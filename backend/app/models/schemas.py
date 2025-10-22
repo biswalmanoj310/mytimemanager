@@ -167,3 +167,106 @@ class DashboardStats(BaseModel):
     total_hours_spent: float = 0.0
     percentage_utilized: float = 0.0
     pillars_breakdown: List[PillarStatistics] = []
+
+
+# ============= TASK SCHEMAS =============
+
+class TaskBase(BaseModel):
+    """Base schema for Task"""
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    pillar_id: int = Field(..., gt=0)
+    category_id: int = Field(..., gt=0)
+    sub_category_id: Optional[int] = Field(None, gt=0)
+    allocated_minutes: int = Field(..., gt=0, description="Time allocated in minutes")
+    follow_up_frequency: FollowUpFrequency
+    separately_followed: bool = Field(default=False, description="No time bound")
+    goal_id: Optional[int] = Field(None, gt=0)
+    is_part_of_goal: bool = Field(default=False)
+    why_reason: Optional[str] = Field(None, description="Why this task is important")
+    additional_whys: Optional[List[str]] = Field(None, description="Additional why reasons")
+    due_date: Optional[datetime] = None
+
+    @validator('additional_whys', pre=True)
+    def parse_additional_whys(cls, v):
+        """Parse additional_whys if it's a JSON string"""
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return []
+        return v
+
+
+class TaskCreate(TaskBase):
+    """Schema for creating a new Task"""
+    pass
+
+
+class TaskUpdate(BaseModel):
+    """Schema for updating a Task"""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    pillar_id: Optional[int] = Field(None, gt=0)
+    category_id: Optional[int] = Field(None, gt=0)
+    sub_category_id: Optional[int] = Field(None, gt=0)
+    allocated_minutes: Optional[int] = Field(None, gt=0)
+    follow_up_frequency: Optional[FollowUpFrequency] = None
+    separately_followed: Optional[bool] = None
+    goal_id: Optional[int] = Field(None, gt=0)
+    is_part_of_goal: Optional[bool] = None
+    why_reason: Optional[str] = None
+    additional_whys: Optional[List[str]] = None
+    due_date: Optional[datetime] = None
+    is_active: Optional[bool] = None
+    is_completed: Optional[bool] = None
+
+    @validator('additional_whys', pre=True)
+    def parse_additional_whys(cls, v):
+        """Parse additional_whys if it's a JSON string"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            import json
+            try:
+                return json.loads(v)
+            except json.JSONDecodeError:
+                return []
+        return v
+
+
+class TaskResponse(TaskBase):
+    """Schema for Task response"""
+    id: int
+    spent_minutes: int = 0
+    is_active: bool = True
+    is_completed: bool = False
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TaskWithStats(TaskResponse):
+    """Task with detailed statistics and hierarchy info"""
+    pillar_name: Optional[str] = None
+    category_name: Optional[str] = None
+    sub_category_name: Optional[str] = None
+    goal_name: Optional[str] = None
+    completion_percentage: float = 0.0
+    time_entries_count: int = 0
+
+
+class TaskFilters(BaseModel):
+    """Filters for task queries"""
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    goal_id: Optional[int] = None
+    follow_up_frequency: Optional[FollowUpFrequency] = None
+    is_active: Optional[bool] = None
+    is_completed: Optional[bool] = None
+    is_part_of_goal: Optional[bool] = None
