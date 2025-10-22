@@ -49,7 +49,7 @@ async def health_check():
 
 
 # Import and include routers
-from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics
+from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar
 
 app.include_router(pillars.router, prefix="/api/pillars", tags=["Pillars"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
@@ -59,6 +59,7 @@ app.include_router(goals.router, prefix="/api/goals", tags=["Goals"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(time_entries.router, prefix="/api/time-entries", tags=["Time Entries"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+app.include_router(calendar.router, prefix="/api/calendar", tags=["Calendar"])
 
 
 if __name__ == "__main__":
