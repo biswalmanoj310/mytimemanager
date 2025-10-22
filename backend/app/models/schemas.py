@@ -342,3 +342,47 @@ class GoalFilters(BaseModel):
     goal_time_period: Optional[GoalTimePeriod] = None
     is_active: Optional[bool] = None
     is_completed: Optional[bool] = None
+
+
+# ============= TIME ENTRY SCHEMAS =============
+
+class TimeEntryBase(BaseModel):
+    """Base schema for TimeEntry"""
+    task_id: int = Field(..., gt=0)
+    entry_date: Optional[datetime] = None
+    start_time: datetime = Field(...)
+    end_time: datetime = Field(...)
+    notes: Optional[str] = None
+
+
+class TimeEntryCreate(TimeEntryBase):
+    """Schema for creating a new TimeEntry"""
+    pass
+
+
+class TimeEntryUpdate(BaseModel):
+    """Schema for updating a TimeEntry"""
+    task_id: Optional[int] = Field(None, gt=0)
+    entry_date: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class TimeEntryResponse(TimeEntryBase):
+    """Schema for TimeEntry response"""
+    id: int
+    duration_minutes: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TimeEntryWithDetails(TimeEntryResponse):
+    """TimeEntry with task and pillar details"""
+    task_name: Optional[str] = None
+    pillar_name: Optional[str] = None
+    category_name: Optional[str] = None
+    sub_category_name: Optional[str] = None
