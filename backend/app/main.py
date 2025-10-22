@@ -1,0 +1,62 @@
+"""
+Main FastAPI application
+"""
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
+
+# Create FastAPI app
+app = FastAPI(
+    title="MyTimeManager API",
+    description="Time and Task Management API based on CANI concept",
+    version="1.0.0"
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {
+        "message": "Welcome to MyTimeManager API",
+        "version": "1.0.0",
+        "pillars": ["Hard Work", "Calmness", "Family"],
+        "philosophy": "CANI - Constant And Never-ending Improvement"
+    }
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "database": "sqlite",
+        "message": "MyTimeManager is running!"
+    }
+
+
+# Import and include routers here (will be added in future requirements)
+# from app.routes import pillars, categories, tasks, goals
+# app.include_router(pillars.router, prefix="/api/pillars", tags=["pillars"])
+# app.include_router(categories.router, prefix="/api/categories", tags=["categories"])
+# app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
+# app.include_router(goals.router, prefix="/api/goals", tags=["goals"])
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("BACKEND_PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
