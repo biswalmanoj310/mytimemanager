@@ -270,3 +270,75 @@ class TaskFilters(BaseModel):
     is_active: Optional[bool] = None
     is_completed: Optional[bool] = None
     is_part_of_goal: Optional[bool] = None
+
+
+# ============= GOAL SCHEMAS =============
+
+class GoalBase(BaseModel):
+    """Base schema for Goal"""
+    name: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    pillar_id: int = Field(..., gt=0)
+    category_id: int = Field(..., gt=0)
+    sub_category_id: Optional[int] = Field(None, gt=0)
+    goal_time_period: GoalTimePeriod
+    allocated_hours: float = Field(..., gt=0, description="Total hours allocated for this goal")
+    why_reason: Optional[str] = Field(None, description="Why this goal is important")
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+
+
+class GoalCreate(GoalBase):
+    """Schema for creating a new Goal"""
+    pass
+
+
+class GoalUpdate(BaseModel):
+    """Schema for updating a Goal"""
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    description: Optional[str] = None
+    pillar_id: Optional[int] = Field(None, gt=0)
+    category_id: Optional[int] = Field(None, gt=0)
+    sub_category_id: Optional[int] = Field(None, gt=0)
+    goal_time_period: Optional[GoalTimePeriod] = None
+    allocated_hours: Optional[float] = Field(None, gt=0)
+    why_reason: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    is_active: Optional[bool] = None
+    is_completed: Optional[bool] = None
+
+
+class GoalResponse(GoalBase):
+    """Schema for Goal response"""
+    id: int
+    spent_hours: float = 0.0
+    is_active: bool = True
+    is_completed: bool = False
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class GoalWithStats(GoalResponse):
+    """Goal with detailed statistics"""
+    pillar_name: Optional[str] = None
+    category_name: Optional[str] = None
+    sub_category_name: Optional[str] = None
+    progress_percentage: float = 0.0
+    linked_tasks_count: int = 0
+    completed_tasks_count: int = 0
+    remaining_hours: float = 0.0
+
+
+class GoalFilters(BaseModel):
+    """Filters for goal queries"""
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    goal_time_period: Optional[GoalTimePeriod] = None
+    is_active: Optional[bool] = None
+    is_completed: Optional[bool] = None
