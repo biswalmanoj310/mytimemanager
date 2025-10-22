@@ -48,9 +48,13 @@ async def health_check():
     }
 
 
-# Import and include routers here (will be added in future requirements)
-# from app.routes import pillars, categories, tasks, goals
-# app.include_router(pillars.router, prefix="/api/pillars", tags=["pillars"])
+# Import and include routers
+from app.routes import pillars
+
+app.include_router(pillars.router, prefix="/api/pillars", tags=["Pillars"])
+
+# Future routers (will be added in upcoming requirements)
+# from app.routes import categories, tasks, goals
 # app.include_router(categories.router, prefix="/api/categories", tags=["categories"])
 # app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])
 # app.include_router(goals.router, prefix="/api/goals", tags=["goals"])
