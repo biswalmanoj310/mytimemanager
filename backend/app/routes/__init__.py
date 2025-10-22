@@ -2,6 +2,6 @@
 Initialize routes package
 """
 
-from app.routes import pillars
+from app.routes import pillars, categories, sub_categories
 
-__all__ = ["pillars"]
+__all__ = ["pillars", "categories", "sub_categories"]
