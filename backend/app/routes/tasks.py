@@ -101,7 +101,7 @@ def get_tasks(
         
         tasks = TaskService.get_tasks(db, filters=filters, skip=skip, limit=limit)
         
-        # Parse additional_whys for all tasks
+        # Parse additional_whys and add related names for all tasks
         result = []
         for task in tasks:
             task_dict = TaskResponse.model_validate(task).model_dump()
@@ -110,6 +110,15 @@ def get_tasks(
                     task_dict['additional_whys'] = json.loads(task.additional_whys)
                 except json.JSONDecodeError:
                     task_dict['additional_whys'] = []
+            
+            # Add pillar, category, and subcategory names
+            if task.pillar:
+                task_dict['pillar_name'] = task.pillar.name
+            if task.category:
+                task_dict['category_name'] = task.category.name
+            if task.sub_category:
+                task_dict['sub_category_name'] = task.sub_category.name
+            
             result.append(task_dict)
         
         return result

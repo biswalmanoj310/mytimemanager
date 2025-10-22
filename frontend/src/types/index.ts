@@ -5,6 +5,7 @@
 // Enums
 export enum FollowUpFrequency {
   TODAY = 'today',
+  DAILY = 'daily',
   WEEKLY = 'weekly',
   MONTHLY = 'monthly',
   QUARTERLY = 'quarterly',
@@ -82,12 +83,16 @@ export interface Task {
   is_active: boolean;
   is_completed: boolean;
   completed_at?: string;
+  na_marked_at?: string;
   created_at: string;
   updated_at?: string;
   due_date?: string;
   pillar?: Pillar;
   category?: Category;
   sub_category?: SubCategory;
+  pillar_name?: string;
+  category_name?: string;
+  sub_category_name?: string;
 }
 
 // Goal

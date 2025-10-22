@@ -243,8 +243,12 @@ class TaskResponse(TaskBase):
     is_active: bool = True
     is_completed: bool = False
     completed_at: Optional[datetime] = None
+    na_marked_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
+    pillar_name: Optional[str] = None
+    category_name: Optional[str] = None
+    sub_category_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -386,3 +390,65 @@ class TimeEntryWithDetails(TimeEntryResponse):
     pillar_name: Optional[str] = None
     category_name: Optional[str] = None
     sub_category_name: Optional[str] = None
+
+
+# ============= DAILY TIME ENTRY SCHEMAS =============
+
+class DailyTimeEntryBase(BaseModel):
+    """Base schema for DailyTimeEntry"""
+    task_id: int = Field(..., gt=0)
+    entry_date: datetime
+    hour: int = Field(..., ge=0, le=23)
+    minutes: int = Field(default=0, ge=0)
+
+
+class DailyTimeEntryCreate(DailyTimeEntryBase):
+    """Schema for creating/updating a daily time entry"""
+    pass
+
+
+class DailyTimeEntryBulkCreate(BaseModel):
+    """Schema for bulk creating daily time entries"""
+    entry_date: datetime
+    entries: List[dict]  # List of {task_id, hour, minutes}
+
+
+class DailyTimeEntryResponse(DailyTimeEntryBase):
+    """Schema for DailyTimeEntry response"""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============= DAILY SUMMARY SCHEMAS =============
+
+class DailySummaryBase(BaseModel):
+    """Base schema for DailySummary"""
+    entry_date: datetime
+    total_allocated: int = 0
+    total_spent: int = 0
+    is_complete: bool = False
+
+
+class DailySummaryResponse(DailySummaryBase):
+    """Schema for DailySummary response"""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IncompleteDayResponse(BaseModel):
+    """Schema for incomplete day listing"""
+    entry_date: datetime
+    total_allocated: int
+    total_spent: int
+    difference: int
+
+    class Config:
+        from_attributes = True

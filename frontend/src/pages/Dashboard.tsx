@@ -5,41 +5,84 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '../services/api';
-import { PillarStats, DashboardStats } from '../types';
+import TaskForm from '../components/TaskForm';
+import GoalForm from '../components/GoalForm';
 import './Dashboard.css';
 
+interface GoalsSummary {
+  total_goals: number;
+  active_goals: number;
+  completed_goals: number;
+  pending_goals?: number;
+  total_allocated_hours: number;
+  total_spent_hours: number;
+  overall_progress: number;
+  completion_rate: number;
+}
+
+interface PillarData {
+  pillar_id: number;
+  count: number;
+  active: number;
+  completed: number;
+  allocated_hours: number;
+  spent_hours: number;
+  progress: number;
+}
+
+interface DashboardData {
+  summary: GoalsSummary;
+  by_pillar: Record<string, PillarData>;
+  by_time_period?: any;
+  top_performing?: any[];
+  needs_attention?: any[];
+  recently_completed?: any[];
+}
+
+const PILLAR_ICONS: Record<string, string> = {
+  'Hard Work': '💼',
+  'Calmness': '🧘',
+  'Family': '👨‍👩‍👦'
+};
+
+const PILLAR_COLORS: Record<string, string> = {
+  'Hard Work': '#3B82F6',
+  'Calmness': '#10B981',
+  'Family': '#F59E0B'
+};
+
 export default function Dashboard() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [pillarStats, setPillarStats] = useState<PillarStats[]>([]);
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Fetch dashboard data
-      const [statsData, pillarData] = await Promise.all([
-        api.get<DashboardStats>('/api/dashboard/goals-overview'),
-        api.get<{ pillars: PillarStats[] }>('/api/dashboard/goals-overview?group_by=pillar')
-      ]);
+      console.log('Loading dashboard data...');
+      const dashboardData = await api.get<DashboardData>('/api/dashboard/goals/overview');
+      console.log('Dashboard data loaded:', dashboardData);
       
-      setStats(statsData);
-      setPillarStats(pillarData.pillars || []);
-    } catch (err) {
+      setData(dashboardData);
+    } catch (err: any) {
       console.error('Error loading dashboard:', err);
-      setError('Failed to load dashboard data. Please try again.');
+      console.error('Error details:', err.response?.data);
+      setError(err.response?.data?.detail || err.message || 'Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
+
+  // Always show loading first on initial mount
+  if (loading || !data) {
     return (
       <div className="dashboard-loading">
         <div className="spinner"></div>
@@ -48,6 +91,7 @@ export default function Dashboard() {
     );
   }
 
+  // Show error state
   if (error) {
     return (
       <div className="dashboard-error">
@@ -59,6 +103,20 @@ export default function Dashboard() {
     );
   }
 
+  // Final safety check
+  if (!data.summary) {
+    return (
+      <div className="dashboard-error">
+        <p>No dashboard data available</p>
+        <button onClick={loadDashboardData} className="btn btn-primary">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  const { summary, by_pillar = {} } = data;
+
   return (
     <div className="dashboard">
       <header className="dashboard-header">
@@ -67,69 +125,71 @@ export default function Dashboard() {
       </header>
 
       {/* Overall Stats */}
-      {stats && (
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-label">Total Goals</div>
-            <div className="stat-value">{stats.total_goals}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Active Goals</div>
-            <div className="stat-value">{stats.active_goals}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Completed Goals</div>
-            <div className="stat-value">{stats.completed_goals}</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Completion Rate</div>
-            <div className="stat-value">{stats.completion_rate.toFixed(1)}%</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Time Utilization</div>
-            <div className="stat-value">{stats.time_utilization.toFixed(1)}%</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Hours Spent / Allocated</div>
-            <div className="stat-value">
-              {stats.total_spent_hours.toFixed(1)} / {stats.total_allocated_hours.toFixed(1)}
-            </div>
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-label">Total Goals</div>
+          <div className="stat-value">{summary.total_goals || 0}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Active Goals</div>
+          <div className="stat-value">{summary.active_goals || 0}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Completed Goals</div>
+          <div className="stat-value">{summary.completed_goals || 0}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Completion Rate</div>
+          <div className="stat-value">{(summary.completion_rate || 0).toFixed(1)}%</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Overall Progress</div>
+          <div className="stat-value">{(summary.overall_progress || 0).toFixed(1)}%</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Hours Spent / Allocated</div>
+          <div className="stat-value">
+            {(summary.total_spent_hours || 0).toFixed(1)} / {(summary.total_allocated_hours || 0).toFixed(1)}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Pillar Stats */}
       <section className="pillar-section">
         <h2>Three Pillars Overview</h2>
         <div className="pillar-cards">
-          {pillarStats.map((pillar) => (
-            <div key={pillar.pillar_id} className="pillar-card">
+          {by_pillar && Object.entries(by_pillar).map(([pillarName, pillarData]) => (
+            <div key={pillarName} className="pillar-card">
               <div className="pillar-header">
-                <span className="pillar-icon">{pillar.pillar_icon}</span>
-                <h3>{pillar.pillar_name}</h3>
+                <span className="pillar-icon">{PILLAR_ICONS[pillarName] || '📊'}</span>
+                <h3>{pillarName}</h3>
               </div>
               <div className="pillar-stats">
                 <div className="pillar-stat">
                   <span className="label">Goals:</span>
-                  <span className="value">{pillar.active_goals} / {pillar.total_goals}</span>
+                  <span className="value">{pillarData.active || 0} / {pillarData.count || 0}</span>
                 </div>
                 <div className="pillar-stat">
-                  <span className="label">Tasks:</span>
-                  <span className="value">{pillar.completed_tasks} / {pillar.total_tasks}</span>
+                  <span className="label">Completed:</span>
+                  <span className="value">{pillarData.completed || 0}</span>
                 </div>
                 <div className="pillar-stat">
                   <span className="label">Hours:</span>
                   <span className="value">
-                    {pillar.spent_hours.toFixed(1)} / {pillar.allocated_hours.toFixed(1)}
+                    {(pillarData.spent_hours || 0).toFixed(1)} / {(pillarData.allocated_hours || 0).toFixed(1)}
                   </span>
+                </div>
+                <div className="pillar-stat">
+                  <span className="label">Progress:</span>
+                  <span className="value">{(pillarData.progress || 0).toFixed(1)}%</span>
                 </div>
               </div>
               <div className="progress-bar">
                 <div 
                   className="progress-fill" 
                   style={{ 
-                    width: `${Math.min((pillar.spent_hours / pillar.allocated_hours) * 100, 100)}%`,
-                    backgroundColor: pillar.pillar_color
+                    width: `${Math.min(pillarData.progress || 0, 100)}%`,
+                    backgroundColor: PILLAR_COLORS[pillarName] || '#6B7280'
                   }}
                 ></div>
               </div>
@@ -142,11 +202,11 @@ export default function Dashboard() {
       <section className="quick-actions">
         <h2>Quick Actions</h2>
         <div className="action-buttons">
-          <button className="action-btn">
+          <button className="action-btn" onClick={() => setIsTaskFormOpen(true)}>
             <span>➕</span>
             <span>Add Task</span>
           </button>
-          <button className="action-btn">
+          <button className="action-btn" onClick={() => setIsGoalFormOpen(true)}>
             <span>🎯</span>
             <span>Create Goal</span>
           </button>
@@ -160,6 +220,26 @@ export default function Dashboard() {
           </button>
         </div>
       </section>
+
+      {/* Task Form Modal */}
+      <TaskForm
+        isOpen={isTaskFormOpen}
+        onClose={() => setIsTaskFormOpen(false)}
+        onSuccess={() => {
+          loadDashboardData();
+          setIsTaskFormOpen(false);
+        }}
+      />
+
+      {/* Goal Form Modal */}
+      <GoalForm
+        isOpen={isGoalFormOpen}
+        onClose={() => setIsGoalFormOpen(false)}
+        onSuccess={() => {
+          loadDashboardData();
+          setIsGoalFormOpen(false);
+        }}
+      />
     </div>
   );
 }

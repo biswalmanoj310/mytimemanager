@@ -227,6 +227,14 @@ class TaskService:
         if task_data.is_completed is not None and task_data.is_completed and not db_task.is_completed:
             update_data['completed_at'] = datetime.utcnow()
         
+        # Handle NA marking - set timestamp when task is marked as inactive
+        if task_data.is_active is not None and not task_data.is_active and db_task.is_active:
+            update_data['na_marked_at'] = datetime.utcnow()
+        
+        # If task is reactivated, clear the NA timestamp
+        if task_data.is_active is not None and task_data.is_active and not db_task.is_active:
+            update_data['na_marked_at'] = None
+        
         for key, value in update_data.items():
             setattr(db_task, key, value)
         

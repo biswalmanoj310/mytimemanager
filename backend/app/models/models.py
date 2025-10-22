@@ -16,6 +16,7 @@ from app.database.config import Base
 class FollowUpFrequency(str, enum.Enum):
     """Follow-up frequency options for tasks"""
     TODAY = "today"
+    DAILY = "daily"
     WEEKLY = "weekly"
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
@@ -124,7 +125,7 @@ class Goal(Base):
     sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True)
     
     # Time tracking
-    goal_time_period = Column(SQLEnum(GoalTimePeriod), nullable=False)
+    goal_time_period = Column(String(20), nullable=False)  # Using String instead of Enum for SQLite compatibility
     allocated_hours = Column(Float, nullable=False)  # Total hours for this goal
     spent_hours = Column(Float, default=0.0)  # Hours already spent
     
@@ -172,7 +173,7 @@ class Task(Base):
     spent_minutes = Column(Integer, default=0)  # Actual time spent
     
     # Follow-up
-    follow_up_frequency = Column(SQLEnum(FollowUpFrequency), nullable=False)
+    follow_up_frequency = Column(String(20), nullable=False)  # Using String instead of Enum for SQLite compatibility
     separately_followed = Column(Boolean, default=False)  # No time bound
     
     # Goal linkage
@@ -187,6 +188,7 @@ class Task(Base):
     is_active = Column(Boolean, default=True)
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
+    na_marked_at = Column(DateTime(timezone=True), nullable=True)  # When task was marked as NA
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -232,6 +234,45 @@ class TimeEntry(Base):
 
     def __repr__(self):
         return f"<TimeEntry(task='{self.task.name if self.task else None}', minutes={self.duration_minutes})>"
+
+
+class DailyTimeEntry(Base):
+    """
+    Stores actual time spent on each task for each hour of each day
+    """
+    __tablename__ = "daily_time_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    entry_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    hour = Column(Integer, nullable=False)  # 0-23
+    minutes = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="daily_entries")
+
+    def __repr__(self):
+        return f"<DailyTimeEntry(task_id={self.task_id}, date={self.entry_date}, hour={self.hour}, minutes={self.minutes})>"
+
+
+class DailySummary(Base):
+    """
+    Summary of each day's time tracking completion status
+    """
+    __tablename__ = "daily_summary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_date = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
+    total_allocated = Column(Integer, nullable=False, default=0)
+    total_spent = Column(Integer, nullable=False, default=0)
+    is_complete = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<DailySummary(date={self.entry_date}, allocated={self.total_allocated}, spent={self.total_spent}, complete={self.is_complete})>"
 
 
 class MotivationalQuote(Base):
