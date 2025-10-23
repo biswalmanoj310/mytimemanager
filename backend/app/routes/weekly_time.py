@@ -4,6 +4,7 @@ API routes for weekly time entries and summaries
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, date
 from typing import List, Optional
 from app.database.config import get_db
@@ -113,7 +114,7 @@ def get_week_task_statuses(
 @router.post("/status/{task_id}/complete")
 def mark_task_complete(
     task_id: int,
-    week_start_date: date,
+    week_start_date: date = Query(...),
     db: Session = Depends(get_db)
 ):
     """Mark a task as complete for a specific week"""
@@ -124,7 +125,7 @@ def mark_task_complete(
 @router.post("/status/{task_id}/na")
 def mark_task_na(
     task_id: int,
-    week_start_date: date,
+    week_start_date: date = Query(...),
     db: Session = Depends(get_db)
 ):
     """Mark a task as NA for a specific week"""
@@ -143,3 +144,40 @@ def reset_task_status(
     if not success:
         raise HTTPException(status_code=404, detail="Status not found")
     return {"success": True}
+
+
+@router.post("/status/{task_id}/{week_start_date}")
+def create_or_update_task_status(
+    task_id: int,
+    week_start_date: date,
+    status_data: dict,
+    db: Session = Depends(get_db)
+):
+    """Create or update a task status for a specific week"""
+    from app.models.models import WeeklyTaskStatus
+    
+    # Check if status already exists
+    existing = db.query(WeeklyTaskStatus).filter(
+        WeeklyTaskStatus.task_id == task_id,
+        func.date(WeeklyTaskStatus.week_start_date) == week_start_date
+    ).first()
+    
+    if existing:
+        # Update existing
+        existing.is_completed = status_data.get('is_completed', existing.is_completed)
+        existing.is_na = status_data.get('is_na', existing.is_na)
+        db.commit()
+        db.refresh(existing)
+        return existing
+    else:
+        # Create new
+        new_status = WeeklyTaskStatus(
+            task_id=task_id,
+            week_start_date=week_start_date,
+            is_completed=status_data.get('is_completed', False),
+            is_na=status_data.get('is_na', False)
+        )
+        db.add(new_status)
+        db.commit()
+        db.refresh(new_status)
+        return new_status

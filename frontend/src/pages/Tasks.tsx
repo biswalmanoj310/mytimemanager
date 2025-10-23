@@ -126,13 +126,10 @@ export default function Tasks() {
   const handleWeeklyTaskComplete = async (taskId: number) => {
     try {
       const dateStr = selectedWeekStart.toISOString().split('T')[0];
-      // Mark weekly status for this week
+      // Mark weekly status ONLY for this week (don't affect global task status)
       await api.post(`/api/weekly-time/status/${taskId}/complete?week_start_date=${dateStr}`, {});
-      // Also mark task globally as completed (so it won't appear in future weeks)
-      await api.post(`/api/tasks/${taskId}/complete`, {});
-      // Reload weekly statuses and tasks
+      // Reload weekly statuses only (don't reload tasks to avoid affecting daily view)
       await loadWeeklyEntries(selectedWeekStart);
-      await loadTasks();
     } catch (err: any) {
       console.error('Error updating weekly task status:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
@@ -142,13 +139,10 @@ export default function Tasks() {
   const handleWeeklyTaskNA = async (taskId: number) => {
     try {
       const dateStr = selectedWeekStart.toISOString().split('T')[0];
-      // Mark weekly status for this week
+      // Mark weekly status ONLY for this week (don't affect global task status)
       await api.post(`/api/weekly-time/status/${taskId}/na?week_start_date=${dateStr}`, {});
-      // Also mark task globally as inactive/NA (so it won't appear in future weeks)
-      await api.put(`/api/tasks/${taskId}`, { is_active: false });
-      // Reload weekly statuses and tasks
+      // Reload weekly statuses only (don't reload tasks to avoid affecting daily view)
       await loadWeeklyEntries(selectedWeekStart);
-      await loadTasks();
     } catch (err: any) {
       console.error('Error updating weekly task status:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
@@ -190,12 +184,15 @@ export default function Tasks() {
       const task = tasks.find(t => t.id === selectedDailyTask);
       if (!task) return;
 
-      // Update the task to be weekly
-      await api.put(`/api/tasks/${selectedDailyTask}`, {
-        follow_up_frequency: 'weekly'
+      // Create a weekly status entry to mark this task for tracking this week
+      // This keeps the task as 'daily' but makes it appear in the weekly view
+      const weekStart = selectedWeekStart.toISOString().split('T')[0];
+      await api.post(`/api/weekly-time/status/${selectedDailyTask}/${weekStart}`, {
+        is_completed: false,
+        is_na: false
       });
 
-      // Reload tasks and weekly entries to show daily aggregates
+      // Reload tasks and weekly entries to show the task in weekly view
       await loadTasks();
       await loadWeeklyEntries(selectedWeekStart);
       setShowAddWeeklyTaskModal(false);
@@ -259,6 +256,9 @@ export default function Tasks() {
         
         // Reload incomplete days after save
         loadIncompleteDays();
+        
+        // Reload weekly entries to update daily aggregates in weekly view
+        await loadWeeklyEntries(selectedWeekStart);
       }
     } catch (err) {
       console.error('Error saving daily entries:', err);
@@ -387,6 +387,72 @@ export default function Tasks() {
       }
       
       setWeeklyTaskStatuses(statusMap);
+
+      // Auto-copy incomplete tasks from previous week ONLY if viewing the current real week
+      if (statusData.length === 0) {
+        // Check if the week we're loading IS the current real week (not a future week)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekStartDate = new Date(weekStart);
+        weekStartDate.setHours(0, 0, 0, 0);
+        const weekEndDate = new Date(weekStart);
+        weekEndDate.setDate(weekEndDate.getDate() + 6); // Saturday
+        weekEndDate.setHours(23, 59, 59, 999);
+        
+        const isCurrentRealWeek = today >= weekStartDate && today <= weekEndDate;
+        
+        // Only auto-copy if this is the current real week (not browsing future weeks)
+        if (isCurrentRealWeek) {
+          // This week has no tasks yet - check if we should copy from previous week
+          const prevWeekStart = new Date(weekStart);
+          prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+          const prevWeekDateStr = prevWeekStart.toISOString().split('T')[0];
+          
+          try {
+            const prevWeekStatusResponse: any = await api.get(`/api/weekly-time/status/${prevWeekDateStr}`);
+            const prevWeekStatusData = Array.isArray(prevWeekStatusResponse) ? prevWeekStatusResponse : (prevWeekStatusResponse.data || []);
+            
+            if (Array.isArray(prevWeekStatusData) && prevWeekStatusData.length > 0) {
+              // Copy tasks that were NOT completed and NOT NA in previous week
+              const tasksToCopy = prevWeekStatusData.filter((status: any) => 
+                !status.is_completed && !status.is_na
+              );
+              
+              if (tasksToCopy.length > 0) {
+                // Create status entries for this week for all incomplete tasks
+                for (const prevStatus of tasksToCopy) {
+                  try {
+                    await api.post(`/api/weekly-time/status/${prevStatus.task_id}/${dateStr}`, {
+                      is_completed: false,
+                      is_na: false
+                    });
+                  } catch (err) {
+                    console.error(`Error copying task ${prevStatus.task_id} to new week:`, err);
+                  }
+                }
+                
+                // Reload statuses after copying
+                const newStatusResponse: any = await api.get(`/api/weekly-time/status/${dateStr}`);
+                const newStatusData = Array.isArray(newStatusResponse) ? newStatusResponse : (newStatusResponse.data || []);
+                const newStatusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {};
+                
+                if (Array.isArray(newStatusData)) {
+                  newStatusData.forEach((status: any) => {
+                    newStatusMap[status.task_id] = {
+                      is_completed: status.is_completed,
+                      is_na: status.is_na
+                    };
+                  });
+                }
+                
+                setWeeklyTaskStatuses(newStatusMap);
+              }
+            }
+          } catch (err) {
+            console.error('Error checking/copying tasks from previous week:', err);
+          }
+        }
+      }
 
       // Load list of all tasks that have ever been completed/NA in any week
       const completedResponse: any = await api.get('/api/weekly-time/status/completed-tasks');
@@ -635,27 +701,67 @@ export default function Tasks() {
   
   const filteredTasks = tasks
     .filter(task => {
-      if (task.follow_up_frequency !== activeTab) return false;
+      // For weekly tab: ONLY show tasks that have data or status for this specific week
+      if (activeTab === 'weekly') {
+        // Check if this task has daily aggregates for the current week
+        const hasDailyDataThisWeek = weekDays.some(day => {
+          const key = `${task.id}-${day.index}`;
+          return (dailyAggregates[key] || 0) > 0;
+        });
+        
+        // Check if this task has weekly time entries for the current week
+        const hasWeeklyDataThisWeek = weekDays.some(day => {
+          const key = `${task.id}-${day.index}`;
+          return (weeklyEntries[key] || 0) > 0;
+        });
+        
+        // Check if task has been explicitly added to this week
+        const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if:
+        // 1. It has data for this week (daily or weekly entries), OR
+        // 2. It has been explicitly added to weekly tracking (has status entry for this week)
+        if (task.follow_up_frequency === 'weekly') {
+          // Weekly task - show ONLY if it has data or was explicitly added
+          if (!hasWeeklyDataThisWeek && !hasDailyDataThisWeek && !hasBeenAddedToWeekly) {
+            return false; // No data and not added - don't show
+          }
+        } else if (task.follow_up_frequency === 'daily') {
+          // Daily task - show ONLY if it has data or was explicitly added
+          if (!hasDailyDataThisWeek && !hasBeenAddedToWeekly) {
+            return false; // No data and not added - don't show
+          }
+        } else {
+          // Other frequencies - don't show in weekly tab
+          return false;
+        }
+        
+      } else {
+        // For non-weekly tabs, normal frequency filter
+        if (task.follow_up_frequency !== activeTab) return false;
+      }
       
-      // For weekly tab: Check if task was ever completed/NA in any week
+      // For weekly tab: Handle weekly-specific completion status
       if (activeTab === 'weekly') {
         const taskStatus = weeklyTaskStatuses[task.id];
-        const wasEverCompleted = everCompletedTaskIds.has(task.id);
         
+        // If task is marked completed/NA for THIS week, show it
         if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
-          // Task is completed/NA for current week - keep it visible this week
           return true;
         }
         
-        // If task was ever completed/NA in any previous week, don't show it in future weeks
-        if (wasEverCompleted) {
-          return false;
+        // Don't filter out based on "ever completed" since weekly status is independent
+        // This allows the same task to be tracked in multiple weeks
+        
+        // Only filter out if the task itself is globally completed/NA (from daily or other tabs)
+        // But since we removed that from weekly handlers, this should rarely happen
+        if (task.is_completed || !task.is_active) {
+          // Only hide if it's a weekly task (not a daily task showing in weekly view)
+          if (task.follow_up_frequency === 'weekly') {
+            return false;
+          }
         }
         
-        // Also filter out globally completed/NA tasks
-        if (task.is_completed || !task.is_active) {
-          return false;
-        }
         return true;
       }
       
@@ -715,7 +821,13 @@ export default function Tasks() {
           <button
             key={tab.key}
             className={`tab ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => {
+              setActiveTab(tab.key);
+              // Force reload weekly data when switching to weekly tab
+              if (tab.key === 'weekly') {
+                loadWeeklyEntries(selectedWeekStart);
+              }
+            }}
           >
             {tab.label}
           </button>
@@ -814,8 +926,8 @@ export default function Tasks() {
                   </>
                 ) : activeTab === 'weekly' ? (
                   <>
-                    <th className="col-time sticky-col sticky-col-3">Spent</th>
-                    <th className="col-time sticky-col sticky-col-4">Remaining</th>
+                    <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
+                    <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average)</th>
                     {weekDays.map(day => (
                       <th key={day.index} className="col-hour">{day.label}</th>
                     ))}
@@ -839,8 +951,14 @@ export default function Tasks() {
                 // Get row color class for weekly view
                 const weeklyColorClass = getWeeklyRowColorClass(task);
                 
+                // Determine row class based on weekly status for weekly tab
+                const weeklyStatus = weeklyTaskStatuses[task.id];
+                const isWeeklyCompleted = activeTab === 'weekly' && weeklyStatus?.is_completed;
+                const isWeeklyNA = activeTab === 'weekly' && weeklyStatus?.is_na;
+                const rowClassName = isWeeklyCompleted ? 'completed-row' : isWeeklyNA ? 'na-row' : (task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '');
+                
                 return (
-                <tr key={task.id} className={task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : ''}>
+                <tr key={task.id} className={rowClassName}>
                   <td className={`col-task sticky-col sticky-col-1 ${weeklyColorClass}`}>
                     <div 
                       className={`task-name ${hasDailyAggregates ? '' : 'task-link'}`}
@@ -852,10 +970,10 @@ export default function Tasks() {
                       title={hasDailyAggregates ? 'Task with daily aggregates - edit time in Daily tab' : 'Click to edit'}
                     >
                       {task.name}
-                      {activeTab === 'weekly' && hasDailyAggregates && (
+                      {activeTab === 'weekly' && task.follow_up_frequency === 'daily' && (
                         <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                       )}
-                      {activeTab === 'weekly' && !hasDailyAggregates && (
+                      {activeTab === 'weekly' && task.follow_up_frequency === 'weekly' && (
                         <span style={{ marginLeft: '8px', fontSize: '11px', color: '#4299e1', fontWeight: '600' }}>(Weekly)</span>
                       )}
                     </div>
@@ -939,15 +1057,37 @@ export default function Tasks() {
                     </>
                   ) : activeTab === 'weekly' ? (
                     <>
-                      {/* Spent column - average per day */}
+                      {/* Spent column - average per day till today */}
                       <td className={`col-time sticky-col sticky-col-3 ${weeklyColorClass}`}>
                         {(() => {
                           const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
-                          const averagePerDay = Math.round(totalSpent / 7);
+                          
+                          // Calculate days elapsed so far in this week
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const weekStart = new Date(selectedWeekStart);
+                          weekStart.setHours(0, 0, 0, 0);
+                          
+                          let daysElapsed = 1; // At least 1 day
+                          if (today >= weekStart) {
+                            const weekEnd = new Date(weekStart);
+                            weekEnd.setDate(weekEnd.getDate() + 6); // Saturday
+                            
+                            if (today <= weekEnd) {
+                              // Current week: count days from week start to today (inclusive)
+                              const diffTime = today.getTime() - weekStart.getTime();
+                              daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                            } else {
+                              // Past week: all 7 days
+                              daysElapsed = 7;
+                            }
+                          }
+                          
+                          const averagePerDay = Math.round(totalSpent / daysElapsed);
                           return formatTaskValue(task, averagePerDay);
                         })()}
                       </td>
-                      {/* Remaining column - time needed per remaining day to hit target */}
+                      {/* Remaining column - average needed per remaining day to hit target */}
                       <td className={`col-time sticky-col sticky-col-4 ${weeklyColorClass}`}>
                         {(() => {
                           const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
@@ -965,7 +1105,7 @@ export default function Tasks() {
                           
                           let daysRemaining = 0;
                           if (today >= weekStart && today <= weekEnd) {
-                            // Current week: days from tomorrow to end of week
+                            // Current week: days from tomorrow to end of week (inclusive)
                             const diffTime = weekEnd.getTime() - today.getTime();
                             daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                           }
@@ -973,41 +1113,44 @@ export default function Tasks() {
                           if (remaining <= 0) {
                             return formatTaskValue(task, 0); // Target already met
                           } else if (daysRemaining === 0) {
-                            return formatTaskValue(task, remaining); // Last day, show total remaining
+                            // Last day of the week: show remaining amount needed today
+                            return formatTaskValue(task, remaining);
                           } else {
-                            const perDayRemaining = Math.round(remaining / daysRemaining);
-                            return formatTaskValue(task, perDayRemaining);
+                            // Average per day needed to achieve target
+                            const avgPerDayNeeded = Math.round(remaining / daysRemaining);
+                            return formatTaskValue(task, avgPerDayNeeded);
                           }
                         })()}
                       </td>
                       {/* 7 daily columns */}
                       {weekDays.map(day => {
-                        const isDailyAggregate = isFromDailyAggregate(task.id, day.index);
                         const isBoolean = task.task_type === TaskType.BOOLEAN;
+                        // If task has ANY daily aggregates, disable ALL days for this task
+                        const isTaskFromDaily = hasDailyAggregates;
                         return (
                           <td key={day.index} className={`col-hour ${weeklyColorClass}`}>
                             {isBoolean ? (
                               <input
                                 type="checkbox"
-                                className={`hour-input ${isDailyAggregate ? 'from-daily' : ''}`}
+                                className={`hour-input ${isTaskFromDaily ? 'from-daily' : ''}`}
                                 checked={getWeeklyTime(task.id, day.index) > 0}
                                 onChange={(e) => handleWeeklyTimeChange(task.id, day.index, e.target.checked ? '1' : '0')}
-                                title={isDailyAggregate ? 'Read-only: Auto-populated from Daily tab. Edit in Daily tab to change.' : 'Mark as done'}
-                                disabled={isDailyAggregate}
-                                style={isDailyAggregate ? { cursor: 'not-allowed', opacity: 0.7 } : { cursor: 'pointer' }}
+                                title={isTaskFromDaily ? 'Read-only: This is a Daily task. Edit in Daily tab to change.' : 'Mark as done'}
+                                disabled={isTaskFromDaily}
+                                style={isTaskFromDaily ? { cursor: 'not-allowed', opacity: 0.7 } : { cursor: 'pointer' }}
                               />
                             ) : (
                               <input
                                 type="number"
                                 min="0"
-                                className={`hour-input ${isDailyAggregate ? 'from-daily' : ''}`}
+                                className={`hour-input ${isTaskFromDaily ? 'from-daily' : ''}`}
                                 value={getWeeklyTime(task.id, day.index) || ''}
                                 onChange={(e) => handleWeeklyTimeChange(task.id, day.index, e.target.value)}
                                 placeholder="0"
-                                title={isDailyAggregate ? 'Read-only: Auto-populated from Daily tab. Edit in Daily tab to change.' : `Enter ${task.task_type === TaskType.COUNT ? 'count' : 'time'}`}
-                                readOnly={isDailyAggregate}
-                                disabled={isDailyAggregate}
-                                style={isDailyAggregate ? { cursor: 'not-allowed', opacity: 0.7 } : {}}
+                                title={isTaskFromDaily ? 'Read-only: This is a Daily task. Edit in Daily tab to change.' : `Enter ${task.task_type === TaskType.COUNT ? 'count' : 'time'}`}
+                                readOnly={isTaskFromDaily}
+                                disabled={isTaskFromDaily}
+                                style={isTaskFromDaily ? { cursor: 'not-allowed', opacity: 0.7 } : {}}
                               />
                             )}
                           </td>
@@ -1129,9 +1272,9 @@ export default function Tasks() {
                       const hourTotal = filteredTasks
                         .filter(task => task.is_active)
                         .reduce((sum, task) => sum + getHourlyTime(task.id, hour.index), 0);
-                      const isOverLimit = hourTotal > 60;
+                      const isNotExactly60 = hourTotal !== 60;
                       return (
-                        <td key={hour.index} className={`col-hour ${isOverLimit ? 'hour-over-limit' : ''}`}>
+                        <td key={hour.index} className={`col-hour ${isNotExactly60 ? 'hour-over-limit' : ''}`}>
                           <strong>{hourTotal || '-'}</strong>
                         </td>
                       );
