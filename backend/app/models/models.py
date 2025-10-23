@@ -168,8 +168,11 @@ class Task(Base):
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
     sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True)
     
-    # Time allocation
-    allocated_minutes = Column(Integer, nullable=False)  # Time in minutes
+    # Task type and allocation
+    task_type = Column(String(20), nullable=False, default='time')  # 'time', 'count', or 'boolean'
+    allocated_minutes = Column(Integer, nullable=False)  # Time in minutes (for time-based tasks)
+    target_value = Column(Integer, nullable=True)  # Target for count-based tasks (e.g., 10 push-ups)
+    unit = Column(String(50), nullable=True)  # Unit for count tasks (e.g., 'reps', 'glasses', 'miles')
     spent_minutes = Column(Integer, default=0)  # Actual time spent
     
     # Follow-up
@@ -275,9 +278,70 @@ class DailySummary(Base):
         return f"<DailySummary(date={self.entry_date}, allocated={self.total_allocated}, spent={self.total_spent}, complete={self.is_complete})>"
 
 
+class WeeklyTimeEntry(Base):
+    """
+    Weekly time entries - stores time spent on each task for each day of the week
+    """
+    __tablename__ = "weekly_time_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    week_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    day_of_week = Column(Integer, nullable=False)  # 0=Sunday, 6=Saturday
+    minutes = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="weekly_entries")
+
+    def __repr__(self):
+        return f"<WeeklyTimeEntry(task_id={self.task_id}, week={self.week_start_date}, day={self.day_of_week}, minutes={self.minutes})>"
+
+
+class WeeklySummary(Base):
+    """
+    Summary of each week's time tracking completion status
+    """
+    __tablename__ = "weekly_summary"
+
+    id = Column(Integer, primary_key=True, index=True)
+    week_start_date = Column(DateTime(timezone=True), nullable=False, unique=True, index=True)
+    total_allocated = Column(Integer, nullable=False, default=0)
+    total_spent = Column(Integer, nullable=False, default=0)
+    is_complete = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<WeeklySummary(week={self.week_start_date}, allocated={self.total_allocated}, spent={self.total_spent}, complete={self.is_complete})>"
+
+
+class WeeklyTaskStatus(Base):
+    """
+    Track completion status of tasks per week (independent of the task's global status)
+    """
+    __tablename__ = "weekly_task_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    week_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    is_completed = Column(Boolean, nullable=False, default=False)
+    is_na = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="weekly_statuses")
+
+    def __repr__(self):
+        return f"<WeeklyTaskStatus(task_id={self.task_id}, week={self.week_start_date}, completed={self.is_completed})>"
+
+
 class MotivationalQuote(Base):
     """
-    Inspirational quotes for the application
+    Motivational quotes displayed on the dashboard
     """
     __tablename__ = "motivational_quotes"
 

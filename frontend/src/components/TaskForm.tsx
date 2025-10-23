@@ -5,7 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Pillar, Category, SubCategory, Goal, FollowUpFrequency } from '../types';
+import { Pillar, Category, SubCategory, Goal, FollowUpFrequency, TaskType } from '../types';
 import './TaskForm.css';
 
 interface TaskFormProps {
@@ -13,6 +13,7 @@ interface TaskFormProps {
   onClose: () => void;
   onSuccess: () => void;
   taskId?: number;
+  defaultFrequency?: FollowUpFrequency;
 }
 
 interface TaskFormData {
@@ -21,7 +22,10 @@ interface TaskFormData {
   pillar_id: number | null;
   category_id: number | null;
   sub_category_id: number | null;
+  task_type: TaskType;
   allocated_minutes: number;
+  target_value: number | null;
+  unit: string;
   follow_up_frequency: FollowUpFrequency;
   separately_followed: boolean;
   is_part_of_goal: boolean;
@@ -31,14 +35,17 @@ interface TaskFormData {
   due_date: string;
 }
 
-export default function TaskForm({ isOpen, onClose, onSuccess, taskId }: TaskFormProps) {
+export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency }: TaskFormProps) {
   const [formData, setFormData] = useState<TaskFormData>({
     name: '',
     description: '',
     pillar_id: null,
     category_id: null,
     sub_category_id: null,
+    task_type: TaskType.TIME,
     allocated_minutes: 60,
+    target_value: null,
+    unit: '',
     follow_up_frequency: FollowUpFrequency.TODAY,
     separately_followed: false,
     is_part_of_goal: false,
@@ -139,7 +146,10 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId }: TaskFor
         pillar_id: data.pillar_id || null,
         category_id: data.category_id || null,
         sub_category_id: data.sub_category_id || null,
+        task_type: data.task_type || TaskType.TIME,
         allocated_minutes: data.allocated_minutes || 60,
+        target_value: data.target_value || null,
+        unit: data.unit || '',
         follow_up_frequency: data.follow_up_frequency || FollowUpFrequency.TODAY,
         separately_followed: data.separately_followed || false,
         is_part_of_goal: data.is_part_of_goal || false,
@@ -172,13 +182,32 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId }: TaskFor
       return;
     }
 
-    if (formData.allocated_minutes <= 0) {
-      const errorMsg = 'Please enter a valid time allocation (greater than 0 minutes)';
-      console.error('Validation error:', errorMsg);
-      setError(errorMsg);
-      alert(errorMsg);
-      return;
+    // Validate based on task type
+    if (formData.task_type === TaskType.TIME) {
+      if (formData.allocated_minutes <= 0) {
+        const errorMsg = 'Please enter a valid time allocation (greater than 0 minutes)';
+        console.error('Validation error:', errorMsg);
+        setError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+    } else if (formData.task_type === TaskType.COUNT) {
+      if (!formData.target_value || formData.target_value <= 0) {
+        const errorMsg = 'Please enter a valid target count (greater than 0)';
+        console.error('Validation error:', errorMsg);
+        setError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
+      if (!formData.unit || formData.unit.trim() === '') {
+        const errorMsg = 'Please enter a unit (e.g., reps, glasses, miles)';
+        console.error('Validation error:', errorMsg);
+        setError(errorMsg);
+        alert(errorMsg);
+        return;
+      }
     }
+    // BOOLEAN type needs no additional validation
 
     try {
       setLoading(true);
@@ -190,7 +219,10 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId }: TaskFor
         pillar_id: formData.pillar_id,
         category_id: formData.category_id,
         sub_category_id: formData.sub_category_id || undefined,
-        allocated_minutes: formData.allocated_minutes,
+        task_type: formData.task_type,
+        allocated_minutes: formData.task_type === TaskType.TIME ? formData.allocated_minutes : 0,
+        target_value: formData.task_type === TaskType.COUNT ? formData.target_value : undefined,
+        unit: formData.task_type === TaskType.COUNT ? formData.unit : undefined,
         follow_up_frequency: formData.follow_up_frequency,
         separately_followed: formData.separately_followed,
         is_part_of_goal: formData.is_part_of_goal,
@@ -254,8 +286,11 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId }: TaskFor
       pillar_id: null,
       category_id: null,
       sub_category_id: null,
+      task_type: TaskType.TIME,
       allocated_minutes: 60,
-      follow_up_frequency: FollowUpFrequency.TODAY,
+      target_value: null,
+      unit: '',
+      follow_up_frequency: defaultFrequency || FollowUpFrequency.TODAY,
       separately_followed: false,
       is_part_of_goal: false,
       goal_id: null,
@@ -381,29 +416,106 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId }: TaskFor
           </div>
           */}
 
-          {/* Time Allocated */}
+          {/* Task Type Selector */}
           <div className="form-group">
-            <label htmlFor="allocated_time">Time Allocated (minutes): <span className="required">*</span></label>
-            <input
-              type="text"
-              id="allocated_time"
-              value={formData.allocated_minutes === 0 ? '' : formData.allocated_minutes}
-              onChange={(e) => {
-                const value = e.target.value;
-                // Only allow numbers
-                if (value === '' || /^\d+$/.test(value)) {
-                  setFormData({ ...formData, allocated_minutes: value === '' ? 0 : Number(value) });
-                }
-              }}
-              placeholder="Enter minutes (e.g., 60)"
-              required
-            />
-            {formData.allocated_minutes > 0 && (
-              <small className="help-text">
-                {(formData.allocated_minutes / 60).toFixed(1)} hours
-              </small>
-            )}
+            <label>Task Type: <span className="required">*</span></label>
+            <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  value={TaskType.TIME}
+                  checked={formData.task_type === TaskType.TIME}
+                  onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
+                  style={{ marginRight: '6px' }}
+                />
+                Time-based (minutes/hours)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  value={TaskType.COUNT}
+                  checked={formData.task_type === TaskType.COUNT}
+                  onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
+                  style={{ marginRight: '6px' }}
+                />
+                Count-based (reps, glasses, etc.)
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  value={TaskType.BOOLEAN}
+                  checked={formData.task_type === TaskType.BOOLEAN}
+                  onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
+                  style={{ marginRight: '6px' }}
+                />
+                Yes/No (completion)
+              </label>
+            </div>
           </div>
+
+          {/* Conditional fields based on task type */}
+          {formData.task_type === TaskType.TIME && (
+            <div className="form-group">
+              <label htmlFor="allocated_time">Time Allocated (minutes): <span className="required">*</span></label>
+              <input
+                type="text"
+                id="allocated_time"
+                value={formData.allocated_minutes === 0 ? '' : formData.allocated_minutes}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === '' || /^\d+$/.test(value)) {
+                    setFormData({ ...formData, allocated_minutes: value === '' ? 0 : Number(value) });
+                  }
+                }}
+                placeholder="Enter minutes (e.g., 60)"
+                required
+              />
+              {formData.allocated_minutes > 0 && (
+                <small className="help-text">
+                  {(formData.allocated_minutes / 60).toFixed(1)} hours
+                </small>
+              )}
+            </div>
+          )}
+
+          {formData.task_type === TaskType.COUNT && (
+            <>
+              <div className="form-group">
+                <label htmlFor="target_value">Target Count: <span className="required">*</span></label>
+                <input
+                  type="number"
+                  id="target_value"
+                  value={formData.target_value || ''}
+                  onChange={(e) => setFormData({ ...formData, target_value: e.target.value ? Number(e.target.value) : null })}
+                  placeholder="e.g., 10"
+                  min="1"
+                  required
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="unit">Unit: <span className="required">*</span></label>
+                <input
+                  type="text"
+                  id="unit"
+                  value={formData.unit}
+                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                  placeholder="e.g., push-ups, glasses, miles, pages"
+                  required
+                />
+                <small className="help-text">
+                  Example units: reps, glasses, miles, pages, calls, emails
+                </small>
+              </div>
+            </>
+          )}
+
+          {formData.task_type === TaskType.BOOLEAN && (
+            <div className="form-group">
+              <small className="help-text" style={{ display: 'block', marginTop: '0', color: '#666' }}>
+                ✓ This is a yes/no completion task (e.g., "Did I go to the gym?", "Did I meditate?")
+              </small>
+            </div>
+          )}
 
           {/* Follow-up Frequency */}
           <div className="form-group">

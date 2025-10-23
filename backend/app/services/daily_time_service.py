@@ -164,3 +164,32 @@ def get_daily_summary(db: Session, entry_date: date) -> Optional[DailySummary]:
     return db.query(DailySummary).filter(
         func.date(DailySummary.entry_date) == entry_date
     ).first()
+
+
+def get_week_daily_aggregates(db: Session, week_start_date: date) -> Dict:
+    """Get aggregated daily entries for a week (7 days)
+    Returns: {task_id: {day_of_week: total_minutes}}
+    where day_of_week is 0-6 (Sunday-Saturday)
+    """
+    result = {}
+    
+    for day_offset in range(7):
+        current_date = date.fromordinal(week_start_date.toordinal() + day_offset)
+        
+        # Get all entries for this date
+        entries = db.query(DailyTimeEntry).filter(
+            func.date(DailyTimeEntry.entry_date) == current_date
+        ).all()
+        
+        # Aggregate by task
+        for entry in entries:
+            task_id = entry.task_id
+            if task_id not in result:
+                result[task_id] = {}
+            
+            if day_offset not in result[task_id]:
+                result[task_id][day_offset] = 0
+            
+            result[task_id][day_offset] += entry.minutes
+    
+    return result

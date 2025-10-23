@@ -64,6 +64,13 @@ export interface SubCategory {
   category?: Category;
 }
 
+// Task Type Enum
+export enum TaskType {
+  TIME = 'time',      // Time-based tasks (minutes/hours)
+  COUNT = 'count',    // Count-based tasks (reps, glasses, miles, etc.)
+  BOOLEAN = 'boolean' // Yes/No completion tasks
+}
+
 // Task
 export interface Task {
   id: number;
@@ -72,7 +79,10 @@ export interface Task {
   pillar_id: number;
   category_id: number;
   sub_category_id?: number;
+  task_type: TaskType;
   allocated_minutes: number;
+  target_value?: number;  // For count-based tasks
+  unit?: string;           // For count-based tasks (reps, glasses, miles, etc.)
   spent_minutes: number;
   follow_up_frequency: FollowUpFrequency;
   separately_followed: boolean;

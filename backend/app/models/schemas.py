@@ -172,13 +172,16 @@ class DashboardStats(BaseModel):
 # ============= TASK SCHEMAS =============
 
 class TaskBase(BaseModel):
-    """Base schema for Task"""
+    """Base Task model with shared fields"""
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     pillar_id: int = Field(..., gt=0)
     category_id: int = Field(..., gt=0)
     sub_category_id: Optional[int] = Field(None, gt=0)
-    allocated_minutes: int = Field(..., gt=0, description="Time allocated in minutes")
+    task_type: str = Field(default='time', description="Type of task: time, count, or boolean")
+    allocated_minutes: int = Field(default=0, description="Time allocated in minutes (for time-based tasks)")
+    target_value: Optional[int] = Field(None, description="Target value for count-based tasks")
+    unit: Optional[str] = Field(None, max_length=50, description="Unit for count-based tasks (e.g., reps, glasses)")
     follow_up_frequency: FollowUpFrequency
     separately_followed: bool = Field(default=False, description="No time bound")
     goal_id: Optional[int] = Field(None, gt=0)
@@ -211,7 +214,10 @@ class TaskUpdate(BaseModel):
     pillar_id: Optional[int] = Field(None, gt=0)
     category_id: Optional[int] = Field(None, gt=0)
     sub_category_id: Optional[int] = Field(None, gt=0)
-    allocated_minutes: Optional[int] = Field(None, gt=0)
+    task_type: Optional[str] = Field(None, description="Type of task: time, count, or boolean")
+    allocated_minutes: Optional[int] = Field(None, description="Time allocated in minutes")
+    target_value: Optional[int] = Field(None, description="Target value for count-based tasks")
+    unit: Optional[str] = Field(None, max_length=50, description="Unit for count-based tasks")
     follow_up_frequency: Optional[FollowUpFrequency] = None
     separately_followed: Optional[bool] = None
     goal_id: Optional[int] = Field(None, gt=0)
@@ -449,6 +455,94 @@ class IncompleteDayResponse(BaseModel):
     total_allocated: int
     total_spent: int
     difference: int
+
+    class Config:
+        from_attributes = True
+
+
+# ============= WEEKLY TIME ENTRY SCHEMAS =============
+
+class WeeklyTimeEntryBase(BaseModel):
+    """Base schema for WeeklyTimeEntry"""
+    task_id: int = Field(..., gt=0)
+    week_start_date: datetime
+    day_of_week: int = Field(..., ge=0, le=6)  # 0=Sunday, 6=Saturday
+    minutes: int = Field(default=0, ge=0)
+
+
+class WeeklyTimeEntryCreate(WeeklyTimeEntryBase):
+    """Schema for creating/updating a weekly time entry"""
+    pass
+
+
+class WeeklyTimeEntryBulkCreate(BaseModel):
+    """Schema for bulk creating weekly time entries"""
+    week_start_date: datetime
+    entries: List[dict]  # List of {task_id, day_of_week, minutes}
+
+
+class WeeklyTimeEntryResponse(WeeklyTimeEntryBase):
+    """Schema for WeeklyTimeEntry response"""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ============= WEEKLY SUMMARY SCHEMAS =============
+
+class WeeklySummaryBase(BaseModel):
+    """Base schema for WeeklySummary"""
+    week_start_date: datetime
+    total_allocated: int = 0
+    total_spent: int = 0
+    is_complete: bool = False
+
+
+class WeeklySummaryResponse(WeeklySummaryBase):
+    """Schema for WeeklySummary response"""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class IncompleteWeekResponse(BaseModel):
+    """Schema for incomplete week listing"""
+    week_start_date: datetime
+    total_allocated: int
+    total_spent: int
+    difference: int
+
+    class Config:
+        from_attributes = True
+
+
+# ============= WEEKLY TASK STATUS SCHEMAS =============
+
+class WeeklyTaskStatusBase(BaseModel):
+    """Base schema for WeeklyTaskStatus"""
+    task_id: int = Field(..., gt=0)
+    week_start_date: datetime
+    is_completed: bool = False
+    is_na: bool = False
+
+
+class WeeklyTaskStatusCreate(WeeklyTaskStatusBase):
+    """Schema for creating/updating a weekly task status"""
+    pass
+
+
+class WeeklyTaskStatusResponse(WeeklyTaskStatusBase):
+    """Schema for WeeklyTaskStatus response"""
+    id: int
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

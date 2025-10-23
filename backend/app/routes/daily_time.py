@@ -84,3 +84,12 @@ def recalculate_summary(
     """Recalculate and update summary for a specific date"""
     summary = daily_time_service.update_daily_summary(db, entry_date)
     return summary
+
+
+@router.get("/entries/week/{week_start_date}")
+def get_week_daily_entries(
+    week_start_date: date,
+    db: Session = Depends(get_db)
+):
+    """Get aggregated daily entries for a week (7 days starting from week_start_date)"""
+    return daily_time_service.get_week_daily_aggregates(db, week_start_date)
