@@ -193,3 +193,41 @@ def get_week_daily_aggregates(db: Session, week_start_date: date) -> Dict:
             result[task_id][day_offset] += entry.minutes
     
     return result
+
+
+def get_month_daily_aggregates(db: Session, month_start_date: date) -> Dict:
+    """Get aggregated daily entries for a month
+    Returns: {task_id: {day_of_month: total_minutes}}
+    where day_of_month is 1-31
+    """
+    result = {}
+    
+    # Calculate the number of days in the month
+    year = month_start_date.year
+    month = month_start_date.month
+    if month == 12:
+        next_month = date(year + 1, 1, 1)
+    else:
+        next_month = date(year, month + 1, 1)
+    days_in_month = (next_month - month_start_date).days
+    
+    for day_of_month in range(1, days_in_month + 1):
+        current_date = date(year, month, day_of_month)
+        
+        # Get all entries for this date
+        entries = db.query(DailyTimeEntry).filter(
+            func.date(DailyTimeEntry.entry_date) == current_date
+        ).all()
+        
+        # Aggregate by task
+        for entry in entries:
+            task_id = entry.task_id
+            if task_id not in result:
+                result[task_id] = {}
+            
+            if day_of_month not in result[task_id]:
+                result[task_id][day_of_month] = 0
+            
+            result[task_id][day_of_month] += entry.minutes
+    
+    return result

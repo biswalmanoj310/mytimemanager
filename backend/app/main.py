@@ -20,7 +20,15 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,7 +57,7 @@ async def health_check():
 
 
 # Import and include routers
-from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar, comparative_analytics, daily_time, weekly_time
+from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar, comparative_analytics, daily_time, weekly_time, monthly_time, yearly_time, one_time_tasks, projects, life_goals
 
 app.include_router(pillars.router, prefix="/api/pillars", tags=["Pillars"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
@@ -63,6 +71,11 @@ app.include_router(calendar.router, prefix="/api/calendar", tags=["Calendar"])
 app.include_router(comparative_analytics.router)
 app.include_router(daily_time.router)
 app.include_router(weekly_time.router)
+app.include_router(monthly_time.router)
+app.include_router(yearly_time.router)
+app.include_router(one_time_tasks.router)
+app.include_router(projects.router)
+app.include_router(life_goals.router)
 
 
 if __name__ == "__main__":

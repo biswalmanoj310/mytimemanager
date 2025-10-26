@@ -907,19 +907,22 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px 8px 0 0;
 }
 
 .modal-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #2d3748;
+  color: #ffffff;
+  font-weight: 600;
 }
 
 .btn-close {
   background: none;
   border: none;
   font-size: 28px;
-  color: #a0aec0;
+  color: #ffffff;
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -928,12 +931,14 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
+  opacity: 0.9;
   transition: all 0.2s;
 }
 
 .btn-close:hover {
-  background-color: #f7fafc;
-  color: #4a5568;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  opacity: 1;
 }
 
 .modal-body {
@@ -979,3 +984,1609 @@
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
+
+/* One-Time Tasks Row Colors */
+.row-good {
+  background-color: #a8d5a8 !important; /* Deeper green */
+}
+
+.row-good:hover {
+  background-color: #90c590 !important;
+}
+
+.row-warning {
+  background-color: #b8b8b8 !important; /* Deeper gray */
+}
+
+.row-warning:hover {
+  background-color: #a0a0a0 !important;
+}
+
+.row-overdue {
+  background-color: #f5a3a3 !important; /* Deeper red */
+}
+
+.row-overdue:hover {
+  background-color: #f08080 !important;
+}
+
+.col-date input[type="date"],
+.col-number input[type="number"],
+.col-action button {
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+}
+
+.col-category {
+  font-size: 0.9em;
+  color: #666;
+  white-space: nowrap;
+  padding: 8px 12px;
+}
+
+/* Remove arrows from number input */
+.col-number input[type="number"]::-webkit-outer-spin-button,
+.col-number input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.col-number input[type="number"] {
+  -moz-appearance: textfield; /* Firefox */
+  appearance: textfield;
+}
+
+.col-action .btn-delete {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.col-action .btn-delete:hover {
+  background-color: #dc2626;
+}
+
+/* ============= Projects Feature Styles ============= */
+
+.projects-container {
+  margin-top: 20px;
+}
+
+.projects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.project-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.project-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+/* Overdue project styling */
+.project-card.project-overdue,
+.project-card.project-has-overdue {
+  border-left: 6px solid #f56565;
+  background: linear-gradient(to right, #fff5f5, white);
+}
+
+.project-card.project-overdue .project-card-header h3,
+.project-card.project-has-overdue .project-card-header h3 {
+  color: #c53030;
+}
+
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.project-card-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.project-status {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-not_started {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+.status-in_progress {
+  background-color: #bee3f8;
+  color: #2c5282;
+}
+
+.status-in_progress.status-overdue {
+  background-color: #fed7d7;
+  color: #742a2a;
+  font-weight: 700;
+}
+
+.status-completed {
+  background-color: #c6f6d5;
+  color: #22543d;
+}
+
+.status-on_hold {
+  background-color: #fed7d7;
+  color: #742a2a;
+}
+
+.project-description {
+  font-size: 14px;
+  color: #718096;
+  margin: 12px 0;
+  line-height: 1.5;
+}
+
+.project-progress {
+  margin: 16px 0;
+}
+
+.progress-bar {
+  height: 8px;
+  background-color: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #48bb78, #38a169);
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 13px;
+  color: #718096;
+}
+
+.project-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.project-due-date,
+.project-pillar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.project-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.project-actions button {
+  flex: 1;
+}
+
+.btn-view-tasks {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  color: white !important;
+  font-weight: 600 !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.btn-view-tasks:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4) !important;
+}
+
+/* Project Detail View */
+.project-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.project-detail-header h2 {
+  margin: 0;
+  font-size: 28px;
+  color: #2d3748;
+}
+
+.project-detail-description {
+  font-size: 16px;
+  color: #718096;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+/* Task Hierarchy Tree */
+.project-tasks-tree {
+  margin-top: 24px;
+}
+
+.task-list {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.task-node {
+  margin-bottom: 8px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.task-row:hover {
+  background-color: #f7fafc;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.task-row.completed {
+  opacity: 0.6;
+  background-color: #f7fafc;
+}
+
+/* Due date color coding */
+.task-row.task-overdue {
+  border-left: 4px solid #f56565;
+  background-color: #fff5f5;
+}
+
+.task-row.task-urgent {
+  border-left: 4px solid #f56565;
+  background-color: #fff5f5;
+}
+
+.task-row.task-soon {
+  border-left: 4px solid #ecc94b;
+  background-color: #fffff0;
+}
+
+.task-row.task-ok {
+  border-left: 4px solid #48bb78;
+  background-color: #f0fff4;
+}
+
+/* Today tab table row colors */
+.tasks-table tbody tr.task-overdue {
+  background-color: #fc8181 !important; /* Deep red background for overdue */
+}
+
+.tasks-table tbody tr.task-urgent {
+  background-color: #fc8181 !important; /* Deep red background for urgent */
+}
+
+.tasks-table tbody tr.task-soon {
+  background-color: #fbd38d !important; /* Orange/yellow background for soon */
+}
+
+.tasks-table tbody tr.task-ok {
+  background-color: #9ae6b4 !important; /* Green background for ok */
+}
+
+.task-checkbox {
+  display: flex;
+  align-items: center;
+}
+
+.task-checkbox input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.task-expand {
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-expand {
+  background: none;
+  border: none;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  color: #4a5568;
+  transition: color 0.2s;
+}
+
+.btn-expand:hover {
+  color: #2d3748;
+}
+
+.task-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-name {
+  font-size: 15px;
+  color: #2d3748;
+  font-weight: 500;
+}
+
+.task-name.strikethrough {
+  text-decoration: line-through;
+  color: #a0aec0;
+}
+
+.task-description {
+  font-size: 13px;
+  color: #718096;
+}
+
+.task-due-date {
+  font-size: 13px;
+  color: #4a5568;
+  white-space: nowrap;
+}
+
+.task-priority {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.priority-high {
+  background-color: #fed7d7;
+  color: #742a2a;
+}
+
+.priority-medium {
+  background-color: #feebc8;
+  color: #7c2d12;
+}
+
+.priority-low {
+  background-color: #e6fffa;
+  color: #234e52;
+}
+
+.task-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.task-children {
+  margin-top: 8px;
+  margin-left: 20px;
+}
+
+/* Level-based indentation styling */
+.task-node.level-0 .task-row {
+  font-weight: 500;
+}
+
+.task-node.level-1 .task-row {
+
+/* Button styles */
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-danger {
+  background-color: #f56565;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-danger:hover {
+  background-color: #e53e3e;
+}
+
+/* Project Tasks Due Today Section */
+.project-tasks-today-section {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 2px solid #e2e8f0;
+}
+
+.col-checkbox {
+  width: 40px;
+  text-align: center;
+  padding: 8px;
+}
+
+.strikethrough {
+  text-decoration: line-through;
+  color: #a0aec0;
+}
+
+/* ============================================
+   LIFE GOALS STYLES
+   ============================================ */
+
+/* Goals Container */
+.goals-container {
+  margin-top: 20px;
+}
+
+.goals-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+/* Goals Grid - Card Layout */
+.goals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.goal-card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px;
+  transition: box-shadow 0.3s, transform 0.2s, border-color 0.3s;
+  cursor: pointer;
+}
+
+.goal-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  transform: translateY(-3px);
+}
+
+/* Goal Card Status Colors */
+.goal-card.status-on-track {
+  border-left: 6px solid #48bb78;
+}
+
+.goal-card.status-at-risk {
+  border-left: 6px solid #ed8936;
+}
+
+.goal-card.status-behind {
+  border-left: 6px solid #f56565;
+}
+
+.goal-card.status-completed {
+  border-left: 6px solid #38b2ac;
+  opacity: 0.85;
+}
+
+.goal-card.status-not-started {
+  border-left: 6px solid #cbd5e0;
+}
+
+/* Goal Card Header */
+.goal-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.goal-card-header h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #2d3748;
+  font-weight: 600;
+  flex: 1;
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.status-badge.status-on-track {
+  background-color: #c6f6d5;
+  color: #22543d;
+}
+
+.status-badge.status-at-risk {
+  background-color: #feebc8;
+  color: #7c2d12;
+}
+
+.status-badge.status-behind {
+  background-color: #fed7d7;
+  color: #742a2a;
+}
+
+.status-badge.status-completed {
+  background-color: #b2f5ea;
+  color: #234e52;
+}
+
+.status-badge.status-not-started {
+  background-color: #e2e8f0;
+  color: #4a5568;
+}
+
+/* Goal Card Body */
+.goal-card-body {
+  margin-bottom: 16px;
+}
+
+.goal-category,
+.goal-dates {
+  font-size: 14px;
+  color: #4a5568;
+  margin-bottom: 8px;
+}
+
+.days-remaining {
+  color: #718096;
+  font-weight: 500;
+}
+
+/* Goal Progress Bar */
+.goal-progress {
+  margin-top: 16px;
+}
+
+.progress-label {
+  font-size: 13px;
+  color: #718096;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.progress-bar-container {
+  height: 10px;
+  background-color: #e2e8f0;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease;
+  border-radius: 5px;
+}
+
+/* Goal Card Footer */
+.goal-card-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.goal-card-footer button {
+  flex: 1;
+}
+
+/* ============================================
+   GOAL DETAIL VIEW
+   ============================================ */
+
+.goal-detail {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.goal-detail-header {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.goal-detail-header h2 {
+  margin: 16px 0 0 0;
+  font-size: 28px;
+  color: #2d3748;
+  font-weight: 700;
+}
+
+.goal-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+/* Goal Info Section */
+.goal-info-section {
+  background: #f7fafc;
+  padding: 20px;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.goal-info-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.goal-info-row strong {
+  color: #4a5568;
+  font-weight: 600;
+  min-width: 120px;
+}
+
+/* Goal Section (Milestones, Tasks, etc.) */
+.goal-section {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 24px;
+}
+
+.goal-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+/* Why Statements */
+.why-statements-list {
+  list-style-position: inside;
+  padding-left: 0;
+  margin: 0;
+}
+
+.why-statements-list li {
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #f7fafc;
+  border-left: 4px solid #4299e1;
+  border-radius: 4px;
+  font-size: 15px;
+  color: #2d3748;
+  line-height: 1.6;
+}
+
+/* Milestones List */
+.milestones-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.milestone-item:hover {
+  background: #edf2f7;
+}
+
+.milestone-item.completed {
+  opacity: 0.7;
+  background: #e6fffa;
+  border-color: #81e6d9;
+}
+
+.milestone-item input[type="checkbox"] {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.milestone-content {
+  flex: 1;
+}
+
+.milestone-content strong {
+  display: block;
+  font-size: 16px;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+
+.milestone-date {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 13px;
+  color: #718096;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.milestone-description {
+  font-size: 14px;
+  color: #4a5568;
+  margin: 8px 0 0 0;
+  line-height: 1.5;
+}
+
+/* Linked Tasks List */
+.linked-tasks-list,
+.goal-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linked-task-item,
+.goal-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #fffaf0;
+  border: 1px solid #feebc8;
+  border-left: 4px solid #ed8936;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.goal-task-item {
+  background: #f0fff4;
+  border: 1px solid #c6f6d5;
+  border-left: 4px solid #48bb78;
+}
+
+.linked-task-item:hover,
+.goal-task-item:hover {
+  background: #fef5e7;
+}
+
+.goal-task-item:hover {
+  background: #e6ffed;
+}
+
+.goal-task-item.completed {
+  opacity: 0.7;
+  background: #e6fffa;
+}
+
+.goal-task-item input[type="checkbox"] {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.linked-task-content,
+.goal-task-content {
+  flex: 1;
+}
+
+.linked-task-content strong,
+.goal-task-content strong {
+  display: block;
+  font-size: 16px;
+  color: #2d3748;
+  margin-bottom: 4px;
+}
+
+.task-type-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: #e2e8f0;
+  color: #4a5568;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.task-notes,
+.task-description {
+  font-size: 14px;
+  color: #4a5568;
+  margin: 8px 0 0 0;
+  line-height: 1.5;
+}
+
+.task-due-date {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #718096;
+  background: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* Responsive Design for Goals */
+@media (max-width: 768px) {
+  .goals-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .goal-info-section {
+    grid-template-columns: 1fr;
+  }
+  
+  .goal-detail {
+    padding: 20px;
+  }
+}
+
+/* ============================================
+   GOAL MODAL SPECIFIC STYLES
+   ============================================ */
+
+.modal-large {
+  max-width: 700px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.why-statement-input {
+  margin-bottom: 12px;
+}
+
+.why-statement-input input {
+  width: 100%;
+}
+
+/* Form styling improvements for goal modal */
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 14px;
+}
+
+.form-text {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #718096;
+  font-style: italic;
+}
+
+/* Responsive form row for mobile */
+@media (max-width: 640px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .modal-large {
+    max-width: 95%;
+  }
+}
+
+/* === Life Goals Detail Page Styles === */
+
+.goal-detail-page {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.goal-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.goal-header-info {
+  flex: 1;
+  margin-left: 16px;
+}
+
+.goal-header-info h2 {
+  margin: 0 0 8px 0;
+  font-size: 28px;
+  color: #2d3748;
+}
+
+.goal-header-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.goal-detail-header .btn-secondary {
+  white-space: nowrap;
+}
+
+/* Summary Card */
+.goal-summary-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-item label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-item span {
+  font-size: 16px;
+  color: #2d3748;
+  font-weight: 500;
+}
+
+.summary-item small {
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.text-muted {
+  color: #718096;
+}
+
+.text-danger {
+  color: #e53e3e;
+  font-weight: 600;
+}
+
+.progress-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-inline .progress-bar-container {
+  flex: 1;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-inline .progress-bar-fill {
+  height: 100%;
+  background: #48bb78;
+  transition: width 0.3s ease;
+}
+
+.progress-inline .progress-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  min-width: 40px;
+}
+
+/* Goal Sections */
+.goal-detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.goal-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.goal-section h3 {
+  margin: 0 0 16px 0;
+  font-size: 20px;
+  color: #2d3748;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.empty-section {
+  padding: 40px 20px;
+  text-align: center;
+  color: #718096;
+  font-style: italic;
+}
+
+/* Why Statements */
+.why-statements-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.why-statements-list li {
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  background: #f7fafc;
+  border-left: 4px solid #4299e1;
+  border-radius: 4px;
+  color: #2d3748;
+  line-height: 1.6;
+}
+
+.why-statements-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Description */
+.description-section p {
+  margin: 0;
+  line-height: 1.8;
+  color: #4a5568;
+}
+
+/* Milestones */
+.milestones-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.milestone-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.milestone-item:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+.milestone-item.completed {
+  opacity: 0.7;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.milestone-item.completed .milestone-content strong {
+  text-decoration: line-through;
+  color: #718096;
+}
+
+.milestone-item input[type="checkbox"] {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.milestone-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.milestone-content strong {
+  font-size: 15px;
+  color: #2d3748;
+}
+
+.milestone-date {
+  font-size: 13px;
+  color: #718096;
+}
+
+.milestone-description {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+/* Goal Tasks */
+.goal-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.goal-task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.goal-task-item:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+.goal-task-item.completed {
+  opacity: 0.7;
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.goal-task-item.completed .goal-task-content strong {
+  text-decoration: line-through;
+  color: #718096;
+}
+
+.goal-task-item input[type="checkbox"] {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.goal-task-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.goal-task-content strong {
+  font-size: 15px;
+  color: #2d3748;
+}
+
+.task-due-date {
+  font-size: 13px;
+  color: #718096;
+}
+
+.task-description {
+  margin: 4px 0 0 0;
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+/* Linked Tasks */
+.linked-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.linked-task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.linked-task-item:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+}
+
+.linked-task-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.linked-task-content strong {
+  font-size: 15px;
+  color: #2d3748;
+}
+
+.task-type-badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #bee3f8;
+  color: #2c5282;
+}
+
+.task-notes {
+  width: 100%;
+  margin: 8px 0 0 0;
+  font-size: 14px;
+  color: #4a5568;
+  font-style: italic;
+}
+
+/* Days Remaining Badge */
+.days-remaining-badge {
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  background: #fef5e7;
+  color: #d68910;
+  margin-left: 8px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .goal-detail-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .goal-header-info {
+    margin-left: 0;
+  }
+  
+  .summary-row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .milestone-item,
+  .goal-task-item,
+  .linked-task-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .milestone-item .btn,
+  .goal-task-item .btn,
+  .linked-task-item .btn {
+    align-self: flex-end;
+  }
+}
+
+/* Enhanced Linked Tasks Styles */
+.linked-task-item {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+.linked-task-content.clickable {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.linked-task-content.clickable:hover {
+  background-color: #edf2f7;
+}
+
+.linked-task-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.linked-task-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.stat-row.progress-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.stat-label {
+  color: #718096;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.stat-value {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.stat-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-progress .progress-bar-container {
+  flex: 1;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.stat-progress .progress-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.stat-progress .progress-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+  white-space: nowrap;
+}
+
+.task-notes {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Goal Projects Section */
+.goal-projects-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.project-card {
+  padding: 16px;
+  background: #f7fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.project-card:hover {
+  background: #edf2f7;
+  border-color: #cbd5e0;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.project-card-header strong {
+  font-size: 16px;
+  color: #2d3748;
+}
+
+.project-description {
+  font-size: 14px;
+  color: #4a5568;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+
+.project-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+/* Goal Projects (Tracking Dashboards) Styles */
+.tracking-projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tracking-project-card {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+}
+
+.tracking-project-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.tracking-project-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.tracking-project-header strong {
+  font-size: 18px;
+  color: #2d3748;
+}
+
+.tracking-project-overall {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.task-performances {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.task-performance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #f7fafc;
+  border-radius: 6px;
+  gap: 16px;
+}
+
+.task-performance-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.task-name {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.task-type-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #4a5568;
+}
+
+.task-performance-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.completion-count {
+  font-size: 14px;
+  color: #718096;
+  white-space: nowrap;
+}
+
+.performance-bar-container {
+  flex: 1;
+  max-width: 200px;
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.performance-bar-fill {
+  height: 100%;
+  transition: width 0.3s ease, background-color 0.3s ease;
+  border-radius: 4px;
+}
+
+.performance-percentage {
+  font-size: 14px;
+  font-weight: bold;
+  min-width: 45px;
+  text-align: right;
+}
+

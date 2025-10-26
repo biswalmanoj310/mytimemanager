@@ -339,6 +339,92 @@ class WeeklyTaskStatus(Base):
         return f"<WeeklyTaskStatus(task_id={self.task_id}, week={self.week_start_date}, completed={self.is_completed})>"
 
 
+class MonthlyTimeEntry(Base):
+    """
+    Monthly time entries - stores time spent on each task for each day of the month
+    """
+    __tablename__ = "monthly_time_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    month_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    day_of_month = Column(Integer, nullable=False)  # 1-31
+    minutes = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="monthly_entries")
+
+    def __repr__(self):
+        return f"<MonthlyTimeEntry(task_id={self.task_id}, month={self.month_start_date}, day={self.day_of_month}, minutes={self.minutes})>"
+
+
+class MonthlyTaskStatus(Base):
+    """
+    Track completion status of tasks per month (independent of the task's global status)
+    """
+    __tablename__ = "monthly_task_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    month_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    is_completed = Column(Boolean, nullable=False, default=False)
+    is_na = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="monthly_statuses")
+
+    def __repr__(self):
+        return f"<MonthlyTaskStatus(task_id={self.task_id}, month={self.month_start_date}, completed={self.is_completed})>"
+
+
+class YearlyTimeEntry(Base):
+    """
+    Yearly time entries - stores time spent on each task for each month of the year
+    """
+    __tablename__ = "yearly_time_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    year_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    month = Column(Integer, nullable=False)  # 1-12 for Jan-Dec
+    minutes = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="yearly_entries")
+
+    def __repr__(self):
+        return f"<YearlyTimeEntry(task_id={self.task_id}, year={self.year_start_date}, month={self.month}, minutes={self.minutes})>"
+
+
+class YearlyTaskStatus(Base):
+    """
+    Track completion status of tasks per year (independent of the task's global status)
+    """
+    __tablename__ = "yearly_task_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    year_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    is_completed = Column(Boolean, nullable=False, default=False)
+    is_na = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="yearly_statuses")
+
+    def __repr__(self):
+        return f"<YearlyTaskStatus(task_id={self.task_id}, year={self.year_start_date}, completed={self.is_completed})>"
+
+
 class MotivationalQuote(Base):
     """
     Motivational quotes displayed on the dashboard
@@ -354,3 +440,85 @@ class MotivationalQuote(Base):
 
     def __repr__(self):
         return f"<Quote(author='{self.author}')>"
+
+
+class OneTimeTask(Base):
+    """
+    One-time tasks with start date, target gap, and updated date tracking
+    """
+    __tablename__ = "one_time_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    target_gap = Column(Integer, nullable=True)  # Target days between updates
+    updated_date = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task", backref="one_time_entries")
+
+    def __repr__(self):
+        return f"<OneTimeTask(task_id={self.task_id}, start_date={self.start_date})>"
+
+
+class Project(Base):
+    """
+    Projects - Container for complex tasks with hierarchical sub-tasks
+    Different from Goals: Projects focus on execution with dependencies,
+    Goals focus on aspirational achievements with metrics
+    Can be linked to a Life Goal for goal-oriented project management
+    """
+    __tablename__ = "projects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    pillar_id = Column(Integer, ForeignKey("pillars.id", ondelete="SET NULL"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
+    goal_id = Column(Integer, ForeignKey("life_goals.id", ondelete="SET NULL"), nullable=True)  # Link to Life Goal
+    start_date = Column(DateTime(timezone=True), nullable=True)
+    target_completion_date = Column(DateTime(timezone=True), nullable=True)
+    status = Column(String(20), nullable=False, default="not_started")  # not_started, in_progress, completed, on_hold
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_completed = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    pillar = relationship("Pillar", backref="projects")
+    category = relationship("Category", backref="projects")
+    tasks = relationship("ProjectTask", back_populates="project", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Project(id={self.id}, name='{self.name}', status='{self.status}')>"
+
+
+class ProjectTask(Base):
+    """
+    Project Tasks - Hierarchical tasks within a project
+    Supports up to 3 levels: Task → Sub-task → Sub-sub-task
+    """
+    __tablename__ = "project_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_task_id = Column(Integer, ForeignKey("project_tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String(300), nullable=False)
+    description = Column(Text, nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True, index=True)
+    priority = Column(String(10), nullable=False, default="medium")  # high, medium, low
+    is_completed = Column(Boolean, nullable=False, default=False, index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    order = Column(Integer, nullable=False, default=0)  # For manual sorting
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    project = relationship("Project", back_populates="tasks")
+    parent_task = relationship("ProjectTask", remote_side=[id], backref="sub_tasks")
+
+    def __repr__(self):
+        return f"<ProjectTask(id={self.id}, name='{self.name}', completed={self.is_completed})>"

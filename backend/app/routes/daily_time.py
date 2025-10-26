@@ -93,3 +93,12 @@ def get_week_daily_entries(
 ):
     """Get aggregated daily entries for a week (7 days starting from week_start_date)"""
     return daily_time_service.get_week_daily_aggregates(db, week_start_date)
+
+
+@router.get("/entries/month/{month_start_date}")
+def get_month_daily_entries(
+    month_start_date: date,
+    db: Session = Depends(get_db)
+):
+    """Get aggregated daily entries for a month (all days in the month starting from month_start_date)"""
+    return daily_time_service.get_month_daily_aggregates(db, month_start_date)

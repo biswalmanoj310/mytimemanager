@@ -11,7 +11,7 @@ import './TaskForm.css';
 interface TaskFormProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (createdTaskId?: number) => void;
   taskId?: number;
   defaultFrequency?: FollowUpFrequency;
 }
@@ -128,10 +128,18 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
 
   const loadGoals = async () => {
     try {
-      const data = await api.get<Goal[]>('/api/goals/?is_active=true');
-      setGoals(data);
+      const data = await api.get<any[]>('/api/life-goals/');
+      console.log('Life goals loaded:', data);
+      // Map to Goal structure, using only the fields we need
+      const mappedGoals = data.map(lg => ({
+        id: lg.id,
+        name: lg.name,
+        description: lg.description || '',
+        is_active: lg.status === 'active'
+      })) as Goal[];
+      setGoals(mappedGoals);
     } catch (err) {
-      console.error('Error loading goals:', err);
+      console.error('Error loading life goals:', err);
     }
   };
 
@@ -236,20 +244,25 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
 
       console.log('Submitting task data:', submitData);
       
-      let response;
+      let response: any;
+      let createdTaskId: number | undefined;
+      
       if (taskId) {
         // Update existing task
         response = await api.put(`/api/tasks/${taskId}`, submitData);
         console.log('Task updated successfully:', response);
         alert('Task updated successfully!');
+        createdTaskId = taskId;
       } else {
         // Create new task
         response = await api.post('/api/tasks/', submitData);
         console.log('Task created successfully:', response);
         alert('Task created successfully!');
+        // Extract the task ID from the response
+        createdTaskId = response?.data?.id || response?.id;
       }
       
-      onSuccess();
+      onSuccess(createdTaskId);
       onClose();
       resetForm();
     } catch (err: any) {
@@ -472,7 +485,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               />
               {formData.allocated_minutes > 0 && (
                 <small className="help-text">
-                  {(formData.allocated_minutes / 60).toFixed(1)} hours
+                  {(formData.allocated_minutes / 60).toFixed(1)} hours • Total for the week/month (flexible scheduling)
                 </small>
               )}
             </div>
@@ -491,6 +504,9 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
                   min="1"
                   required
                 />
+                <small className="help-text">
+                  Total completions needed for the week/month (flexible scheduling)
+                </small>
               </div>
               <div className="form-group">
                 <label htmlFor="unit">Unit: <span className="required">*</span></label>
@@ -586,7 +602,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
                 <option value="">Select a goal</option>
                 {goals.map(goal => (
                   <option key={goal.id} value={goal.id}>
-                    {goal.name} ({goal.goal_time_period})
+                    {goal.name}
                   </option>
                 ))}
               </select>
