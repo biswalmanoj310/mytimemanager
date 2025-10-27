@@ -11,6 +11,7 @@ import Tasks from './pages/Tasks';
 import Goals from './pages/Goals';
 import Analytics from './pages/Analytics';
 import TimeTracking from './pages/TimeTracking';
+import Completed from './pages/Completed';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
           <Route path="/goals" element={<Goals />} />
           <Route path="/time-tracking" element={<TimeTracking />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/completed" element={<Completed />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Layout>

@@ -251,13 +251,11 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         // Update existing task
         response = await api.put(`/api/tasks/${taskId}`, submitData);
         console.log('Task updated successfully:', response);
-        alert('Task updated successfully!');
         createdTaskId = taskId;
       } else {
         // Create new task
         response = await api.post('/api/tasks/', submitData);
         console.log('Task created successfully:', response);
-        alert('Task created successfully!');
         // Extract the task ID from the response
         createdTaskId = response?.data?.id || response?.id;
       }

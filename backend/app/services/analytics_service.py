@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 from collections import defaultdict
 
 from app.models.models import (
-    Pillar, Category, SubCategory, Task, Goal, TimeEntry, 
+    Pillar, Category, SubCategory, Task, Goal, TimeEntry, DailyTimeEntry,
     GoalTimePeriod, FollowUpFrequency
 )
 
@@ -32,18 +32,18 @@ class AnalyticsService:
         """
         pillars = self.db.query(Pillar).all()
         
-        # Build time entry query
+        # Build time entry query from DailyTimeEntry table
         query = self.db.query(
-            TimeEntry.task_id,
-            func.sum(TimeEntry.duration_minutes).label('total_minutes')
+            DailyTimeEntry.task_id,
+            func.sum(DailyTimeEntry.minutes).label('total_minutes')
         )
         
         if start_date:
-            query = query.filter(func.date(TimeEntry.entry_date) >= start_date)
+            query = query.filter(func.date(DailyTimeEntry.entry_date) >= start_date)
         if end_date:
-            query = query.filter(func.date(TimeEntry.entry_date) <= end_date)
+            query = query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
         
-        time_by_task = query.group_by(TimeEntry.task_id).all()
+        time_by_task = query.group_by(DailyTimeEntry.task_id).all()
         
         # Map to pillars
         task_pillar_map = {
@@ -104,18 +104,18 @@ class AnalyticsService:
         
         categories = query.all()
         
-        # Build time entry query
+        # Build time entry query from DailyTimeEntry table
         time_query = self.db.query(
-            TimeEntry.task_id,
-            func.sum(TimeEntry.duration_minutes).label('total_minutes')
+            DailyTimeEntry.task_id,
+            func.sum(DailyTimeEntry.minutes).label('total_minutes')
         )
         
         if start_date:
-            time_query = time_query.filter(func.date(TimeEntry.entry_date) >= start_date)
+            time_query = time_query.filter(func.date(DailyTimeEntry.entry_date) >= start_date)
         if end_date:
-            time_query = time_query.filter(func.date(TimeEntry.entry_date) <= end_date)
+            time_query = time_query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
         
-        time_by_task = time_query.group_by(TimeEntry.task_id).all()
+        time_by_task = time_query.group_by(DailyTimeEntry.task_id).all()
         
         # Map to categories
         task_category_map = {

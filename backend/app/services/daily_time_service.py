@@ -34,7 +34,7 @@ def save_daily_time_entry(db: Session, entry_data: DailyTimeEntryCreate) -> Dail
     if existing:
         # Update existing entry
         existing.minutes = entry_data.minutes
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now()
         db.commit()
         db.refresh(existing)
         return existing
@@ -72,17 +72,23 @@ def bulk_save_daily_entries(db: Session, entry_date: date, entries: List[Dict]) 
                 )
             ).first()
 
-            if existing:
-                existing.minutes = minutes
-                existing.updated_at = datetime.utcnow()
+            if minutes == 0:
+                # Delete entry if minutes is 0
+                if existing:
+                    db.delete(existing)
             else:
-                new_entry = DailyTimeEntry(
-                    task_id=task_id,
-                    entry_date=datetime.combine(entry_date, datetime.min.time()),
-                    hour=hour,
-                    minutes=minutes
-                )
-                db.add(new_entry)
+                # Update or create entry
+                if existing:
+                    existing.minutes = minutes
+                    existing.updated_at = datetime.now()
+                else:
+                    new_entry = DailyTimeEntry(
+                        task_id=task_id,
+                        entry_date=datetime.combine(entry_date, datetime.min.time()),
+                        hour=hour,
+                        minutes=minutes
+                    )
+                    db.add(new_entry)
 
         db.commit()
         
@@ -126,7 +132,7 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
         summary.total_allocated = total_allocated
         summary.total_spent = total_spent
         summary.is_complete = is_complete
-        summary.updated_at = datetime.utcnow()
+        summary.updated_at = datetime.now()
     else:
         summary = DailySummary(
             entry_date=datetime.combine(entry_date, datetime.min.time()),

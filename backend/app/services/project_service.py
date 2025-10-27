@@ -4,7 +4,7 @@ Service layer for Projects and Project Tasks operations
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
 from app.models.models import Project, ProjectTask
 
@@ -227,8 +227,8 @@ def delete_project_task(db: Session, task_id: int) -> bool:
 
 
 def get_tasks_due_today(db: Session) -> List[ProjectTask]:
-    """Get all project tasks due today (including completed from today)"""
-    from sqlalchemy import or_, cast, Date
+    """Get all project tasks due today (including completed today)"""
+    from sqlalchemy import or_
     today = datetime.now().date()
     today_start = datetime.combine(today, datetime.min.time())
     today_end = datetime.combine(today, datetime.max.time())
@@ -240,10 +240,13 @@ def get_tasks_due_today(db: Session) -> List[ProjectTask]:
             or_(
                 # Not completed
                 ProjectTask.is_completed == False,
-                # Completed today - show until next day (compare dates)
+                # Completed today (check if completed_at or updated_at is today)
                 and_(
                     ProjectTask.is_completed == True,
-                    cast(ProjectTask.updated_at, Date) >= today
+                    or_(
+                        ProjectTask.completed_at >= today_start,
+                        ProjectTask.updated_at >= today_start
+                    )
                 )
             )
         )
@@ -251,8 +254,8 @@ def get_tasks_due_today(db: Session) -> List[ProjectTask]:
 
 
 def get_overdue_tasks(db: Session) -> List[ProjectTask]:
-    """Get all overdue project tasks (including completed from today)"""
-    from sqlalchemy import or_, cast, Date
+    """Get all overdue project tasks (including completed today)"""
+    from sqlalchemy import or_
     today = datetime.now().date()
     today_start = datetime.combine(today, datetime.min.time())
     
@@ -262,14 +265,17 @@ def get_overdue_tasks(db: Session) -> List[ProjectTask]:
             or_(
                 # Not completed
                 ProjectTask.is_completed == False,
-                # Completed today - show until next day (compare dates)
+                # Completed today (show until midnight)
                 and_(
                     ProjectTask.is_completed == True,
-                    cast(ProjectTask.updated_at, Date) >= today
+                    or_(
+                        ProjectTask.completed_at >= today_start,
+                        ProjectTask.updated_at >= today_start
+                    )
                 )
             )
         )
-    ).order_by(ProjectTask.due_date).all()
+    ).order_by(ProjectTask.priority, ProjectTask.due_date).all()
 
 
 def get_upcoming_tasks(db: Session, days: int = 7) -> List[ProjectTask]:

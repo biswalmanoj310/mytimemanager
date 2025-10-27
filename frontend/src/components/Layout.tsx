@@ -12,6 +12,7 @@ import {
   Target, 
   Clock, 
   BarChart3,
+  CheckCircle2,
   Menu,
   X
 } from 'lucide-react';
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
   { path: '/goals', label: 'Goals', icon: <Target size={20} /> },
   { path: '/time-tracking', label: 'Time Tracking', icon: <Clock size={20} /> },
   { path: '/analytics', label: 'Analytics', icon: <BarChart3 size={20} /> },
+  { path: '/completed', label: 'Completed', icon: <CheckCircle2 size={20} /> },
 ];
 
 export default function Layout({ children }: LayoutProps) {

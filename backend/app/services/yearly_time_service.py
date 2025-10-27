@@ -33,7 +33,7 @@ def save_yearly_time_entry(db: Session, task_id: int, year_start_date: date, mon
     if existing:
         # Update existing entry
         existing.minutes = minutes
-        existing.updated_at = datetime.utcnow()
+        existing.updated_at = datetime.now()
         db.commit()
         db.refresh(existing)
         return existing

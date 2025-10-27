@@ -8,6 +8,7 @@ from datetime import datetime, date
 from typing import List, Optional
 from app.database.config import get_db
 from app.services import daily_time_service
+from app.utils.datetime_utils import get_local_date
 from app.models.schemas import (
     DailyTimeEntryCreate,
     DailyTimeEntryBulkCreate,
@@ -102,3 +103,12 @@ def get_month_daily_entries(
 ):
     """Get aggregated daily entries for a month (all days in the month starting from month_start_date)"""
     return daily_time_service.get_month_daily_aggregates(db, month_start_date)
+
+
+@router.get("/today")
+def get_today_date():
+    """Get today's date in server's local timezone"""
+    return {
+        "date": get_local_date().isoformat(),
+        "datetime": datetime.now().isoformat()
+    }

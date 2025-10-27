@@ -3,7 +3,7 @@
  * Display and manage all tasks with tabs and table view
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import './Tasks.css';
@@ -90,14 +90,26 @@ export default function Tasks() {
   const [activeTab, setActiveTab] = useState<TabType>('today');
   // Hourly time entries for daily tab - key format: "taskId-hour"
   const [hourlyEntries, setHourlyEntries] = useState<Record<string, number>>({});
-  // Selected date for daily tab
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  // Ref to track latest hourly entries (avoids stale closure issues)
+  const hourlyEntriesRef = useRef<Record<string, number>>({});
+  // Ref to track last pasted value to prevent wheel from overwriting it
+  const lastPastedValueRef = useRef<{key: string, value: number, timestamp: number} | null>(null);
+  // Ref to track if current change is from wheel event
+  const isWheelChangeRef = useRef<boolean>(false);
+  // Selected date for daily tab - initialize to today at midnight local time
+  const [selectedDate, setSelectedDate] = useState<Date>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  });
   // Incomplete days list
   const [incompleteDays, setIncompleteDays] = useState<any[]>([]);
   // Save timeout for debouncing
   const [saveTimeout, setSaveTimeout] = useState<number | null>(null);
   // Weekly tab state - key format: "taskId-dayIndex" (0=Sunday, 6=Saturday)
   const [weeklyEntries, setWeeklyEntries] = useState<Record<string, number>>({});
+  // Ref to track latest weekly entries
+  const weeklyEntriesRef = useRef<Record<string, number>>({});
   // Daily aggregates for weekly view - key format: "taskId-dayIndex"
   const [dailyAggregates, setDailyAggregates] = useState<Record<string, number>>({});
   // Weekly task statuses - key format: "taskId", value: {is_completed, is_na}
@@ -120,6 +132,8 @@ export default function Tasks() {
   
   // Monthly tab state - key format: "taskId-dayOfMonth" (1-31)
   const [monthlyEntries, setMonthlyEntries] = useState<Record<string, number>>({});
+  // Ref to track latest monthly entries
+  const monthlyEntriesRef = useRef<Record<string, number>>({});
   // Daily aggregates for monthly view - key format: "taskId-dayOfMonth"
   const [monthlyDailyAggregates, setMonthlyDailyAggregates] = useState<Record<string, number>>({});
   // Monthly task statuses - key format: "taskId", value: {is_completed, is_na}
@@ -296,13 +310,10 @@ export default function Tasks() {
     const projectParam = searchParams.get('project');
     const dateParam = searchParams.get('date');
 
-    console.log('URL params:', { tabParam, projectParam, dateParam });
-
     // Set active tab if provided
     if (tabParam) {
       const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'projects'];
       if (validTabs.includes(tabParam as TabType)) {
-        console.log('Setting active tab to:', tabParam);
         setActiveTab(tabParam as TabType);
       }
     }
@@ -310,19 +321,26 @@ export default function Tasks() {
     // Set selected date if provided (for daily tab)
     if (dateParam) {
       try {
-        const date = new Date(dateParam);
+        // Parse date as local (YYYY-MM-DD) to avoid timezone shift
+        const [year, month, day] = dateParam.split('-').map(Number);
+        const date = new Date(year, month - 1, day);
+        date.setHours(0, 0, 0, 0);
         if (!isNaN(date.getTime())) {
           setSelectedDate(date);
         }
       } catch (e) {
         console.error('Invalid date parameter:', dateParam);
       }
+    } else if (!tabParam || tabParam === 'daily') {
+      // If no date param but on daily tab, ensure we're on today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      setSelectedDate(today);
     }
 
     // Store project ID to select after projects are loaded (only if not already set)
     if (projectParam && tabParam === 'projects') {
       const projectId = parseInt(projectParam);
-      console.log('Parsed project ID from URL:', projectId);
       if (!isNaN(projectId)) {
         setPendingProjectId(projectId);
       }
@@ -353,6 +371,7 @@ export default function Tasks() {
   useEffect(() => {
     loadTasks();
     loadIncompleteDays();
+    // Don't load daily entries here - let the URL params or tab change handle it
   }, []);
 
   useEffect(() => {
@@ -382,6 +401,31 @@ export default function Tasks() {
       loadOverdueOneTimeTasks();
     }
   }, [tasks, oneTimeTasks, activeTab]);
+
+  // Helper function to format date for input (avoids timezone issues)
+  const formatDateForInput = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Helper function to check if a date is today
+  const isToday = (date: Date): boolean => {
+    const today = new Date();
+    return date.getFullYear() === today.getFullYear() &&
+           date.getMonth() === today.getMonth() &&
+           date.getDate() === today.getDate();
+  };
+
+  // Helper function to check if a date is in the future
+  const isFutureDate = (date: Date): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(date);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate > today;
+  };
 
   const loadTasks = async () => {
     try {
@@ -510,10 +554,8 @@ export default function Tasks() {
   // Load daily time entries from backend for selected date
   const loadDailyEntries = async (date: Date) => {
     try {
-      const dateStr = date.toISOString().split('T')[0];
-      console.log('Loading daily entries for date:', dateStr);
+      const dateStr = formatDateForInput(date);
       const entries = await api.get<any[]>(`/api/daily-time/entries/${dateStr}`);
-      console.log('Loaded entries:', entries);
       
       // Convert entries array to hourlyEntries map format
       const entriesMap: Record<string, number> = {};
@@ -522,8 +564,8 @@ export default function Tasks() {
         entriesMap[key] = entry.minutes;
       });
       
-      console.log('Setting hourlyEntries:', entriesMap);
       setHourlyEntries(entriesMap);
+      hourlyEntriesRef.current = entriesMap;
     } catch (err) {
       console.error('Error loading daily entries:', err);
     }
@@ -542,21 +584,33 @@ export default function Tasks() {
   // Save daily entries to backend (debounced)
   const saveDailyEntriesWithData = async (entriesToSave: Record<string, number>) => {
     try {
-      const dateStr = selectedDate.toISOString().split('T')[0];
+      // Group entries by task_id to find all tasks that have been edited
+      const taskEntries = new Map<number, Array<{hour: number, minutes: number}>>();
       
-      // Convert hourlyEntries map to array format
-      const entries = Object.entries(entriesToSave)
-        .filter(([_, minutes]) => minutes > 0)
-        .map(([key, minutes]) => {
-          const [task_id, hour] = key.split('-').map(Number);
-          return { task_id, hour, minutes };
-        });
+      Object.entries(entriesToSave).forEach(([key, minutes]) => {
+        const [task_id, hour] = key.split('-').map(Number);
+        if (!taskEntries.has(task_id)) {
+          taskEntries.set(task_id, []);
+        }
+        taskEntries.get(task_id)!.push({ hour, minutes });
+      });
+      
+      // Convert to array format - include ALL entries for edited tasks (even 0s)
+      const entries = Array.from(taskEntries.entries()).flatMap(([task_id, hourEntries]) => {
+        return hourEntries.map(({ hour, minutes }) => ({
+          task_id,
+          hour,
+          minutes
+        }));
+      });
 
       if (entries.length > 0) {
-        await api.post('/api/daily-time/entries/bulk/', {
-          entry_date: dateStr,
+        const payload = {
+          entry_date: formatDateForInput(selectedDate) + 'T00:00:00',
           entries: entries
-        });
+        };
+        
+        await api.post('/api/daily-time/entries/bulk/', payload);
         
         // Reload incomplete days after save
         loadIncompleteDays();
@@ -588,7 +642,10 @@ export default function Tasks() {
 
   // Format date for display
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    // Parse as local date to avoid timezone shift
+    const [year, month, day] = dateStr.split('T')[0].split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('en-US', {
       weekday: 'short',
       year: 'numeric',
       month: 'short',
@@ -653,6 +710,8 @@ export default function Tasks() {
       }
       
       setWeeklyEntries(entriesMap);
+      // Also update ref
+      weeklyEntriesRef.current = entriesMap;
 
       // Load daily aggregates for the week
       const dailyResponse: any = await api.get(`/api/daily-time/entries/week/${dateStr}`);
@@ -776,10 +835,13 @@ export default function Tasks() {
     try {
       const dateStr = selectedWeekStart.toISOString().split('T')[0];
       console.log('Saving weekly entries for week starting:', dateStr);
-      console.log('Current weeklyEntries:', weeklyEntries);
+      
+      // Use ref to get latest entries
+      const entriesToSave = weeklyEntriesRef.current;
+      console.log('Current weeklyEntries:', entriesToSave);
       
       // Convert weeklyEntries map to array format
-      const entries = Object.entries(weeklyEntries)
+      const entries = Object.entries(entriesToSave)
         .filter(([_, minutes]) => minutes > 0)
         .map(([key, minutes]) => {
           const [task_id, day_of_week] = key.split('-').map(Number);
@@ -805,10 +867,17 @@ export default function Tasks() {
   const handleWeeklyTimeChange = (taskId: number, dayIndex: number, value: string) => {
     const minutes = parseInt(value) || 0;
     const key = `${taskId}-${dayIndex}`;
-    setWeeklyEntries(prev => ({
-      ...prev,
-      [key]: minutes
-    }));
+    setWeeklyEntries(prev => {
+      const newEntries = {
+        ...prev,
+        [key]: minutes
+      };
+      
+      // Update ref immediately
+      weeklyEntriesRef.current = newEntries;
+      
+      return newEntries;
+    });
     
     // Debounced auto-save - wait 1 second after last input
     if (weeklySaveTimeout) {
@@ -820,6 +889,16 @@ export default function Tasks() {
     }, 1000);
     
     setWeeklySaveTimeout(timeout);
+  };
+
+  // Handle blur event for weekly - save immediately when input loses focus
+  const handleWeeklyTimeBlur = () => {
+    if (weeklySaveTimeout) {
+      window.clearTimeout(weeklySaveTimeout);
+      setWeeklySaveTimeout(null);
+    }
+    // Use ref to get latest value (no race condition, no delay needed)
+    saveWeeklyEntries();
   };
 
   // Get weekly time entry for a task and day
@@ -896,6 +975,8 @@ export default function Tasks() {
       }
       
       setMonthlyEntries(entriesMap);
+      // Also update ref
+      monthlyEntriesRef.current = entriesMap;
 
       // Load daily aggregates for the month
       const dailyResponse: any = await api.get(`/api/daily-time/entries/month/${dateStr}`);
@@ -1010,8 +1091,11 @@ export default function Tasks() {
     try {
       const dateStr = selectedMonthStart.toISOString().split('T')[0];
       
+      // Use ref to get latest entries
+      const entriesToSave = monthlyEntriesRef.current;
+      
       // Convert monthlyEntries map to array format
-      const entries = Object.entries(monthlyEntries)
+      const entries = Object.entries(entriesToSave)
         .filter(([_, minutes]) => minutes > 0)
         .map(([key, minutes]) => {
           const [task_id, day_of_month] = key.split('-').map(Number);
@@ -1038,10 +1122,17 @@ export default function Tasks() {
     
     const key = `${taskId}-${dayOfMonth}`;
     
-    setMonthlyEntries(prev => ({
-      ...prev,
-      [key]: finalValue
-    }));
+    setMonthlyEntries(prev => {
+      const newEntries = {
+        ...prev,
+        [key]: finalValue
+      };
+      
+      // Update ref immediately
+      monthlyEntriesRef.current = newEntries;
+      
+      return newEntries;
+    });
     
     // Debounced auto-save - wait 1 second after last input
     if (monthlySaveTimeout) {
@@ -1053,6 +1144,16 @@ export default function Tasks() {
     }, 1000);
     
     setMonthlySaveTimeout(timeout);
+  };
+
+  // Handle blur event for monthly - save immediately when input loses focus
+  const handleMonthlyTimeBlur = () => {
+    if (monthlySaveTimeout) {
+      window.clearTimeout(monthlySaveTimeout);
+      setMonthlySaveTimeout(null);
+    }
+    // Use ref to get latest value (no race condition, no delay needed)
+    saveMonthlyEntries();
   };
 
   // Get monthly time entry for a task and day
@@ -1627,16 +1728,23 @@ export default function Tasks() {
 
   const handleToggleTaskCompletion = async (taskId: number, currentStatus: boolean) => {
     try {
+      console.log('Toggling task completion:', taskId, 'from', currentStatus, 'to', !currentStatus);
+      
       await api.put(`/api/projects/tasks/${taskId}`, {
         is_completed: !currentStatus
       });
       
+      console.log('Task updated successfully, reloading data...');
+      
       // Refresh both projects list and tasks
       await loadProjects(); // This will reload all projects with updated status
+      await loadProjectTasksDueToday(); // Reload the today tasks list
       
       if (selectedProject) {
         await loadProjectTasks(selectedProject.id);
       }
+      
+      console.log('Data reloaded successfully');
     } catch (err: any) {
       console.error('Error toggling task completion:', err);
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
@@ -1970,25 +2078,45 @@ export default function Tasks() {
     const minutes = parseInt(value) || 0;
     const key = `${taskId}-${hour}`;
     
-    setHourlyEntries(prev => {
-      const newEntries = {
-        ...prev,
-        [key]: minutes
-      };
-      
-      // Debounced auto-save - wait 500ms after last input
-      if (saveTimeout) {
-        window.clearTimeout(saveTimeout);
+    // Check if this is a wheel-induced change trying to overwrite a recent paste
+    const lastPaste = lastPastedValueRef.current;
+    if (isWheelChangeRef.current && lastPaste && lastPaste.key === key) {
+      const timeSincePaste = Date.now() - lastPaste.timestamp;
+      if (timeSincePaste < 2000 && minutes !== lastPaste.value) {
+        // Within 2 seconds of paste and it's a wheel change - restore pasted value
+        hourlyEntriesRef.current[key] = lastPaste.value;
+        setHourlyEntries(prev => ({
+          ...prev,
+          [key]: lastPaste.value
+        }));
+        isWheelChangeRef.current = false; // Reset flag
+        return; // Don't process the wheel-induced change
       }
-      
-      const timeout = window.setTimeout(() => {
-        saveDailyEntriesWithData(newEntries);
-      }, 500);
-      
-      setSaveTimeout(timeout);
-      
-      return newEntries;
-    });
+    }
+    
+    // Reset wheel flag after processing
+    isWheelChangeRef.current = false;
+    
+    // Update ref FIRST by direct mutation (NOT replacing the whole object)
+    hourlyEntriesRef.current[key] = minutes;
+    
+    // Update state (React needs a new object reference to detect changes)
+    setHourlyEntries(prev => ({
+      ...prev,
+      [key]: minutes
+    }));
+    
+    // Clear any existing timeout
+    if (saveTimeout) {
+      window.clearTimeout(saveTimeout);
+    }
+    
+    // Debounced auto-save
+    const timeout = window.setTimeout(() => {
+      saveDailyEntriesWithData(hourlyEntriesRef.current);
+    }, 1000);
+    
+    setSaveTimeout(timeout);
   };
 
   // Handle blur event - save immediately when input loses focus
@@ -1997,7 +2125,79 @@ export default function Tasks() {
       window.clearTimeout(saveTimeout);
       setSaveTimeout(null);
     }
-    saveDailyEntriesWithData(hourlyEntries);
+    saveDailyEntriesWithData(hourlyEntriesRef.current);
+  };
+
+  // Handle paste event to ensure clean paste behavior
+  const handleHourlyTimePaste = (taskId: number, hour: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    
+    const pastedText = e.clipboardData.getData('text');
+    const pastedValue = parseInt(pastedText) || 0;
+    const key = `${taskId}-${hour}`;
+    
+    // Record this paste to protect it from wheel events for 2 seconds
+    lastPastedValueRef.current = {
+      key,
+      value: pastedValue,
+      timestamp: Date.now()
+    };
+    
+    const input = e.currentTarget;
+    input.value = String(pastedValue);
+    
+    handleHourlyTimeChange(taskId, hour, String(pastedValue));
+  };
+
+  // Handle focus event to add paste protection
+  const handleHourlyTimeFocus = (taskId: number, hour: number, e: React.FocusEvent<HTMLInputElement>) => {
+    const key = `${taskId}-${hour}`;
+    const input = e.currentTarget;
+    
+    // Prevent mouse wheel from changing value
+    const wheelHandler = (wheelEvent: WheelEvent) => {
+      wheelEvent.preventDefault();
+      isWheelChangeRef.current = true; // Mark next change as wheel-induced
+    };
+    
+    // Prevent arrow keys from changing value  
+    const keydownHandler = (keyEvent: KeyboardEvent) => {
+      if (keyEvent.key === 'ArrowUp' || keyEvent.key === 'ArrowDown') {
+        keyEvent.preventDefault();
+        isWheelChangeRef.current = true; // Mark next change as arrow-key-induced
+      }
+    };
+    
+    const pasteHandler = (pasteEvent: ClipboardEvent) => {
+      pasteEvent.preventDefault();
+      
+      const pastedText = pasteEvent.clipboardData?.getData('text') || '';
+      const pastedValue = parseInt(pastedText) || 0;
+      
+      // Record this paste to protect it from wheel events for 2 seconds
+      lastPastedValueRef.current = {
+        key,
+        value: pastedValue,
+        timestamp: Date.now()
+      };
+      
+      input.value = String(pastedValue);
+      handleHourlyTimeChange(taskId, hour, String(pastedValue));
+    };
+    
+    // Add listeners
+    input.addEventListener('paste', pasteHandler);
+    input.addEventListener('wheel', wheelHandler, { passive: false });
+    input.addEventListener('keydown', keydownHandler);
+    
+    // Clean up on blur
+    const blurCleanup = () => {
+      input.removeEventListener('paste', pasteHandler);
+      input.removeEventListener('wheel', wheelHandler);
+      input.removeEventListener('keydown', keydownHandler);
+      input.removeEventListener('blur', blurCleanup);
+    };
+    input.addEventListener('blur', blurCleanup, { once: true });
   };
 
   // Get hourly time entry for a task and hour
@@ -2243,6 +2443,42 @@ export default function Tasks() {
     'Family|Time Waste': 8,
   };
 
+  // Define custom task name order
+  const taskNameOrder: { [key: string]: number } = {
+    'cd-Mails-Tickets': 1,
+    'Code Coverage': 2,
+    'Code - Scripts': 3,
+    'Cloud': 4,
+    'LLM GenAI': 5,
+    'Git Jenkin Tools': 6,
+    'Interview Q/A': 7,
+    'Interview Talk': 8,
+    'Life Coach & NLP': 9,
+    'Toastmaster Task': 10,
+    'Yoga - Dhyan': 11,
+    'Sleep': 12,
+    'Planning': 13,
+    'Stocks': 14,
+    'Task (Bank/ mail)': 15,
+    'Commute': 16,
+    'Nature Needs': 17,
+    'Eating': 18,
+    'My Games': 19,
+    'Parent Talk': 20,
+    'Home Task': 21,
+    'Task Trishna': 22,
+    'Task Divyanshi': 23,
+    'Daughter Sports': 24,
+    'Shopping': 25,
+    'Family Friends': 26,
+    'Youtube': 27,
+    'TV': 28,
+    'Facebook': 29,
+    'Nextdoor': 30,
+    'News': 31,
+    'Dark Future': 32,
+  };
+
   // Filter tasks by active tab
   // Also filter out completed/NA tasks that are older than today
   const today = new Date();
@@ -2404,12 +2640,20 @@ export default function Tasks() {
       const orderA = hierarchyOrder[keyA] || 999;
       const orderB = hierarchyOrder[keyB] || 999;
       
-      // Sort by hierarchy order
+      // Sort by hierarchy order first
       if (orderA !== orderB) {
         return orderA - orderB;
       }
       
-      // Within same category, sort by task name
+      // Within same category, sort by custom task name order
+      const taskOrderA = taskNameOrder[a.name || ''] || 999;
+      const taskOrderB = taskNameOrder[b.name || ''] || 999;
+      
+      if (taskOrderA !== taskOrderB) {
+        return taskOrderA - taskOrderB;
+      }
+      
+      // If not in custom order, sort alphabetically
       return (a.name || '').localeCompare(b.name || '');
     });
 
@@ -2599,13 +2843,26 @@ export default function Tasks() {
           <input
             type="date"
             className="date-input"
-            value={selectedDate.toISOString().split('T')[0]}
-            onChange={(e) => setSelectedDate(new Date(e.target.value))}
+            value={formatDateForInput(selectedDate)}
+            max={formatDateForInput(new Date())} // Prevent future dates
+            onChange={(e) => {
+              const [year, month, day] = e.target.value.split('-').map(Number);
+              const localDate = new Date(year, month - 1, day);
+              setSelectedDate(localDate);
+            }}
           />
           <button className="btn-nav" onClick={() => changeDate(1)}>
             Next Day →
           </button>
-          <button className="btn-nav btn-today" onClick={() => setSelectedDate(new Date())}>
+          <button 
+            className={`btn-nav btn-today ${isToday(selectedDate) ? 'active' : 'inactive'}`}
+            onClick={() => {
+              const today = new Date();
+              // Set to start of day in local timezone
+              today.setHours(0, 0, 0, 0);
+              setSelectedDate(today);
+            }}
+          >
             📅 Today
           </button>
           <span className="date-display">
@@ -2973,11 +3230,8 @@ export default function Tasks() {
             <thead>
               <tr>
                 <th className="col-task sticky-col sticky-col-1">Task</th>
-                <th className="col-time sticky-col sticky-col-2">Allocated</th>
                 {activeTab === 'daily' ? (
                   <>
-                    <th className="col-time sticky-col sticky-col-3">Spent</th>
-                    <th className="col-time sticky-col sticky-col-4">Remaining</th>
                     {hourLabels.map(hour => (
                       <th key={hour.index} className="col-hour">{hour.label}</th>
                     ))}
@@ -2985,6 +3239,7 @@ export default function Tasks() {
                   </>
                 ) : activeTab === 'weekly' ? (
                   <>
+                    <th className="col-time sticky-col sticky-col-2">Allocated</th>
                     <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
                     <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average)</th>
                     {weekDays.map(day => (
@@ -2994,6 +3249,7 @@ export default function Tasks() {
                   </>
                 ) : activeTab === 'monthly' ? (
                   <>
+                    <th className="col-time sticky-col sticky-col-2">Allocated</th>
                     <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
                     <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average)</th>
                     {(() => {
@@ -3008,6 +3264,7 @@ export default function Tasks() {
                   </>
                 ) : activeTab === 'yearly' ? (
                   <>
+                    <th className="col-time sticky-col sticky-col-2">Allocated</th>
                     <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
                     <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average)</th>
                     {(() => {
@@ -3023,6 +3280,7 @@ export default function Tasks() {
                   </>
                 ) : (
                   <>
+                    <th className="col-time">Allocated</th>
                     {activeTab !== 'today' && <th className="col-time">Spent</th>}
                     {activeTab !== 'today' && <th className="col-time">Remaining</th>}
                     <th className="col-status">Status</th>
@@ -3067,9 +3325,20 @@ export default function Tasks() {
                         cursor: hasDailyAggregates ? 'not-allowed' : 'pointer',
                         opacity: hasDailyAggregates ? 0.7 : 1
                       }}
-                      title={hasDailyAggregates ? 'Task with daily aggregates - edit time in Daily tab' : 'Click to edit'}
+                      title={
+                        hasDailyAggregates 
+                          ? 'Task with daily aggregates - edit time in Daily tab' 
+                          : task.pillar_name 
+                            ? `${task.pillar_name}${task.category_name ? ` - ${task.category_name}` : ''}\nClick to edit`
+                            : 'Click to edit'
+                      }
                     >
                       {task.name}
+                      {activeTab === 'daily' && (
+                        <span style={{ marginLeft: '8px', fontSize: '12px', color: '#718096' }}>
+                          ({formatTaskTarget(task, false, false)})
+                        </span>
+                      )}
                       {activeTab === 'weekly' && task.follow_up_frequency === 'daily' && (
                         <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                       )}
@@ -3080,31 +3349,10 @@ export default function Tasks() {
                         <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                       )}
                     </div>
-                    {task.pillar_name && (
-                      <div className="task-pillar">
-                        ({task.pillar_name}{task.category_name ? ` - ${task.category_name}` : ''})
-                      </div>
-                    )}
-                  </td>
-                  <td className={`col-time sticky-col sticky-col-2 ${colorClass}`}>
-                    {formatTaskTarget(task, activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly', activeTab === 'monthly' || activeTab === 'yearly')}
                   </td>
                   
                   {activeTab === 'daily' ? (
                     <>
-                      {/* Spent column - sum of all hourly entries */}
-                      <td className={`col-time sticky-col sticky-col-3 ${colorClass}`}>
-                        {formatTaskValue(task, hourLabels.reduce((sum, hour) => sum + getHourlyTime(task.id, hour.index), 0))}
-                      </td>
-                      {/* Remaining column */}
-                      <td className={`col-time sticky-col sticky-col-4 ${colorClass}`}>
-                        {(() => {
-                          const spent = hourLabels.reduce((sum, hour) => sum + getHourlyTime(task.id, hour.index), 0);
-                          const target = task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes;
-                          const remaining = target - spent;
-                          return formatTaskValue(task, remaining > 0 ? remaining : 0);
-                        })()}
-                      </td>
                       {/* 24 hourly columns */}
                       {hourLabels.map(hour => {
                         const isBoolean = task.task_type === TaskType.BOOLEAN;
@@ -3119,6 +3367,7 @@ export default function Tasks() {
                                 onBlur={handleHourlyTimeBlur}
                                 title="Mark as done"
                                 style={{ cursor: 'pointer' }}
+                                disabled={isFutureDate(selectedDate)}
                               />
                             ) : (
                               <input
@@ -3128,9 +3377,18 @@ export default function Tasks() {
                                 className="hour-input"
                                 value={getHourlyTime(task.id, hour.index) || ''}
                                 onChange={(e) => handleHourlyTimeChange(task.id, hour.index, e.target.value)}
+                                onPaste={(e) => handleHourlyTimePaste(task.id, hour.index, e)}
+                                onFocus={(e) => handleHourlyTimeFocus(task.id, hour.index, e)}
+                                onWheel={(e) => e.preventDefault()}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                                    e.preventDefault();
+                                  }
+                                }}
                                 onBlur={handleHourlyTimeBlur}
                                 placeholder="0"
                                 title={task.task_type === TaskType.COUNT ? 'Enter count' : 'Enter minutes'}
+                                disabled={isFutureDate(selectedDate)}
                               />
                             )}
                           </td>
@@ -3162,6 +3420,10 @@ export default function Tasks() {
                     </>
                   ) : activeTab === 'weekly' ? (
                     <>
+                      {/* Allocated column */}
+                      <td className={`col-time sticky-col sticky-col-2 ${colorClass}`}>
+                        {formatTaskTarget(task, true, false)}
+                      </td>
                       {/* Spent column - average per day till today */}
                       <td className={`col-time sticky-col sticky-col-3 ${colorClass}`}>
                         {(() => {
@@ -3240,6 +3502,7 @@ export default function Tasks() {
                                 className={`hour-input ${isTaskFromDaily ? 'from-daily' : ''}`}
                                 checked={getWeeklyTime(task.id, day.index) > 0}
                                 onChange={(e) => handleWeeklyTimeChange(task.id, day.index, e.target.checked ? '1' : '0')}
+                                onBlur={handleWeeklyTimeBlur}
                                 title={isTaskFromDaily ? 'Read-only: This is a Daily task. Edit in Daily tab to change.' : 'Mark as done'}
                                 disabled={isTaskFromDaily}
                                 style={isTaskFromDaily ? { cursor: 'not-allowed', opacity: 0.7 } : { cursor: 'pointer' }}
@@ -3251,6 +3514,7 @@ export default function Tasks() {
                                 className={`hour-input ${isTaskFromDaily ? 'from-daily' : ''}`}
                                 value={getWeeklyTime(task.id, day.index) || ''}
                                 onChange={(e) => handleWeeklyTimeChange(task.id, day.index, e.target.value)}
+                                onBlur={handleWeeklyTimeBlur}
                                 placeholder="0"
                                 title={isTaskFromDaily ? 'Read-only: This is a Daily task. Edit in Daily tab to change.' : `Enter ${task.task_type === TaskType.COUNT ? 'count' : 'time'}`}
                                 readOnly={isTaskFromDaily}
@@ -3289,6 +3553,10 @@ export default function Tasks() {
                     </>
                   ) : activeTab === 'monthly' ? (
                     <>
+                      {/* Allocated column */}
+                      <td className={`col-time sticky-col sticky-col-2 ${getMonthlyRowColorClass(task)}`}>
+                        {formatTaskTarget(task, true, true)}
+                      </td>
                       {/* Spent column - average per day till today */}
                       <td className={`col-time sticky-col sticky-col-3 ${getMonthlyRowColorClass(task)}`}>
                         {(() => {
@@ -3405,6 +3673,7 @@ export default function Tasks() {
                                   className={`hour-input ${isTaskFromDaily ? 'from-daily' : ''}`}
                                   checked={getMonthlyTime(task.id, day) > 0}
                                   onChange={(e) => handleMonthlyTimeChange(task.id, day, e.target.checked ? '1' : '0')}
+                                  onBlur={handleMonthlyTimeBlur}
                                   title={isTaskFromDaily ? 'Read-only: This is a Daily task. Edit in Daily tab to change.' : 'Mark as done'}
                                   disabled={isTaskFromDaily}
                                   style={isTaskFromDaily ? { cursor: 'not-allowed', opacity: 0.7 } : { cursor: 'pointer' }}
@@ -3416,6 +3685,7 @@ export default function Tasks() {
                                   className={`hour-input ${isTaskFromDaily ? 'from-daily' : ''}`}
                                   value={getMonthlyTime(task.id, day) || ''}
                                   onChange={(e) => handleMonthlyTimeChange(task.id, day, e.target.value)}
+                                  onBlur={handleMonthlyTimeBlur}
                                   placeholder="0"
                                   title={isTaskFromDaily ? 'Read-only: This is a Daily task. Edit in Daily tab to change.' : `Enter ${task.task_type === TaskType.COUNT ? 'count' : 'time'}`}
                                   readOnly={isTaskFromDaily}
@@ -3456,6 +3726,10 @@ export default function Tasks() {
                     </>
                   ) : activeTab === 'yearly' ? (
                     <>
+                      {/* Allocated column */}
+                      <td className={`col-time sticky-col sticky-col-2 ${getYearlyRowColorClass(task)}`}>
+                        {formatTaskTarget(task, true, true)}
+                      </td>
                       {/* Spent column - average per month till today */}
                       <td className={`col-time sticky-col sticky-col-3 ${getYearlyRowColorClass(task)}`}>
                         {(() => {
@@ -3617,6 +3891,7 @@ export default function Tasks() {
                     </>
                   ) : (
                     <>
+                      <td className="col-time">{formatTaskValue(task, task.allocated_minutes)}</td>
                       {activeTab !== 'today' && <td className="col-time">{formatTaskValue(task, task.spent_minutes)}</td>}
                       {activeTab !== 'today' && <td className="col-time">{(() => {
                         const target = task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes;
@@ -3688,18 +3963,10 @@ export default function Tasks() {
                 return (
                   <tr className={`total-row ${!isExactly24 ? 'total-mismatch' : ''}`}>
                     <td className="col-task sticky-col sticky-col-1">
-                      <strong>Total</strong><br/>
-                      <strong>Time</strong>
-                    </td>
-                    <td className="col-time sticky-col sticky-col-2">
-                      <strong>{totalAllocated} min</strong><br/>
-                      <strong>({totalHours.toFixed(2)}h)</strong>
-                    </td>
-                    <td className="col-time sticky-col sticky-col-3">
-                      <strong>{totalSpent} min</strong>
-                    </td>
-                    <td className="col-time sticky-col sticky-col-4">
-                      <strong>{totalAllocated - totalSpent} min</strong>
+                      <strong>Total Time</strong><br/>
+                      <small style={{ fontSize: '11px', color: '#666' }}>
+                        Allocated: {totalAllocated} min ({totalHours.toFixed(2)}h) | Spent: {totalSpent} min
+                      </small>
                     </td>
                     {hourLabels.map(hour => {
                       const hourTotal = filteredTasks
@@ -3784,8 +4051,11 @@ export default function Tasks() {
                         <input
                           type="checkbox"
                           checked={task.is_completed}
-                          onChange={() => handleToggleTaskCompletion(task.id, task.is_completed)}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          onChange={(e) => {
+                            console.log('Checkbox clicked for task:', task.id, 'Current status:', task.is_completed);
+                            handleToggleTaskCompletion(task.id, task.is_completed);
+                          }}
+                          style={{ width: '18px', height: '18px', cursor: 'pointer', pointerEvents: 'auto' }}
                         />
                       </td>
                       <td className="col-task">
