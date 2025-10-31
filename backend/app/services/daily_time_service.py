@@ -148,9 +148,16 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
 
 
 def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayResponse]:
-    """Get list of incomplete days (where allocated != spent)"""
+    """Get list of incomplete days (where allocated != spent)
+    Excludes today since the day is not yet over
+    """
+    today = date.today()
+    
     summaries = db.query(DailySummary).filter(
-        DailySummary.is_complete == False
+        and_(
+            DailySummary.is_complete == False,
+            func.date(DailySummary.entry_date) < today  # Exclude today
+        )
     ).order_by(DailySummary.entry_date.desc()).limit(limit).all()
 
     result = []

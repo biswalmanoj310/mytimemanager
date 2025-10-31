@@ -13,7 +13,10 @@ import Analytics from './pages/Analytics';
 import TimeTracking from './pages/TimeTracking';
 import Completed from './pages/Completed';
 
+console.log('[APP] App component loaded');
+
 function App() {
+  console.log('[APP] App component rendering');
   return (
     <Router>
       <Layout>

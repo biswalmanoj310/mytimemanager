@@ -205,6 +205,48 @@
   font-weight: 600;
 }
 
+/* Task Section Headers */
+.task-section-header {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px 8px 0 0;
+  margin-bottom: 0;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-section-header .emoji {
+  font-size: 22px;
+}
+
+.task-section-header .subtitle {
+  font-size: 14px;
+  font-weight: 400;
+  opacity: 0.9;
+  margin-left: 8px;
+}
+
+/* Different colors for each task type */
+.task-section-header.time-based {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  box-shadow: 0 2px 8px rgba(79, 172, 254, 0.3);
+}
+
+.task-section-header.count-based {
+  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+  box-shadow: 0 2px 8px rgba(67, 233, 123, 0.3);
+}
+
+.task-section-header.boolean-based {
+  background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+  box-shadow: 0 2px 8px rgba(250, 112, 154, 0.3);
+}
+
 /* Excel-like Table */
 .tasks-table-container {
   background: white;
@@ -217,6 +259,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  padding-bottom: 10px; /* Ensure Total row is fully visible */
 }
 
 .tasks-table {
@@ -228,24 +271,27 @@
 }
 
 .tasks-table thead {
-  background: #f7fafc;
-  border-bottom: 2px solid #cbd5e0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-bottom: 2px solid #5a67d8;
   position: sticky;
   top: 0;
   z-index: 20;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .tasks-table thead th {
-  border-bottom: 1px solid #cbd5e0;
+  border-bottom: 1px solid #5a67d8;
+  color: #ffffff;
 }
 
 .tasks-table th {
-  padding: 12px 16px;
+  padding: 3px 4px;
+  /* Minimal padding for Excel-like feel */
   text-align: left;
   font-weight: 600;
-  color: #2d3748;
-  border-right: 1px solid #e2e8f0;
+  color: #ffffff;
+  border-right: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 12px;
 }
 
 .tasks-table th:last-child {
@@ -262,6 +308,43 @@
 
 .tasks-table tbody tr:hover {
   background: #f7fafc;
+}
+
+/* Row and Column Highlighting on Cell Hover */
+.tasks-table tbody tr:hover td {
+  background: #fef3c7; /* Light yellow - highlight entire row */
+}
+
+.tasks-table tbody td:hover {
+  background: #fbbf24 !important; /* Bright yellow/orange - highlight hovered cell */
+}
+
+/* Column highlighting with JavaScript-managed class */
+.tasks-table thead th.column-highlight {
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%) !important; /* Orange gradient for headers */
+  color: #ffffff !important; /* Keep text white and visible */
+}
+
+.tasks-table tbody td.column-highlight {
+  background: #fef3c7 !important; /* Light yellow column highlight for body cells */
+}
+
+/* Sticky column highlighting - needs higher specificity */
+.tasks-table tbody td.sticky-col.column-highlight {
+  background: #fef3c7 !important; /* Light yellow for sticky task column */
+}
+
+.tasks-table tfoot td.column-highlight {
+  background: #fde68a !important; /* Medium yellow for footer */
+}
+
+/* Hovered cell should be darker than column */
+.tasks-table tbody td.column-highlight:hover {
+  background: #fbbf24 !important;
+}
+
+.tasks-table tbody td.sticky-col.column-highlight:hover {
+  background: #fbbf24 !important; /* Same bright yellow for sticky column hover */
 }
 
 .tasks-table tbody tr.completed-row {
@@ -302,9 +385,11 @@
 }
 
 .tasks-table td {
-  padding: 12px 16px;
+  padding: 0px 4px;
+  /* Minimal padding for Excel-like feel */
   border-right: 1px solid #e2e8f0;
   vertical-align: middle;
+  height: 24px;
 }
 
 .tasks-table td:last-child {
@@ -313,16 +398,19 @@
 
 /* Column Widths - Auto-adjusting to content */
 .col-task {
-  min-width: 200px;
-  max-width: 500px;
+  min-width: 150px;
+  max-width: 400px;
+  width: auto;
   white-space: normal;
   word-wrap: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .col-time {
   white-space: nowrap;
   text-align: center;
-  padding: 12px 20px !important;
+  padding: 3px 6px !important;
 }
 
 .col-status {
@@ -382,15 +470,21 @@
   box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.total-row {
+  height: auto;
+  min-height: 60px; /* Ensure enough space for two-line content */
+}
+
 .total-row td {
-  padding: 14px 16px;
+  padding: 12px 8px;
   font-weight: 700;
   color: #2d3748;
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.3;
   vertical-align: middle;
   background: #f7fafc;
   border-top: 1px solid #cbd5e0;
+  white-space: normal; /* Allow text wrapping */
 }
 
 .total-row .col-task {
@@ -538,15 +632,15 @@
 }
 
 .daily-table .col-time {
-  min-width: 80px;
-  padding: 12px 16px !important;
+  min-width: 60px;
+  padding: 3px 6px !important;
 }
 
 .col-hour {
-  width: 70px;
-  min-width: 70px;
-  max-width: 70px;
-  padding: 8px 4px !important;
+  width: 50px;
+  min-width: 50px;
+  max-width: 50px;
+  padding: 0px 2px !important;
   text-align: center;
   font-size: 11px;
   white-space: nowrap;
@@ -555,19 +649,27 @@
 
 .hour-input {
   width: 100%;
-  max-width: 60px;
-  padding: 4px 6px;
+  max-width: 46px;
+  padding: 0px 2px;
+  /* Minimal padding like Excel */
   border: 1px solid #cbd5e0;
-  border-radius: 4px;
+  border-radius: 1px;
+  /* Subtle border radius */
   font-size: 13px;
   text-align: center;
   transition: all 0.2s;
+  line-height: 1.1;
+  height: 22px;
+  /* Fixed height to fill cell */
+  box-sizing: border-box;
+  /* Tighter line height */
 }
 
 .hour-input:focus {
   outline: none;
   border-color: #4299e1;
-  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  box-shadow: 0 0 0 2px rgba(66, 153, 225, 0.15);
+  /* Subtle focus indicator */
 }
 
 .hour-input:hover {
@@ -622,6 +724,11 @@
   min-width: 250px;
 }
 
+.daily-table .sticky-col-1.column-highlight {
+  background: #fef3c7 !important; /* Override with yellow highlight */
+  z-index: 16; /* Slightly higher to show highlight */
+}
+
 .daily-table .sticky-col-2 {
   position: sticky;
   left: 250px; /* Width of col-1 */
@@ -669,7 +776,23 @@
 .daily-table tbody tr:hover .sticky-col-2,
 .daily-table tbody tr:hover .sticky-col-3,
 .daily-table tbody tr:hover .sticky-col-4 {
-  background: #f7fafc;
+  background: #fef3c7; /* Light yellow on row hover */
+}
+
+/* Sticky column with column-highlight class */
+.daily-table tbody tr .sticky-col-1.column-highlight,
+.daily-table tbody tr .sticky-col-2.column-highlight,
+.daily-table tbody tr .sticky-col-3.column-highlight,
+.daily-table tbody tr .sticky-col-4.column-highlight {
+  background: #fef3c7 !important; /* Light yellow for column highlight */
+}
+
+/* Sticky column hover state */
+.daily-table tbody tr .sticky-col-1.column-highlight:hover,
+.daily-table tbody tr .sticky-col-2.column-highlight:hover,
+.daily-table tbody tr .sticky-col-3.column-highlight:hover,
+.daily-table tbody tr .sticky-col-4.column-highlight:hover {
+  background: #fbbf24 !important; /* Bright yellow on hover */
 }
 
 /* Enhanced scrolling with visible scrollbars */

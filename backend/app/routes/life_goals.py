@@ -543,14 +543,15 @@ def get_goal_projects_for_task(task_id: int, db: Session = Depends(get_db)):
 
 @router.get("/goal-tasks/due-today")
 def get_goal_tasks_due_today(db: Session = Depends(get_db)):
-    """Get all goal tasks that are due today (including completed from today)"""
+    """Get all goal tasks that are due today (including completed from today - visible until next day midnight)"""
     from app.models.goal import LifeGoalTask, LifeGoal
-    from datetime import date, datetime
+    from datetime import date, datetime, timedelta
     from sqlalchemy import or_, and_, cast, Date
     
     today = date.today()
+    yesterday = today - timedelta(days=1)
     
-    # Get tasks due today - include completed if completed today
+    # Get tasks due today - include completed if completed today or yesterday
     tasks = db.query(LifeGoalTask).join(
         LifeGoal, LifeGoalTask.goal_id == LifeGoal.id
     ).filter(
@@ -559,10 +560,10 @@ def get_goal_tasks_due_today(db: Session = Depends(get_db)):
         or_(
             # Not completed
             LifeGoalTask.is_completed == False,
-            # Completed today - show until next day
+            # Completed today or yesterday - show until next day midnight
             and_(
                 LifeGoalTask.is_completed == True, 
-                LifeGoalTask.updated_at >= today
+                cast(LifeGoalTask.updated_at, Date) >= yesterday
             )
         )
     ).all()
@@ -592,12 +593,13 @@ def get_goal_tasks_due_today(db: Session = Depends(get_db)):
 
 @router.get("/goal-tasks/overdue")
 def get_goal_tasks_overdue(db: Session = Depends(get_db)):
-    """Get all goal tasks that are overdue (including completed from today)"""
+    """Get all goal tasks that are overdue (including completed from today - visible until next day midnight)"""
     from app.models.goal import LifeGoalTask, LifeGoal
-    from datetime import date
-    from sqlalchemy import or_, and_
+    from datetime import date, timedelta
+    from sqlalchemy import or_, and_, cast, Date
     
     today = date.today()
+    yesterday = today - timedelta(days=1)
     
     tasks = db.query(LifeGoalTask).join(
         LifeGoal, LifeGoalTask.goal_id == LifeGoal.id
@@ -607,10 +609,10 @@ def get_goal_tasks_overdue(db: Session = Depends(get_db)):
         or_(
             # Not completed
             LifeGoalTask.is_completed == False,
-            # Completed today - show until next day
+            # Completed today or yesterday - show until next day midnight
             and_(
                 LifeGoalTask.is_completed == True,
-                LifeGoalTask.updated_at >= today
+                cast(LifeGoalTask.updated_at, Date) >= yesterday
             )
         )
     ).all()

@@ -11,6 +11,7 @@ import json
 
 from app.models.models import Task, Pillar, Category, SubCategory, Goal
 from app.models.schemas import TaskCreate, TaskUpdate, TaskFilters
+from app.utils.datetime_utils import normalize_to_midnight
 
 
 class TaskService:
@@ -228,15 +229,13 @@ class TaskService:
         
         # Handle completion
         if task_data.is_completed is not None and task_data.is_completed and not db_task.is_completed:
-            # Store current date at midnight to avoid timezone comparison issues
-            now = datetime.now()
-            update_data['completed_at'] = datetime(now.year, now.month, now.day)
+            # Store current date at midnight in local timezone
+            update_data['completed_at'] = normalize_to_midnight(datetime.now())
         
         # Handle NA marking - set timestamp when task is marked as inactive
         if task_data.is_active is not None and not task_data.is_active and db_task.is_active:
-            # Store current date at midnight to avoid timezone comparison issues
-            now = datetime.now()
-            update_data['na_marked_at'] = datetime(now.year, now.month, now.day)
+            # Store current date at midnight in local timezone
+            update_data['na_marked_at'] = normalize_to_midnight(datetime.now())
         
         # If task is reactivated, clear the NA timestamp
         if task_data.is_active is not None and task_data.is_active and not db_task.is_active:
@@ -353,9 +352,8 @@ class TaskService:
             raise ValueError(f"Task with id {task_id} not found")
         
         db_task.is_completed = True
-        # Store current date at midnight to avoid timezone comparison issues
-        now = datetime.now()
-        db_task.completed_at = datetime(now.year, now.month, now.day)
+        # Store current date at midnight in local timezone
+        db_task.completed_at = normalize_to_midnight(datetime.now())
         
         db.commit()
         db.refresh(db_task)

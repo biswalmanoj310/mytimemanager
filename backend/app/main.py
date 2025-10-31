@@ -24,10 +24,12 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
+        "http://localhost:3003",
         "http://localhost:8000",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
-        "http://127.0.0.1:3002"
+        "http://127.0.0.1:3002",
+        "http://127.0.0.1:3003"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -57,7 +59,7 @@ async def health_check():
 
 
 # Import and include routers
-from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar, comparative_analytics, daily_time, weekly_time, monthly_time, yearly_time, one_time_tasks, projects, life_goals, streaks, completed
+from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar, comparative_analytics, daily_time, weekly_time, monthly_time, yearly_time, one_time_tasks, projects, life_goals, streaks, completed, misc_tasks, habits, wishes
 
 app.include_router(pillars.router, prefix="/api/pillars", tags=["Pillars"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
@@ -75,9 +77,12 @@ app.include_router(monthly_time.router)
 app.include_router(yearly_time.router)
 app.include_router(one_time_tasks.router)
 app.include_router(projects.router)
+app.include_router(misc_tasks.router)
 app.include_router(life_goals.router)
 app.include_router(streaks.router)
 app.include_router(completed.router)
+app.include_router(habits.router)
+app.include_router(wishes.router)
 
 
 if __name__ == "__main__":

@@ -52,50 +52,101 @@ const PILLAR_COLORS: Record<string, string> = {
 };
 
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Test mode - set to true to bypass API and render immediately
+  const TEST_MODE = false;
+  
+  const [data, setData] = useState<DashboardData | null>(TEST_MODE ? {
+    summary: {
+      total_goals: 0,
+      active_goals: 0,
+      completed_goals: 0,
+      pending_goals: 0,
+      total_allocated_hours: 0,
+      total_spent_hours: 0,
+      overall_progress: 0,
+      completion_rate: 0
+    },
+    by_pillar: {},
+    top_performing: [],
+    needs_attention: [],
+    recently_completed: []
+  } : null);
+  const [loading, setLoading] = useState(!TEST_MODE);
   const [error, setError] = useState<string | null>(null);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
+  
+  console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
 
   const loadDashboardData = async () => {
+    console.log('[Dashboard] Starting to load dashboard data...');
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('Loading dashboard data...');
+      console.log('[Dashboard] Calling API: /api/dashboard/goals/overview');
       const dashboardData = await api.get<DashboardData>('/api/dashboard/goals/overview');
-      console.log('Dashboard data loaded:', dashboardData);
+      console.log('[Dashboard] Data received:', dashboardData);
+      console.log('[Dashboard] Data type:', typeof dashboardData);
       
-      setData(dashboardData);
+      // Ensure we have valid data
+      if (dashboardData && typeof dashboardData === 'object') {
+        console.log('[Dashboard] Setting data, keys:', Object.keys(dashboardData));
+        setData(dashboardData);
+        console.log('[Dashboard] Data set successfully');
+      } else {
+        console.error('[Dashboard] Invalid data format:', dashboardData);
+        setError('Invalid data format received from server');
+      }
     } catch (err: any) {
-      console.error('Error loading dashboard:', err);
-      console.error('Error details:', err.response?.data);
+      console.error('[Dashboard] Error caught:', err);
+      console.error('[Dashboard] Error message:', err.message);
+      console.error('[Dashboard] Error response:', err.response);
       setError(err.response?.data?.detail || err.message || 'Failed to load dashboard data. Please try again.');
     } finally {
+      console.log('[Dashboard] Setting loading to false');
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log('[Dashboard] useEffect running, about to load data');
     loadDashboardData();
   }, []);
 
-  // Always show loading first on initial mount
-  if (loading || !data) {
+  console.log('[Dashboard] Render - loading:', loading, 'error:', error, 'hasData:', !!data);
+
+  // Show loading state
+  if (loading) {
+    console.log('[Dashboard] Rendering loading state');
     return (
-      <div className="dashboard-loading">
+      <div className="dashboard-loading" style={{ padding: '40px', textAlign: 'center' }}>
         <div className="spinner"></div>
         <p>Loading dashboard...</p>
+        <p style={{ fontSize: '12px', color: '#666', marginTop: '10px' }}>
+          If this persists, check browser console (F12) for errors
+        </p>
       </div>
     );
   }
 
-  // Show error state
+  // Show error state before checking data
   if (error) {
     return (
       <div className="dashboard-error">
         <p>{error}</p>
+        <button onClick={loadDashboardData} className="btn btn-primary">
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // If we finished loading but have no data, show error
+  if (!data) {
+    return (
+      <div className="dashboard-error">
+        <p>No dashboard data available</p>
         <button onClick={loadDashboardData} className="btn btn-primary">
           Retry
         </button>

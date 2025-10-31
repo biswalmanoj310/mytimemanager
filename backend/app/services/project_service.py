@@ -227,11 +227,12 @@ def delete_project_task(db: Session, task_id: int) -> bool:
 
 
 def get_tasks_due_today(db: Session) -> List[ProjectTask]:
-    """Get all project tasks due today (including completed today)"""
+    """Get all project tasks due today (including completed today - visible until next day midnight)"""
     from sqlalchemy import or_
     today = datetime.now().date()
     today_start = datetime.combine(today, datetime.min.time())
     today_end = datetime.combine(today, datetime.max.time())
+    yesterday_start = datetime.combine(today - timedelta(days=1), datetime.min.time())
     
     return db.query(ProjectTask).filter(
         and_(
@@ -240,12 +241,12 @@ def get_tasks_due_today(db: Session) -> List[ProjectTask]:
             or_(
                 # Not completed
                 ProjectTask.is_completed == False,
-                # Completed today (check if completed_at or updated_at is today)
+                # Completed today or yesterday (show until next day midnight)
                 and_(
                     ProjectTask.is_completed == True,
                     or_(
-                        ProjectTask.completed_at >= today_start,
-                        ProjectTask.updated_at >= today_start
+                        ProjectTask.completed_at >= yesterday_start,
+                        ProjectTask.updated_at >= yesterday_start
                     )
                 )
             )
@@ -254,10 +255,11 @@ def get_tasks_due_today(db: Session) -> List[ProjectTask]:
 
 
 def get_overdue_tasks(db: Session) -> List[ProjectTask]:
-    """Get all overdue project tasks (including completed today)"""
+    """Get all overdue project tasks (including completed today - visible until next day midnight)"""
     from sqlalchemy import or_
     today = datetime.now().date()
     today_start = datetime.combine(today, datetime.min.time())
+    yesterday_start = datetime.combine(today - timedelta(days=1), datetime.min.time())
     
     return db.query(ProjectTask).filter(
         and_(
@@ -265,12 +267,12 @@ def get_overdue_tasks(db: Session) -> List[ProjectTask]:
             or_(
                 # Not completed
                 ProjectTask.is_completed == False,
-                # Completed today (show until midnight)
+                # Completed today or yesterday (show until next day midnight)
                 and_(
                     ProjectTask.is_completed == True,
                     or_(
-                        ProjectTask.completed_at >= today_start,
-                        ProjectTask.updated_at >= today_start
+                        ProjectTask.completed_at >= yesterday_start,
+                        ProjectTask.updated_at >= yesterday_start
                     )
                 )
             )

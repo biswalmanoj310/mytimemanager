@@ -273,11 +273,43 @@ const ProjectTaskNode = ({
   );
 };
 
+// Wishes interfaces
+interface WishData {
+  id: number;
+  title: string;
+  description?: string;
+  category?: string;
+  dream_type?: string;
+  estimated_timeframe?: string;
+  estimated_cost?: number;
+  priority: string;
+  why_important?: string;
+  emotional_impact?: string;
+  life_area?: string;
+  image_url?: string;
+  status: string;
+  is_active: boolean;
+  stats?: {
+    days_dreaming: number;
+    reflections_count: number;
+    exploration_steps_total: number;
+    exploration_steps_completed: number;
+    exploration_progress: number;
+    inspirations_count: number;
+    average_clarity_score?: number;
+  };
+}
+
+type TabType = 'goals' | 'wishes';
+
 export default function Goals() {
   // Navigation
   const navigate = useNavigate();
   
-  // State
+  // Tab State
+  const [activeTab, setActiveTab] = useState<TabType>('goals');
+  
+  // Goals State
   const [lifeGoals, setLifeGoals] = useState<LifeGoalData[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<LifeGoalData | null>(null);
   const [goalMilestones, setGoalMilestones] = useState<MilestoneData[]>([]);
@@ -293,6 +325,12 @@ export default function Goals() {
   const [createAsProject, setCreateAsProject] = useState(false);
   const [loading, setLoading] = useState(true);
   const [availableTasks, setAvailableTasks] = useState<Task[]>([]);
+  
+  // Wishes State
+  const [wishes, setWishes] = useState<WishData[]>([]);
+  const [selectedWish, setSelectedWish] = useState<WishData | null>(null);
+  const [showAddWishModal, setShowAddWishModal] = useState(false);
+  const [showWishDetailsModal, setShowWishDetailsModal] = useState(false);
   const [selectedTaskType, setSelectedTaskType] = useState<string>('');
 
   // Project management state
@@ -319,10 +357,14 @@ export default function Goals() {
   const [selectedProjectForTask, setSelectedProjectForTask] = useState<number | null>(null);
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTaskData | null>(null);
 
-  // Load goals on mount
+  // Load data based on active tab
   useEffect(() => {
-    loadLifeGoals();
-  }, []);
+    if (activeTab === 'goals') {
+      loadLifeGoals();
+    } else if (activeTab === 'wishes') {
+      loadWishes();
+    }
+  }, [activeTab]);
 
   // Load tasks when task type is selected
   const loadTasksByType = async (taskType: string) => {
@@ -348,6 +390,48 @@ export default function Goals() {
   };
 
   // API Functions
+  
+  // Wish / Dream Board functions
+  const loadWishes = async () => {
+    try {
+      const response: any = await api.get('/api/wishes/');
+      const data = response.data || response;
+      const wishesList = Array.isArray(data) ? data : [];
+      console.log('Loaded wishes from API:', wishesList);
+      setWishes(wishesList);
+    } catch (err: any) {
+      console.error('Error loading wishes:', err);
+      setWishes([]);
+    }
+  };
+
+  const handleCreateWish = async (wishData: any) => {
+    try {
+      await api.post('/api/wishes/', wishData);
+      await loadWishes();
+      setShowAddWishModal(false);
+    } catch (err: any) {
+      console.error('Error creating wish:', err);
+      alert('Failed to create wish: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleArchiveWish = async (wishId: number) => {
+    if (!confirm('Archive this wish? You can view archived wishes later.')) {
+      return;
+    }
+
+    try {
+      await api.delete(`/api/wishes/${wishId}/archive`);
+      await loadWishes();
+      setSelectedWish(null);
+      setShowWishDetailsModal(false);
+    } catch (err: any) {
+      console.error('Error archiving wish:', err);
+      alert('Failed to archive wish: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+  
   const loadLifeGoals = async () => {
     try {
       setLoading(true);
@@ -738,13 +822,357 @@ export default function Goals() {
 
   return (
     <div className="page-container">
-      <h1>Life Goals</h1>
+      <h1>Life Goals & Dreams</h1>
       <p className="page-description">
-        Define and track your most important long-term objectives. Break them down into milestones, 
-        link daily/weekly tasks, and measure progress toward becoming your best self.
+        Track your aspirations from pressure-free dreams to committed goals with milestones and action plans.
       </p>
 
-      <div className="goals-container">
+      {/* Tab Navigation */}
+      <div className="tabs-container" style={{ marginBottom: '20px', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', gap: '0' }}>
+          <button
+            className={`tab ${activeTab === 'goals' ? 'active' : ''}`}
+            onClick={() => setActiveTab('goals')}
+            style={{
+              padding: '12px 24px',
+              border: 'none',
+              background: activeTab === 'goals' ? '#3b82f6' : 'transparent',
+              color: activeTab === 'goals' ? 'white' : '#64748b',
+              borderRadius: '8px 8px 0 0',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'goals' ? '600' : '400',
+              transition: 'all 0.2s'
+            }}
+          >
+            🎯 Committed Goals
+          </button>
+          <button
+            className={`tab ${activeTab === 'wishes' ? 'active' : ''}`}
+            onClick={() => setActiveTab('wishes')}
+            style={{
+              padding: '12px 24px',
+              border: 'none',
+              background: activeTab === 'wishes' ? '#3b82f6' : 'transparent',
+              color: activeTab === 'wishes' ? 'white' : '#64748b',
+              borderRadius: '8px 8px 0 0',
+              cursor: 'pointer',
+              fontWeight: activeTab === 'wishes' ? '600' : '400',
+              transition: 'all 0.2s'
+            }}
+          >
+            ✨ Dream Board
+          </button>
+        </div>
+      </div>
+
+      {activeTab === 'wishes' ? (
+        /* Wishes Tab - Dream Board */
+        <div className="wishes-container" style={{ padding: '20px' }}>
+          <div className="wishes-header" style={{ marginBottom: '30px' }}>
+            <h2 style={{ fontSize: '28px', marginBottom: '10px' }}>✨ Your Dream Board</h2>
+            <p style={{ color: '#666', fontSize: '16px', marginBottom: '20px' }}>
+              A pressure-free space for your aspirations and dreams. No deadlines, no guilt – just possibilities.
+            </p>
+            <button 
+              className="btn btn-primary" 
+              onClick={() => setShowAddWishModal(true)}
+              style={{ padding: '12px 24px', fontSize: '16px' }}
+            >
+              ➕ Add New Wish
+            </button>
+          </div>
+
+          {wishes.length === 0 ? (
+            <div className="empty-state" style={{ 
+              textAlign: 'center', 
+              padding: '60px 20px',
+              backgroundColor: '#f7fafc',
+              borderRadius: '12px'
+            }}>
+              <div style={{ fontSize: '64px', marginBottom: '20px' }}>💭</div>
+              <h3 style={{ fontSize: '24px', marginBottom: '10px', color: '#2d3748' }}>
+                No dreams yet
+              </h3>
+              <p style={{ fontSize: '16px', color: '#718096', marginBottom: '20px', maxWidth: '500px', margin: '0 auto 20px' }}>
+                What would you love to do, have, or become? Travel the world? Learn a new skill? 
+                Create something meaningful? This is your space to dream without limits.
+              </p>
+              <p style={{ fontSize: '14px', color: '#a0aec0', fontStyle: 'italic', marginTop: '20px' }}>
+                "A goal is a dream with a deadline" – Napoleon Hill
+                <br/>
+                Start with the dream.
+              </p>
+            </div>
+          ) : (
+            <div className="wishes-grid" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', 
+              gap: '24px'
+            }}>
+              {wishes.map((wish) => {
+                // Determine card background based on category
+                const categoryColors: Record<string, string> = {
+                  travel: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  financial: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  personal: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                  career: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                  health: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                  relationship: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+                  learning: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+                  lifestyle: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+                };
+                const bgGradient = categoryColors[wish.category || ''] || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+                
+                // Status styling
+                const statusColors: Record<string, { bg: string, text: string }> = {
+                  dreaming: { bg: '#e3f2fd', text: '#1976d2' },
+                  exploring: { bg: '#f3e5f5', text: '#7b1fa2' },
+                  planning: { bg: '#fff3e0', text: '#f57c00' },
+                  ready_to_commit: { bg: '#e8f5e9', text: '#388e3c' },
+                  converted: { bg: '#e0f2f1', text: '#00897b' },
+                };
+                const statusStyle = statusColors[wish.status] || statusColors.dreaming;
+                
+                return (
+                  <div 
+                    key={wish.id} 
+                    className="wish-card"
+                    style={{
+                      borderRadius: '16px',
+                      overflow: 'hidden',
+                      backgroundColor: 'white',
+                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+                      transition: 'all 0.3s ease',
+                      cursor: 'pointer',
+                      border: '2px solid transparent',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-8px)';
+                      e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.15)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                    }}
+                    onClick={() => {
+                      setSelectedWish(wish);
+                      setShowWishDetailsModal(true);
+                    }}
+                  >
+                    {/* Gradient header */}
+                    <div style={{
+                      background: bgGradient,
+                      padding: '24px 20px',
+                      color: 'white',
+                      position: 'relative'
+                    }}>
+                      {/* Priority indicator */}
+                      {wish.priority === 'burning_desire' && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '12px',
+                          right: '12px',
+                          fontSize: '24px'
+                        }}>
+                          🔥
+                        </div>
+                      )}
+                      
+                      <h3 style={{ 
+                        margin: '0 0 8px 0', 
+                        fontSize: '22px', 
+                        fontWeight: '700',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}>
+                        {wish.title}
+                      </h3>
+                      
+                      {wish.estimated_timeframe && (
+                        <div style={{ 
+                          fontSize: '13px', 
+                          opacity: 0.95,
+                          fontWeight: '500'
+                        }}>
+                          ⏰ {wish.estimated_timeframe.replace('_', ' ').replace('-', '-')}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card content */}
+                    <div style={{ padding: '20px' }}>
+                      {/* Description */}
+                      {wish.description && (
+                        <p style={{ 
+                          margin: '0 0 16px 0', 
+                          fontSize: '15px', 
+                          color: '#4a5568',
+                          lineHeight: '1.6'
+                        }}>
+                          {wish.description.length > 120 
+                            ? wish.description.substring(0, 120) + '...' 
+                            : wish.description}
+                        </p>
+                      )}
+
+                      {/* Why it matters */}
+                      {wish.why_important && (
+                        <div style={{
+                          backgroundColor: '#fef5e7',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          marginBottom: '16px',
+                          borderLeft: '3px solid #f39c12'
+                        }}>
+                          <div style={{ fontSize: '12px', color: '#856404', fontWeight: '600', marginBottom: '4px' }}>
+                            💫 Why this matters:
+                          </div>
+                          <p style={{ 
+                            margin: 0, 
+                            fontSize: '13px', 
+                            color: '#856404',
+                            lineHeight: '1.5'
+                          }}>
+                            {wish.why_important.length > 100 
+                              ? wish.why_important.substring(0, 100) + '...' 
+                              : wish.why_important}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Stats */}
+                      {wish.stats && (
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(3, 1fr)',
+                          gap: '8px',
+                          marginBottom: '16px',
+                          padding: '12px',
+                          backgroundColor: '#f7fafc',
+                          borderRadius: '8px'
+                        }}>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4a5568' }}>
+                              {wish.stats.days_dreaming || 0}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#718096' }}>
+                              days dreaming
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4a5568' }}>
+                              {wish.stats.reflections_count || 0}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#718096' }}>
+                              reflections
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4a5568' }}>
+                              {wish.stats.exploration_progress || 0}%
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#718096' }}>
+                              explored
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Status badge */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                        <span style={{
+                          padding: '6px 12px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          backgroundColor: statusStyle.bg,
+                          color: statusStyle.text,
+                          textTransform: 'capitalize'
+                        }}>
+                          {wish.status.replace('_', ' ')}
+                        </span>
+                        
+                        {wish.category && (
+                          <span style={{ fontSize: '12px', color: '#a0aec0' }}>
+                            {wish.category === 'travel' && '🌍'} 
+                            {wish.category === 'financial' && '💰'}
+                            {wish.category === 'personal' && '🌱'}
+                            {wish.category === 'career' && '💼'}
+                            {wish.category === 'health' && '💪'}
+                            {wish.category === 'relationship' && '❤️'}
+                            {wish.category === 'learning' && '📚'}
+                            {wish.category === 'lifestyle' && '🏡'}
+                            {' '}{wish.category}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Quick actions */}
+                      <div style={{ display: 'flex', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          className="btn btn-sm"
+                          style={{
+                            flex: 1,
+                            padding: '8px',
+                            fontSize: '13px',
+                            backgroundColor: '#edf2f7',
+                            color: '#4a5568',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                          onClick={() => {
+                            setSelectedWish(wish);
+                            setShowWishDetailsModal(true);
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#edf2f7'}
+                        >
+                          💫 Details
+                        </button>
+                        <button 
+                          className="btn btn-sm"
+                          style={{
+                            flex: 1,
+                            padding: '8px',
+                            fontSize: '13px',
+                            backgroundColor: '#bee3f8',
+                            color: '#2c5282',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                          onClick={async () => {
+                            const text = prompt("What are your thoughts about this dream?");
+                            if (text) {
+                              try {
+                                await api.post(`/api/wishes/${wish.id}/reflections`, {
+                                  reflection_text: text,
+                                  mood: 'inspired'
+                                });
+                                await loadWishes();
+                              } catch (err) {
+                                console.error('Error adding reflection:', err);
+                              }
+                            }
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#90cdf4'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#bee3f8'}
+                        >
+                          ✍️ Reflect
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Goals Tab - Committed Goals */
+        <div className="goals-container">
         {!selectedGoal ? (
           /* Goals List View */
           <>
@@ -1416,7 +1844,8 @@ export default function Goals() {
             </div>
           </div>
         )}
-      </div>
+        </div>
+      )}
 
       {/* Add/Edit Life Goal Modal */}
       {showAddGoalModal && (
@@ -2595,6 +3024,534 @@ export default function Goals() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Wish Modal */}
+      {showAddWishModal && (
+        <div className="modal-overlay" onClick={() => setShowAddWishModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header">
+              <h2>✨ Create New Wish</h2>
+              <button className="btn-close" onClick={() => setShowAddWishModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                
+                const wishData: any = {
+                  title: formData.get('title') as string,
+                  description: formData.get('description') as string || undefined,
+                  category: formData.get('category') as string || undefined,
+                  dream_type: formData.get('dream_type') as string || undefined,
+                  estimated_timeframe: formData.get('estimated_timeframe') as string || undefined,
+                  estimated_cost: formData.get('estimated_cost') ? parseFloat(formData.get('estimated_cost') as string) : undefined,
+                  priority: formData.get('priority') as string || 'medium',
+                  why_important: formData.get('why_important') as string || undefined,
+                  emotional_impact: formData.get('emotional_impact') as string || undefined,
+                  life_area: formData.get('life_area') as string || undefined,
+                  image_url: formData.get('image_url') as string || undefined,
+                  inspiration_notes: formData.get('inspiration_notes') as string || undefined,
+                  status: 'dreaming',
+                  is_active: true,
+                };
+
+                await handleCreateWish(wishData);
+              }}>
+                <div className="form-group">
+                  <label htmlFor="title">Dream Title *</label>
+                  <input 
+                    type="text" 
+                    id="title" 
+                    name="title" 
+                    placeholder="What's your dream?" 
+                    required 
+                    style={{ fontSize: '16px' }}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="description">Description</label>
+                  <textarea 
+                    id="description" 
+                    name="description" 
+                    rows={3}
+                    placeholder="Describe your wish in more detail..."
+                    style={{ fontSize: '14px' }}
+                  ></textarea>
+                </div>
+
+                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div className="form-group">
+                    <label htmlFor="category">Category</label>
+                    <select id="category" name="category">
+                      <option value="">Select category...</option>
+                      <option value="travel">🌍 Travel & Adventure</option>
+                      <option value="financial">💰 Financial</option>
+                      <option value="personal">🌱 Personal Growth</option>
+                      <option value="career">💼 Career</option>
+                      <option value="health">💪 Health & Fitness</option>
+                      <option value="relationship">❤️ Relationships</option>
+                      <option value="learning">📚 Learning</option>
+                      <option value="lifestyle">🏡 Lifestyle</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="dream_type">Type</label>
+                    <select id="dream_type" name="dream_type">
+                      <option value="">Select type...</option>
+                      <option value="experience">🎭 Experience</option>
+                      <option value="acquisition">🎁 Acquisition</option>
+                      <option value="achievement">🏆 Achievement</option>
+                      <option value="transformation">🦋 Transformation</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div className="form-group">
+                    <label htmlFor="estimated_timeframe">Timeframe</label>
+                    <select id="estimated_timeframe" name="estimated_timeframe">
+                      <option value="">When do you imagine...</option>
+                      <option value="someday">Someday (no rush)</option>
+                      <option value="1-2 years">1-2 years</option>
+                      <option value="2-5 years">2-5 years</option>
+                      <option value="5+ years">5+ years</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="priority">Priority</label>
+                    <select id="priority" name="priority" defaultValue="medium">
+                      <option value="low">Low priority</option>
+                      <option value="medium">Medium priority</option>
+                      <option value="high">High priority</option>
+                      <option value="burning_desire">🔥 Burning desire!</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="estimated_cost">Estimated Cost (optional)</label>
+                  <input 
+                    type="number" 
+                    id="estimated_cost" 
+                    name="estimated_cost" 
+                    placeholder="0.00"
+                    step="0.01"
+                    min="0"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="why_important">Why does this matter to you?</label>
+                  <textarea 
+                    id="why_important" 
+                    name="why_important" 
+                    rows={3}
+                    placeholder="Viktor Frankl said: 'Those who have a why can bear almost any how.' What's your why?"
+                    style={{ fontSize: '14px', fontStyle: 'italic' }}
+                  ></textarea>
+                  <small style={{ color: '#718096', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                    This is your emotional anchor – it helps you understand what truly drives this dream.
+                  </small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="emotional_impact">How will you feel when you achieve this?</label>
+                  <textarea 
+                    id="emotional_impact" 
+                    name="emotional_impact" 
+                    rows={2}
+                    placeholder="Proud? Free? Fulfilled? Describe the feeling..."
+                    style={{ fontSize: '14px' }}
+                  ></textarea>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="inspiration_notes">Inspiration & Ideas</label>
+                  <textarea 
+                    id="inspiration_notes" 
+                    name="inspiration_notes" 
+                    rows={2}
+                    placeholder="Any thoughts, inspirations, or ideas that sparked this wish..."
+                    style={{ fontSize: '14px' }}
+                  ></textarea>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="image_url">Image URL (optional)</label>
+                  <input 
+                    type="url" 
+                    id="image_url" 
+                    name="image_url" 
+                    placeholder="https://example.com/inspiring-image.jpg"
+                  />
+                  <small style={{ color: '#718096', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                    Add a visual representation of your dream to keep it vivid in your mind.
+                  </small>
+                </div>
+
+                <div style={{ 
+                  marginTop: '24px', 
+                  padding: '16px', 
+                  backgroundColor: '#ebf8ff', 
+                  borderRadius: '8px',
+                  borderLeft: '4px solid #3182ce'
+                }}>
+                  <p style={{ margin: 0, fontSize: '13px', color: '#2c5282', lineHeight: '1.6' }}>
+                    <strong>💡 Remember:</strong> This is a pressure-free space. No deadlines, no commitments yet. 
+                    Just give yourself permission to dream. You can always explore, reflect, and eventually 
+                    convert this into a committed goal when you're ready.
+                  </p>
+                </div>
+
+                <div className="modal-footer" style={{ marginTop: '24px', display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowAddWishModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    ✨ Create Wish
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Wish Details Modal */}
+      {showWishDetailsModal && selectedWish && (
+        <div className="modal-overlay" onClick={() => setShowWishDetailsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="modal-header">
+              <h2>✨ {selectedWish.title}</h2>
+              <button className="btn-close" onClick={() => setShowWishDetailsModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              {/* Header section with status and actions */}
+              <div style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
+                  <span style={{
+                    padding: '6px 12px',
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    backgroundColor: selectedWish.status === 'dreaming' ? '#e3f2fd' : 
+                                    selectedWish.status === 'exploring' ? '#f3e5f5' :
+                                    selectedWish.status === 'planning' ? '#fff3e0' :
+                                    selectedWish.status === 'ready_to_commit' ? '#e8f5e9' : '#e0f2f1',
+                    color: selectedWish.status === 'dreaming' ? '#1976d2' : 
+                          selectedWish.status === 'exploring' ? '#7b1fa2' :
+                          selectedWish.status === 'planning' ? '#f57c00' :
+                          selectedWish.status === 'ready_to_commit' ? '#388e3c' : '#00897b',
+                    textTransform: 'capitalize'
+                  }}>
+                    {selectedWish.status.replace('_', ' ')}
+                  </span>
+                  
+                  {selectedWish.category && (
+                    <span style={{ fontSize: '14px', color: '#718096' }}>
+                      {selectedWish.category === 'travel' && '🌍'} 
+                      {selectedWish.category === 'financial' && '💰'}
+                      {selectedWish.category === 'personal' && '🌱'}
+                      {selectedWish.category === 'career' && '💼'}
+                      {selectedWish.category === 'health' && '💪'}
+                      {selectedWish.category === 'relationship' && '❤️'}
+                      {selectedWish.category === 'learning' && '📚'}
+                      {selectedWish.category === 'lifestyle' && '🏡'}
+                      {' '}{selectedWish.category}
+                    </span>
+                  )}
+                  
+                  {selectedWish.priority === 'burning_desire' && (
+                    <span style={{ fontSize: '20px' }}>🔥</span>
+                  )}
+                </div>
+                
+                {selectedWish.description && (
+                  <p style={{ margin: '12px 0', fontSize: '15px', color: '#4a5568', lineHeight: '1.6' }}>
+                    {selectedWish.description}
+                  </p>
+                )}
+
+                {selectedWish.estimated_timeframe && (
+                  <div style={{ fontSize: '14px', color: '#718096', marginTop: '8px' }}>
+                    ⏰ Estimated timeframe: <strong>{selectedWish.estimated_timeframe.replace('_', ' ')}</strong>
+                  </div>
+                )}
+
+                {selectedWish.estimated_cost && (
+                  <div style={{ fontSize: '14px', color: '#718096', marginTop: '4px' }}>
+                    💵 Estimated cost: <strong>${selectedWish.estimated_cost.toLocaleString()}</strong>
+                  </div>
+                )}
+              </div>
+
+              {/* Why it matters section */}
+              {selectedWish.why_important && (
+                <div style={{
+                  backgroundColor: '#fef5e7',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  borderLeft: '4px solid #f39c12'
+                }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#856404', fontWeight: '600' }}>
+                    💫 Why this matters to you:
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#856404', lineHeight: '1.6' }}>
+                    {selectedWish.why_important}
+                  </p>
+                </div>
+              )}
+
+              {/* Emotional impact section */}
+              {selectedWish.emotional_impact && (
+                <div style={{
+                  backgroundColor: '#f0f9ff',
+                  padding: '16px',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  borderLeft: '4px solid #3b82f6'
+                }}>
+                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#1e40af', fontWeight: '600' }}>
+                    ✨ How you'll feel:
+                  </h4>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', lineHeight: '1.6' }}>
+                    {selectedWish.emotional_impact}
+                  </p>
+                </div>
+              )}
+
+              {/* Stats section */}
+              {selectedWish.stats && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+                  gap: '16px',
+                  marginBottom: '24px',
+                  padding: '16px',
+                  backgroundColor: '#f7fafc',
+                  borderRadius: '8px'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
+                      {selectedWish.stats.days_dreaming || 0}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      Days Dreaming
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
+                      {selectedWish.stats.reflections_count || 0}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      Reflections
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
+                      {selectedWish.stats.exploration_steps_completed || 0}/{selectedWish.stats.exploration_steps_total || 0}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      Exploration Steps
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
+                      {selectedWish.stats.inspirations_count || 0}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                      Inspirations
+                    </div>
+                  </div>
+                  {selectedWish.stats.average_clarity_score && (
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
+                        {selectedWish.stats.average_clarity_score.toFixed(1)}/10
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                        Clarity Score
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quick Actions */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '12px',
+                marginBottom: '24px'
+              }}>
+                <button 
+                  className="btn"
+                  style={{
+                    padding: '12px',
+                    backgroundColor: '#bee3f8',
+                    color: '#2c5282',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}
+                  onClick={async () => {
+                    const text = prompt("What are your thoughts about this dream? How do you feel about it right now?");
+                    if (text) {
+                      const moodOptions = ['excited', 'uncertain', 'determined', 'doubtful', 'inspired'];
+                      const mood = prompt(`How would you describe your mood? (${moodOptions.join(', ')})`);
+                      const clarityStr = prompt("How clear is this wish to you now? (1-10, where 10 is crystal clear)");
+                      const clarity = clarityStr ? parseInt(clarityStr) : undefined;
+                      
+                      try {
+                        await api.post(`/api/wishes/${selectedWish.id}/reflections`, {
+                          reflection_text: text,
+                          mood: mood || 'inspired',
+                          clarity_score: clarity
+                        });
+                        await loadWishes();
+                        const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
+                        setSelectedWish(updated.data || updated);
+                      } catch (err) {
+                        console.error('Error adding reflection:', err);
+                        alert('Failed to add reflection');
+                      }
+                    }
+                  }}
+                >
+                  ✍️ Add Reflection
+                </button>
+
+                <button 
+                  className="btn"
+                  style={{
+                    padding: '12px',
+                    backgroundColor: '#c6f6d5',
+                    color: '#22543d',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}
+                  onClick={async () => {
+                    const title = prompt("What small step can you take to explore this wish?");
+                    if (title) {
+                      const typeOptions = ['research', 'save_money', 'learn_skill', 'explore', 'connect'];
+                      const type = prompt(`What type of step is this? (${typeOptions.join(', ')})`);
+                      
+                      try {
+                        await api.post(`/api/wishes/${selectedWish.id}/steps`, {
+                          step_title: title,
+                          step_type: type || 'research'
+                        });
+                        await loadWishes();
+                        const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
+                        setSelectedWish(updated.data || updated);
+                      } catch (err) {
+                        console.error('Error adding exploration step:', err);
+                        alert('Failed to add exploration step');
+                      }
+                    }
+                  }}
+                >
+                  🔍 Add Exploration Step
+                </button>
+
+                <button 
+                  className="btn"
+                  style={{
+                    padding: '12px',
+                    backgroundColor: '#fef3c7',
+                    color: '#78350f',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}
+                  onClick={async () => {
+                    const title = prompt("What inspired you? (article title, quote, person, etc.)");
+                    if (title) {
+                      const url = prompt("URL (if applicable):");
+                      const typeOptions = ['article', 'video', 'photo', 'quote', 'story', 'person'];
+                      const type = prompt(`What type of inspiration? (${typeOptions.join(', ')})`);
+                      
+                      try {
+                        await api.post(`/api/wishes/${selectedWish.id}/inspirations`, {
+                          title: title,
+                          url: url || undefined,
+                          inspiration_type: type || 'article'
+                        });
+                        await loadWishes();
+                        const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
+                        setSelectedWish(updated.data || updated);
+                      } catch (err) {
+                        console.error('Error adding inspiration:', err);
+                        alert('Failed to add inspiration');
+                      }
+                    }
+                  }}
+                >
+                  💡 Add Inspiration
+                </button>
+
+                {selectedWish.status === 'ready_to_commit' && (
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '12px',
+                      backgroundColor: '#d1fae5',
+                      color: '#065f46',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                    onClick={() => {
+                      alert('Convert to Goal feature coming soon! This will create a Life Goal from your wish.');
+                    }}
+                  >
+                    🎯 Convert to Goal
+                  </button>
+                )}
+              </div>
+
+              {/* Bottom Actions */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+                <button 
+                  className="btn btn-secondary"
+                  onClick={async () => {
+                    if (confirm('Are you sure you want to archive this wish? You can view archived wishes later.')) {
+                      await handleArchiveWish(selectedWish.id);
+                      setShowWishDetailsModal(false);
+                    }
+                  }}
+                  style={{ color: '#e53e3e' }}
+                >
+                  🗄️ Archive
+                </button>
+                
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => setShowWishDetailsModal(false)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
