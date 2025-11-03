@@ -297,6 +297,35 @@ class WishService:
         return step
 
     @staticmethod
+    def uncomplete_exploration_step(
+        db: Session,
+        step_id: int
+    ) -> Optional[WishExplorationStep]:
+        """
+        Mark an exploration step as incomplete (undo completion)
+        
+        Args:
+            db: Database session
+            step_id: ID of step
+            
+        Returns:
+            Updated WishExplorationStep object
+        """
+        step = db.query(WishExplorationStep)\
+            .filter(WishExplorationStep.id == step_id)\
+            .first()
+        
+        if not step:
+            return None
+        
+        step.is_completed = False
+        step.completed_at = None
+        
+        db.commit()
+        db.refresh(step)
+        return step
+
+    @staticmethod
     def get_exploration_steps(db: Session, wish_id: int) -> List[WishExplorationStep]:
         """Get all exploration steps for a wish"""
         return db.query(WishExplorationStep)\
@@ -406,3 +435,122 @@ class WishService:
             'status': wish.status,
             'priority': wish.priority
         }
+
+    # ============================================================================
+    # DREAM LIFECYCLE TRANSITIONS
+    # ============================================================================
+
+    @staticmethod
+    def promote_dream_to_goal(db: Session, wish_id: int):
+        """
+        🚀 Promote a dream to a committed Life Goal
+        
+        This automatically:
+        1. Creates a new Life Goal from the dream
+        2. Sets start_date = today
+        3. Updates dream status to 'moved_to_goal'
+        4. Links the dream to the new goal
+        
+        Args:
+            db: Database session
+            wish_id: ID of wish to promote
+            
+        Returns:
+            Created LifeGoal object
+        """
+        from app.models.goal import LifeGoal
+        
+        wish = db.query(Wish).filter(Wish.id == wish_id).first()
+        if not wish:
+            raise ValueError("Wish not found")
+        
+        if wish.status == 'moved_to_goal':
+            raise ValueError("This dream has already been promoted to a goal")
+        
+        # Create new Life Goal
+        goal = LifeGoal(
+            name=wish.title,
+            description=wish.description,
+            category=wish.category or 'personal',
+            start_date=date.today(),
+            status='in_progress',
+            priority=wish.priority if wish.priority in ['low', 'medium', 'high'] else 'medium',
+            why_statements=[wish.why_important] if wish.why_important else [],
+            pillar_id=wish.pillar_id
+        )
+        
+        db.add(goal)
+        db.flush()  # Get goal.id without committing
+        
+        # Update wish
+        wish.status = 'moved_to_goal'
+        wish.linked_goal_id = goal.id
+        wish.updated_at = datetime.now()
+        
+        db.commit()
+        db.refresh(goal)
+        return goal
+
+    @staticmethod
+    def mark_achieved(
+        db: Session,
+        wish_id: int,
+        achievement_notes: Optional[str] = None
+    ) -> Optional[Wish]:
+        """
+        ✨ Mark a dream as manifested/achieved
+        
+        Use this when a dream came true without formal goal tracking
+        
+        Args:
+            db: Database session
+            wish_id: ID of wish
+            achievement_notes: Notes about how it manifested
+            
+        Returns:
+            Updated Wish object
+        """
+        wish = db.query(Wish).filter(Wish.id == wish_id).first()
+        if not wish:
+            return None
+        
+        wish.status = 'achieved'
+        wish.achieved_at = datetime.now()
+        wish.achievement_notes = achievement_notes
+        wish.updated_at = datetime.now()
+        
+        db.commit()
+        db.refresh(wish)
+        return wish
+
+    @staticmethod
+    def release_dream(
+        db: Session,
+        wish_id: int,
+        release_reason: Optional[str] = None
+    ) -> Optional[Wish]:
+        """
+        🕊️ Release a dream with gratitude
+        
+        Let go peacefully when a dream no longer resonates
+        
+        Args:
+            db: Database session
+            wish_id: ID of wish
+            release_reason: Why letting go
+            
+        Returns:
+            Updated Wish object
+        """
+        wish = db.query(Wish).filter(Wish.id == wish_id).first()
+        if not wish:
+            return None
+        
+        wish.status = 'released'
+        wish.released_at = datetime.now()
+        wish.release_reason = release_reason
+        wish.updated_at = datetime.now()
+        
+        db.commit()
+        db.refresh(wish)
+        return wish

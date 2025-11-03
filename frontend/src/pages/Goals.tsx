@@ -5,10 +5,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import './Tasks.css'; // Reuse the same CSS for now
 import { Task } from '../types';
+import confetti from 'canvas-confetti';
+import TaskForm from '../components/TaskForm';
 
 // Life Goals interfaces
 interface LifeGoalData {
@@ -27,6 +29,11 @@ interface LifeGoalData {
   time_allocated_hours: number;
   time_spent_hours: number;
   days_remaining: number | null;
+  stats?: {
+    milestones?: { total: number; completed: number };
+    goal_tasks?: { total: number; completed: number };
+    linked_tasks?: { total: number };
+  };
   created_at: string;
   updated_at: string | null;
 }
@@ -289,6 +296,11 @@ interface WishData {
   image_url?: string;
   status: string;
   is_active: boolean;
+  linked_goal_id?: number;
+  achieved_at?: string;
+  achievement_notes?: string;
+  released_at?: string;
+  release_reason?: string;
   stats?: {
     days_dreaming: number;
     reflections_count: number;
@@ -305,6 +317,7 @@ type TabType = 'goals' | 'wishes';
 export default function Goals() {
   // Navigation
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Tab State
   const [activeTab, setActiveTab] = useState<TabType>('goals');
@@ -312,6 +325,7 @@ export default function Goals() {
   // Goals State
   const [lifeGoals, setLifeGoals] = useState<LifeGoalData[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<LifeGoalData | null>(null);
+  const [editingGoal, setEditingGoal] = useState<LifeGoalData | null>(null);
   const [goalMilestones, setGoalMilestones] = useState<MilestoneData[]>([]);
   const [goalTasks, setGoalTasks] = useState<GoalTaskData[]>([]);
   const [linkedTasks, setLinkedTasks] = useState<GoalTaskLinkData[]>([]);
@@ -332,6 +346,7 @@ export default function Goals() {
   const [showAddWishModal, setShowAddWishModal] = useState(false);
   const [showWishDetailsModal, setShowWishDetailsModal] = useState(false);
   const [selectedTaskType, setSelectedTaskType] = useState<string>('');
+  const [wishStats, setWishStats] = useState<{[key: number]: {projects: number, tasks: number, goals: number}}>({});
 
   // Project management state
   interface ProjectTaskData {
@@ -357,14 +372,108 @@ export default function Goals() {
   const [selectedProjectForTask, setSelectedProjectForTask] = useState<number | null>(null);
   const [editingProjectTask, setEditingProjectTask] = useState<ProjectTaskData | null>(null);
 
+  // Toast notification state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Exploration modal state
+  const [showAddExplorationModal, setShowAddExplorationModal] = useState(false);
+  const [currentExplorationWish, setCurrentExplorationWish] = useState<WishData | null>(null);
+  const [explorationSteps, setExplorationSteps] = useState<any[]>([]);
+  
+  // Inline creation modals from exploration
+  const [showInlineProjectModal, setShowInlineProjectModal] = useState(false);
+  const [showInlineTaskModal, setShowInlineTaskModal] = useState(false);
+  const [showInlineGoalModal, setShowInlineGoalModal] = useState(false);
+  
+  // Add Reflection modal state
+  const [showAddReflectionModal, setShowAddReflectionModal] = useState(false);
+  
+  // Add Exploration Step modal state (from wish details)
+  const [showAddStepModal, setShowAddStepModal] = useState(false);
+  
+  // Dream insights modal state
+  const [showDreamInsightsModal, setShowDreamInsightsModal] = useState(false);
+  const [dreamInsights, setDreamInsights] = useState<any>(null);
+  
+  // Task Form modal state (for adding tasks from dream activities)
+  const [showTaskFormModal, setShowTaskFormModal] = useState(false);
+  const [taskFormWishId, setTaskFormWishId] = useState<number | null>(null);
+
+  // Load exploration steps for a wish
+  const loadExplorationSteps = async (wishId: number) => {
+    try {
+      const response: any = await api.get(`/api/wishes/${wishId}/steps`);
+      const steps = response.data || response;
+      setExplorationSteps(Array.isArray(steps) ? steps : []);
+    } catch (err) {
+      console.error('Error loading exploration steps:', err);
+      setExplorationSteps([]);
+    }
+  };
+
+  // Load exploration steps when wish details modal is opened
+  useEffect(() => {
+    if (selectedWish && showWishDetailsModal) {
+      loadExplorationSteps(selectedWish.id);
+    } else {
+      setExplorationSteps([]);
+    }
+  }, [selectedWish, showWishDetailsModal]);
+
+  // 🎉 Celebration confetti when achieved dreams exist
+  useEffect(() => {
+    const achievedDreams = wishes.filter(w => w.status === 'achieved');
+    if (achievedDreams.length > 0 && activeTab === 'wishes') {
+      // Small celebratory burst when section is visible
+      setTimeout(() => {
+        confetti({
+          particleCount: 30,
+          spread: 50,
+          origin: { y: 0.4 },
+          colors: ['#ffd700', '#fef3c7', '#fde68a'],
+          startVelocity: 20,
+          gravity: 0.8
+        });
+      }, 300);
+    }
+  }, [wishes, activeTab]);
+
+  // Show toast notification
+  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000); // Increased to 4 seconds
+  };
+
   // Load data based on active tab
   useEffect(() => {
-    if (activeTab === 'goals') {
-      loadLifeGoals();
-    } else if (activeTab === 'wishes') {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    
+    if (tab === 'wishes') {
+      setActiveTab('wishes');
       loadWishes();
+    } else {
+      setActiveTab('goals');
+      loadLifeGoals();
     }
-  }, [activeTab]);
+  }, [location.search]);
+
+  // Handle URL parameter for goal detail view
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const goalId = params.get('goal');
+    
+    if (goalId && lifeGoals.length > 0) {
+      const goal = lifeGoals.find(g => g.id === parseInt(goalId));
+      if (goal) {
+        setSelectedGoal(goal);
+        loadGoalDetails(parseInt(goalId));
+      }
+    } else if (!goalId && selectedGoal) {
+      // User clicked back button - clear selected goal
+      setSelectedGoal(null);
+    }
+  }, [location.search, lifeGoals]);
 
   // Load tasks when task type is selected
   const loadTasksByType = async (taskType: string) => {
@@ -394,15 +503,67 @@ export default function Goals() {
   // Wish / Dream Board functions
   const loadWishes = async () => {
     try {
+      setLoading(true);
       const response: any = await api.get('/api/wishes/');
       const data = response.data || response;
       const wishesList = Array.isArray(data) ? data : [];
       console.log('Loaded wishes from API:', wishesList);
       setWishes(wishesList);
+      
+      // Load stats for each wish
+      await loadWishStats(wishesList);
     } catch (err: any) {
       console.error('Error loading wishes:', err);
       setWishes([]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const loadWishStats = async (wishesList: WishData[]) => {
+    try {
+      const stats: {[key: number]: {projects: number, tasks: number, goals: number}} = {};
+      
+      // Load all projects and tasks in parallel
+      const [allProjects, allTasks] = await Promise.all([
+        api.get('/api/projects/').catch(() => []),
+        api.get('/api/tasks/').catch(() => [])
+      ]);
+      
+      // Count for each wish
+      for (const wish of wishesList) {
+        const projects = (Array.isArray(allProjects) ? allProjects : []).filter((p: any) => p.related_wish_id === wish.id);
+        const tasks = (Array.isArray(allTasks) ? allTasks : []).filter((t: any) => t.related_wish_id === wish.id);
+        
+        stats[wish.id] = {
+          projects: projects.length,
+          tasks: tasks.length,
+          goals: 0 // Goals don't have related_wish_id yet, keeping for future
+        };
+      }
+      
+      setWishStats(stats);
+    } catch (err) {
+      console.error('Error loading wish stats:', err);
+    }
+  };
+
+  // Dream card color themes
+  const dreamThemes = [
+    { gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', border: '#667eea', symbol: '🌟', frame: '4px double' },
+    { gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', border: '#f093fb', symbol: '💫', frame: '4px ridge' },
+    { gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', border: '#4facfe', symbol: '✨', frame: '4px groove' },
+    { gradient: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', border: '#43e97b', symbol: '🌈', frame: '4px solid' },
+    { gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', border: '#fa709a', symbol: '🎯', frame: '4px double' },
+    { gradient: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)', border: '#30cfd0', symbol: '🚀', frame: '4px ridge' },
+    { gradient: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)', border: '#a8edea', symbol: '💎', frame: '4px groove' },
+    { gradient: 'linear-gradient(135deg, #ff9a56 0%, #ff6a88 100%)', border: '#ff9a56', symbol: '🔥', frame: '4px solid' },
+    { gradient: 'linear-gradient(135deg, #fbc2eb 0%, #a6c1ee 100%)', border: '#fbc2eb', symbol: '🎨', frame: '4px double' },
+    { gradient: 'linear-gradient(135deg, #fdcbf1 0%, #e6dee9 100%)', border: '#fdcbf1', symbol: '🌺', frame: '4px ridge' }
+  ];
+
+  const getDreamTheme = (wishId: number) => {
+    return dreamThemes[wishId % dreamThemes.length];
   };
 
   const handleCreateWish = async (wishData: any) => {
@@ -410,9 +571,10 @@ export default function Goals() {
       await api.post('/api/wishes/', wishData);
       await loadWishes();
       setShowAddWishModal(false);
+      showToast('✨ Dream created successfully!', 'success');
     } catch (err: any) {
       console.error('Error creating wish:', err);
-      alert('Failed to create wish: ' + (err.response?.data?.detail || err.message));
+      showToast('Failed to create wish: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -429,6 +591,20 @@ export default function Goals() {
     } catch (err: any) {
       console.error('Error archiving wish:', err);
       alert('Failed to archive wish: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUpdateWishStatus = async (wishId: number, newStatus: string) => {
+    try {
+      await api.put(`/api/wishes/${wishId}`, { status: newStatus });
+      await loadWishes();
+      if (selectedWish && selectedWish.id === wishId) {
+        const updated: any = await api.get(`/api/wishes/${wishId}`);
+        setSelectedWish(updated.data || updated);
+      }
+    } catch (err: any) {
+      console.error('Error updating wish status:', err);
+      alert('Failed to update status: ' + (err.response?.data?.detail || err.message));
     }
   };
   
@@ -809,6 +985,7 @@ export default function Goals() {
     setGoalMilestones([]);
     setGoalTasks([]);
     setLinkedTasks([]);
+    navigate('/goals'); // Clear URL parameter
   };
 
   if (loading) {
@@ -820,63 +997,497 @@ export default function Goals() {
     );
   }
 
-  return (
-    <div className="page-container">
-      <h1>Life Goals & Dreams</h1>
-      <p className="page-description">
-        Track your aspirations from pressure-free dreams to committed goals with milestones and action plans.
-      </p>
+  // Render Goal Card Function
+  const renderGoalCard = (goal: LifeGoalData, cardIndex: number) => {
+    const milestonesTotal = goal.stats?.milestones?.total || 0;
+    const milestonesCompleted = goal.stats?.milestones?.completed || 0;
+    const tasksTotal = goal.stats?.goal_tasks?.total || 0;
+    const tasksCompleted = goal.stats?.goal_tasks?.completed || 0;
+    const linkedTasksTotal = goal.stats?.linked_tasks?.total || 0;
+    
+    // Dynamic background colors for each card
+    const cardColors = [
+      { bg: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)', border: '#ec4899' }, // Pink
+      { bg: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', border: '#8b5cf6' }, // Purple
+      { bg: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', border: '#10b981' }, // Green
+      { bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '#f59e0b' }, // Yellow
+      { bg: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', border: '#6366f1' }, // Indigo
+      { bg: 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)', border: '#f97316' }, // Orange
+      { bg: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)', border: '#14b8a6' }, // Teal
+    ];
+    const cardColor = cardColors[cardIndex % cardColors.length];
 
-      {/* Tab Navigation */}
-      <div className="tabs-container" style={{ marginBottom: '20px', borderBottom: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', gap: '0' }}>
+    return (
+      <div
+        key={goal.id}
+        className={`goal-card status-${goal.status.replace('_', '-')}`}
+        style={{ 
+          position: 'relative', 
+          width: '360px', 
+          flexShrink: 0, 
+          border: `4px solid ${cardColor.border}`,
+          background: cardColor.bg,
+          padding: '16px',
+          boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
+          borderRadius: '16px'
+        }}
+      >
+        {/* Inner container with light background */}
+        <div style={{
+          background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+          padding: '12px',
+          borderRadius: '12px',
+          marginBottom: '12px',
+          border: '2px solid #bae6fd'
+        }}>
+          {/* Goal Name Row with Icon */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '14px 16px',
+            background: '#1e40af',
+            borderRadius: '10px',
+            marginBottom: '10px'
+          }}>
+            <span style={{ fontSize: '28px' }}>🎯</span>
+            <div style={{ flex: 1 }}>
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: 'rgba(255, 255, 255, 0.7)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                display: 'block',
+                marginBottom: '4px'
+              }}>Goal:</span>
+              <span 
+                style={{
+                  fontSize: '16px',
+                  fontWeight: '800',
+                  color: '#ffffff',
+                  display: 'block',
+                  lineHeight: '1.3',
+                  cursor: 'text',
+                  userSelect: 'text'
+                }}
+                title={goal.name}
+              >{goal.name}</span>
+            </div>
+          </div>
+
+          {/* Status Row */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 14px',
+            background: '#047857',
+            borderRadius: '8px',
+            marginBottom: '12px'
+          }}>
+            <span style={{
+              fontSize: '11px',
+              fontWeight: '700',
+              color: 'rgba(255, 255, 255, 0.8)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}>Status</span>
+            <span style={{
+              fontSize: '14px',
+              fontWeight: '800',
+              color: '#ffffff',
+              textTransform: 'uppercase'
+            }}>{goal.status.replace('_', ' ')}</span>
+          </div>
+
+          {/* Progress Bar */}
+          <div style={{
+            background: '#374151',
+            padding: '14px',
+            borderRadius: '10px',
+            marginBottom: '12px',
+            border: '2px solid rgba(0,0,0,0.4)'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: '700',
+              color: '#d1d5db',
+              marginBottom: '10px',
+              textAlign: 'center',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>Progress</div>
+            <div style={{
+              height: '24px',
+              background: '#1f2937',
+              borderRadius: '12px',
+              overflow: 'hidden',
+              border: '2px solid rgba(0, 0, 0, 0.5)'
+            }}>
+              <div style={{
+                height: '100%',
+                width: `${goal.progress_percentage || 0}%`,
+                background: goal.status === 'on_track' || goal.status === 'completed' ? 
+                  'linear-gradient(90deg, #10b981, #059669)' :
+                  goal.status === 'at_risk' ? 'linear-gradient(90deg, #f59e0b, #d97706)' :
+                  goal.status === 'behind' ? 'linear-gradient(90deg, #ef4444, #dc2626)' :
+                  'linear-gradient(90deg, #60a5fa, #3b82f6)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                paddingRight: '10px',
+                fontSize: '12px',
+                fontWeight: '900',
+                color: 'white',
+                transition: 'width 0.5s ease',
+                textShadow: '0 1px 2px rgba(0,0,0,0.3)'
+              }}>
+                {goal.progress_percentage > 10 && `${goal.progress_percentage?.toFixed(0)}%`}
+              </div>
+            </div>
+          </div>
+
+          {/* Milestones, Projects, Tasks Row */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr',
+            gap: '10px',
+            marginBottom: '12px'
+          }}>
+            <div style={{
+              background: '#be185d',
+              padding: '18px 10px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              border: '2px solid rgba(0,0,0,0.3)',
+              minHeight: '90px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center'
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: '#fce7f3',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>Milestones</div>
+              <div style={{
+                fontSize: '22px',
+                fontWeight: '900',
+                color: '#ffffff',
+                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+              }}>{milestonesCompleted}/{milestonesTotal}</div>
+            </div>
+            <div style={{
+              background: '#047857',
+              padding: '18px 10px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              border: '2px solid rgba(0,0,0,0.3)',
+              minHeight: '90px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center'
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: '#d1fae5',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>Projects</div>
+              <div style={{
+                fontSize: '22px',
+                fontWeight: '900',
+                color: '#ffffff',
+                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+              }}>{linkedTasksTotal}</div>
+            </div>
+            <div style={{
+              background: '#1e40af',
+              padding: '18px 10px',
+              borderRadius: '10px',
+              textAlign: 'center',
+              border: '2px solid rgba(0,0,0,0.3)',
+              minHeight: '90px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center'
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: '#dbeafe',
+                marginBottom: '8px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>Tasks</div>
+              <div style={{
+                fontSize: '22px',
+                fontWeight: '900',
+                color: '#ffffff',
+                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
+              }}>{tasksCompleted}/{tasksTotal}</div>
+            </div>
+          </div>
+
+          {/* Dates Section - Editable */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '10px',
+            marginBottom: '12px'
+          }}>
+            <div style={{
+              background: '#4b5563',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid rgba(0,0,0,0.3)',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: '#d1d5db',
+                marginBottom: '6px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>Start Date</div>
+              <input
+                type="date"
+                value={goal.start_date || ''}
+                onChange={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await api.put(`/api/life-goals/${goal.id}`, {
+                      ...goal,
+                      start_date: e.target.value
+                    });
+                    await loadLifeGoals();
+                  } catch (err) {
+                    console.error('Error updating start date:', err);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  color: '#ffffff',
+                  background: 'transparent',
+                  border: 'none',
+                  width: '100%',
+                  maxWidth: '100%',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div style={{
+              background: '#4b5563',
+              padding: '12px',
+              borderRadius: '8px',
+              border: '2px solid rgba(0,0,0,0.3)',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                color: '#d1d5db',
+                marginBottom: '6px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px'
+              }}>End Date</div>
+              <input
+                type="date"
+                value={goal.target_date || ''}
+                onChange={async (e) => {
+                  e.stopPropagation();
+                  try {
+                    await api.put(`/api/life-goals/${goal.id}`, {
+                      ...goal,
+                      target_date: e.target.value
+                    });
+                    await loadLifeGoals();
+                  } catch (err) {
+                    console.error('Error updating target date:', err);
+                  }
+                }}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: '12px',
+                  fontWeight: '800',
+                  color: '#ffffff',
+                  background: 'transparent',
+                  border: 'none',
+                  width: '100%',
+                  maxWidth: '100%',
+                  cursor: 'pointer',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+        </div>
+        {/* Close inner light container */}
+
+        {/* Action Buttons Row - Outside light container */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          gap: '8px',
+          marginTop: '12px'
+        }}>
           <button
-            className={`tab ${activeTab === 'goals' ? 'active' : ''}`}
-            onClick={() => setActiveTab('goals')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedGoal(goal);
+              loadGoalDetails(goal.id);
+              navigate(`/goals?goal=${goal.id}`);
+            }}
             style={{
-              padding: '12px 24px',
-              border: 'none',
-              background: activeTab === 'goals' ? '#3b82f6' : 'transparent',
-              color: activeTab === 'goals' ? 'white' : '#64748b',
-              borderRadius: '8px 8px 0 0',
+              background: '#2563eb',
+              border: '2px solid rgba(0,0,0,0.3)',
+              padding: '10px 8px',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '700',
               cursor: 'pointer',
-              fontWeight: activeTab === 'goals' ? '600' : '400',
               transition: 'all 0.2s'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
           >
-            🎯 Committed Goals
+            👁️ View
           </button>
           <button
-            className={`tab ${activeTab === 'wishes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('wishes')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingGoal(goal);
+              setShowAddGoalModal(true);
+            }}
             style={{
-              padding: '12px 24px',
-              border: 'none',
-              background: activeTab === 'wishes' ? '#3b82f6' : 'transparent',
-              color: activeTab === 'wishes' ? 'white' : '#64748b',
-              borderRadius: '8px 8px 0 0',
+              background: '#f59e0b',
+              border: '2px solid rgba(0,0,0,0.3)',
+              padding: '10px 8px',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '700',
               cursor: 'pointer',
-              fontWeight: activeTab === 'wishes' ? '600' : '400',
               transition: 'all 0.2s'
             }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
           >
-            ✨ Dream Board
+            ✏️ Edit
+          </button>
+          <button
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (window.confirm(`Are you sure you want to delete "${goal.name}"?`)) {
+                try {
+                  await api.delete(`/api/life-goals/${goal.id}`);
+                  await loadLifeGoals();
+                } catch (err) {
+                  console.error('Error deleting goal:', err);
+                }
+              }
+            }}
+            style={{
+              background: '#dc2626',
+              border: '2px solid rgba(0,0,0,0.3)',
+              padding: '10px 8px',
+              borderRadius: '8px',
+              color: 'white',
+              fontSize: '12px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
+            onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
+          >
+            🗑️ Delete
           </button>
         </div>
       </div>
+    );
+  };
+
+  return (
+    <div className="page-container">
 
       {activeTab === 'wishes' ? (
         /* Wishes Tab - Dream Board */
         <div className="wishes-container" style={{ padding: '20px' }}>
-          <div className="wishes-header" style={{ marginBottom: '30px' }}>
-            <h2 style={{ fontSize: '28px', marginBottom: '10px' }}>✨ Your Dream Board</h2>
-            <p style={{ color: '#666', fontSize: '16px', marginBottom: '20px' }}>
-              A pressure-free space for your aspirations and dreams. No deadlines, no guilt – just possibilities.
-            </p>
+          <div className="wishes-header" style={{ 
+            marginBottom: '30px',
+            background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 50%, #ffeaa7 100%)',
+            padding: '16px 20px',
+            borderRadius: '16px',
+            border: '4px solid #f59e0b',
+            boxShadow: '0 8px 24px rgba(245, 158, 11, 0.3)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            position: 'relative',
+            overflow: 'hidden'
+          }}>
+            {/* Decorative elements */}
+            <div style={{ position: 'absolute', left: '10px', top: '10px', fontSize: '32px', opacity: 0.3 }}>🌸</div>
+            <div style={{ position: 'absolute', left: '60px', top: '8px', fontSize: '24px', opacity: 0.25 }}>🌺</div>
+            <div style={{ position: 'absolute', right: '10px', top: '12px', fontSize: '28px', opacity: 0.3 }}>🌳</div>
+            <div style={{ position: 'absolute', right: '55px', bottom: '10px', fontSize: '26px', opacity: 0.25 }}>🦋</div>
+            <div style={{ position: 'absolute', left: '45%', bottom: '8px', fontSize: '20px', opacity: 0.2 }}>🌟</div>
+            
+            <div style={{ position: 'relative', zIndex: 1 }}>
+              <h2 style={{ 
+                fontSize: '32px', 
+                marginBottom: '8px',
+                background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #f59e0b 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+                fontWeight: '900',
+                textShadow: '2px 2px 4px rgba(168, 85, 247, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                <span style={{ fontSize: '36px' }}>✨</span>
+                <span>Your Dream Board</span>
+                <span style={{ fontSize: '28px' }}>🌈</span>
+                <span style={{ fontSize: '24px' }}>💫</span>
+              </h2>
+              <p style={{ 
+                color: '#7c2d12', 
+                fontSize: '15px', 
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                marginBottom: 0
+              }}>
+                🌱 A pressure-free space for your aspirations and dreams. No deadlines, no guilt – just possibilities. 🌠
+              </p>
+            </div>
             <button 
               className="btn btn-primary" 
               onClick={() => setShowAddWishModal(true)}
-              style={{ padding: '12px 24px', fontSize: '16px' }}
+              style={{ 
+                padding: '14px 28px', 
+                fontSize: '16px',
+                background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                border: '2px solid #9333ea',
+                color: 'white',
+                fontWeight: '700',
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(168, 85, 247, 0.4)',
+                whiteSpace: 'nowrap'
+              }}
             >
               ➕ Add New Wish
             </button>
@@ -886,30 +1497,273 @@ export default function Goals() {
             <div className="empty-state" style={{ 
               textAlign: 'center', 
               padding: '60px 20px',
-              backgroundColor: '#f7fafc',
-              borderRadius: '12px'
+              background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+              borderRadius: '16px',
+              border: '3px dashed #ced4da'
             }}>
               <div style={{ fontSize: '64px', marginBottom: '20px' }}>💭</div>
-              <h3 style={{ fontSize: '24px', marginBottom: '10px', color: '#2d3748' }}>
-                No dreams yet
+              <h3 style={{ fontSize: '28px', marginBottom: '12px', color: '#495057', fontWeight: '800' }}>
+                Your Canvas Awaits
               </h3>
-              <p style={{ fontSize: '16px', color: '#718096', marginBottom: '20px', maxWidth: '500px', margin: '0 auto 20px' }}>
+              <p style={{ fontSize: '17px', color: '#6c757d', marginBottom: '24px', maxWidth: '600px', margin: '0 auto 24px', lineHeight: '1.6' }}>
                 What would you love to do, have, or become? Travel the world? Learn a new skill? 
                 Create something meaningful? This is your space to dream without limits.
               </p>
-              <p style={{ fontSize: '14px', color: '#a0aec0', fontStyle: 'italic', marginTop: '20px' }}>
+              <p style={{ fontSize: '15px', color: '#868e96', fontStyle: 'italic', padding: '20px', background: 'rgba(255,255,255,0.5)', borderRadius: '12px', maxWidth: '500px', margin: '0 auto' }}>
                 "A goal is a dream with a deadline" – Napoleon Hill
                 <br/>
-                Start with the dream.
+                <span style={{ color: '#a855f7', fontWeight: '600' }}>Start with the dream.</span>
               </p>
             </div>
           ) : (
-            <div className="wishes-grid" style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', 
-              gap: '24px'
-            }}>
-              {wishes.map((wish) => {
+            <>
+              {/* � EXPLORING DREAMS SECTION - Move to top */}
+              {wishes.filter(w => w.status === 'exploring').length > 0 && (
+                <div style={{ marginBottom: '48px' }}>
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)',
+                    padding: '20px',
+                    borderRadius: '16px',
+                    border: '3px solid #14b8a6',
+                    marginBottom: '20px'
+                  }}>
+                    <h2 style={{
+                      fontSize: '26px',
+                      fontWeight: '900',
+                      marginBottom: '8px',
+                      background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}>
+                      🔬 Exploring Dreams ({wishes.filter(w => w.status === 'exploring').length})
+                    </h2>
+                    <p style={{ color: '#0f766e', fontSize: '15px', margin: 0, fontWeight: '500' }}>
+                      💪 Dreams you're actively researching, planning, and preparing - building your path forward!
+                    </p>
+                  </div>
+                  
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', 
+                    gap: '28px'
+                  }}>
+                    {wishes.filter(w => w.status === 'exploring').map((wish) => {
+                      const theme = getDreamTheme(wish.id);
+                      const stats = wishStats[wish.id] || { projects: 0, tasks: 0, goals: 0 };
+                      
+                      return (
+                        <div key={wish.id} style={{
+                          background: 'white',
+                          borderRadius: '20px',
+                          border: theme.frame + ' ' + theme.border,
+                          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.15)',
+                          overflow: 'hidden',
+                          transition: 'all 0.3s ease',
+                          position: 'relative'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-6px) scale(1.02)';
+                          e.currentTarget.style.boxShadow = '0 15px 40px rgba(0, 0, 0, 0.25)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                          e.currentTarget.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.15)';
+                        }}>
+                          {/* Header with gradient */}
+                          <div style={{
+                            background: theme.gradient,
+                            padding: '24px',
+                            position: 'relative',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            setSelectedWish(wish);
+                            setShowWishDetailsModal(true);
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
+                              <div style={{ fontSize: '42px', lineHeight: 1 }}>{theme.symbol}</div>
+                              <div style={{ flex: 1 }}>
+                                <h3 style={{ 
+                                  fontSize: '20px', 
+                                  fontWeight: '800', 
+                                  color: 'white', 
+                                  marginBottom: '8px',
+                                  textShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                                }}>
+                                  {wish.title}
+                                </h3>
+                                {wish.created_at && (
+                                  <div style={{ fontSize: '12px', color: 'rgba(255, 255, 255, 0.9)', fontWeight: '500' }}>
+                                    📅 Started: {new Date(wish.created_at).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Stats Dashboard */}
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, 1fr)',
+                            gap: '1px',
+                            background: '#e5e7eb',
+                            padding: 0
+                          }}>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)', 
+                              padding: '16px', 
+                              textAlign: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => showToast(`${stats.projects} projects linked to this dream`, 'info')}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)'}>
+                              <div style={{ fontSize: '28px', fontWeight: '900', color: '#9333ea', marginBottom: '4px' }}>
+                                {stats.projects}
+                              </div>
+                              <div style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                📁 Projects
+                              </div>
+                            </div>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', 
+                              padding: '16px', 
+                              textAlign: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => showToast(`${stats.tasks} tasks linked to this dream`, 'info')}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)'}>
+                              <div style={{ fontSize: '28px', fontWeight: '900', color: '#f59e0b', marginBottom: '4px' }}>
+                                {stats.tasks}
+                              </div>
+                              <div style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                ✅ Tasks
+                              </div>
+                            </div>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)', 
+                              padding: '16px', 
+                              textAlign: 'center',
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => showToast(`${stats.goals} goals promoted from this dream`, 'info')}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)'}>
+                              <div style={{ fontSize: '28px', fontWeight: '900', color: '#14b8a6', marginBottom: '4px' }}>
+                                {stats.goals}
+                              </div>
+                              <div style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                🎯 Goals
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div style={{ padding: '16px', background: '#f9fafb' }} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  padding: '10px',
+                                  fontSize: '13px',
+                                  background: theme.gradient,
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '10px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)'
+                                }}
+                                onClick={() => {
+                                  setSelectedWish(wish);
+                                  setShowWishDetailsModal(true);
+                                }}
+                              >
+                                👁️ View Details
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  padding: '10px',
+                                  fontSize: '13px',
+                                  background: 'white',
+                                  color: '#374151',
+                                  border: '2px solid #d1d5db',
+                                  borderRadius: '10px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => {
+                                  setCurrentExplorationWish(wish);
+                                  setShowAddExplorationModal(true);
+                                }}
+                              >
+                                ➕ Add Activity
+                              </button>
+                            </div>
+                            <button
+                              className="btn btn-sm"
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                fontSize: '12px',
+                                backgroundColor: '#fef3c7',
+                                color: '#92400e',
+                                border: '1px solid #fde68a',
+                                borderRadius: '8px',
+                                fontWeight: '600'
+                              }}
+                              onClick={async () => {
+                                if (confirm('Move back to Active Dreams (Dreaming status)?')) {
+                                  await handleUpdateWishStatus(wish.id, 'dreaming');
+                                  showToast('↶ Moved back to active dreams', 'info');
+                                }
+                              }}
+                            >
+                              ↶ Back to Active Dreams
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 💭 ACTIVE DREAMS SECTION - Only Dreaming Status */}
+              {wishes.filter(w => w.status === 'dreaming').length > 0 && (
+                <div style={{ marginBottom: '48px' }}>
+                  <h2 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '20px',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    💭 Active Dreams ({wishes.filter(w => w.status === 'dreaming').length})
+                  </h2>
+                  <div className="wishes-grid" style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', 
+                    gap: '28px'
+                  }}>
+                    {wishes.filter(w => w.status === 'dreaming').map((wish) => {
+                const theme = getDreamTheme(wish.id);
+                const stats = wishStats[wish.id] || { projects: 0, tasks: 0, goals: 0 };
+                
                 // Determine card background based on category
                 const categoryColors: Record<string, string> = {
                   travel: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -923,17 +1777,18 @@ export default function Goals() {
                 };
                 const bgGradient = categoryColors[wish.category || ''] || 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
                 
-                // Status styling
-                const statusColors: Record<string, { bg: string, text: string }> = {
-                  dreaming: { bg: '#e3f2fd', text: '#1976d2' },
-                  exploring: { bg: '#f3e5f5', text: '#7b1fa2' },
-                  planning: { bg: '#fff3e0', text: '#f57c00' },
-                  ready_to_commit: { bg: '#e8f5e9', text: '#388e3c' },
-                  converted: { bg: '#e0f2f1', text: '#00897b' },
+                // Enhanced Status styling with lifecycle colors
+                const statusColors: Record<string, { bg: string, text: string, icon: string, border: string }> = {
+                  dreaming: { bg: 'linear-gradient(135deg, #e9d5ff 0%, #ddd6fe 100%)', text: '#7c3aed', icon: '💭', border: '#c084fc' },
+                  exploring: { bg: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)', text: '#0d9488', icon: '🔍', border: '#14b8a6' },
+                  ready: { bg: 'linear-gradient(135deg, #fed7aa 0%, #fdba74 100%)', text: '#c2410c', icon: '🔥', border: '#f97316' },
+                  moved_to_goal: { bg: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', text: '#1e40af', icon: '🚀', border: '#2563eb' },
+                  achieved: { bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', text: '#92400e', icon: '✨', border: '#eab308' },
+                  released: { bg: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)', text: '#6b7280', icon: '🕊️', border: '#9ca3af' },
                 };
                 const statusStyle = statusColors[wish.status] || statusColors.dreaming;
                 
-                return (
+return (
                   <div 
                     key={wish.id} 
                     className="wish-card"
@@ -941,75 +1796,144 @@ export default function Goals() {
                       borderRadius: '16px',
                       overflow: 'hidden',
                       backgroundColor: 'white',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                      transition: 'all 0.3s ease',
-                      cursor: 'pointer',
-                      border: '2px solid transparent',
+                      boxShadow: '0 6px 16px rgba(0,0,0,0.12)',
+                      transition: 'all 0.35s ease',
+                      border: `${theme.frame} ${theme.border}`,
+                      position: 'relative'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-8px)';
-                      e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.15)';
+                      e.currentTarget.style.transform = 'translateY(-6px) scale(1.02)';
+                      e.currentTarget.style.boxShadow = '0 16px 32px rgba(0,0,0,0.18)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-                    }}
-                    onClick={() => {
-                      setSelectedWish(wish);
-                      setShowWishDetailsModal(true);
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)';
+                      e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.12)';
                     }}
                   >
-                    {/* Gradient header */}
+                    {/* Gradient Header with Symbol */}
                     <div style={{
-                      background: bgGradient,
-                      padding: '24px 20px',
+                      background: `linear-gradient(135deg, ${theme.gradient.split('-')[0]} 0%, ${theme.gradient.split('-')[1]} 100%)`,
+                      padding: '28px 24px',
                       color: 'white',
-                      position: 'relative'
+                      position: 'relative',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '16px',
+                      borderBottom: `3px solid ${theme.border}`
                     }}>
-                      {/* Priority indicator */}
+                      {/* Dream Symbol */}
+                      <div style={{ 
+                        fontSize: '42px', 
+                        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+                        flexShrink: 0
+                      }}>
+                        {theme.symbol}
+                      </div>
+                      
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ 
+                          margin: '0 0 6px 0', 
+                          fontSize: '22px', 
+                          fontWeight: '800',
+                          textShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                          letterSpacing: '0.3px'
+                        }}>
+                          {wish.title}
+                        </h3>
+                        
+                        {wish.created_at && (
+                          <div style={{ 
+                            fontSize: '13px', 
+                            opacity: 0.95,
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span>📅</span>
+                            <span>Started: {new Date(wish.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Priority Badge */}
                       {wish.priority === 'burning_desire' && (
                         <div style={{
                           position: 'absolute',
-                          top: '12px',
-                          right: '12px',
-                          fontSize: '24px'
+                          top: '16px',
+                          right: '16px',
+                          fontSize: '28px',
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.3))',
+                          animation: 'pulse 2s infinite'
                         }}>
                           🔥
                         </div>
                       )}
-                      
-                      <h3 style={{ 
-                        margin: '0 0 8px 0', 
-                        fontSize: '22px', 
-                        fontWeight: '700',
-                        textShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                      }}>
-                        {wish.title}
-                      </h3>
-                      
-                      {wish.estimated_timeframe && (
-                        <div style={{ 
-                          fontSize: '13px', 
-                          opacity: 0.95,
-                          fontWeight: '500'
-                        }}>
-                          ⏰ {wish.estimated_timeframe.replace('_', ' ').replace('-', '-')}
-                        </div>
-                      )}
                     </div>
 
-                    {/* Card content */}
-                    <div style={{ padding: '20px' }}>
+                    {/* Stats Dashboard */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(3, 1fr)',
+                      gap: '16px',
+                      padding: '24px',
+                      backgroundColor: '#f9fafb',
+                      borderBottom: '2px solid #e5e7eb'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ 
+                          fontSize: '28px', 
+                          fontWeight: '900', 
+                          color: '#9333ea',
+                          marginBottom: '4px'
+                        }}>
+                          {stats.projects}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '700', textTransform: 'uppercase' }}>
+                          � Projects
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ 
+                          fontSize: '28px', 
+                          fontWeight: '900', 
+                          color: '#f97316',
+                          marginBottom: '4px'
+                        }}>
+                          {stats.tasks}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '700', textTransform: 'uppercase' }}>
+                          ✅ Tasks
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ 
+                          fontSize: '28px', 
+                          fontWeight: '900', 
+                          color: '#14b8a6',
+                          marginBottom: '4px'
+                        }}>
+                          {stats.goals}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: '700', textTransform: 'uppercase' }}>
+                          🎯 Goals
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Content Area */}
+                    <div style={{ padding: '24px' }}>
                       {/* Description */}
                       {wish.description && (
                         <p style={{ 
                           margin: '0 0 16px 0', 
-                          fontSize: '15px', 
-                          color: '#4a5568',
-                          lineHeight: '1.6'
+                          fontSize: '14px', 
+                          color: '#4b5563',
+                          lineHeight: '1.7',
+                          fontWeight: '500'
                         }}>
-                          {wish.description.length > 120 
-                            ? wish.description.substring(0, 120) + '...' 
+                          {wish.description.length > 100 
+                            ? wish.description.substring(0, 100) + '...' 
                             : wish.description}
                         </p>
                       )}
@@ -1018,19 +1942,21 @@ export default function Goals() {
                       {wish.why_important && (
                         <div style={{
                           backgroundColor: '#fef5e7',
-                          padding: '12px',
-                          borderRadius: '8px',
+                          padding: '12px 14px',
+                          borderRadius: '10px',
                           marginBottom: '16px',
-                          borderLeft: '3px solid #f39c12'
+                          borderLeft: '4px solid #f59e0b',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                         }}>
-                          <div style={{ fontSize: '12px', color: '#856404', fontWeight: '600', marginBottom: '4px' }}>
-                            💫 Why this matters:
+                          <div style={{ fontSize: '11px', color: '#92400e', fontWeight: '700', marginBottom: '6px', textTransform: 'uppercase' }}>
+                            💫 Why This Matters
                           </div>
                           <p style={{ 
                             margin: 0, 
                             fontSize: '13px', 
-                            color: '#856404',
-                            lineHeight: '1.5'
+                            color: '#78350f',
+                            lineHeight: '1.5',
+                            fontWeight: '500'
                           }}>
                             {wish.why_important.length > 100 
                               ? wish.why_important.substring(0, 100) + '...' 
@@ -1039,111 +1965,170 @@ export default function Goals() {
                         </div>
                       )}
 
-                      {/* Stats */}
-                      {wish.stats && (
-                        <div style={{
-                          display: 'grid',
-                          gridTemplateColumns: 'repeat(3, 1fr)',
-                          gap: '8px',
-                          marginBottom: '16px',
-                          padding: '12px',
-                          backgroundColor: '#f7fafc',
-                          borderRadius: '8px'
-                        }}>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4a5568' }}>
-                              {wish.stats.days_dreaming || 0}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#718096' }}>
-                              days dreaming
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4a5568' }}>
-                              {wish.stats.reflections_count || 0}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#718096' }}>
-                              reflections
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'center' }}>
-                            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#4a5568' }}>
-                              {wish.stats.exploration_progress || 0}%
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#718096' }}>
-                              explored
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Status badge */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      {/* Status & Category */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', flexWrap: 'wrap' }}>
                         <span style={{
-                          padding: '6px 12px',
-                          borderRadius: '12px',
+                          padding: '8px 16px',
+                          borderRadius: '20px',
                           fontSize: '12px',
-                          fontWeight: '600',
-                          backgroundColor: statusStyle.bg,
+                          fontWeight: '800',
+                          background: statusStyle.bg,
                           color: statusStyle.text,
-                          textTransform: 'capitalize'
+                          textTransform: 'uppercase',
+                          border: `2px solid ${statusStyle.border}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.1)',
+                          letterSpacing: '0.5px'
                         }}>
+                          <span>{statusStyle.icon}</span>
                           {wish.status.replace('_', ' ')}
                         </span>
                         
                         {wish.category && (
-                          <span style={{ fontSize: '12px', color: '#a0aec0' }}>
-                            {wish.category === 'travel' && '🌍'} 
-                            {wish.category === 'financial' && '💰'}
-                            {wish.category === 'personal' && '🌱'}
-                            {wish.category === 'career' && '💼'}
-                            {wish.category === 'health' && '💪'}
-                            {wish.category === 'relationship' && '❤️'}
-                            {wish.category === 'learning' && '📚'}
-                            {wish.category === 'lifestyle' && '🏡'}
-                            {' '}{wish.category}
+                          <span style={{ 
+                            fontSize: '13px', 
+                            color: '#6b7280',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span>
+                              {wish.category === 'travel' && '🌍'} 
+                              {wish.category === 'goals' && '🎯'}
+                              {wish.category === 'financial' && '💰'}
+                              {wish.category === 'personal' && '🌱'}
+                              {wish.category === 'career' && '💼'}
+                              {wish.category === 'health' && '💪'}
+                              {wish.category === 'relationship' && '❤️'}
+                              {wish.category === 'learning' && '📚'}
+                              {wish.category === 'lifestyle' && '🏡'}
+                            </span>
+                            {wish.category}
                           </span>
                         )}
                       </div>
+                    </div>
 
-                      {/* Quick actions */}
-                      <div style={{ display: 'flex', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                    {/* Action Buttons */}
+                    <div style={{ 
+                      padding: '20px 24px 24px', 
+                      backgroundColor: '#f9fafb',
+                      borderTop: '2px solid #e5e7eb',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px'
+                    }}>
+                      {/* Promote to Goal (for ready status) */}
+                      {wish.status === 'ready' && (
+                        <button 
+                          className="btn btn-sm"
+                          style={{
+                            width: '100%',
+                            padding: '14px',
+                            fontSize: '14px',
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                            color: 'white',
+                            border: '2px solid #1e40af',
+                            borderRadius: '12px',
+                            cursor: 'pointer',
+                            fontWeight: '800',
+                            boxShadow: '0 4px 10px rgba(37, 99, 235, 0.35)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '8px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (confirm(`🚀 Ready to make "${wish.title}" a committed Life Goal?`)) {
+                              try {
+                                await api.post(`/api/wishes/${wish.id}/promote-to-goal`);
+                                showToast('✨ Dream promoted to Life Goal! Time to make it happen!', 'success');
+                                await loadWishes();
+                                await loadLifeGoals();
+                              } catch (err) {
+                                console.error('Error promoting dream:', err);
+                                showToast('Failed to promote dream to goal', 'error');
+                              }
+                            }
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 6px 16px rgba(37, 99, 235, 0.45)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 4px 10px rgba(37, 99, 235, 0.35)';
+                          }}
+                        >
+                          🚀 Promote to Goal
+                        </button>
+                      )}
+
+                      {/* Main Actions */}
+                      <div style={{ display: 'flex', gap: '10px' }}>
                         <button 
                           className="btn btn-sm"
                           style={{
                             flex: 1,
-                            padding: '8px',
+                            padding: '12px',
                             fontSize: '13px',
-                            backgroundColor: '#edf2f7',
-                            color: '#4a5568',
+                            background: `linear-gradient(135deg, ${theme.gradient.split('-')[0]} 0%, ${theme.gradient.split('-')[1]} 100%)`,
+                            color: 'white',
                             border: 'none',
-                            borderRadius: '6px',
+                            borderRadius: '10px',
                             cursor: 'pointer',
-                            fontWeight: '500'
+                            fontWeight: '700',
+                            boxShadow: '0 3px 8px rgba(0,0,0,0.15)',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
                           }}
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setSelectedWish(wish);
                             setShowWishDetailsModal(true);
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e2e8f0'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#edf2f7'}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 3px 8px rgba(0,0,0,0.15)';
+                          }}
                         >
-                          💫 Details
+                          👁️ View Details
                         </button>
+                        
                         <button 
                           className="btn btn-sm"
                           style={{
                             flex: 1,
-                            padding: '8px',
+                            padding: '12px',
                             fontSize: '13px',
-                            backgroundColor: '#bee3f8',
-                            color: '#2c5282',
-                            border: 'none',
-                            borderRadius: '6px',
+                            backgroundColor: 'white',
+                            color: '#4b5563',
+                            border: '2px solid #d1d5db',
+                            borderRadius: '10px',
                             cursor: 'pointer',
-                            fontWeight: '500'
+                            fontWeight: '700',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
                           }}
-                          onClick={async () => {
+                          onClick={async (e) => {
+                            e.stopPropagation();
                             const text = prompt("What are your thoughts about this dream?");
                             if (text) {
                               try {
@@ -1152,38 +2137,538 @@ export default function Goals() {
                                   mood: 'inspired'
                                 });
                                 await loadWishes();
+                                showToast('✨ Reflection added!', 'success');
                               } catch (err) {
                                 console.error('Error adding reflection:', err);
+                                showToast('Failed to add reflection', 'error');
                               }
                             }
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#90cdf4'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#bee3f8'}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f3f4f6';
+                            e.currentTarget.style.borderColor = '#9ca3af';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'white';
+                            e.currentTarget.style.borderColor = '#d1d5db';
+                          }}
                         >
-                          ✍️ Reflect
+                          ✍️ Add Reflection
                         </button>
                       </div>
+
+                      {/* Status Progression */}
+                      {wish.status === 'dreaming' && (
+                        <button
+                          className="btn btn-sm"
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            fontSize: '13px',
+                            background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                            color: '#92400e',
+                            border: '2px solid #fcd34d',
+                            borderRadius: '10px',
+                            fontWeight: '700',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUpdateWishStatus(wish.id, 'exploring');
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = 'none';
+                          }}
+                        >
+                          � Start Exploring
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
-              })}
-            </div>
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* DUPLICATE SECTION REMOVED - Exploring Dreams is shown at the top now */}
+              {false && wishes.filter(w => w.status === 'exploring').length > 0 && (
+                <div style={{ marginBottom: '48px' }}>
+                  <div style={{
+                    background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)',
+                    padding: '20px',
+                    borderRadius: '16px',
+                    border: '3px solid #14b8a6',
+                    marginBottom: '20px'
+                  }}>
+                    <h2 style={{
+                      fontSize: '24px',
+                      fontWeight: '800',
+                      marginBottom: '8px',
+                      background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px'
+                    }}>
+                      🔬 Exploration Zone ({wishes.filter(w => w.status === 'exploring').length})
+                    </h2>
+                    <p style={{ color: '#0f766e', fontSize: '15px', margin: 0, fontWeight: '500' }}>
+                      🌱 Dreams you're actively researching and exploring - no pressure, just curiosity!
+                    </p>
+                  </div>
+                  
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', 
+                    gap: '24px'
+                  }}>
+                    {wishes.filter(w => w.status === 'exploring').map((wish) => (
+                      <div key={wish.id} style={{
+                        background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)',
+                        padding: '24px',
+                        borderRadius: '16px',
+                        border: '3px solid #14b8a6',
+                        boxShadow: '0 8px 16px rgba(20, 184, 166, 0.2)',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onClick={() => {
+                        setSelectedWish(wish);
+                        setShowWishDetailsModal(true);
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-4px)';
+                        e.currentTarget.style.boxShadow = '0 12px 24px rgba(20, 184, 166, 0.3)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 8px 16px rgba(20, 184, 166, 0.2)';
+                      }}
+                      >
+                        <div style={{ marginBottom: '16px' }}>
+                          <h3 style={{ fontSize: '20px', fontWeight: '700', color: '#0f766e', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            🔍 {wish.title}
+                          </h3>
+                          {wish.description && (
+                            <p style={{ fontSize: '14px', color: '#0d9488', marginBottom: '12px', lineHeight: '1.5' }}>
+                              {wish.description}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Exploration Actions */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="btn btn-sm"
+                            style={{
+                              width: '100%',
+                              padding: '10px',
+                              fontSize: '14px',
+                              background: 'white',
+                              color: '#0f766e',
+                              border: '2px solid #14b8a6',
+                              borderRadius: '10px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '8px'
+                            }}
+                            onClick={() => {
+                              setCurrentExplorationWish(wish);
+                              setShowAddExplorationModal(true);
+                            }}
+                          >
+                            📝 Add Exploration Step
+                          </button>
+                          
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              className="btn btn-sm"
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                fontSize: '13px',
+                                backgroundColor: '#d1fae5',
+                                color: '#065f46',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => {
+                                setSelectedWish(wish);
+                                setShowWishDetailsModal(true);
+                              }}
+                            >
+                              📋 View Steps
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              style={{
+                                flex: 1,
+                                padding: '8px',
+                                fontSize: '13px',
+                                background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '8px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
+                              onClick={() => handleUpdateWishStatus(wish.id, 'ready')}
+                            >
+                              🔥 I'm Ready!
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* �🚀 DREAMS BECOMING REAL SECTION */}
+              {wishes.filter(w => w.status === 'moved_to_goal').length > 0 && (
+                <div style={{ marginBottom: '48px' }}>
+                  <h2 style={{
+                    fontSize: '24px',
+                    fontWeight: '800',
+                    marginBottom: '20px',
+                    background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    🚀 Dreams Becoming Real ({wishes.filter(w => w.status === 'moved_to_goal').length})
+                  </h2>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', 
+                    gap: '24px'
+                  }}>
+                    {wishes.filter(w => w.status === 'moved_to_goal').map((wish) => (
+                      <div key={wish.id} style={{
+                        background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                        padding: '24px',
+                        borderRadius: '16px',
+                        border: '3px solid #2563eb',
+                        boxShadow: '0 8px 16px rgba(37, 99, 235, 0.2)'
+                      }}>
+                        <h3 style={{ fontSize: '20px', fontWeight: '700', color: '#1e40af', marginBottom: '12px' }}>
+                          {wish.title}
+                        </h3>
+                        <p style={{ fontSize: '14px', color: '#1e3a8a', marginBottom: '16px' }}>
+                          This dream is now a committed Life Goal! 🎯
+                        </p>
+                        <button
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '10px',
+                            fontWeight: '700',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => {
+                            // Navigate to goal detail
+                            setActiveTab('goals');
+                            navigate('/goals');
+                          }}
+                        >
+                          View Life Goal →
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ✨ MANIFESTED DREAMS SECTION - Dreams Come True! */}
+              {wishes.filter(w => w.status === 'achieved').length > 0 && (
+                <div style={{ marginBottom: '48px' }}>
+                  <div style={{
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    padding: '20px',
+                    borderRadius: '16px',
+                    border: '4px solid #eab308',
+                    marginBottom: '20px',
+                    position: 'relative',
+                    overflow: 'hidden'
+                  }}>
+                    {/* Celebratory decorations */}
+                    <div style={{ position: 'absolute', left: '15px', top: '10px', fontSize: '32px', opacity: 0.3 }}>🎉</div>
+                    <div style={{ position: 'absolute', right: '15px', top: '10px', fontSize: '32px', opacity: 0.3 }}>🏆</div>
+                    <div style={{ position: 'absolute', left: '60px', bottom: '10px', fontSize: '28px', opacity: 0.25 }}>⭐</div>
+                    <div style={{ position: 'absolute', right: '60px', bottom: '10px', fontSize: '28px', opacity: 0.25 }}>💫</div>
+                    
+                    <h2 style={{
+                      fontSize: '28px',
+                      fontWeight: '900',
+                      marginBottom: '8px',
+                      background: 'linear-gradient(135deg, #eab308 0%, #f59e0b 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '12px',
+                      position: 'relative',
+                      zIndex: 1
+                    }}>
+                      <span style={{ fontSize: '36px' }}>✨</span>
+                      <span>Dreams Come True</span>
+                      <span style={{ fontSize: '36px' }}>🌟</span>
+                    </h2>
+                    <p style={{ 
+                      textAlign: 'center', 
+                      color: '#92400e', 
+                      fontSize: '15px', 
+                      fontWeight: '600',
+                      margin: 0,
+                      position: 'relative',
+                      zIndex: 1
+                    }}>
+                      🎊 Celebrating {wishes.filter(w => w.status === 'achieved').length} manifested dream{wishes.filter(w => w.status === 'achieved').length !== 1 ? 's' : ''}! You did it! 🎊
+                    </p>
+                  </div>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', 
+                    gap: '24px'
+                  }}>
+                    {wishes.filter(w => w.status === 'achieved').map((wish) => (
+                      <div key={wish.id} style={{
+                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                        padding: '24px',
+                        borderRadius: '16px',
+                        border: '3px solid #eab308',
+                        boxShadow: '0 8px 16px rgba(234, 179, 8, 0.3)',
+                        position: 'relative',
+                        overflow: 'hidden'
+                      }}>
+                        <div style={{ position: 'absolute', top: '12px', right: '12px', fontSize: '48px', opacity: 0.3 }}>
+                          🎉
+                        </div>
+                        <h3 style={{ fontSize: '20px', fontWeight: '700', color: '#92400e', marginBottom: '8px' }}>
+                          {wish.title}
+                        </h3>
+                        <div style={{ fontSize: '13px', color: '#78350f', fontStyle: 'italic', marginBottom: '12px' }}>
+                          Dream manifested! ✨
+                        </div>
+                        {wish.achievement_notes && (
+                          <p style={{ fontSize: '14px', color: '#92400e', lineHeight: '1.6', marginBottom: '16px' }}>
+                            {wish.achievement_notes}
+                          </p>
+                        )}
+                        {wish.achieved_at && (
+                          <div style={{ fontSize: '12px', color: '#a16207', marginBottom: '12px' }}>
+                            📅 Achieved on: {new Date(wish.achieved_at).toLocaleDateString()}
+                          </div>
+                        )}
+                        {/* Undo Button */}
+                        <button
+                          className="btn btn-sm"
+                          style={{
+                            width: '100%',
+                            padding: '8px',
+                            fontSize: '13px',
+                            backgroundColor: '#fef3c7',
+                            color: '#92400e',
+                            border: '2px solid #eab308',
+                            borderRadius: '8px',
+                            fontWeight: '600',
+                            cursor: 'pointer'
+                          }}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (confirm('Move this dream back to active status?')) {
+                              try {
+                                await api.put(`/api/wishes/${wish.id}`, { status: 'dreaming' });
+                                showToast('Dream moved back to active dreams', 'info');
+                                await loadWishes();
+                              } catch (err) {
+                                showToast('Failed to update dream', 'error');
+                              }
+                            }
+                          }}
+                        >
+                          ↶ Move Back to Active
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 🕊️ RELEASED DREAMS SECTION (Collapsible) */}
+              {wishes.filter(w => w.status === 'released').length > 0 && (
+                <div style={{ marginBottom: '48px' }}>
+                  <details>
+                    <summary style={{
+                      fontSize: '20px',
+                      fontWeight: '700',
+                      color: '#6b7280',
+                      cursor: 'pointer',
+                      padding: '16px',
+                      background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
+                      borderRadius: '12px',
+                      border: '2px solid #d1d5db',
+                      marginBottom: '20px',
+                      listStyle: 'none'
+                    }}>
+                      🕊️ Released Dreams ({wishes.filter(w => w.status === 'released').length}) - Released with gratitude
+                    </summary>
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', 
+                      gap: '24px',
+                      opacity: 0.8
+                    }}>
+                      {wishes.filter(w => w.status === 'released').map((wish) => (
+                        <div key={wish.id} style={{
+                          background: 'linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%)',
+                          padding: '24px',
+                          borderRadius: '16px',
+                          border: '2px solid #d1d5db'
+                        }}>
+                          <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#6b7280', marginBottom: '8px' }}>
+                            {wish.title}
+                          </h3>
+                          <div style={{ fontSize: '13px', color: '#9ca3af', fontStyle: 'italic', marginBottom: '8px' }}>
+                            Released peacefully
+                          </div>
+                          {wish.release_reason && (
+                            <p style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.5' }}>
+                              {wish.release_reason}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+              )}
+            </>
           )}
         </div>
       ) : (
         /* Goals Tab - Committed Goals */
-        <div className="goals-container">
+        <div className="goals-container" style={{
+          padding: '24px',
+          maxWidth: '1600px',
+          margin: '0 auto'
+        }}>
         {!selectedGoal ? (
           /* Goals List View */
           <>
-            <div className="goals-header">
-              <button 
-                className="btn btn-primary" 
-                onClick={() => setShowAddGoalModal(true)}
-                style={{ marginBottom: '20px' }}
-              >
-                ➕ Add Life Goal
-              </button>
+            {/* Compact Header with Inline Stats */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px',
+              padding: '20px 24px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              borderRadius: '12px',
+              color: 'white'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>
+                  🎯 Life Goals
+                </h1>
+                <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
+                  <span style={{ 
+                    background: 'rgba(255,255,255,0.2)', 
+                    padding: '4px 12px', 
+                    borderRadius: '12px',
+                    fontWeight: '600'
+                  }}>
+                    Total: {lifeGoals.length}
+                  </span>
+                  <span style={{ 
+                    background: 'rgba(16, 185, 129, 0.3)', 
+                    padding: '4px 12px', 
+                    borderRadius: '12px',
+                    fontWeight: '600'
+                  }}>
+                    On Track: {lifeGoals.filter(g => g.status === 'on_track').length}
+                  </span>
+                  <span style={{ 
+                    background: 'rgba(59, 130, 246, 0.3)', 
+                    padding: '4px 12px', 
+                    borderRadius: '12px',
+                    fontWeight: '600'
+                  }}>
+                    In Progress: {lifeGoals.filter(g => g.status === 'in_progress').length}
+                  </span>
+                  <span style={{ 
+                    background: 'rgba(168, 85, 247, 0.3)', 
+                    padding: '4px 12px', 
+                    borderRadius: '12px',
+                    fontWeight: '600'
+                  }}>
+                    Dreams: {lifeGoals.filter(g => g.status === 'not_started').length}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    setActiveTab('wishes');
+                    navigate('/goals?tab=wishes');
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                    border: '2px solid #d97706',
+                    color: '#dc2626',
+                    fontWeight: '700',
+                    padding: '10px 20px',
+                    borderRadius: '8px',
+                    fontSize: '15px'
+                  }}
+                >
+                  ✨ Dream Board
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => {
+                    setEditingGoal(null);
+                    setShowAddGoalModal(true);
+                  }}
+                  style={{
+                    background: 'rgba(255,255,255,0.25)',
+                    border: '2px solid rgba(255,255,255,0.4)',
+                    color: 'white',
+                    fontWeight: '700',
+                    padding: '10px 20px',
+                    borderRadius: '8px'
+                  }}
+                >
+                  ➕ Add Life Goal
+                </button>
+              </div>
             </div>
 
             {lifeGoals.length === 0 ? (
@@ -1196,111 +2681,166 @@ export default function Goals() {
                 </p>
                 <button 
                   className="btn btn-primary" 
-                  onClick={() => setShowAddGoalModal(true)}
+                  onClick={() => {
+                    setEditingGoal(null);
+                    setShowAddGoalModal(true);
+                  }}
                   style={{ marginTop: '20px' }}
                 >
                   Create Your First Goal
                 </button>
               </div>
             ) : (
-              <div className="goals-grid">
-                {lifeGoals
-                  .filter(goal => !goal.parent_goal_id) // Only show root goals
-                  .map(goal => {
-                    return (
-                      <div
-                        key={goal.id}
-                        className="goal-card"
-                      >
-                        <div className="goal-card-header">
-                          <h3>{goal.name}</h3>
-                        </div>
+              <>
+                {/* 💪 In Progress Section - Active Work */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'in_progress').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#2563eb',
+                      marginBottom: '16px',
+                      padding: '8px 12px',
+                      background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                      borderRadius: '8px',
+                      border: '2px solid #3b82f6'
+                    }}>
+                      💪 Goals: In Progress ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'in_progress').length})
+                    </h3>
+                    <div className="goals-grid">
+                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'in_progress').map((goal, index) => renderGoalCard(goal, index))}
+                    </div>
+                  </div>
+                )}
 
-                        <div className="goal-card-body">
-                          <div className="goal-dates-row">
-                            {goal.start_date && (
-                              <div className="goal-date-item">
-                                <strong>Start:</strong> {new Date(goal.start_date).toLocaleDateString()}
-                              </div>
-                            )}
-                            {goal.target_date && (
-                              <div className="goal-date-item">
-                                <strong>Target:</strong> {new Date(goal.target_date).toLocaleDateString()}
-                                {goal.days_remaining !== null && (
-                                  <span className="days-remaining-badge">
-                                    {goal.days_remaining > 0 
-                                      ? `${goal.days_remaining} days left`
-                                      : `${Math.abs(goal.days_remaining)} days overdue`}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                          </div>
+                {/* 🚀 On Track Section - Making Progress */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#0891b2',
+                      marginBottom: '16px',
+                      padding: '8px 12px',
+                      background: 'linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%)',
+                      borderRadius: '8px',
+                      border: '2px solid #06b6d4'
+                    }}>
+                      🚀 Goals: On Track ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length})
+                    </h3>
+                    <div className="goals-grid">
+                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'on_track').map((goal, index) => renderGoalCard(goal, index))}
+                    </div>
+                  </div>
+                )}
 
-                          <div className="goal-progress">
-                            <div className="progress-label">
-                              Progress: <strong>{goal.progress_percentage?.toFixed(0) || 0}%</strong>
-                            </div>
-                            <div className="progress-bar-container">
-                              <div 
-                                className="progress-bar-fill"
-                                style={{ 
-                                  width: `${goal.progress_percentage || 0}%`,
-                                  backgroundColor: 
-                                    goal.status === 'on_track' ? '#48bb78' :
-                                    goal.status === 'at_risk' ? '#ed8936' :
-                                    goal.status === 'behind' ? '#f56565' :
-                                    '#cbd5e0'
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
+                {/* 🏆 Completed Section - Achieved */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#059669',
+                      marginBottom: '16px',
+                      padding: '8px 12px',
+                      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                      borderRadius: '8px',
+                      border: '2px solid #10b981'
+                    }}>
+                      🏆 Goals: Done ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length})
+                    </h3>
+                    <div className="goals-grid">
+                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'completed').map((goal, index) => renderGoalCard(goal, index))}
+                    </div>
+                  </div>
+                )}
 
-                        <div className="goal-card-footer">
-                          <button
-                            className="btn btn-primary"
-                            onClick={() => {
-                              setSelectedGoal(goal);
-                              loadGoalDetails(goal.id);
-                            }}
-                          >
-                            View Details
-                          </button>
-                          <button
-                            className="btn btn-danger"
-                            onClick={() => handleDeleteLifeGoal(goal.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                {/* 📋 Not Started Section - Planned */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#64748b',
+                      marginBottom: '16px',
+                      padding: '8px 12px',
+                      background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+                      borderRadius: '8px',
+                      border: '2px solid #94a3b8'
+                    }}>
+                      📋 Goals: Not Started ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length})
+                    </h3>
+                    <div className="goals-grid">
+                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'not_started').map((goal, index) => renderGoalCard(goal, index))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         ) : (
           /* Goal Detail View - Full Page */
-          <div className="goal-detail-page">
-            <div className="goal-detail-header">
+          <div className="goal-detail-page" style={{
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
+            borderRadius: '16px',
+            padding: '24px',
+            border: '4px solid #5a67d8'
+          }}>
+            <div className="goal-detail-header" style={{
+              background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
+              padding: '20px',
+              borderRadius: '12px',
+              marginBottom: '24px',
+              border: '2px solid #3b82f6'
+            }}>
               <button
                 className="btn btn-secondary"
                 onClick={handleBackToGoals}
+                style={{
+                  background: 'linear-gradient(135deg, #374151 0%, #1f2937 100%)',
+                  color: 'white',
+                  border: '2px solid #6b7280',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontWeight: '600'
+                }}
               >
                 ← Back to All Goals
               </button>
               <div className="goal-header-info">
-                <h2>{selectedGoal.name}</h2>
-                <div className="goal-header-meta">
-                  <span className={`status-badge status-${selectedGoal.status}`}>
+                <h2 style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', marginTop: '12px' }}>{selectedGoal.name}</h2>
+                <div className="goal-header-meta" style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                  <span className={`status-badge status-${selectedGoal.status}`} style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    background: selectedGoal.status === 'on_track' || selectedGoal.status === 'completed' ? '#047857' :
+                               selectedGoal.status === 'in_progress' ? '#1e40af' : '#4b5563',
+                    color: 'white'
+                  }}>
                     {selectedGoal.status.replace('_', ' ').toUpperCase()}
                   </span>
                   {selectedGoal.category && (
-                    <span className="category-badge">{selectedGoal.category}</span>
+                    <span className="category-badge" style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      fontSize: '13px',
+                      background: '#7c3aed',
+                      color: 'white'
+                    }}>{selectedGoal.category}</span>
                   )}
                   {selectedGoal.priority && (
-                    <span className={`priority-badge priority-${selectedGoal.priority}`}>
+                    <span className={`priority-badge priority-${selectedGoal.priority}`} style={{
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      fontSize: '13px',
+                      background: selectedGoal.priority === 'high' ? '#dc2626' : 
+                                 selectedGoal.priority === 'medium' ? '#ea580c' : '#65a30d',
+                      color: 'white'
+                    }}>
                       {selectedGoal.priority.toUpperCase()}
                     </span>
                   )}
@@ -1310,7 +2850,13 @@ export default function Goals() {
 
             <div className="goal-detail-body">
               {/* Goal Summary Card */}
-              <div className="goal-summary-card">
+              <div className="goal-summary-card" style={{
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #dbeafe 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #3b82f6',
+                marginBottom: '20px'
+              }}>
                 <div className="summary-row">
                   <div className="summary-item">
                     <label>Start Date</label>
@@ -1353,9 +2899,15 @@ export default function Goals() {
 
               {/* Why Statements */}
               {selectedGoal.why_statements && selectedGoal.why_statements.length > 0 && (
-                <div className="goal-section why-section">
-                  <h3>💡 Why This Goal Matters</h3>
-                  <ul className="why-statements-list">
+                <div className="goal-section why-section" style={{
+                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  border: '3px solid #f59e0b',
+                  marginBottom: '20px'
+                }}>
+                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px' }}>💡 Why This Goal Matters</h3>
+                  <ul className="why-statements-list" style={{ color: '#78350f', fontSize: '15px' }}>
                     {selectedGoal.why_statements.map((why, index) => (
                       <li key={index}>{why}</li>
                     ))}
@@ -1365,19 +2917,39 @@ export default function Goals() {
 
               {/* Description */}
               {selectedGoal.description && (
-                <div className="goal-section description-section">
-                  <h3>📝 Description</h3>
-                  <p>{selectedGoal.description}</p>
+                <div className="goal-section description-section" style={{
+                  background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  border: '3px solid #8b5cf6',
+                  marginBottom: '20px'
+                }}>
+                  <h3 style={{ color: '#5b21b6', fontWeight: 'bold', fontSize: '18px' }}>📝 Description</h3>
+                  <p style={{ color: '#4c1d95', fontSize: '15px' }}>{selectedGoal.description}</p>
                 </div>
               )}
 
               {/* Milestones */}
-              <div className="goal-section milestones-section">
-                <div className="section-header">
-                  <h3>🎯 Milestones</h3>
+              <div className="goal-section milestones-section" style={{
+                background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #10b981',
+                marginBottom: '20px'
+              }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>🎯 Milestones</h3>
                   <button
                     className="btn btn-primary"
                     onClick={() => setShowAddMilestoneModal(true)}
+                    style={{
+                      background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                      color: 'white',
+                      border: '2px solid #065f46',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: '600'
+                    }}
                   >
                     ➕ Add Milestone
                   </button>
@@ -1419,12 +2991,26 @@ export default function Goals() {
               </div>
 
               {/* Goal-Specific Tasks */}
-              <div className="goal-section tasks-section">
-                <div className="section-header">
-                  <h3>✅ Goal Tasks</h3>
+              <div className="goal-section tasks-section" style={{
+                background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #ec4899',
+                marginBottom: '20px'
+              }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ color: '#9f1239', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>✅ Goal Tasks</h3>
                   <button
                     className="btn btn-primary"
                     onClick={() => setShowAddGoalTaskModal(true)}
+                    style={{
+                      background: 'linear-gradient(135deg, #db2777 0%, #be185d 100%)',
+                      color: 'white',
+                      border: '2px solid #9f1239',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: '600'
+                    }}
                   >
                     ➕ Add Task
                   </button>
@@ -1495,12 +3081,26 @@ export default function Goals() {
               </div>
 
               {/* Linked Tasks */}
-              <div className="goal-section linked-section">
-                <div className="section-header">
-                  <h3>🔗 Linked Tasks</h3>
+              <div className="goal-section linked-section" style={{
+                background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #6366f1',
+                marginBottom: '20px'
+              }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ color: '#3730a3', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>🔗 Linked Tasks</h3>
                   <button
                     className="btn btn-primary"
                     onClick={() => setShowLinkTaskModal(true)}
+                    style={{
+                      background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
+                      color: 'white',
+                      border: '2px solid #3730a3',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: '600'
+                    }}
                   >
                     🔗 Link Task
                   </button>
@@ -1849,11 +3449,17 @@ export default function Goals() {
 
       {/* Add/Edit Life Goal Modal */}
       {showAddGoalModal && (
-        <div className="modal-overlay" onClick={() => setShowAddGoalModal(false)}>
+        <div className="modal-overlay" onClick={() => {
+          setShowAddGoalModal(false);
+          setEditingGoal(null);
+        }}>
           <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add New Life Goal</h2>
-              <button className="btn-close" onClick={() => setShowAddGoalModal(false)}>×</button>
+              <h2>{editingGoal ? 'Edit Life Goal' : 'Add New Life Goal'}</h2>
+              <button className="btn-close" onClick={() => {
+                setShowAddGoalModal(false);
+                setEditingGoal(null);
+              }}>×</button>
             </div>
             <div className="modal-body">
               <form onSubmit={async (e) => {
@@ -1886,10 +3492,20 @@ export default function Goals() {
                     time_allocated_hours: parseFloat(formData.get('time_allocated_hours') as string) || 0
                   };
                   
-                  await handleCreateLifeGoal(goalData);
+                  if (editingGoal) {
+                    // Update existing goal
+                    await api.put(`/api/life-goals/${editingGoal.id}`, goalData);
+                    alert('Goal updated successfully!');
+                  } else {
+                    // Create new goal
+                    await handleCreateLifeGoal(goalData);
+                  }
+                  setShowAddGoalModal(false);
+                  setEditingGoal(null);
+                  await loadLifeGoals();
                 } catch (err: any) {
-                  console.error('Error creating goal:', err);
-                  alert('Failed to create goal: ' + (err.response?.data?.detail || err.message));
+                  console.error('Error saving goal:', err);
+                  alert('Failed to save goal: ' + (err.response?.data?.detail || err.message));
                 }
               }}>
                 <div className="form-group">
@@ -1901,6 +3517,7 @@ export default function Goals() {
                     className="form-control"
                     required
                     placeholder="e.g., Become Director in 2 years"
+                    defaultValue={editingGoal?.name || ''}
                   />
                 </div>
                 
@@ -1911,6 +3528,7 @@ export default function Goals() {
                       id="goal-category"
                       name="category"
                       className="form-control"
+                      defaultValue={editingGoal?.category || ''}
                     >
                       <option value="">-- Select Category --</option>
                       <option value="career">Career</option>
@@ -1929,7 +3547,7 @@ export default function Goals() {
                       id="goal-priority"
                       name="priority"
                       className="form-control"
-                      defaultValue="medium"
+                      defaultValue={editingGoal?.priority || 'medium'}
                     >
                       <option value="high">High</option>
                       <option value="medium">Medium</option>
@@ -1947,7 +3565,7 @@ export default function Goals() {
                       name="start_date"
                       className="form-control"
                       required
-                      defaultValue={new Date().toISOString().split('T')[0]}
+                      defaultValue={editingGoal?.start_date || new Date().toISOString().split('T')[0]}
                     />
                     <small className="form-text">
                       When did/will you start working on this goal? (Editable - can be in the past)
@@ -1962,6 +3580,7 @@ export default function Goals() {
                       name="target_date"
                       className="form-control"
                       required
+                      defaultValue={editingGoal?.target_date || ''}
                     />
                     <small className="form-text">
                       When do you want to achieve this goal?
@@ -1975,6 +3594,7 @@ export default function Goals() {
                     id="goal-parent"
                     name="parent_goal_id"
                     className="form-control"
+                    defaultValue={editingGoal?.parent_goal_id || ''}
                   >
                     <option value="">-- None (Root Goal) --</option>
                     {lifeGoals
@@ -1997,6 +3617,7 @@ export default function Goals() {
                     min="0"
                     step="0.5"
                     placeholder="e.g., 100"
+                    defaultValue={editingGoal?.time_allocated_hours || ''}
                   />
                   <small className="form-text">Total hours you estimate this goal will take</small>
                 </div>
@@ -2010,6 +3631,7 @@ export default function Goals() {
                         name="why_0"
                         className="form-control"
                         placeholder="Reason 1: e.g., Career growth and better compensation"
+                        defaultValue={editingGoal?.why_statements?.[0] || ''}
                       />
                     </div>
                     <div className="why-statement-input">
@@ -2018,6 +3640,7 @@ export default function Goals() {
                         name="why_1"
                         className="form-control"
                         placeholder="Reason 2: e.g., Leadership experience"
+                        defaultValue={editingGoal?.why_statements?.[1] || ''}
                       />
                     </div>
                     <div className="why-statement-input">
@@ -2026,6 +3649,7 @@ export default function Goals() {
                         name="why_2"
                         className="form-control"
                         placeholder="Reason 3: e.g., Opportunity to make bigger impact"
+                        defaultValue={editingGoal?.why_statements?.[2] || ''}
                       />
                     </div>
                   </div>
@@ -2063,6 +3687,7 @@ export default function Goals() {
                     className="form-control"
                     rows={4}
                     placeholder="Additional details, action plan, or notes about this goal..."
+                    defaultValue={editingGoal?.description || ''}
                   />
                 </div>
                 
@@ -2075,7 +3700,7 @@ export default function Goals() {
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary">
-                    Create Goal
+                    {editingGoal ? 'Update Goal' : 'Create Goal'}
                   </button>
                 </div>
               </form>
@@ -3228,38 +4853,64 @@ export default function Goals() {
         </div>
       )}
 
-      {/* Wish Details Modal */}
+      {/* Wish Details Modal - Compact Version */}
       {showWishDetailsModal && selectedWish && (
-        <div className="modal-overlay" onClick={() => setShowWishDetailsModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', maxHeight: '90vh', overflow: 'auto' }}>
+        <div className="modal-overlay" onClick={() => {
+          setShowWishDetailsModal(false);
+          setSelectedWish(null);
+        }} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
-              <h2>✨ {selectedWish.title}</h2>
-              <button className="btn-close" onClick={() => setShowWishDetailsModal(false)}>×</button>
+              <h2 style={{ fontSize: '20px' }}>✨ {selectedWish.title}</h2>
+              <button className="btn-close" onClick={() => {
+                setShowWishDetailsModal(false);
+                setSelectedWish(null);
+              }}>×</button>
             </div>
-            <div className="modal-body">
-              {/* Header section with status and actions */}
-              <div style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: '1px solid #e2e8f0' }}>
-                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
-                  <span style={{
-                    padding: '6px 12px',
-                    borderRadius: '12px',
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    backgroundColor: selectedWish.status === 'dreaming' ? '#e3f2fd' : 
-                                    selectedWish.status === 'exploring' ? '#f3e5f5' :
-                                    selectedWish.status === 'planning' ? '#fff3e0' :
-                                    selectedWish.status === 'ready_to_commit' ? '#e8f5e9' : '#e0f2f1',
-                    color: selectedWish.status === 'dreaming' ? '#1976d2' : 
-                          selectedWish.status === 'exploring' ? '#7b1fa2' :
-                          selectedWish.status === 'planning' ? '#f57c00' :
-                          selectedWish.status === 'ready_to_commit' ? '#388e3c' : '#00897b',
-                    textTransform: 'capitalize'
-                  }}>
-                    {selectedWish.status.replace('_', ' ')}
-                  </span>
+            <div className="modal-body" style={{ padding: '20px' }}>
+              {/* Compact Header Section */}
+              <div style={{ marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                {/* Row 1: Timeframe and Status */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  {selectedWish.estimated_timeframe && (
+                    <div style={{ fontSize: '13px', color: '#718096' }}>
+                      ⏰ <strong>{selectedWish.estimated_timeframe.replace('_', ' ')}</strong>
+                    </div>
+                  )}
                   
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span style={{
+                      padding: '4px 10px',
+                      borderRadius: '10px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      backgroundColor: selectedWish.status === 'dreaming' ? '#e3f2fd' : 
+                                      selectedWish.status === 'exploring' ? '#f3e5f5' :
+                                      selectedWish.status === 'planning' ? '#fff3e0' :
+                                      selectedWish.status === 'ready' ? '#e8f5e9' : '#e0f2f1',
+                      color: selectedWish.status === 'dreaming' ? '#1976d2' : 
+                            selectedWish.status === 'exploring' ? '#7b1fa2' :
+                            selectedWish.status === 'planning' ? '#f57c00' :
+                            selectedWish.status === 'ready' ? '#388e3c' : '#00897b',
+                      textTransform: 'capitalize'
+                    }}>
+                      {selectedWish.status.replace('_', ' ')}
+                    </span>
+                    
+                    {selectedWish.priority === 'burning_desire' && <span style={{ fontSize: '18px' }}>🔥</span>}
+                  </div>
+                </div>
+                
+                {selectedWish.description && (
+                  <p style={{ margin: '10px 0', fontSize: '14px', color: '#4a5568', lineHeight: '1.5' }}>
+                    {selectedWish.description}
+                  </p>
+                )}
+
+                {/* Row 2: Category and Cost */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#718096', marginTop: '8px' }}>
                   {selectedWish.category && (
-                    <span style={{ fontSize: '14px', color: '#718096' }}>
+                    <span>
                       {selectedWish.category === 'travel' && '🌍'} 
                       {selectedWish.category === 'financial' && '💰'}
                       {selectedWish.category === 'personal' && '🌱'}
@@ -3272,28 +4923,12 @@ export default function Goals() {
                     </span>
                   )}
                   
-                  {selectedWish.priority === 'burning_desire' && (
-                    <span style={{ fontSize: '20px' }}>🔥</span>
+                  {selectedWish.estimated_cost && (
+                    <span>
+                      💵 <strong>${selectedWish.estimated_cost.toLocaleString()}</strong>
+                    </span>
                   )}
                 </div>
-                
-                {selectedWish.description && (
-                  <p style={{ margin: '12px 0', fontSize: '15px', color: '#4a5568', lineHeight: '1.6' }}>
-                    {selectedWish.description}
-                  </p>
-                )}
-
-                {selectedWish.estimated_timeframe && (
-                  <div style={{ fontSize: '14px', color: '#718096', marginTop: '8px' }}>
-                    ⏰ Estimated timeframe: <strong>{selectedWish.estimated_timeframe.replace('_', ' ')}</strong>
-                  </div>
-                )}
-
-                {selectedWish.estimated_cost && (
-                  <div style={{ fontSize: '14px', color: '#718096', marginTop: '4px' }}>
-                    💵 Estimated cost: <strong>${selectedWish.estimated_cost.toLocaleString()}</strong>
-                  </div>
-                )}
               </div>
 
               {/* Why it matters section */}
@@ -3388,6 +5023,172 @@ export default function Goals() {
                 </div>
               )}
 
+              {/* Exploration Steps List */}
+              {explorationSteps.length > 0 && (
+                <div style={{ marginBottom: '24px' }}>
+                  <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#0f766e', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🔬 Exploration Steps ({explorationSteps.filter((s: any) => s.is_completed).length}/{explorationSteps.length})
+                  </h4>
+                  <div style={{ 
+                    maxHeight: '300px', 
+                    overflowY: 'auto',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '12px'
+                  }}>
+                    {explorationSteps.map((step: any) => (
+                      <div key={step.id} style={{
+                        padding: '12px',
+                        marginBottom: '8px',
+                        backgroundColor: step.is_completed ? '#f0fdf4' : '#fef3c7',
+                        borderRadius: '8px',
+                        border: step.is_completed ? '2px solid #10b981' : '2px solid #f59e0b',
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px'
+                      }}>
+                        <div style={{ fontSize: '20px', flexShrink: 0 }}>
+                          {step.is_completed ? '✅' : 
+                           step.step_type === 'research' ? '🔍' :
+                           step.step_type === 'save_money' ? '💰' :
+                           step.step_type === 'learn_skill' ? '📚' :
+                           step.step_type === 'explore' ? '🧭' :
+                           step.step_type === 'connect' ? '🤝' : '📝'}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            fontWeight: '600', 
+                            color: step.is_completed ? '#065f46' : '#92400e',
+                            textDecoration: step.is_completed ? 'line-through' : 'none',
+                            marginBottom: '4px'
+                          }}>
+                            {step.step_title}
+                          </div>
+                          {step.step_description && (
+                            <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                              {step.step_description}
+                            </div>
+                          )}
+                          {step.completed_at && (
+                            <div style={{ fontSize: '12px', color: '#059669', marginTop: '4px' }}>
+                              Completed: {new Date(step.completed_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                        {!step.is_completed ? (
+                          <button
+                            className="btn btn-sm"
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                            onClick={async () => {
+                              try {
+                                await api.post(`/api/wishes/steps/${step.id}/complete`, {
+                                  notes: 'Completed'
+                                });
+                                showToast('✅ Step completed!', 'success');
+                                await loadExplorationSteps(selectedWish.id);
+                                await loadWishes();
+                              } catch (err) {
+                                console.error('Error completing step:', err);
+                                showToast('Failed to complete step', 'error');
+                              }
+                            }}
+                          >
+                            ✓ Done
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-sm"
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: '#f59e0b',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                            onClick={async () => {
+                              if (confirm('Mark this step as incomplete?')) {
+                                try {
+                                  await api.post(`/api/wishes/steps/${step.id}/uncomplete`);
+                                  showToast('↶ Step marked as incomplete', 'info');
+                                  await loadExplorationSteps(selectedWish.id);
+                                  await loadWishes();
+                                } catch (err) {
+                                  console.error('Error uncompleting step:', err);
+                                  showToast('Failed to mark step as incomplete', 'error');
+                                }
+                              }
+                            }}
+                          >
+                            ↶ Undo
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* View Dream Insights Button */}
+              <div style={{ marginBottom: '16px' }}>
+                <button 
+                  className="btn"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
+                    color: '#3730a3',
+                    border: '2px solid #6366f1',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    fontWeight: '700',
+                    fontSize: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px'
+                  }}
+                  onClick={async () => {
+                    try {
+                      // Load all related data for this dream
+                      const [reflections, inspirations, steps, projects, tasks] = await Promise.all([
+                        api.get(`/api/wishes/${selectedWish.id}/reflections`).catch(() => []),
+                        api.get(`/api/wishes/${selectedWish.id}/inspirations`).catch(() => []),
+                        api.get(`/api/wishes/${selectedWish.id}/steps`).catch(() => []),
+                        api.get(`/api/projects/?related_wish_id=${selectedWish.id}`).catch(() => []),
+                        api.get(`/api/tasks/?related_wish_id=${selectedWish.id}`).catch(() => [])
+                      ]);
+                      
+                      setDreamInsights({
+                        wish: selectedWish,
+                        reflections: reflections,
+                        inspirations: inspirations,
+                        steps: steps,
+                        projects: projects,
+                        tasks: tasks
+                      });
+                      setShowDreamInsightsModal(true);
+                    } catch (err) {
+                      console.error('Error loading dream insights:', err);
+                      showToast('Failed to load dream insights', 'error');
+                    }
+                  }}
+                >
+                  📊 View Dream Insights & Activities
+                </button>
+              </div>
+
               {/* Quick Actions */}
               <div style={{ 
                 display: 'grid', 
@@ -3399,37 +5200,15 @@ export default function Goals() {
                   className="btn"
                   style={{
                     padding: '12px',
-                    backgroundColor: '#bee3f8',
-                    color: '#2c5282',
-                    border: 'none',
+                    background: 'linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%)',
+                    color: '#1e3a8a',
+                    border: '2px solid #3b82f6',
                     borderRadius: '8px',
                     cursor: 'pointer',
                     fontWeight: '600',
                     fontSize: '14px'
                   }}
-                  onClick={async () => {
-                    const text = prompt("What are your thoughts about this dream? How do you feel about it right now?");
-                    if (text) {
-                      const moodOptions = ['excited', 'uncertain', 'determined', 'doubtful', 'inspired'];
-                      const mood = prompt(`How would you describe your mood? (${moodOptions.join(', ')})`);
-                      const clarityStr = prompt("How clear is this wish to you now? (1-10, where 10 is crystal clear)");
-                      const clarity = clarityStr ? parseInt(clarityStr) : undefined;
-                      
-                      try {
-                        await api.post(`/api/wishes/${selectedWish.id}/reflections`, {
-                          reflection_text: text,
-                          mood: mood || 'inspired',
-                          clarity_score: clarity
-                        });
-                        await loadWishes();
-                        const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
-                        setSelectedWish(updated.data || updated);
-                      } catch (err) {
-                        console.error('Error adding reflection:', err);
-                        alert('Failed to add reflection');
-                      }
-                    }
-                  }}
+                  onClick={() => setShowAddReflectionModal(true)}
                 >
                   ✍️ Add Reflection
                 </button>
@@ -3438,36 +5217,40 @@ export default function Goals() {
                   className="btn"
                   style={{
                     padding: '12px',
-                    backgroundColor: '#c6f6d5',
-                    color: '#22543d',
-                    border: 'none',
+                    background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                    color: '#065f46',
+                    border: '2px solid #10b981',
                     borderRadius: '8px',
                     cursor: 'pointer',
                     fontWeight: '600',
                     fontSize: '14px'
                   }}
-                  onClick={async () => {
-                    const title = prompt("What small step can you take to explore this wish?");
-                    if (title) {
-                      const typeOptions = ['research', 'save_money', 'learn_skill', 'explore', 'connect'];
-                      const type = prompt(`What type of step is this? (${typeOptions.join(', ')})`);
-                      
-                      try {
-                        await api.post(`/api/wishes/${selectedWish.id}/steps`, {
-                          step_title: title,
-                          step_type: type || 'research'
-                        });
-                        await loadWishes();
-                        const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
-                        setSelectedWish(updated.data || updated);
-                      } catch (err) {
-                        console.error('Error adding exploration step:', err);
-                        alert('Failed to add exploration step');
-                      }
-                    }
+                  onClick={() => {
+                    setCurrentExplorationWish(selectedWish);
+                    setShowAddExplorationModal(true);
                   }}
                 >
-                  🔍 Add Exploration Step
+                  🔍 Add Exploration Activity
+                </button>
+
+                <button 
+                  className="btn"
+                  style={{
+                    padding: '12px',
+                    background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
+                    color: '#831843',
+                    border: '2px solid #ec4899',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    fontSize: '14px'
+                  }}
+                  onClick={() => {
+                    setTaskFormWishId(selectedWish.id);
+                    setShowTaskFormModal(true);
+                  }}
+                >
+                  ✅ Add Task
                 </button>
 
                 <button 
@@ -3508,6 +5291,71 @@ export default function Goals() {
                   💡 Add Inspiration
                 </button>
 
+                {selectedWish.status !== 'achieved' && selectedWish.status !== 'released' && selectedWish.status !== 'moved_to_goal' && (
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                      color: '#78350f',
+                      border: '2px solid #eab308',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '700',
+                      fontSize: '14px',
+                      boxShadow: '0 4px 8px rgba(234, 179, 8, 0.3)'
+                    }}
+                    onClick={async () => {
+                      const notes = prompt("🎉 Congratulations! Tell us how this dream came true:");
+                      if (notes !== null) {
+                        try {
+                          await api.post(`/api/wishes/${selectedWish.id}/mark-achieved`, null, {
+                            params: { achievement_notes: notes || 'Dream manifested!' }
+                          });
+                          
+                          // 🎊 CONFETTI CELEBRATION! 🎊
+                          confetti({
+                            particleCount: 100,
+                            spread: 70,
+                            origin: { y: 0.6 },
+                            colors: ['#ffd700', '#ff69b4', '#87ceeb', '#98fb98', '#dda0dd']
+                          });
+                          
+                          // More confetti bursts
+                          setTimeout(() => {
+                            confetti({
+                              particleCount: 50,
+                              angle: 60,
+                              spread: 55,
+                              origin: { x: 0 },
+                              colors: ['#ffd700', '#ff1493', '#00bfff']
+                            });
+                          }, 200);
+                          
+                          setTimeout(() => {
+                            confetti({
+                              particleCount: 50,
+                              angle: 120,
+                              spread: 55,
+                              origin: { x: 1 },
+                              colors: ['#ffd700', '#ff1493', '#00bfff']
+                            });
+                          }, 400);
+                          
+                          showToast('✨ Dream marked as achieved! Celebrating your success!', 'success');
+                          await loadWishes();
+                          setShowWishDetailsModal(false);
+                        } catch (err) {
+                          console.error('Error marking dream as achieved:', err);
+                          showToast('Failed to mark dream as achieved', 'error');
+                        }
+                      }
+                    }}
+                  >
+                    ✨ Mark as Achieved
+                  </button>
+                )}
+
                 {selectedWish.status === 'ready_to_commit' && (
                   <button 
                     className="btn"
@@ -3522,7 +5370,7 @@ export default function Goals() {
                       fontSize: '14px'
                     }}
                     onClick={() => {
-                      alert('Convert to Goal feature coming soon! This will create a Life Goal from your wish.');
+                      showToast('💡 Use the "Promote to Goal" button on the dream card instead!', 'info');
                     }}
                   >
                     🎯 Convert to Goal
@@ -3530,24 +5378,115 @@ export default function Goals() {
                 )}
               </div>
 
-              {/* Bottom Actions */}
-              <div style={{ display: 'flex', gap: '10px', justifyContent: 'space-between', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid #e2e8f0' }}>
+              {/* Compact Bottom Actions - All in One Row */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '8px', 
+                marginTop: '20px', 
+                paddingTop: '12px', 
+                borderTop: '1px solid #e2e8f0',
+                flexWrap: 'wrap'
+              }}>
+                {(selectedWish.status === 'exploring' || selectedWish.status === 'planning') && (
+                  <button 
+                    className="btn"
+                    onClick={async () => {
+                      if (confirm('Mark as Achieved without going through all exploration steps?')) {
+                        const notes = prompt("🎉 How did this dream come true?");
+                        if (notes !== null) {
+                          try {
+                            await api.post(`/api/wishes/${selectedWish.id}/mark-achieved`, null, {
+                              params: { achievement_notes: notes || 'Dream manifested!' }
+                            });
+                            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+                            showToast('✨ Dream achieved!', 'success');
+                            await loadWishes();
+                            setShowWishDetailsModal(false);
+                          } catch (err) {
+                            showToast('Failed to mark as achieved', 'error');
+                          }
+                        }
+                      }
+                    }}
+                    style={{
+                      flex: '1 1 auto',
+                      padding: '8px 12px',
+                      fontSize: '13px',
+                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    ✨ Achieved
+                  </button>
+                )}
+                
                 <button 
-                  className="btn btn-secondary"
+                  className="btn"
                   onClick={async () => {
-                    if (confirm('Are you sure you want to archive this wish? You can view archived wishes later.')) {
+                    if (confirm('Archive this dream? You can view it later.')) {
                       await handleArchiveWish(selectedWish.id);
                       setShowWishDetailsModal(false);
                     }
                   }}
-                  style={{ color: '#e53e3e' }}
+                  style={{
+                    flex: '1 1 auto',
+                    padding: '8px 12px',
+                    fontSize: '13px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#64748b',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '600'
+                  }}
                 >
                   🗄️ Archive
                 </button>
                 
                 <button 
+                  className="btn"
+                  onClick={async () => {
+                    if (confirm('Mark this dream as "Not Needed"? It will be archived.')) {
+                      try {
+                        await api.post(`/api/wishes/${selectedWish.id}/release`, null, {
+                          params: { release_reason: 'no_longer_relevant' }
+                        });
+                        showToast('Dream marked as not needed', 'info');
+                        await loadWishes();
+                        setShowWishDetailsModal(false);
+                      } catch (err) {
+                        showToast('Failed to release dream', 'error');
+                      }
+                    }
+                  }}
+                  style={{
+                    flex: '1 1 auto',
+                    padding: '8px 12px',
+                    fontSize: '13px',
+                    backgroundColor: '#fecaca',
+                    color: '#991b1b',
+                    border: 'none',
+                    borderRadius: '6px',
+                    fontWeight: '600'
+                  }}
+                >
+                  ❌ Not Needed
+                </button>
+                
+                <button 
                   className="btn btn-primary"
-                  onClick={() => setShowWishDetailsModal(false)}
+                  onClick={() => {
+                    setShowWishDetailsModal(false);
+                    setSelectedWish(null);
+                  }}
+                  style={{
+                    flex: '1 1 auto',
+                    padding: '8px 12px',
+                    fontSize: '13px',
+                    fontWeight: '600'
+                  }}
                 >
                   Close
                 </button>
@@ -3556,6 +5495,1126 @@ export default function Goals() {
           </div>
         </div>
       )}
+
+      {/* Add Exploration Activity Modal */}
+      {showAddExplorationModal && currentExplorationWish && (
+        <div className="modal-overlay" onClick={() => setShowAddExplorationModal(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+              color: 'white'
+            }}>
+              <h2>🔬 Explore: {currentExplorationWish.title}</h2>
+              <button className="btn-close" onClick={() => setShowAddExplorationModal(false)} style={{ color: 'white' }}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: '24px', color: '#0f766e', fontSize: '15px', fontWeight: '600', background: '#f0fdfa', padding: '12px', borderRadius: '8px', border: '2px solid #5eead4' }}>
+                💡 Choose how you want to explore this dream - no pressure, just curiosity!
+              </p>
+              
+              {/* Option Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px', marginBottom: '24px' }}>
+                {/* Simple Step */}
+                <button
+                  className="btn"
+                  style={{
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+                    border: '3px solid #0ea5e9',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.3s'
+                  }}
+                  onClick={() => {
+                    const title = prompt("📝 What simple step do you want to take?\n\nExamples:\n• Research online\n• Watch a video\n• Read an article");
+                    if (title) {
+                      api.post(`/api/wishes/${currentExplorationWish.id}/steps`, {
+                        step_title: title,
+                        step_type: 'research'
+                      }).then(() => {
+                        showToast('✅ Exploration step added!', 'success');
+                        loadWishes();
+                        setShowAddExplorationModal(false);
+                      });
+                    }
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>📝</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#0369a1', marginBottom: '4px' }}>Simple Step</div>
+                  <div style={{ fontSize: '13px', color: '#0c4a6e' }}>Quick research or learning</div>
+                </button>
+
+                {/* Task */}
+                <button
+                  className="btn"
+                  style={{
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    border: '3px solid #eab308',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.3s'
+                  }}
+                  onClick={() => {
+                    setShowAddExplorationModal(false);
+                    setShowInlineTaskModal(true);
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>✅</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#92400e', marginBottom: '4px' }}>Create Task</div>
+                  <div style={{ fontSize: '13px', color: '#78350f' }}>Specific action item</div>
+                </button>
+
+                {/* Project */}
+                <button
+                  className="btn"
+                  style={{
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)',
+                    border: '3px solid #a78bfa',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.3s'
+                  }}
+                  onClick={() => {
+                    setShowAddExplorationModal(false);
+                    setShowInlineProjectModal(true);
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>📁</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#6d28d9', marginBottom: '4px' }}>Mini Project</div>
+                  <div style={{ fontSize: '13px', color: '#5b21b6' }}>Collection of related tasks</div>
+                </button>
+
+                {/* Goal */}
+                <button
+                  className="btn"
+                  style={{
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #fecaca 0%, #fca5a5 100%)',
+                    border: '3px solid #f87171',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.3s'
+                  }}
+                  onClick={() => {
+                    setShowAddExplorationModal(false);
+                    setShowInlineGoalModal(true);
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎯</div>
+                  <div style={{ fontSize: '16px', fontWeight: '700', color: '#b91c1c', marginBottom: '4px' }}>Sub-Goal</div>
+                  <div style={{ fontSize: '13px', color: '#991b1b' }}>Bigger milestone</div>
+                </button>
+              </div>
+
+              <button 
+                className="btn btn-secondary"
+                onClick={() => {
+                  setShowAddExplorationModal(false);
+                  setCurrentExplorationWish(null);
+                }}
+                style={{ width: '100%' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Beautiful Add Reflection Modal */}
+      {showAddReflectionModal && selectedWish && (
+        <div className="modal-overlay" onClick={() => setShowAddReflectionModal(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: 'white',
+              padding: '24px',
+              borderRadius: '12px 12px 0 0'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '32px' }}>✍️</span>
+                <span>Reflect on Your Dream</span>
+              </h2>
+              <p style={{ margin: '8px 0 0 44px', fontSize: '14px', opacity: 0.9 }}>
+                {selectedWish.title}
+              </p>
+              <button className="btn-close" onClick={() => setShowAddReflectionModal(false)} style={{ color: 'white', top: '20px', right: '20px' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '32px' }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const text = formData.get('reflection_text') as string;
+                const mood = formData.get('mood') as string;
+                const clarityStr = formData.get('clarity_score') as string;
+                const clarity = clarityStr ? parseInt(clarityStr) : undefined;
+                
+                try {
+                  await api.post(`/api/wishes/${selectedWish.id}/reflections`, {
+                    reflection_text: text,
+                    mood: mood,
+                    clarity_score: clarity
+                  });
+                  showToast('✅ Reflection added!', 'success');
+                  await loadWishes();
+                  const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
+                  setSelectedWish(updated.data || updated);
+                  setShowAddReflectionModal(false);
+                } catch (err) {
+                  console.error('Error adding reflection:', err);
+                  showToast('Failed to add reflection', 'error');
+                }
+              }}>
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label htmlFor="reflection_text" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#1e40af', fontSize: '15px' }}>
+                    💭 Your Thoughts
+                  </label>
+                  <textarea 
+                    id="reflection_text" 
+                    name="reflection_text" 
+                    rows={5}
+                    placeholder="What are you thinking about this dream? How does it make you feel?"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid #bfdbfe',
+                      fontSize: '15px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                      transition: 'border 0.3s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                    onBlur={(e) => e.target.style.borderColor = '#bfdbfe'}
+                  ></textarea>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label htmlFor="mood" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#1e40af', fontSize: '15px' }}>
+                    😊 Current Mood
+                  </label>
+                  <select 
+                    id="mood" 
+                    name="mood" 
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid #bfdbfe',
+                      fontSize: '15px',
+                      backgroundColor: 'white',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="excited">🎉 Excited - Can't wait to get started!</option>
+                    <option value="inspired">✨ Inspired - Feeling motivated</option>
+                    <option value="determined">💪 Determined - Ready to make it happen</option>
+                    <option value="uncertain">🤔 Uncertain - Not sure yet</option>
+                    <option value="doubtful">😕 Doubtful - Having second thoughts</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '32px' }}>
+                  <label htmlFor="clarity_score" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#1e40af', fontSize: '15px' }}>
+                    🔍 Clarity Level (1-10)
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <input 
+                      type="range" 
+                      id="clarity_score" 
+                      name="clarity_score" 
+                      min="1" 
+                      max="10" 
+                      defaultValue="5"
+                      style={{
+                        flex: 1,
+                        height: '8px',
+                        borderRadius: '4px',
+                        background: 'linear-gradient(to right, #fca5a5, #fde68a, #86efac)',
+                        cursor: 'pointer'
+                      }}
+                      onInput={(e) => {
+                        const val = (e.target as HTMLInputElement).value;
+                        const display = document.getElementById('clarity_display');
+                        if (display) display.textContent = val;
+                      }}
+                    />
+                    <span id="clarity_display" style={{
+                      minWidth: '32px',
+                      textAlign: 'center',
+                      fontWeight: '700',
+                      fontSize: '18px',
+                      color: '#2563eb'
+                    }}>5</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', fontSize: '12px', color: '#64748b' }}>
+                    <span>Fuzzy</span>
+                    <span>Crystal Clear</span>
+                  </div>
+                </div>
+
+                <div className="form-actions" style={{ display: 'flex', gap: '12px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    onClick={() => setShowAddReflectionModal(false)}
+                    style={{ flex: 1, padding: '14px', fontSize: '15px', fontWeight: '600' }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    style={{ 
+                      flex: 1, 
+                      padding: '14px', 
+                      fontSize: '15px', 
+                      fontWeight: '700',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                      border: 'none',
+                      color: 'white',
+                      boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                    }}
+                  >
+                    ✍️ Save Reflection
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Beautiful Add Exploration Step Modal */}
+      {showAddStepModal && selectedWish && (
+        <div className="modal-overlay" onClick={() => setShowAddStepModal(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: 'white',
+              padding: '24px',
+              borderRadius: '12px 12px 0 0'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '32px' }}>🔍</span>
+                <span>Add Exploration Step</span>
+              </h2>
+              <p style={{ margin: '8px 0 0 44px', fontSize: '14px', opacity: 0.9 }}>
+                {selectedWish.title}
+              </p>
+              <button className="btn-close" onClick={() => setShowAddStepModal(false)} style={{ color: 'white', top: '20px', right: '20px' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '32px' }}>
+              <div style={{
+                background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                padding: '16px',
+                borderRadius: '10px',
+                border: '2px solid #10b981',
+                marginBottom: '24px'
+              }}>
+                <p style={{ margin: 0, fontSize: '14px', color: '#065f46', fontWeight: '600' }}>
+                  💡 Small steps lead to big dreams! What's one thing you can do to learn more?
+                </p>
+              </div>
+
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                const title = formData.get('step_title') as string;
+                const type = formData.get('step_type') as string;
+                const description = formData.get('step_description') as string;
+                
+                try {
+                  await api.post(`/api/wishes/${selectedWish.id}/steps`, {
+                    step_title: title,
+                    step_type: type,
+                    step_description: description || undefined
+                  });
+                  showToast('✅ Exploration step added!', 'success');
+                  await loadWishes();
+                  const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
+                  setSelectedWish(updated.data || updated);
+                  await loadExplorationSteps(selectedWish.id);
+                  setShowAddStepModal(false);
+                } catch (err) {
+                  console.error('Error adding exploration step:', err);
+                  showToast('Failed to add exploration step', 'error');
+                }
+              }}>
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label htmlFor="step_type" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#065f46', fontSize: '15px' }}>
+                    🎯 Type of Step
+                  </label>
+                  <select 
+                    id="step_type" 
+                    name="step_type" 
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid #a7f3d0',
+                      fontSize: '15px',
+                      backgroundColor: 'white',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <option value="research">🔍 Research - Learn more about it</option>
+                    <option value="explore">🧭 Explore - Try it out hands-on</option>
+                    <option value="learn_skill">📚 Learn Skill - Build knowledge</option>
+                    <option value="save_money">💰 Save Money - Financial planning</option>
+                    <option value="connect">🤝 Connect - Meet people/network</option>
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '24px' }}>
+                  <label htmlFor="step_title" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#065f46', fontSize: '15px' }}>
+                    📝 What will you do?
+                  </label>
+                  <input 
+                    type="text" 
+                    id="step_title" 
+                    name="step_title" 
+                    placeholder="e.g., Watch 3 YouTube videos, Read a book, Talk to someone who's done it..."
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid #a7f3d0',
+                      fontSize: '15px',
+                      transition: 'border 0.3s'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#10b981'}
+                    onBlur={(e) => e.target.style.borderColor = '#a7f3d0'}
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: '32px' }}>
+                  <label htmlFor="step_description" style={{ display: 'block', marginBottom: '8px', fontWeight: '600', color: '#065f46', fontSize: '15px' }}>
+                    📋 Details (Optional)
+                  </label>
+                  <textarea 
+                    id="step_description" 
+                    name="step_description" 
+                    rows={3}
+                    placeholder="Any specific details, links, or notes..."
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      borderRadius: '10px',
+                      border: '2px solid #a7f3d0',
+                      fontSize: '15px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical'
+                    }}
+                  ></textarea>
+                </div>
+
+                <div className="form-actions" style={{ display: 'flex', gap: '12px' }}>
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary"
+                    onClick={() => setShowAddStepModal(false)}
+                    style={{ flex: 1, padding: '14px', fontSize: '15px', fontWeight: '600' }}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    style={{ 
+                      flex: 1, 
+                      padding: '14px', 
+                      fontSize: '15px', 
+                      fontWeight: '700',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      border: 'none',
+                      color: 'white',
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                    }}
+                  >
+                    🔍 Add Step
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dream Insights Modal */}
+      {showDreamInsightsModal && dreamInsights && (
+        <div className="modal-overlay" onClick={() => setShowDreamInsightsModal(false)} style={{ zIndex: 9999 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+              color: 'white'
+            }}>
+              <h2>📊 {dreamInsights.wish.title}</h2>
+              <button className="btn-close" onClick={() => setShowDreamInsightsModal(false)} style={{ color: 'white' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#4f46e5', marginBottom: '12px' }}>
+                🔍 Exploration Steps ({dreamInsights.steps?.length || 0})
+              </h3>
+              {dreamInsights.steps && dreamInsights.steps.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  {dreamInsights.steps.map((step: any) => (
+                    <div key={step.id} style={{
+                      padding: '10px',
+                      marginBottom: '8px',
+                      backgroundColor: step.is_completed ? '#f0fdf4' : '#fef3c7',
+                      borderRadius: '8px',
+                      border: `2px solid ${step.is_completed ? '#10b981' : '#f59e0b'}`
+                    }}>
+                      <div style={{ fontWeight: '600', fontSize: '14px' }}>
+                        {step.is_completed ? '✅' : '⏳'} {step.step_title}
+                      </div>
+                      {step.step_description && (
+                        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px' }}>
+                          {step.step_description}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>No exploration steps yet. Start exploring!</p>
+              )}
+
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#4f46e5', marginBottom: '12px' }}>
+                ✍️ Reflections ({dreamInsights.reflections?.length || 0})
+              </h3>
+              {dreamInsights.reflections && dreamInsights.reflections.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  {dreamInsights.reflections.map((reflection: any) => (
+                    <div key={reflection.id} style={{
+                      padding: '12px',
+                      marginBottom: '8px',
+                      backgroundColor: '#f0f9ff',
+                      borderRadius: '8px',
+                      border: '2px solid #bfdbfe'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#1e40af', lineHeight: '1.5' }}>
+                        {reflection.reflection_text}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
+                        {reflection.mood && `Mood: ${reflection.mood}`} • {new Date(reflection.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>No reflections yet. Add your thoughts!</p>
+              )}
+
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#4f46e5', marginBottom: '12px' }}>
+                ✨ Inspirations ({dreamInsights.inspirations?.length || 0})
+              </h3>
+              {dreamInsights.inspirations && dreamInsights.inspirations.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  {dreamInsights.inspirations.map((inspiration: any) => (
+                    <div key={inspiration.id} style={{
+                      padding: '12px',
+                      marginBottom: '8px',
+                      backgroundColor: '#fef3c7',
+                      borderRadius: '8px',
+                      border: '2px solid #fde68a'
+                    }}>
+                      <div style={{ fontWeight: '600', fontSize: '14px', color: '#78350f' }}>
+                        {inspiration.title}
+                      </div>
+                      {inspiration.source_url && (
+                        <a href={inspiration.source_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12px', color: '#2563eb' }}>
+                          🔗 View Source
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>No inspirations saved yet.</p>
+              )}
+
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#8b5cf6', marginBottom: '12px' }}>
+                📁 Related Projects ({dreamInsights.projects?.length || 0})
+              </h3>
+              {dreamInsights.projects && dreamInsights.projects.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  {dreamInsights.projects.map((project: any) => (
+                    <div key={project.id} style={{
+                      padding: '14px',
+                      marginBottom: '10px',
+                      backgroundColor: '#f3e8ff',
+                      borderRadius: '8px',
+                      border: '2px solid #c4b5fd',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e9d5ff'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3e8ff'}
+                    onClick={() => navigate('/tasks')}
+                    >
+                      <div style={{ fontWeight: '600', fontSize: '15px', color: '#6d28d9', marginBottom: '4px' }}>
+                        {project.name}
+                      </div>
+                      {project.description && (
+                        <div style={{ fontSize: '13px', color: '#7c3aed', marginBottom: '6px' }}>
+                          {project.description}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '12px', color: '#8b5cf6', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {project.status && <span>📊 {project.status}</span>}
+                        {project.start_date && <span>📅 Started: {new Date(project.start_date).toLocaleDateString()}</span>}
+                        {project.target_completion_date && <span>🎯 Due: {new Date(project.target_completion_date).toLocaleDateString()}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>No projects linked yet. Create one from the exploration activities!</p>
+              )}
+
+              <h3 style={{ fontSize: '18px', fontWeight: '700', color: '#f59e0b', marginBottom: '12px' }}>
+                ✅ Related Tasks ({dreamInsights.tasks?.length || 0})
+              </h3>
+              {dreamInsights.tasks && dreamInsights.tasks.length > 0 ? (
+                <div style={{ marginBottom: '24px' }}>
+                  {dreamInsights.tasks.map((task: any) => (
+                    <div key={task.id} style={{
+                      padding: '12px',
+                      marginBottom: '8px',
+                      backgroundColor: '#fef3c7',
+                      borderRadius: '8px',
+                      border: '2px solid #fde68a',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef08a'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fef3c7'}
+                    onClick={() => navigate('/tasks')}
+                    >
+                      <div style={{ fontWeight: '600', fontSize: '14px', color: '#92400e', marginBottom: '4px' }}>
+                        {task.name}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#b45309', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {task.follow_up_frequency && <span>🔄 {task.follow_up_frequency}</span>}
+                        {task.allocated_minutes && <span>⏰ {task.allocated_minutes} min</span>}
+                        {task.is_completed && <span style={{ color: '#059669' }}>✓ Completed</span>}
+                        {!task.is_active && !task.is_completed && <span style={{ color: '#dc2626' }}>NA</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>No tasks linked yet. Add tasks through the Tasks page!</p>
+              )}
+
+              <button 
+                className="btn btn-primary"
+                onClick={() => setShowDreamInsightsModal(false)}
+                style={{ width: '100%', padding: '12px', fontWeight: '600' }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Toast Notification with Icons & Gradients */}
+      {toast && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: toast.type === 'success' 
+            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+            : toast.type === 'error' 
+            ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+            : 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+          color: 'white',
+          padding: '24px 48px',
+          borderRadius: '20px',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.4), 0 0 0 4px rgba(255,255,255,0.2)',
+          border: '3px solid rgba(255, 255, 255, 0.4)',
+          zIndex: 10000,
+          fontSize: '20px',
+          fontWeight: '700',
+          animation: 'slideIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+          minWidth: '350px',
+          textAlign: 'center',
+          backdropFilter: 'blur(10px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '14px'
+        }}>
+          <span style={{ fontSize: '32px', filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))' }}>
+            {toast.type === 'success' ? '✅' : toast.type === 'error' ? '❌' : 'ℹ️'}
+          </span>
+          <span>{toast.message}</span>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes slideIn {
+          from {
+            opacity: 0;
+            transform: translate(-50%, -60%);
+          }
+          to {
+            opacity: 1;
+            transform: translate(-50%, -50%);
+          }
+        }
+      `}</style>
+
+      {/* Inline Project Creation Modal from Exploration */}
+      {showInlineProjectModal && currentExplorationWish && (
+        <div className="modal-overlay" onClick={() => setShowInlineProjectModal(false)} style={{ zIndex: 10000 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)',
+              color: 'white',
+              padding: '20px',
+              borderRadius: '12px 12px 0 0'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>
+                📁 Create Mini Project
+              </h2>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px', opacity: 0.9 }}>
+                For Dream: {currentExplorationWish.title}
+              </p>
+              <button className="btn-close" onClick={() => setShowInlineProjectModal(false)} style={{ color: 'white' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px' }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                
+                try {
+                  const goalId = formData.get('goal_id');
+                  await api.post('/api/projects/', {
+                    name: formData.get('name'),
+                    description: formData.get('description') || null,
+                    goal_id: goalId && goalId !== '' ? parseInt(goalId as string) : null,
+                    related_wish_id: currentExplorationWish.id,
+                    start_date: formData.get('start_date') || null,
+                    target_completion_date: formData.get('target_completion_date') || null
+                  });
+                  
+                  showToast('✅ Project created and linked to dream!', 'success');
+                  setShowInlineProjectModal(false);
+                  setCurrentExplorationWish(null);
+                  // Optionally reload wish details to show the new project
+                } catch (err: any) {
+                  console.error('Error creating project:', err);
+                  showToast('Failed to create project: ' + (err.response?.data?.detail || err.message), 'error');
+                }
+              }}>
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-project-goal" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Link to Life Goal (Optional)
+                  </label>
+                  <select
+                    id="inline-project-goal"
+                    name="goal_id"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                  >
+                    <option value="">-- No Goal --</option>
+                    {lifeGoals.map(goal => (
+                      <option key={goal.id} value={goal.id}>
+                        {goal.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '4px' }}>
+                    Link this project to a life goal for better tracking
+                  </small>
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-project-name" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Project Name *
+                  </label>
+                  <input
+                    type="text"
+                    id="inline-project-name"
+                    name="name"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                    required
+                    placeholder="e.g., Learn Python basics for career transition"
+                  />
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-project-description" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Description
+                  </label>
+                  <textarea
+                    id="inline-project-description"
+                    name="description"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0', resize: 'vertical' }}
+                    rows={3}
+                    placeholder="Brief description of what this project entails"
+                  />
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-project-start-date" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Start Date *
+                  </label>
+                  <input
+                    type="date"
+                    id="inline-project-start-date"
+                    name="start_date"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                    required
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                  />
+                  <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '4px' }}>
+                    When did/will you start this project?
+                  </small>
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-project-due-date" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Target Completion Date
+                  </label>
+                  <input
+                    type="date"
+                    id="inline-project-due-date"
+                    name="target_completion_date"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                  />
+                  <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '4px' }}>
+                    When do you want to complete this project?
+                  </small>
+                </div>
+                
+                <div className="modal-footer" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                  <button 
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowInlineProjectModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{
+                      background: 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Create Project
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inline Task Creation Modal from Exploration */}
+      {showInlineTaskModal && currentExplorationWish && (
+        <div className="modal-overlay" onClick={() => setShowInlineTaskModal(false)} style={{ zIndex: 10000 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+              color: 'white',
+              padding: '20px',
+              borderRadius: '12px 12px 0 0'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>
+                ✅ Create Task
+              </h2>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px', opacity: 0.9 }}>
+                For Dream: {currentExplorationWish.title}
+              </p>
+              <button className="btn-close" onClick={() => setShowInlineTaskModal(false)} style={{ color: 'white' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px' }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                
+                try {
+                  // This is a placeholder - you'll need to adjust based on your task creation API
+                  showToast('⚠️ Task creation from dreams requires pillar/category. Please use main Tasks page for now.', 'info');
+                  setShowInlineTaskModal(false);
+                  setCurrentExplorationWish(null);
+                  // Navigate to tasks page
+                  navigate('/tasks');
+                } catch (err: any) {
+                  console.error('Error creating task:', err);
+                  showToast('Failed to create task: ' + (err.response?.data?.detail || err.message), 'error');
+                }
+              }}>
+                <p style={{ 
+                  background: '#fef3c7', 
+                  border: '2px solid #fbbf24', 
+                  borderRadius: '8px', 
+                  padding: '12px',
+                  fontSize: '13px',
+                  marginBottom: '20px'
+                }}>
+                  💡 <strong>Note:</strong> Task creation requires selecting a pillar and category. 
+                  You'll be redirected to the Tasks page where you can create a task and link it to this dream.
+                </p>
+                
+                <div className="modal-footer" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                  <button 
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowInlineTaskModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="button"
+                    className="btn btn-primary"
+                    style={{
+                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontWeight: '600'
+                    }}
+                    onClick={() => navigate('/tasks')}
+                  >
+                    Go to Tasks Page
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inline Goal Creation Modal from Exploration */}
+      {showInlineGoalModal && currentExplorationWish && (
+        <div className="modal-overlay" onClick={() => setShowInlineGoalModal(false)} style={{ zIndex: 10000 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #f87171 0%, #dc2626 100%)',
+              color: 'white',
+              padding: '20px',
+              borderRadius: '12px 12px 0 0'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: '700' }}>
+                🎯 Create Life Goal
+              </h2>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px', opacity: 0.9 }}>
+                For Dream: {currentExplorationWish.title}
+              </p>
+              <button className="btn-close" onClick={() => setShowInlineGoalModal(false)} style={{ color: 'white' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px' }}>
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                
+                try {
+                  const goalData = {
+                    name: formData.get('name'),
+                    start_date: formData.get('start_date') || new Date().toISOString().split('T')[0],
+                    target_date: formData.get('target_date'),
+                    category: formData.get('category') || null,
+                    priority: formData.get('priority') || 'medium',
+                    description: formData.get('description') || null,
+                    time_allocated_hours: 0,
+                    why_statements: []
+                  };
+                  
+                  await api.post('/api/life-goals/', goalData);
+                  showToast('✅ Goal created successfully!', 'success');
+                  setShowInlineGoalModal(false);
+                  setCurrentExplorationWish(null);
+                  await loadLifeGoals();
+                } catch (err: any) {
+                  console.error('Error creating goal:', err);
+                  showToast('Failed to create goal: ' + (err.response?.data?.detail || err.message), 'error');
+                }
+              }}>
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-goal-name" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Goal Name *
+                  </label>
+                  <input
+                    type="text"
+                    id="inline-goal-name"
+                    name="name"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                    required
+                    placeholder="e.g., Become Director in 2 years"
+                  />
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                  <div className="form-group">
+                    <label htmlFor="inline-goal-category" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                      Category
+                    </label>
+                    <select
+                      id="inline-goal-category"
+                      name="category"
+                      className="form-control"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                    >
+                      <option value="">-- Select Category --</option>
+                      <option value="career">Career</option>
+                      <option value="health">Health</option>
+                      <option value="financial">Financial</option>
+                      <option value="personal">Personal</option>
+                      <option value="learning">Learning</option>
+                      <option value="relationships">Relationships</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label htmlFor="inline-goal-priority" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                      Priority
+                    </label>
+                    <select
+                      id="inline-goal-priority"
+                      name="priority"
+                      className="form-control"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                      defaultValue="medium"
+                    >
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                    </select>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                  <div className="form-group">
+                    <label htmlFor="inline-goal-start-date" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                      Start Date *
+                    </label>
+                    <input
+                      type="date"
+                      id="inline-goal-start-date"
+                      name="start_date"
+                      className="form-control"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                      required
+                      defaultValue={new Date().toISOString().split('T')[0]}
+                    />
+                    <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '4px' }}>
+                      When did/will you start?
+                    </small>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label htmlFor="inline-goal-target-date" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                      Target Date *
+                    </label>
+                    <input
+                      type="date"
+                      id="inline-goal-target-date"
+                      name="target_date"
+                      className="form-control"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0' }}
+                      required
+                    />
+                    <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '4px' }}>
+                      When do you want to achieve this?
+                    </small>
+                  </div>
+                </div>
+                
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label htmlFor="inline-goal-description" style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px' }}>
+                    Description
+                  </label>
+                  <textarea
+                    id="inline-goal-description"
+                    name="description"
+                    className="form-control"
+                    style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '2px solid #e0e0e0', resize: 'vertical' }}
+                    rows={3}
+                    placeholder="Brief description of this goal"
+                  />
+                </div>
+                
+                <div className="modal-footer" style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                  <button 
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setShowInlineGoalModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit"
+                    className="btn btn-primary"
+                    style={{
+                      background: 'linear-gradient(135deg, #f87171 0%, #dc2626 100%)',
+                      border: 'none',
+                      color: 'white',
+                      fontWeight: '600'
+                    }}
+                  >
+                    Create Goal
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Task Form Modal - for adding tasks from dream activities */}
+      <TaskForm
+        isOpen={showTaskFormModal}
+        onClose={() => {
+          setShowTaskFormModal(false);
+          setTaskFormWishId(null);
+        }}
+        onSuccess={async () => {
+          setShowTaskFormModal(false);
+          setTaskFormWishId(null);
+          // Reload wishes and dream insights if open
+          await loadWishes();
+          if (dreamInsights && selectedWish) {
+            const tasks = await api.get(`/api/tasks/?related_wish_id=${selectedWish.id}`).catch(() => []);
+            setDreamInsights({ ...dreamInsights, tasks });
+          }
+        }}
+        defaultWishId={taskFormWishId || undefined}
+      />
     </div>
   );
 }

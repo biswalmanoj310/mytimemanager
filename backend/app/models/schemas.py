@@ -186,6 +186,7 @@ class TaskBase(BaseModel):
     separately_followed: bool = Field(default=False, description="No time bound")
     goal_id: Optional[int] = Field(None, gt=0)
     is_part_of_goal: bool = Field(default=False)
+    related_wish_id: Optional[int] = Field(None, gt=0, description="Link to Dream/Wish")
     why_reason: Optional[str] = Field(None, description="Why this task is important")
     additional_whys: Optional[List[str]] = Field(None, description="Additional why reasons")
     due_date: Optional[datetime] = None
@@ -222,6 +223,7 @@ class TaskUpdate(BaseModel):
     separately_followed: Optional[bool] = None
     goal_id: Optional[int] = Field(None, gt=0)
     is_part_of_goal: Optional[bool] = None
+    related_wish_id: Optional[int] = Field(None, gt=0)
     why_reason: Optional[str] = None
     additional_whys: Optional[List[str]] = None
     due_date: Optional[datetime] = None

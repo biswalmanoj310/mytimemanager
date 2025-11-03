@@ -4,7 +4,7 @@ Handles task CRUD operations with validation
 """
 
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import json
@@ -133,6 +133,17 @@ class TaskService:
             joinedload(Task.category),
             joinedload(Task.sub_category),
             joinedload(Task.goal)
+        )
+        
+        # Auto-hide daily tasks that were completed before today
+        # Daily tasks completed today are still shown (visible until midnight)
+        today_midnight = normalize_to_midnight(datetime.now())
+        query = query.filter(
+            or_(
+                Task.follow_up_frequency != 'daily',  # Show all non-daily tasks
+                Task.is_completed == False,  # Show incomplete daily tasks
+                Task.completed_at >= today_midnight  # Show daily tasks completed today
+            )
         )
         
         if filters:

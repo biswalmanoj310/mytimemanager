@@ -3,65 +3,104 @@
  */
 
 :root {
-  /* Pillar Colors */
-  --color-hard-work: #FF6B6B;
-  --color-calmness: #4ECDC4;
-  --color-family: #95E1D3;
+  /* Pillar Colors - Vibrant SharePoint Style */
+  --color-hard-work: #0078D4;      /* Microsoft Blue */
+  --color-hard-work-light: #E3F2FD;
+  --color-calmness: #00B294;       /* Teal */
+  --color-calmness-light: #E0F7F4;
+  --color-family: #F7630C;         /* Orange */
+  --color-family-light: #FFF4E5;
   
-  /* UI Colors */
-  --color-primary: #4A90E2;
-  --color-secondary: #7B68EE;
-  --color-success: #51CF66;
-  --color-warning: #FFB366;
-  --color-danger: #FF6B6B;
-  --color-info: #4ECDC4;
+  /* UI Colors - Microsoft Fluent Design */
+  --color-primary: #0078D4;        /* Primary Blue */
+  --color-primary-hover: #106EBE;
+  --color-primary-light: #DEECF9;
+  --color-secondary: #8764B8;      /* Purple */
+  --color-secondary-light: #F4EEFF;
+  --color-success: #107C10;        /* Green */
+  --color-success-light: #DFF6DD;
+  --color-warning: #FFB900;        /* Yellow */
+  --color-warning-light: #FFF4CE;
+  --color-danger: #D13438;         /* Red */
+  --color-danger-light: #FDE7E9;
+  --color-info: #00B7C3;           /* Cyan */
+  --color-info-light: #E0F9FA;
   
   /* Background Colors */
   --bg-primary: #FFFFFF;
-  --bg-secondary: #F8F9FA;
-  --bg-tertiary: #E9ECEF;
-  --bg-dark: #212529;
+  --bg-secondary: #FAF9F8;         /* Warm gray */
+  --bg-tertiary: #F3F2F1;          /* Light gray */
+  --bg-hover: #EDEBE9;             /* Hover state */
+  --bg-dark: #323130;              /* Dark gray */
+  
+  /* Page Background Gradients */
+  --bg-page-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --bg-page-light: linear-gradient(to bottom, #E3F2FD 0%, #FAF9F8 100%);
+  --bg-goals-page: linear-gradient(to bottom right, #E3F2FD, #F3E5F5);
+  --bg-projects-page: linear-gradient(to bottom right, #E0F7F4, #FFF4E5);
+  --bg-tasks-page: linear-gradient(to bottom right, #FFF4E5, #E3F2FD);
+  
+  /* Card Color Variants */
+  --card-blue-light: #E3F2FD;
+  --card-purple-light: #F3E5F5;
+  --card-green-light: #E0F7F4;
+  --card-orange-light: #FFF4E5;
+  --card-pink-light: #FCE4EC;
+  --card-yellow-light: #FFFDE7;
   
   /* Text Colors */
-  --text-primary: #212529;
-  --text-secondary: #6C757D;
-  --text-light: #ADB5BD;
+  --text-primary: #323130;
+  --text-secondary: #605E5C;
+  --text-tertiary: #8A8886;
+  --text-light: #C8C6C4;
   --text-white: #FFFFFF;
   
   /* Border Colors */
-  --border-light: #DEE2E6;
-  --border-medium: #CED4DA;
-  --border-dark: #ADB5BD;
+  --border-light: #EDEBE9;
+  --border-medium: #D2D0CE;
+  --border-dark: #8A8886;
   
-  /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  /* Shadows - Microsoft Fluent Design */
+  --shadow-sm: 0 1.6px 3.6px 0 rgba(0,0,0,.132), 0 0.3px 0.9px 0 rgba(0,0,0,.108);
+  --shadow-md: 0 3.2px 7.2px 0 rgba(0,0,0,.132), 0 0.6px 1.8px 0 rgba(0,0,0,.108);
+  --shadow-lg: 0 6.4px 14.4px 0 rgba(0,0,0,.132), 0 1.2px 3.6px 0 rgba(0,0,0,.108);
+  --shadow-xl: 0 25.6px 57.6px 0 rgba(0,0,0,.22), 0 4.8px 14.4px 0 rgba(0,0,0,.18);
+  --shadow-card: 0 1.6px 3.6px rgba(0, 0, 0, 0.13), 0 0.3px 0.9px rgba(0, 0, 0, 0.11);
+  --shadow-card-hover: 0 3.2px 7.2px rgba(0, 0, 0, 0.13), 0 0.6px 1.8px rgba(0, 0, 0, 0.11);
   
-  /* Border Radius */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.375rem;
-  --radius-lg: 0.5rem;
-  --radius-xl: 0.75rem;
+  /* Border Radius - Fluent Design */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-full: 9999px;
   
   /* Spacing */
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
+  --spacing-xs: 0.25rem;      /* 4px */
+  --spacing-sm: 0.5rem;       /* 8px */
+  --spacing-md: 1rem;         /* 16px */
+  --spacing-lg: 1.5rem;       /* 24px */
+  --spacing-xl: 2rem;         /* 32px */
+  --spacing-2xl: 3rem;        /* 48px */
   
   /* Font Sizes */
-  --text-xs: 0.75rem;
-  --text-sm: 0.875rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-  --text-4xl: 2.25rem;
+  --text-xs: 0.75rem;         /* 12px */
+  --text-sm: 0.875rem;        /* 14px */
+  --text-base: 1rem;          /* 16px */
+  --text-lg: 1.125rem;        /* 18px */
+  --text-xl: 1.25rem;         /* 20px */
+  --text-2xl: 1.5rem;         /* 24px */
+  --text-3xl: 1.875rem;       /* 30px */
+  --text-4xl: 2.25rem;        /* 36px */
+  --text-5xl: 3rem;           /* 48px */
+  
+  /* Font Weights */
+  --font-light: 300;
+  --font-regular: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
   
   /* Transitions */
   --transition-fast: 150ms ease-in-out;
@@ -83,12 +122,14 @@ html {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', 
+    'Arial', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
   color: var(--text-primary);
   background-color: var(--bg-secondary);
   line-height: 1.5;
+  font-weight: var(--font-regular);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -249,12 +290,108 @@ input:focus, textarea:focus, select:focus {
   box-shadow: var(--shadow-lg);
 }
 
-/* Card Component */
+/* Card Component - Modern SharePoint Style */
 .card {
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-light);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: var(--border-medium);
+}
+
+/* Square Card for Goals/Projects */
+.square-card {
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-light);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-height: 280px;
+  position: relative;
+  overflow: hidden;
+}
+
+.square-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.square-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  border-color: var(--color-primary-light);
+}
+
+.square-card:hover::before {
+  opacity: 1;
+}
+
+.square-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-sm);
+}
+
+.square-card-title {
+  font-size: var(--text-xl);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.square-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.square-card-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-md);
+  margin-top: auto;
+}
+
+.square-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.square-card-stat-label {
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: var(--font-semibold);
+}
+
+.square-card-stat-value {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
 }
 
 /* Badge Component */
@@ -263,8 +400,10 @@ input:focus, textarea:focus, select:focus {
   align-items: center;
   padding: 0.25rem 0.75rem;
   border-radius: var(--radius-full);
-  font-size: var(--text-sm);
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .badge-primary {
@@ -301,6 +440,141 @@ input:focus, textarea:focus, select:focus {
 .badge-family {
   background: var(--color-family);
   color: var(--text-white);
+}
+
+/* Progress Bar */
+.progress-container {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-info));
+  border-radius: var(--radius-full);
+  transition: width 0.3s ease;
+  position: relative;
+}
+
+.progress-bar.success {
+  background: linear-gradient(90deg, var(--color-success), #00B294);
+}
+
+.progress-bar.warning {
+  background: linear-gradient(90deg, var(--color-warning), #FFB900);
+}
+
+.progress-bar.danger {
+  background: linear-gradient(90deg, var(--color-danger), #E74856);
+}
+
+/* Status Badges */
+.status-badge {
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.status-badge.not-started {
+  background: var(--text-light);
+  color: var(--text-white);
+}
+
+.status-badge.in-progress {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.status-badge.on-track {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+.status-badge.at-risk {
+  background: var(--color-warning-light);
+  color: #A83400;
+}
+
+.status-badge.behind {
+  background: var(--color-danger-light);
+  color: var(--color-danger);
+}
+
+.status-badge.completed {
+  background: var(--color-success-light);
+  color: var(--color-success);
+}
+
+/* Action Buttons */
+.btn {
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--text-white);
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-success {
+  background: var(--color-success);
+  color: var(--text-white);
+}
+
+.btn-success:hover {
+  background: #0E6A0E;
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--text-white);
+}
+
+.btn-danger:hover {
+  background: #A92B2F;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-dark);
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: var(--text-xs);
 }
 
 /* Loading Spinner */

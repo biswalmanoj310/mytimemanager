@@ -1,0 +1,983 @@
+/**
+ * Projects Page Styles - Modern Card Layout
+ */
+
+.projects-page {
+  padding: var(--spacing-xl);
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.projects-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.projects-header h1 {
+  font-size: var(--text-4xl);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Projects Grid Layout - Wider Cards */
+.projects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-bottom: var(--spacing-2xl);
+}
+
+/* Project Card Styles - Base (only for non-colorful cards) */
+.project-card:not(.widget-colorful) {
+  background: var(--bg-primary);
+  border-radius: var(--radius-xl);
+  padding: 12px 16px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--border-light);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Top border accent */
+.project-card:not(.widget-colorful)::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+  transition: height 0.3s;
+}
+
+.project-card:not(.widget-colorful):hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
+  border-color: var(--color-primary-light);
+}
+
+.project-card:not(.widget-colorful):hover::before {
+  height: 6px;
+}
+
+/* Project Card Header */
+.project-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.project-card-title {
+  font-size: 16px;
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.project-card-status {
+  flex-shrink: 0;
+}
+
+/* Project Card Body */
+.project-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.project-card-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Project Card Stats Grid */
+.project-card-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+
+.project-card-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.project-card-stat-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-weight: var(--font-semibold);
+}
+
+.project-card-stat-value {
+  font-size: 16px;
+  font-weight: var(--font-bold);
+  color: var(--color-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.project-card-stat-value.success {
+  color: var(--color-success);
+}
+
+.project-card-stat-value.warning {
+  color: var(--color-warning);
+}
+
+.project-card-stat-value.danger {
+  color: var(--color-danger);
+}
+
+.project-card-stat-fraction {
+  font-size: var(--text-lg);
+  color: var(--text-secondary);
+  font-weight: var(--font-regular);
+}
+
+/* Progress Section */
+.project-card-progress {
+  margin-top: var(--spacing-sm);
+}
+
+.project-card-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-xs);
+}
+
+.project-card-progress-label {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  font-weight: var(--font-medium);
+}
+
+.project-card-progress-value {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  font-weight: var(--font-bold);
+}
+
+.project-card-progress-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.project-card-progress-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Empty State */
+.projects-empty {
+  text-align: center;
+  padding: var(--spacing-2xl) var(--spacing-xl);
+  background: var(--bg-primary);
+  border-radius: var(--radius-xl);
+  border: 2px dashed var(--border-medium);
+}
+
+.projects-empty-icon {
+  font-size: 4rem;
+  margin-bottom: var(--spacing-lg);
+  opacity: 0.5;
+}
+
+.projects-empty h3 {
+  font-size: var(--text-2xl);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.projects-empty p {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xl);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .projects-page {
+    padding: var(--spacing-md);
+  }
+
+  .projects-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-lg);
+  }
+
+  .projects-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-md);
+  }
+
+  .projects-header h1 {
+    font-size: var(--text-3xl);
+  }
+
+  .project-card {
+    min-height: auto;
+  }
+
+  .project-card-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ========== Vibrant Colorful Project Cards ========== */
+
+.project-card.widget-colorful {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: visible;
+  color: white !important;
+  min-height: 220px;
+}
+
+/* Rotate through DARK vibrant color schemes - ALL DARK backgrounds with white text - FORCED! */
+.project-card.widget-colorful:nth-child(4n+1) {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
+}
+
+.project-card.widget-colorful:nth-child(4n+2) {
+  background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%) !important;
+  box-shadow: 0 6px 20px rgba(185, 28, 28, 0.4);
+}
+
+.project-card.widget-colorful:nth-child(4n+3) {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%) !important;
+  box-shadow: 0 6px 20px rgba(4, 120, 87, 0.4);
+}
+
+.project-card.widget-colorful:nth-child(4n+4) {
+  background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%) !important;
+  box-shadow: 0 6px 20px rgba(109, 40, 217, 0.4);
+}
+
+/* Class-based colors for dynamic assignment */
+.project-card.widget-colorful.color-1 {
+  background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+  box-shadow: 0 6px 20px rgba(30, 64, 175, 0.4);
+}
+
+.project-card.widget-colorful.color-2 {
+  background: linear-gradient(135deg, #b91c1c 0%, #7f1d1d 100%) !important;
+  box-shadow: 0 6px 20px rgba(185, 28, 28, 0.4);
+}
+
+.project-card.widget-colorful.color-3 {
+  background: linear-gradient(135deg, #047857 0%, #065f46 100%) !important;
+  box-shadow: 0 6px 20px rgba(4, 120, 87, 0.4);
+}
+
+.project-card.widget-colorful.color-4 {
+  background: linear-gradient(135deg, #6d28d9 0%, #5b21b6 100%) !important;
+  box-shadow: 0 6px 20px rgba(109, 40, 217, 0.4);
+}
+
+.project-card.widget-colorful.color-5 {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%) !important;
+  box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
+}
+
+.project-card.widget-colorful.color-6 {
+  background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%) !important;
+  box-shadow: 0 6px 20px rgba(8, 145, 178, 0.4);
+}
+
+.project-card.widget-colorful.color-7 {
+  background: linear-gradient(135deg, #c026d3 0%, #a21caf 100%) !important;
+  box-shadow: 0 6px 20px rgba(192, 38, 211, 0.4);
+}
+
+.project-card.widget-colorful:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+/* Compact Header */
+.project-header-vibrant {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.project-icon-box {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, 0.25);
+}
+
+.project-icon {
+  font-size: 20px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+.project-title-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-title-bold {
+  font-size: 14px;
+  font-weight: 800;
+  color: white;
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-height: 2.6em;
+}
+
+.project-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  display: inline-flex;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  background: #4ade80;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.status-text {
+  font-size: 11px;
+  font-weight: 800;
+  color: #1e293b;
+  text-transform: capitalize;
+  letter-spacing: 0.5px;
+  background: #fbbf24;
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: inline-block;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Progress Section with Task and Milestone Bars Stacked */
+.progress-box-large {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: white;
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.progress-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-task-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.progress-percentage-large {
+  font-size: 18px;
+  font-weight: 900;
+  color: white;
+  line-height: 1;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* Task Progress Bar - Golden/Orange */
+.progress-bar-thick {
+  height: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  position: relative;
+}
+
+.progress-fill-thick {
+  height: 100%;
+  background: linear-gradient(90deg, #fbbf24 0%, #f59e0b 50%, #f97316 100%);
+  border-radius: 7px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-fill-thick::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.4) 50%, transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Milestone Progress Section */
+.milestone-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.milestone-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.milestone-progress-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.milestone-progress-count {
+  font-size: 10px;
+  font-weight: 800;
+  color: white;
+}
+
+/* Milestone Progress Bar - Purple */
+.milestone-progress-bar {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.milestone-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #a78bfa 0%, #8b5cf6 50%, #7c3aed 100%);
+  border-radius: 5px;
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.6);
+}
+
+/* Date Section - More Space */
+.date-section-vibrant {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+  backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 255, 255, 0.2);
+}
+
+.date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.date-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.date-label-yellow {
+  font-size: 9px;
+  font-weight: 800;
+  color: #fef3c7;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.date-input-styled {
+  background: white;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1f2937;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.date-input-styled:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.date-input-styled:focus {
+  outline: none;
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.3);
+}
+
+.date-input-styled::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  font-size: 12px;
+  filter: brightness(0.8);
+}
+
+/* Info Row with Days Left and Milestone Deadline */
+.info-row-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.days-left-box {
+  background: white;
+  border-radius: 12px;
+  padding: 10px;
+  text-align: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.days-left-number {
+  font-size: 24px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.days-left-label {
+  font-size: 8px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.days-left-sublabel {
+  font-size: 9px;
+  font-weight: 600;
+  color: #94a3b8;
+  line-height: 1.2;
+}
+
+/* Next Milestone Days Left Box */
+.milestone-deadline-box {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  border-radius: 12px;
+  padding: 10px;
+  box-shadow: 0 3px 10px rgba(139, 92, 246, 0.3);
+  border: 2px solid rgba(139, 92, 246, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: center;
+}
+
+.milestone-deadline-icon {
+  font-size: 16px;
+  text-align: center;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.milestone-deadline-number {
+  font-size: 24px;
+  font-weight: 900;
+  color: white;
+  line-height: 1;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.milestone-deadline-label {
+  font-size: 8px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  text-align: center;
+}
+
+.milestone-deadline-date {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.milestone-deadline-name {
+  font-size: 9px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  text-align: center;
+  line-height: 1.2;
+  margin-top: 2px;
+  max-height: 2.4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.milestone-info-box {
+  background: white;
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.milestone-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: #1f2937;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.milestone-count::before {
+  content: '🎯';
+  font-size: 12px;
+}
+
+.milestone-progress-mini {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.milestone-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%);
+  border-radius: 5px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 6px rgba(139, 92, 246, 0.5);
+}
+
+/* Progress Circle Container */
+.progress-circle-container {
+  background: white;
+  border-radius: 16px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border: 3px solid rgba(255, 255, 255, 0.3);
+}
+
+.progress-label-text {
+  font-size: 14px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.5px;
+}
+
+.progress-value-text {
+  font-size: 32px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.progress-arrow {
+  width: 52px;
+  height: 52px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  box-shadow: 0 4px 16px rgba(34, 197, 94, 0.4);
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+
+
+/* ========== Milestones Styling ========== */
+
+.project-milestones-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.milestone-icon {
+  font-size: 14px;
+}
+
+.milestone-text {
+  color: #0078D4;
+  font-weight: 500;
+}
+
+.milestone-overdue {
+  color: #D13438;
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.milestones-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.milestone-card {
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-left: 4px solid #0078D4;
+  border-radius: 6px;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.milestone-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.milestone-card.completed {
+  border-left-color: #107C10;
+  background: #f0f9f0;
+  opacity: 0.9;
+}
+
+.milestone-card.overdue {
+  border-left-color: #D13438;
+  background: #fff5f5;
+}
+
+.milestone-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.milestone-name {
+  font-weight: 600;
+  font-size: 15px;
+  flex: 1;
+  color: #333;
+}
+
+.milestone-card.completed .milestone-name {
+  text-decoration: line-through;
+  color: #666;
+}
+
+.milestone-description {
+  font-size: 13px;
+  color: #666;
+  margin: 8px 0;
+  margin-left: 30px;
+  line-height: 1.4;
+}
+
+.milestone-date {
+  font-size: 12px;
+  color: #666;
+  margin-left: 30px;
+  margin-top: 8px;
+}
+
+/* ========== Compact Project Action Buttons ========== */
+
+.project-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+
+.project-actions .btn {
+  flex: 1;
+  min-width: 70px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.project-actions .btn-primary {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.project-actions .btn-primary:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.project-actions .btn-success {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+}
+
+.project-actions .btn-success:hover {
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.4);
+}
+
+.project-actions .btn-warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.project-actions .btn-warning:hover {
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+}
+
+.project-actions .btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: white;
+}
+
+.project-actions .btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+}
+
+.btn-delete-small {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.btn-delete-small:hover {
+  background: #fee;
+  color: #D13438;
+}

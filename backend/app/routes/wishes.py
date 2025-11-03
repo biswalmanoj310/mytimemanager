@@ -102,7 +102,7 @@ def create_wish(wish_data: WishCreate, db: Session = Depends(get_db)):
     """
     try:
         wish = WishService.create_wish(db, wish_data.model_dump())
-        return wish
+        return wish.to_dict()
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -118,7 +118,7 @@ def get_wishes(
     Get all wishes with optional filtering
     
     Query params:
-    - status: dreaming, exploring, planning, ready_to_commit, converted, archived
+    - status: dreaming, exploring, ready, moved_to_goal, achieved, released
     - category: travel, financial, personal, career, health, relationship, learning, lifestyle
     - include_archived: Include archived wishes (default: false)
     """
@@ -128,7 +128,7 @@ def get_wishes(
         category=category,
         include_archived=include_archived
     )
-    return wishes
+    return [wish.to_dict() for wish in wishes]
 
 
 @router.get("/{wish_id}")
@@ -137,7 +137,7 @@ def get_wish(wish_id: int, db: Session = Depends(get_db)):
     wish = WishService.get_wish(db, wish_id)
     if not wish:
         raise HTTPException(status_code=404, detail="Wish not found")
-    return wish
+    return wish.to_dict()
 
 
 @router.put("/{wish_id}")
@@ -149,7 +149,7 @@ def update_wish(wish_id: int, updates: WishUpdate, db: Session = Depends(get_db)
     wish = WishService.update_wish(db, wish_id, update_data)
     if not wish:
         raise HTTPException(status_code=404, detail="Wish not found")
-    return wish
+    return wish.to_dict()
 
 
 @router.delete("/{wish_id}/archive")
@@ -192,7 +192,82 @@ def convert_to_goal(
     wish = WishService.convert_to_goal(db, wish_id, request.goal_id)
     if not wish:
         raise HTTPException(status_code=404, detail="Wish not found")
-    return wish
+    return wish.to_dict()
+
+
+@router.post("/{wish_id}/promote-to-goal", status_code=201)
+def promote_to_goal(wish_id: int, db: Session = Depends(get_db)):
+    """
+    🚀 Promote a dream to a committed Life Goal
+    
+    This automatically:
+    1. Creates a new Life Goal from the dream
+    2. Sets start_date = today
+    3. Updates dream status to 'moved_to_goal'
+    4. Links the dream to the new goal
+    
+    Returns the newly created goal
+    """
+    import json
+    try:
+        goal = WishService.promote_dream_to_goal(db, wish_id)
+        # Format goal as dictionary
+        return {
+            "id": goal.id,
+            "name": goal.name,
+            "parent_goal_id": goal.parent_goal_id,
+            "start_date": goal.start_date.isoformat() if goal.start_date else None,
+            "target_date": goal.target_date.isoformat() if goal.target_date else None,
+            "actual_completion_date": goal.actual_completion_date.isoformat() if goal.actual_completion_date else None,
+            "status": goal.status,
+            "category": goal.category,
+            "priority": goal.priority,
+            "why_statements": json.loads(goal.why_statements) if goal.why_statements else [],
+            "description": goal.description,
+            "progress_percentage": goal.progress_percentage,
+            "time_allocated_hours": goal.time_allocated_hours,
+            "time_spent_hours": goal.time_spent_hours,
+            "created_at": goal.created_at.isoformat() if goal.created_at else None,
+            "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{wish_id}/mark-achieved")
+def mark_dream_achieved(
+    wish_id: int,
+    achievement_notes: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    ✨ Mark a dream as manifested/achieved
+    
+    Use this when a dream came true without formal goal tracking
+    """
+    wish = WishService.mark_achieved(db, wish_id, achievement_notes)
+    if not wish:
+        raise HTTPException(status_code=404, detail="Wish not found")
+    return wish.to_dict()
+
+
+@router.post("/{wish_id}/release")
+def release_dream(
+    wish_id: int,
+    release_reason: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    🕊️ Release a dream with gratitude
+    
+    Let go peacefully when a dream no longer resonates
+    """
+    wish = WishService.release_dream(db, wish_id, release_reason)
+    if not wish:
+        raise HTTPException(status_code=404, detail="Wish not found")
+    return wish.to_dict()
 
 
 # ============================================================================
@@ -266,6 +341,18 @@ def complete_exploration_step(
 ):
     """Mark an exploration step as complete"""
     step = WishService.complete_exploration_step(db, step_id, completion_data.notes)
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    return step
+
+
+@router.post("/steps/{step_id}/uncomplete")
+def uncomplete_exploration_step(
+    step_id: int,
+    db: Session = Depends(get_db)
+):
+    """Mark an exploration step as incomplete (undo completion)"""
+    step = WishService.uncomplete_exploration_step(db, step_id)
     if not step:
         raise HTTPException(status_code=404, detail="Step not found")
     return step

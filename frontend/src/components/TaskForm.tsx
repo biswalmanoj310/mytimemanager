@@ -14,6 +14,7 @@ interface TaskFormProps {
   onSuccess: (createdTaskId?: number) => void;
   taskId?: number;
   defaultFrequency?: FollowUpFrequency;
+  defaultWishId?: number;
 }
 
 interface TaskFormData {
@@ -30,12 +31,13 @@ interface TaskFormData {
   separately_followed: boolean;
   is_part_of_goal: boolean;
   goal_id: number | null;
+  related_wish_id: number | null;
   why_reason: string;
   additional_whys: string[];
   due_date: string;
 }
 
-export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency }: TaskFormProps) {
+export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency, defaultWishId }: TaskFormProps) {
   const [formData, setFormData] = useState<TaskFormData>({
     name: '',
     description: '',
@@ -46,10 +48,11 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     allocated_minutes: 60,
     target_value: null,
     unit: '',
-    follow_up_frequency: FollowUpFrequency.TODAY,
+    follow_up_frequency: defaultFrequency || FollowUpFrequency.TODAY,
     separately_followed: false,
     is_part_of_goal: false,
     goal_id: null,
+    related_wish_id: null,
     why_reason: '',
     additional_whys: [],
     due_date: ''
@@ -59,6 +62,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [wishes, setWishes] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,6 +70,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     if (isOpen) {
       loadPillars();
       loadGoals();
+      loadWishes();
       
       // Load task data if editing
       if (taskId) {
@@ -143,6 +148,16 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     }
   };
 
+  const loadWishes = async () => {
+    try {
+      const data = await api.get<any[]>('/api/wishes/');
+      console.log('Wishes loaded:', data);
+      setWishes(data);
+    } catch (err) {
+      console.error('Error loading wishes:', err);
+    }
+  };
+
   const loadTask = async (id: number) => {
     try {
       setLoading(true);
@@ -162,6 +177,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         separately_followed: data.separately_followed || false,
         is_part_of_goal: data.is_part_of_goal || false,
         goal_id: data.goal_id || null,
+        related_wish_id: data.related_wish_id || null,
         why_reason: data.why_reason || '',
         additional_whys: data.additional_whys || [],
         due_date: data.due_date || '',
@@ -235,6 +251,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         separately_followed: formData.separately_followed,
         is_part_of_goal: formData.is_part_of_goal,
         goal_id: formData.is_part_of_goal ? formData.goal_id : undefined,
+        related_wish_id: formData.related_wish_id || undefined,
         why_reason: formData.why_reason || undefined,
         additional_whys: formData.additional_whys.filter(w => w.trim()).join('|||') || undefined,
         due_date: formData.due_date || undefined,
@@ -305,6 +322,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
       separately_followed: false,
       is_part_of_goal: false,
       goal_id: null,
+      related_wish_id: defaultWishId || null,
       why_reason: '',
       additional_whys: [],
       due_date: ''
@@ -606,6 +624,33 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               </select>
             </div>
           )}
+
+          {/* Wish/Dream Selection */}
+          <div className="form-group">
+            <label htmlFor="wish">Part of a Dream?</label>
+            <select
+              id="wish"
+              value={formData.related_wish_id || ''}
+              onChange={(e) => setFormData({ ...formData, related_wish_id: Number(e.target.value) || null })}
+              style={{
+                padding: '10px',
+                borderRadius: '6px',
+                border: '2px solid #e0e0e0',
+                fontSize: '14px',
+                backgroundColor: formData.related_wish_id ? '#f0fdfa' : 'white'
+              }}
+            >
+              <option value="">-- No associated dream --</option>
+              {wishes.map(wish => (
+                <option key={wish.id} value={wish.id}>
+                  {wish.title} {wish.status === 'exploring' ? '🔬' : '💭'}
+                </option>
+              ))}
+            </select>
+            <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '6px' }}>
+              💡 Link this task to a dream you're exploring or pursuing
+            </small>
+          </div>
 
           {/* Why Reason */}
           <div className="form-group">

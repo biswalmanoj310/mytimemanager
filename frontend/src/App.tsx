@@ -12,6 +12,7 @@ import Goals from './pages/Goals';
 import Analytics from './pages/Analytics';
 import TimeTracking from './pages/TimeTracking';
 import Completed from './pages/Completed';
+import Challenges from './pages/Challenges';
 
 console.log('[APP] App component loaded');
 
@@ -26,6 +27,7 @@ function App() {
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/goals" element={<Goals />} />
+          <Route path="/challenges" element={<Challenges />} />
           <Route path="/time-tracking" element={<TimeTracking />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/completed" element={<Completed />} />

@@ -3,10 +3,11 @@
  * Display and manage all tasks with tabs and table view
  */
 
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import './Tasks.css';
+import './Projects.css';
 import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
 
@@ -196,8 +197,31 @@ export default function Tasks() {
     progress: {
       total_tasks: number;
       completed_tasks: number;
+      pending_tasks: number;
+      overdue_tasks: number;
       progress_percentage: number;
     };
+    milestone_progress?: {
+      total_milestones: number;
+      completed_milestones: number;
+      pending_milestones: number;
+      overdue_milestones: number;
+      progress_percentage: number;
+    };
+    milestones?: ProjectMilestoneData[];
+  }
+  
+  interface ProjectMilestoneData {
+    id: number;
+    project_id: number;
+    name: string;
+    description: string | null;
+    target_date: string;
+    is_completed: boolean;
+    completed_at: string | null;
+    order: number;
+    created_at: string;
+    updated_at: string;
   }
   
   interface ProjectTaskData {
@@ -279,8 +303,10 @@ export default function Tasks() {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
   const [projectTasks, setProjectTasks] = useState<ProjectTaskData[]>([]);
+  const [projectMilestones, setProjectMilestones] = useState<ProjectMilestoneData[]>([]);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const [showAddProjectMilestoneModal, setShowAddProjectMilestoneModal] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectData | null>(null);
   const [editingTask, setEditingTask] = useState<ProjectTaskData | null>(null);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
@@ -481,6 +507,18 @@ export default function Tasks() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Initialize activeTab from URL on mount
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
+      if (validTabs.includes(tabParam as TabType)) {
+        setActiveTab(tabParam as TabType);
+      }
+    }
+  }, []); // Run only on mount
+
   // Handle URL parameters on mount and when location changes
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -488,9 +526,9 @@ export default function Tasks() {
     const projectParam = searchParams.get('project');
     const dateParam = searchParams.get('date');
 
-    // Set active tab if provided
+    // Set active tab if provided (when URL changes)
     if (tabParam) {
-      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'projects'];
+      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
       if (validTabs.includes(tabParam as TabType)) {
         setActiveTab(tabParam as TabType);
       }
@@ -545,6 +583,11 @@ export default function Tasks() {
       }
     }
   }, [projects, pendingProjectId]);
+
+  // Monitor selectedProject state changes
+  useEffect(() => {
+    console.log('🟢 selectedProject state changed to:', selectedProject ? { id: selectedProject.id, name: selectedProject.name } : null);
+  }, [selectedProject]);
 
   useEffect(() => {
     loadTasks();
@@ -672,7 +715,7 @@ export default function Tasks() {
       // Reload weekly statuses only (don't reload tasks to avoid affecting daily view)
       await loadWeeklyEntries(selectedWeekStart);
     } catch (err: any) {
-      console.error('Error updating weekly task status:', err);
+      console.error('Error updating weekly task NA:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
   };
@@ -936,7 +979,8 @@ export default function Tasks() {
         });
       }
       
-      setWeeklyTaskStatuses(statusMap);
+      // Force new object reference to ensure React detects the change
+      setWeeklyTaskStatuses({...statusMap});
 
       // Auto-copy incomplete tasks from previous week ONLY if viewing the current real week
       if (statusData.length === 0) {
@@ -1372,7 +1416,7 @@ export default function Tasks() {
       await api.post(`/api/monthly-time/status/${taskId}/na?month_start_date=${dateStr}`, {});
       await loadMonthlyEntries(selectedMonthStart);
     } catch (err: any) {
-      console.error('Error updating monthly task status:', err);
+      console.error('Error updating monthly task NA:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
   };
@@ -1826,11 +1870,60 @@ export default function Tasks() {
   };
 
   const handleSelectProject = async (project: ProjectData) => {
-    console.log('handleSelectProject called with:', { id: project.id, name: project.name });
-    console.log('Call stack:', new Error().stack);
+    console.log('🔵 handleSelectProject called with:', { id: project.id, name: project.name });
+    console.log('🔵 Current selectedProject before:', selectedProject);
+    console.log('🔵 Setting selectedProject state...');
     setSelectedProject(project);
+    console.log('🔵 Loading project tasks and milestones...');
     await loadProjectTasks(project.id);
-    console.log('Project selected and tasks loaded for:', project.name);
+    await loadProjectMilestones(project.id);
+    console.log('🔵 Project selected! Tasks loaded:', projectTasks.length, 'Milestones loaded:', projectMilestones.length);
+  };
+
+  const loadProjectMilestones = async (projectId: number) => {
+    try {
+      const response = await api.get(`/api/projects/${projectId}/milestones`);
+      setProjectMilestones(response.data);
+    } catch (error) {
+      console.error('Error loading project milestones:', error);
+    }
+  };
+
+  const handleCreateProjectMilestone = async (milestoneData: any) => {
+    if (!selectedProject) return;
+    try {
+      await api.post(`/api/projects/${selectedProject.id}/milestones`, milestoneData);
+      setShowAddProjectMilestoneModal(false);
+      await loadProjectMilestones(selectedProject.id);
+      await loadProjects(); // Refresh project list to update milestone progress
+    } catch (error) {
+      console.error('Error creating milestone:', error);
+      alert('Failed to create milestone');
+    }
+  };
+
+  const handleToggleProjectMilestone = async (milestoneId: number, isCompleted: boolean) => {
+    if (!selectedProject) return;
+    try {
+      await api.put(`/api/projects/milestones/${milestoneId}`, { is_completed: isCompleted });
+      await loadProjectMilestones(selectedProject.id);
+      await loadProjects(); // Refresh project list to update milestone progress
+    } catch (error) {
+      console.error('Error updating milestone:', error);
+    }
+  };
+
+  const handleDeleteProjectMilestone = async (milestoneId: number) => {
+    if (!selectedProject) return;
+    if (!window.confirm('Are you sure you want to delete this milestone?')) return;
+    try {
+      await api.delete(`/api/projects/milestones/${milestoneId}`);
+      await loadProjectMilestones(selectedProject.id);
+      await loadProjects(); // Refresh project list to update milestone progress
+    } catch (error) {
+      console.error('Error deleting milestone:', error);
+      alert('Failed to delete milestone');
+    }
   };
 
   const handleBackToProjects = () => {
@@ -2034,6 +2127,48 @@ export default function Tasks() {
     } catch (err: any) {
       console.error('Error updating goal task due date:', err);
       alert('Failed to update due date: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleToggleProjectComplete = async (projectId: number, isCompleted: boolean) => {
+    // Find the project to check its status
+    const project = projects.find(p => p.id === projectId);
+    
+    // Add confirmation for completing a project
+    if (isCompleted && project) {
+      const pendingCount = project.progress?.pending_tasks || 0;
+      if (pendingCount > 0) {
+        alert(`Cannot complete project: ${pendingCount} task(s) still pending. Please complete all tasks first.`);
+        return;
+      }
+      
+      if (!confirm(`Mark "${project.name}" as completed?`)) {
+        return;
+      }
+    }
+    
+    try {
+      await api.put(`/api/projects/${projectId}`, {
+        is_completed: isCompleted,
+        status: isCompleted ? 'completed' : 'in_progress'
+      });
+      await loadProjects();
+      if (selectedProject?.id === projectId) {
+        setSelectedProject(null);
+      }
+    } catch (err: any) {
+      console.error('Error updating project completion:', err);
+      alert('Failed to update project: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUpdateProject = async (projectId: number, updates: any) => {
+    try {
+      await api.put(`/api/projects/${projectId}`, updates);
+      await loadProjects();
+    } catch (err: any) {
+      console.error('Error updating project:', err);
+      alert('Failed to update project: ' + (err.response?.data?.detail || err.message));
     }
   };
 
@@ -2885,6 +3020,107 @@ export default function Tasks() {
     return ''; // No color if no progress yet
   };
 
+  // Get cell-level color for weekly tab - determines if specific day meets target
+  const getWeeklyCellColorClass = (task: Task, dayIndex: number): string => {
+    if (activeTab !== 'weekly') return '';
+    
+    const actualValue = getWeeklyTime(task.id, dayIndex);
+    
+    // Calculate expected value for this specific day
+    let expectedValue = 0;
+    if (task.task_type === TaskType.COUNT) {
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: expect target_value each day
+        expectedValue = task.target_value || 0;
+      } else {
+        // Weekly task: can distribute throughout week, so expect (target / 7) per day
+        expectedValue = (task.target_value || 0) / 7;
+      }
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      // Boolean: 1 (done) per day if daily, or spread across week if weekly
+      expectedValue = task.follow_up_frequency === 'daily' ? 1 : 1 / 7;
+    } else {
+      // TIME task
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: expect allocated_minutes each day
+        expectedValue = task.allocated_minutes;
+      } else {
+        // Weekly task: can distribute throughout week
+        expectedValue = task.allocated_minutes / 7;
+      }
+    }
+    
+    // Check if this day is in the past or today
+    const dayDate = new Date(selectedWeekStart);
+    dayDate.setDate(dayDate.getDate() + dayIndex);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    if (dayDate > today) {
+      // Future day - no color needed
+      return '';
+    }
+    
+    // Return color based on achievement
+    if (actualValue >= expectedValue) {
+      return 'cell-achieved'; // Green - target met
+    } else if (actualValue > 0) {
+      return 'cell-below-target'; // Red - below target
+    }
+    return ''; // No progress
+  };
+
+  // Get cell-level color for monthly tab
+  const getMonthlyCellColorClass = (task: Task, dayOfMonth: number): string => {
+    if (activeTab !== 'monthly') return '';
+    
+    const actualValue = getMonthlyTime(task.id, dayOfMonth);
+    
+    // Calculate expected value for this specific day
+    let expectedValue = 0;
+    if (task.task_type === TaskType.COUNT) {
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: expect target_value each day
+        expectedValue = task.target_value || 0;
+      } else {
+        // Monthly task: can distribute throughout month
+        const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+        expectedValue = (task.target_value || 0) / daysInMonth;
+      }
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      // Boolean: 1 (done) per day if daily
+      expectedValue = task.follow_up_frequency === 'daily' ? 1 : 0.03; // ~1/30 for monthly
+    } else {
+      // TIME task
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: expect allocated_minutes each day
+        expectedValue = task.allocated_minutes;
+      } else {
+        // Monthly task: can distribute throughout month
+        const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+        expectedValue = task.allocated_minutes / daysInMonth;
+      }
+    }
+    
+    // Check if this day is in the past or today
+    const dayDate = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth(), dayOfMonth);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    if (dayDate > today) {
+      // Future day - no color needed
+      return '';
+    }
+    
+    // Return color based on achievement
+    if (actualValue >= expectedValue) {
+      return 'cell-achieved'; // Green - target met
+    } else if (actualValue > 0) {
+      return 'cell-below-target'; // Red - below target
+    }
+    return ''; // No progress
+  };
+
   // Hierarchy order for sorting
 
   if (loading) {
@@ -3036,9 +3272,14 @@ export default function Tasks() {
       if (activeTab === 'weekly') {
         const taskStatus = weeklyTaskStatuses[task.id];
         
-        // If task is marked completed/NA for THIS week, show it
+        // If task is marked completed/NA for THIS week:
+        // - For DAILY tasks: HIDE them (they belong in daily tab)
+        // - For WEEKLY tasks: SHOW them with status
         if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
-          return true;
+          if (task.follow_up_frequency === 'daily') {
+            return false; // Hide daily tasks when marked complete in weekly
+          }
+          return true; // Show weekly tasks with their status
         }
         
         // Don't filter out based on "ever completed" since weekly status is independent
@@ -3169,11 +3410,11 @@ export default function Tasks() {
     ? filteredTasks.filter(task => task.task_type === TaskType.TIME)
     : [];
   
-  const countBasedTasks = (activeTab === 'daily' || activeTab === 'weekly')
+  const countBasedTasks = (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly')
     ? filteredTasks.filter(task => task.task_type === TaskType.COUNT)
     : [];
   
-  const booleanTasks = (activeTab === 'daily' || activeTab === 'weekly')
+  const booleanTasks = (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly')
     ? filteredTasks.filter(task => task.task_type === TaskType.BOOLEAN)
     : [];
 
@@ -3343,6 +3584,10 @@ export default function Tasks() {
             className={`tab ${activeTab === tab.key ? 'active' : ''}`}
             onClick={() => {
               setActiveTab(tab.key);
+              // Update URL with tab parameter
+              const searchParams = new URLSearchParams(location.search);
+              searchParams.set('tab', tab.key);
+              navigate(`?${searchParams.toString()}`, { replace: true });
               // Force reload data when switching tabs
               if (tab.key === 'weekly') {
                 loadWeeklyEntries(selectedWeekStart);
@@ -3605,54 +3850,196 @@ export default function Tasks() {
                 </button>
               </div>
 
-              <div className="projects-grid">
-                {projects.length === 0 ? (
-                  <div className="empty-state">
-                    <p>No projects yet. Click "Add Project" to get started.</p>
-                  </div>
-                ) : (
-                  projects.map((project) => {
+              {projects.length === 0 ? (
+                <div className="empty-state">
+                  <p>No projects yet. Click "Add Project" to get started.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Group projects by status */}
+                  {(() => {
+                    const inProgressProjects = projects.filter(p => p.status === 'in_progress' && !p.is_completed);
+                    const notStartedProjects = projects.filter(p => p.status === 'not_started' && !p.is_completed);
+                    const completedProjects = projects.filter(p => p.is_completed);
+                    const otherProjects = projects.filter(p => !p.is_completed && p.status !== 'in_progress' && p.status !== 'not_started');
+
+                    return (
+                      <>
+                        {/* IN PROGRESS Section */}
+                        {inProgressProjects.length > 0 && (
+                          <div style={{ marginBottom: '40px' }}>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '12px',
+                              marginBottom: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+                            }}>
+                              <span style={{ fontSize: '24px' }}>▶️</span>
+                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>In Progress</h2>
+                              <span style={{ 
+                                background: 'rgba(255,255,255,0.3)', 
+                                padding: '4px 12px', 
+                                borderRadius: '12px',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                              }}>
+                                {inProgressProjects.length}
+                              </span>
+                            </div>
+                            <div className="projects-grid">
+                              {inProgressProjects.map((project, index) => {
                     const hasOverdue = hasOverdueTasks(project.id);
                     const cardClass = getProjectCardClass(project);
+                    const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
                     
                     return (
-                      <div key={project.id} className={`project-card ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''}`}>
-                        <div className="project-card-header">
-                          <h3>{project.name}</h3>
-                          <span className={`project-status status-${project.status} ${hasOverdue ? 'status-overdue' : ''}`}>
-                            {hasOverdue && '⚠️ '}{project.status.replace('_', ' ')}
-                          </span>
-                        </div>
-                      
-                      {project.description && (
-                        <p className="project-description">{project.description}</p>
-                      )}
-                      
-                      <div className="project-progress">
-                        <div className="progress-bar">
-                          <div 
-                            className="progress-fill" 
-                            style={{ width: `${project.progress.progress_percentage}%` }}
-                          />
-                        </div>
-                        <span className="progress-text">
-                          {project.progress.completed_tasks} / {project.progress.total_tasks} tasks completed 
-                          ({project.progress.progress_percentage}%)
-                        </span>
-                      </div>
-                      
-                      <div className="project-meta">
-                        {project.target_completion_date && (
-                          <div className="project-due-date">
-                            🗓️ Due: {new Date(project.target_completion_date).toLocaleDateString()}
+                      <div 
+                        key={project.id} 
+                        className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                        onClick={(e) => {
+                          // Don't navigate if clicking on buttons or inputs
+                          const target = e.target as HTMLElement;
+                          console.log('🔴 Card clicked!', { target: target.tagName, closest: target.closest('button, input') });
+                          if (target.closest('button, input')) {
+                            console.log('🔴 Click was on button/input, ignoring');
+                            return;
+                          }
+                          console.log('🔴 Calling handleSelectProject for:', project.name);
+                          handleSelectProject(project);
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        {/* Vibrant Header with Icon and Status */}
+                        <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
+                          <div className="project-icon-box">
+                            <span className="project-icon">📊</span>
                           </div>
-                        )}
-                        {project.pillar_id && (
-                          <div className="project-pillar">
-                            📌 Pillar ID: {project.pillar_id}
+                          <div className="project-title-section">
+                            <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
+                            <div className="project-status-indicator">
+                              <span className="status-dot"></span>
+                              <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
+                        </div>
+
+                        {/* Progress Box with Task and Milestone Progress */}
+                        <div className="progress-box-large">
+                          <div className="progress-box-header">
+                            <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
+                            <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
+                          </div>
+                          <div className="progress-bar-thick">
+                            <div 
+                              className="progress-fill-thick"
+                              style={{ width: `${project.progress.progress_percentage}%` }}
+                            ></div>
+                          </div>
+                          
+                          {/* Milestone Progress Bar - Always show for alignment */}
+                          <div className="milestone-progress-section">
+                            <div className="milestone-progress-header">
+                              <span className="milestone-progress-label">Milestones</span>
+                              <span className="milestone-progress-count">
+                                {project.milestone_progress ? 
+                                  `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
+                                  '0/0'}
+                              </span>
+                            </div>
+                            <div className="milestone-progress-bar">
+                              <div 
+                                className="milestone-progress-bar-fill"
+                                style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
+                                  `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
+                                  '0%' }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Date Section with Editable Calendars */}
+                        <div className="date-section-vibrant">
+                          <div className="date-row">
+                            <div className="date-box">
+                              <label className="date-label-yellow">Start Date</label>
+                              <input
+                                type="date"
+                                className="date-input-styled"
+                                value={project.start_date || ''}
+                                onChange={(e) => {
+                                  // Update start date
+                                  handleUpdateProject(project.id, { start_date: e.target.value });
+                                }}
+                              />
+                            </div>
+                            <div className="date-box">
+                              <label className="date-label-yellow">End Date</label>
+                              <input
+                                type="date"
+                                className="date-input-styled"
+                                value={project.target_completion_date || ''}
+                                onChange={(e) => {
+                                  // Update end date
+                                  handleUpdateProject(project.id, { target_completion_date: e.target.value });
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Days Left for Project & Next Milestone */}
+                        <div className="info-row-split">
+                          {project.target_completion_date && (() => {
+                            const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                            const isOverdue = daysLeft < 0;
+                            return (
+                              <div className="days-left-box">
+                                <div className="days-left-number">{Math.abs(daysLeft)}</div>
+                                <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                <div className="days-left-sublabel">for project</div>
+                              </div>
+                            );
+                          })()}
+                          
+                          {/* Next Milestone Days Left - Always show for alignment */}
+                          {(() => {
+                            // Find next incomplete milestone
+                            const nextMilestone = project.milestones?.filter(m => !m.is_completed)
+                              .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                            
+                            if (nextMilestone) {
+                              const milestoneDate = new Date(nextMilestone.target_date);
+                              const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                              const isOverdue = milestoneDaysLeft < 0;
+                              const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              
+                              return (
+                                <div className="milestone-deadline-box" title={nextMilestone.name}>
+                                  <div className="milestone-deadline-icon">🎯</div>
+                                  <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
+                                  <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                  <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
+                                  <div className="milestone-deadline-name">{nextMilestone.name}</div>
+                                </div>
+                              );
+                            } else {
+                              // No milestones - show placeholder for alignment
+                              return (
+                                <div className="milestone-deadline-box" title="No milestones set">
+                                  <div className="milestone-deadline-icon">🎯</div>
+                                  <div className="milestone-deadline-number">-</div>
+                                  <div className="milestone-deadline-label">NO MILESTONE</div>
+                                  <div className="milestone-deadline-date">set milestones below</div>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </div>
                       
                       <div className="project-actions">
                         <button 
@@ -3661,6 +4048,24 @@ export default function Tasks() {
                         >
                           View Tasks
                         </button>
+                        {!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0 && (
+                          <button 
+                            className="btn btn-success"
+                            onClick={() => handleToggleProjectComplete(project.id, true)}
+                            title="Mark project as completed"
+                          >
+                            ✓ Complete
+                          </button>
+                        )}
+                        {project.is_completed && (
+                          <button 
+                            className="btn btn-warning"
+                            onClick={() => handleToggleProjectComplete(project.id, false)}
+                            title="Reopen project"
+                          >
+                            ↺ Reopen
+                          </button>
+                        )}
                         <button 
                           className="btn btn-danger"
                           onClick={() => handleDeleteProject(project.id)}
@@ -3670,11 +4075,613 @@ export default function Tasks() {
                       </div>
                     </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* NOT STARTED Section */}
+                        {notStartedProjects.length > 0 && (
+                          <div style={{ marginBottom: '40px' }}>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '12px',
+                              marginBottom: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              boxShadow: '0 4px 12px rgba(100, 116, 139, 0.3)'
+                            }}>
+                              <span style={{ fontSize: '24px' }}>⏸️</span>
+                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Not Started</h2>
+                              <span style={{ 
+                                background: 'rgba(255,255,255,0.3)', 
+                                padding: '4px 12px', 
+                                borderRadius: '12px',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                              }}>
+                                {notStartedProjects.length}
+                              </span>
+                            </div>
+                            <div className="projects-grid">
+                              {notStartedProjects.map((project, index) => {
+                                const hasOverdue = hasOverdueTasks(project.id);
+                                const cardClass = getProjectCardClass(project);
+                                const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
+                                
+                                return (
+                                  <div 
+                                    key={project.id} 
+                                    className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                                    onClick={(e) => {
+                                      if ((e.target as HTMLElement).closest('button, input')) return;
+                                      handleSelectProject(project);
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    {/* Same card content as above */}
+                                    <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
+                                      <div className="project-icon-box">
+                                        <span className="project-icon">📊</span>
+                                      </div>
+                                      <div className="project-title-section">
+                                        <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
+                                        <div className="project-status-indicator">
+                                          <span className="status-dot"></span>
+                                          <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="progress-box-large">
+                                      <div className="progress-box-header">
+                                        <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
+                                        <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
+                                      </div>
+                                      <div className="progress-bar-thick">
+                                        <div 
+                                          className="progress-fill-thick"
+                                          style={{ width: `${project.progress.progress_percentage}%` }}
+                                        ></div>
+                                      </div>
+                                      
+                                      <div className="milestone-progress-section">
+                                        <div className="milestone-progress-header">
+                                          <span className="milestone-progress-label">Milestones</span>
+                                          <span className="milestone-progress-count">
+                                            {project.milestone_progress ? 
+                                              `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
+                                              '0/0'}
+                                          </span>
+                                        </div>
+                                        <div className="milestone-progress-bar">
+                                          <div 
+                                            className="milestone-progress-bar-fill"
+                                            style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
+                                              `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
+                                              '0%' }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="date-section-vibrant">
+                                      <div className="date-row">
+                                        <div className="date-box">
+                                          <label className="date-label-yellow">Start Date</label>
+                                          <input
+                                            type="date"
+                                            className="date-input-styled"
+                                            value={project.start_date || ''}
+                                            onChange={(e) => {
+                                              handleUpdateProject(project.id, { start_date: e.target.value });
+                                            }}
+                                          />
+                                        </div>
+                                        <div className="date-box">
+                                          <label className="date-label-yellow">End Date</label>
+                                          <input
+                                            type="date"
+                                            className="date-input-styled"
+                                            value={project.target_completion_date || ''}
+                                            onChange={(e) => {
+                                              handleUpdateProject(project.id, { target_completion_date: e.target.value });
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="info-row-split">
+                                      {project.target_completion_date && (() => {
+                                        const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                        const isOverdue = daysLeft < 0;
+                                        return (
+                                          <div className="days-left-box">
+                                            <div className="days-left-number">{Math.abs(daysLeft)}</div>
+                                            <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                            <div className="days-left-sublabel">for project</div>
+                                          </div>
+                                        );
+                                      })()}
+                                      
+                                      {(() => {
+                                        const nextMilestone = project.milestones?.filter(m => !m.is_completed)
+                                          .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                                        
+                                        if (nextMilestone) {
+                                          const milestoneDate = new Date(nextMilestone.target_date);
+                                          const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                          const isOverdue = milestoneDaysLeft < 0;
+                                          const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                          
+                                          return (
+                                            <div className="milestone-deadline-box" title={nextMilestone.name}>
+                                              <div className="milestone-deadline-icon">🎯</div>
+                                              <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
+                                              <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                              <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
+                                              <div className="milestone-deadline-name">{nextMilestone.name}</div>
+                                            </div>
+                                          );
+                                        } else {
+                                          return (
+                                            <div className="milestone-deadline-box" title="No milestones set">
+                                              <div className="milestone-deadline-icon">🎯</div>
+                                              <div className="milestone-deadline-number">-</div>
+                                              <div className="milestone-deadline-label">NO MILESTONE</div>
+                                              <div className="milestone-deadline-date">set milestones below</div>
+                                            </div>
+                                          );
+                                        }
+                                      })()}
+                                    </div>
+                                  
+                                  <div className="project-actions">
+                                    <button 
+                                      className="btn btn-primary btn-view-tasks"
+                                      onClick={() => handleSelectProject(project)}
+                                    >
+                                      View Tasks
+                                    </button>
+                                    {!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0 && (
+                                      <button 
+                                        className="btn btn-success"
+                                        onClick={() => handleToggleProjectComplete(project.id, true)}
+                                        title="Mark project as completed"
+                                      >
+                                        ✓ Complete
+                                      </button>
+                                    )}
+                                    {project.is_completed && (
+                                      <button 
+                                        className="btn btn-warning"
+                                        onClick={() => handleToggleProjectComplete(project.id, false)}
+                                        title="Reopen project"
+                                      >
+                                        ↺ Reopen
+                                      </button>
+                                    )}
+                                    <button 
+                                      className="btn btn-danger"
+                                      onClick={() => handleDeleteProject(project.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* COMPLETED Section */}
+                        {completedProjects.length > 0 && (
+                          <div style={{ marginBottom: '40px' }}>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '12px',
+                              marginBottom: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+                            }}>
+                              <span style={{ fontSize: '24px' }}>✅</span>
+                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Completed</h2>
+                              <span style={{ 
+                                background: 'rgba(255,255,255,0.3)', 
+                                padding: '4px 12px', 
+                                borderRadius: '12px',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                              }}>
+                                {completedProjects.length}
+                              </span>
+                            </div>
+                            <div className="projects-grid">
+                              {completedProjects.map((project, index) => {
+                                const hasOverdue = hasOverdueTasks(project.id);
+                                const cardClass = getProjectCardClass(project);
+                                const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
+                                
+                                return (
+                                  <div 
+                                    key={project.id} 
+                                    className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                                    onClick={(e) => {
+                                      if ((e.target as HTMLElement).closest('button, input')) return;
+                                      handleSelectProject(project);
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    {/* Same card content */}
+                                    <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
+                                      <div className="project-icon-box">
+                                        <span className="project-icon">📊</span>
+                                      </div>
+                                      <div className="project-title-section">
+                                        <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
+                                        <div className="project-status-indicator">
+                                          <span className="status-dot"></span>
+                                          <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="progress-box-large">
+                                      <div className="progress-box-header">
+                                        <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
+                                        <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
+                                      </div>
+                                      <div className="progress-bar-thick">
+                                        <div 
+                                          className="progress-fill-thick"
+                                          style={{ width: `${project.progress.progress_percentage}%` }}
+                                        ></div>
+                                      </div>
+                                      
+                                      <div className="milestone-progress-section">
+                                        <div className="milestone-progress-header">
+                                          <span className="milestone-progress-label">Milestones</span>
+                                          <span className="milestone-progress-count">
+                                            {project.milestone_progress ? 
+                                              `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
+                                              '0/0'}
+                                          </span>
+                                        </div>
+                                        <div className="milestone-progress-bar">
+                                          <div 
+                                            className="milestone-progress-bar-fill"
+                                            style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
+                                              `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
+                                              '0%' }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="date-section-vibrant">
+                                      <div className="date-row">
+                                        <div className="date-box">
+                                          <label className="date-label-yellow">Start Date</label>
+                                          <input
+                                            type="date"
+                                            className="date-input-styled"
+                                            value={project.start_date || ''}
+                                            onChange={(e) => {
+                                              handleUpdateProject(project.id, { start_date: e.target.value });
+                                            }}
+                                          />
+                                        </div>
+                                        <div className="date-box">
+                                          <label className="date-label-yellow">End Date</label>
+                                          <input
+                                            type="date"
+                                            className="date-input-styled"
+                                            value={project.target_completion_date || ''}
+                                            onChange={(e) => {
+                                              handleUpdateProject(project.id, { target_completion_date: e.target.value });
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="info-row-split">
+                                      {project.target_completion_date && (() => {
+                                        const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                        const isOverdue = daysLeft < 0;
+                                        return (
+                                          <div className="days-left-box">
+                                            <div className="days-left-number">{Math.abs(daysLeft)}</div>
+                                            <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                            <div className="days-left-sublabel">for project</div>
+                                          </div>
+                                        );
+                                      })()}
+                                      
+                                      {(() => {
+                                        const nextMilestone = project.milestones?.filter(m => !m.is_completed)
+                                          .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                                        
+                                        if (nextMilestone) {
+                                          const milestoneDate = new Date(nextMilestone.target_date);
+                                          const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                          const isOverdue = milestoneDaysLeft < 0;
+                                          const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                          
+                                          return (
+                                            <div className="milestone-deadline-box" title={nextMilestone.name}>
+                                              <div className="milestone-deadline-icon">🎯</div>
+                                              <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
+                                              <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                              <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
+                                              <div className="milestone-deadline-name">{nextMilestone.name}</div>
+                                            </div>
+                                          );
+                                        } else {
+                                          return (
+                                            <div className="milestone-deadline-box" title="No milestones set">
+                                              <div className="milestone-deadline-icon">🎯</div>
+                                              <div className="milestone-deadline-number">-</div>
+                                              <div className="milestone-deadline-label">NO MILESTONE</div>
+                                              <div className="milestone-deadline-date">set milestones below</div>
+                                            </div>
+                                          );
+                                        }
+                                      })()}
+                                    </div>
+                                  
+                                  <div className="project-actions">
+                                    <button 
+                                      className="btn btn-primary btn-view-tasks"
+                                      onClick={() => handleSelectProject(project)}
+                                    >
+                                      View Tasks
+                                    </button>
+                                    {!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0 && (
+                                      <button 
+                                        className="btn btn-success"
+                                        onClick={() => handleToggleProjectComplete(project.id, true)}
+                                        title="Mark project as completed"
+                                      >
+                                        ✓ Complete
+                                      </button>
+                                    )}
+                                    {project.is_completed && (
+                                      <button 
+                                        className="btn btn-warning"
+                                        onClick={() => handleToggleProjectComplete(project.id, false)}
+                                        title="Reopen project"
+                                      >
+                                        ↺ Reopen
+                                      </button>
+                                    )}
+                                    <button 
+                                      className="btn btn-danger"
+                                      onClick={() => handleDeleteProject(project.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* OTHER STATUS Section (if any) */}
+                        {otherProjects.length > 0 && (
+                          <div style={{ marginBottom: '40px' }}>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '12px',
+                              marginBottom: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)'
+                            }}>
+                              <span style={{ fontSize: '24px' }}>📌</span>
+                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Other</h2>
+                              <span style={{ 
+                                background: 'rgba(255,255,255,0.3)', 
+                                padding: '4px 12px', 
+                                borderRadius: '12px',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                              }}>
+                                {otherProjects.length}
+                              </span>
+                            </div>
+                            <div className="projects-grid">
+                              {otherProjects.map((project, index) => {
+                                const hasOverdue = hasOverdueTasks(project.id);
+                                const cardClass = getProjectCardClass(project);
+                                const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
+                                
+                                return (
+                                  <div 
+                                    key={project.id} 
+                                    className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                                    onClick={(e) => {
+                                      if ((e.target as HTMLElement).closest('button, input')) return;
+                                      handleSelectProject(project);
+                                    }}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
+                                      <div className="project-icon-box">
+                                        <span className="project-icon">📊</span>
+                                      </div>
+                                      <div className="project-title-section">
+                                        <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
+                                        <div className="project-status-indicator">
+                                          <span className="status-dot"></span>
+                                          <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="progress-box-large">
+                                      <div className="progress-box-header">
+                                        <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
+                                        <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
+                                      </div>
+                                      <div className="progress-bar-thick">
+                                        <div 
+                                          className="progress-fill-thick"
+                                          style={{ width: `${project.progress.progress_percentage}%` }}
+                                        ></div>
+                                      </div>
+                                      
+                                      <div className="milestone-progress-section">
+                                        <div className="milestone-progress-header">
+                                          <span className="milestone-progress-label">Milestones</span>
+                                          <span className="milestone-progress-count">
+                                            {project.milestone_progress ? 
+                                              `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
+                                              '0/0'}
+                                          </span>
+                                        </div>
+                                        <div className="milestone-progress-bar">
+                                          <div 
+                                            className="milestone-progress-bar-fill"
+                                            style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
+                                              `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
+                                              '0%' }}
+                                          ></div>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="date-section-vibrant">
+                                      <div className="date-row">
+                                        <div className="date-box">
+                                          <label className="date-label-yellow">Start Date</label>
+                                          <input
+                                            type="date"
+                                            className="date-input-styled"
+                                            value={project.start_date || ''}
+                                            onChange={(e) => {
+                                              handleUpdateProject(project.id, { start_date: e.target.value });
+                                            }}
+                                          />
+                                        </div>
+                                        <div className="date-box">
+                                          <label className="date-label-yellow">End Date</label>
+                                          <input
+                                            type="date"
+                                            className="date-input-styled"
+                                            value={project.target_completion_date || ''}
+                                            onChange={(e) => {
+                                              handleUpdateProject(project.id, { target_completion_date: e.target.value });
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="info-row-split">
+                                      {project.target_completion_date && (() => {
+                                        const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                        const isOverdue = daysLeft < 0;
+                                        return (
+                                          <div className="days-left-box">
+                                            <div className="days-left-number">{Math.abs(daysLeft)}</div>
+                                            <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                            <div className="days-left-sublabel">for project</div>
+                                          </div>
+                                        );
+                                      })()}
+                                      
+                                      {(() => {
+                                        const nextMilestone = project.milestones?.filter(m => !m.is_completed)
+                                          .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                                        
+                                        if (nextMilestone) {
+                                          const milestoneDate = new Date(nextMilestone.target_date);
+                                          const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                          const isOverdue = milestoneDaysLeft < 0;
+                                          const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                          
+                                          return (
+                                            <div className="milestone-deadline-box" title={nextMilestone.name}>
+                                              <div className="milestone-deadline-icon">🎯</div>
+                                              <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
+                                              <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
+                                              <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
+                                              <div className="milestone-deadline-name">{nextMilestone.name}</div>
+                                            </div>
+                                          );
+                                        } else {
+                                          return (
+                                            <div className="milestone-deadline-box" title="No milestones set">
+                                              <div className="milestone-deadline-icon">🎯</div>
+                                              <div className="milestone-deadline-number">-</div>
+                                              <div className="milestone-deadline-label">NO MILESTONE</div>
+                                              <div className="milestone-deadline-date">set milestones below</div>
+                                            </div>
+                                          );
+                                        }
+                                      })()}
+                                    </div>
+                                  
+                                  <div className="project-actions">
+                                    <button 
+                                      className="btn btn-primary btn-view-tasks"
+                                      onClick={() => handleSelectProject(project)}
+                                    >
+                                      View Tasks
+                                    </button>
+                                    {!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0 && (
+                                      <button 
+                                        className="btn btn-success"
+                                        onClick={() => handleToggleProjectComplete(project.id, true)}
+                                        title="Mark project as completed"
+                                      >
+                                        ✓ Complete
+                                      </button>
+                                    )}
+                                    {project.is_completed && (
+                                      <button 
+                                        className="btn btn-warning"
+                                        onClick={() => handleToggleProjectComplete(project.id, false)}
+                                        title="Reopen project"
+                                      >
+                                        ↺ Reopen
+                                      </button>
+                                    )}
+                                    <button 
+                                      className="btn btn-danger"
+                                      onClick={() => handleDeleteProject(project.id)}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
+              )}
             </>
-          ) : (
+          ) : selectedProject ? (
             // Project Detail View with Tasks
             <>
               <div className="project-detail-header">
@@ -3710,8 +4717,62 @@ export default function Tasks() {
                 </span>
               </div>
 
+              {/* Project Milestones Section */}
+              <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0 }}>🎯 Milestones</h3>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowAddProjectMilestoneModal(true)}
+                  >
+                    ➕ Add Milestone
+                  </button>
+                </div>
+                
+                {!projectMilestones || projectMilestones.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '20px', fontSize: '14px' }}>
+                    <p>No milestones yet. Add milestones to track project phases.</p>
+                  </div>
+                ) : (
+                  <div className="milestones-list">
+                    {projectMilestones.map((milestone) => (
+                      <div 
+                        key={milestone.id} 
+                        className={`milestone-card ${milestone.is_completed ? 'completed' : ''} ${new Date(milestone.target_date) < new Date() && !milestone.is_completed ? 'overdue' : ''}`}
+                      >
+                        <div className="milestone-header">
+                          <input
+                            type="checkbox"
+                            checked={milestone.is_completed}
+                            onChange={() => handleToggleProjectMilestone(milestone.id, !milestone.is_completed)}
+                            style={{ marginRight: '10px' }}
+                          />
+                          <span className="milestone-name">{milestone.name}</span>
+                          <button
+                            className="btn-delete-small"
+                            onClick={() => handleDeleteProjectMilestone(milestone.id)}
+                            title="Delete milestone"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {milestone.description && (
+                          <p className="milestone-description">{milestone.description}</p>
+                        )}
+                        <div className="milestone-date">
+                          📅 Target: {new Date(milestone.target_date).toLocaleDateString()}
+                          {new Date(milestone.target_date) < new Date() && !milestone.is_completed && (
+                            <span style={{ color: '#D13438', marginLeft: '8px' }}>⚠️ Overdue</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="project-tasks-tree">
-                {projectTasks.length === 0 ? (
+                {!projectTasks || projectTasks.length === 0 ? (
                   <div className="empty-state">
                     <p>No tasks yet. Click "Add Project Task" to get started.</p>
                   </div>
@@ -3737,6 +4798,13 @@ export default function Tasks() {
                 )}
               </div>
             </>
+          ) : (
+            <div className="empty-state" style={{ padding: '40px', textAlign: 'center' }}>
+              <p>Project not found or still loading...</p>
+              <button className="btn btn-secondary" onClick={handleBackToProjects}>
+                ← Back to Projects
+              </button>
+            </div>
           )}
         </div>
       ) : activeTab === 'misc' ? (
@@ -4306,9 +5374,24 @@ export default function Tasks() {
                   </thead>
                   <tbody>
                     {timeBasedTasks.map((task, taskIndex) => {
-                      const rowClassName = task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '';
+                      // Check weekly status for completed/NA
+                      const weeklyStatus = weeklyTaskStatuses[task.id];
+                      const isWeeklyCompleted = weeklyStatus?.is_completed;
+                      const isWeeklyNA = weeklyStatus?.is_na;
+                      
+                      const rowClassName = isWeeklyCompleted ? 'completed-row' : isWeeklyNA ? 'na-row' : (task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '');
                       return (
-                        <tr key={task.id} className={rowClassName}>
+                        <tr 
+                          key={task.id} 
+                          className={rowClassName}
+                          style={
+                            isWeeklyCompleted
+                              ? { backgroundColor: '#c6f6d5' } 
+                              : isWeeklyNA
+                                ? { backgroundColor: '#e2e8f0' }
+                                : undefined
+                          }
+                        >
                           <td 
                             className={`col-task sticky-col sticky-col-1 ${hoveredColumn === -1 ? 'column-highlight' : ''}`}
                             onMouseEnter={() => setHoveredColumn(-1)}
@@ -4604,13 +5687,28 @@ export default function Tasks() {
                   </thead>
                   <tbody>
                     {booleanTasks.map((task, taskIndex) => {
-                      const rowClassName = task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '';
+                      // Check weekly status for completed/NA
+                      const weeklyStatus = weeklyTaskStatuses[task.id];
+                      const isWeeklyCompleted = weeklyStatus?.is_completed;
+                      const isWeeklyNA = weeklyStatus?.is_na;
+                      
+                      const rowClassName = isWeeklyCompleted ? 'completed-row' : isWeeklyNA ? 'na-row' : (task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '');
                       // For boolean tasks, store in hour 0
                       const value = getHourlyTime(task.id, 0);
                       const isChecked = value > 0;
                       
                       return (
-                        <tr key={task.id} className={rowClassName}>
+                        <tr 
+                          key={task.id} 
+                          className={rowClassName}
+                          style={
+                            isWeeklyCompleted
+                              ? { backgroundColor: '#c6f6d5' } 
+                              : isWeeklyNA
+                                ? { backgroundColor: '#e2e8f0' }
+                                : undefined
+                          }
+                        >
                           <td className="col-task sticky-col sticky-col-1">
                             <div 
                               className="task-name task-link"
@@ -4693,7 +5791,7 @@ export default function Tasks() {
                       {weekDays.map(day => (
                         <th key={day.index} className="col-hour">{day.label}</th>
                       ))}
-                      <th className="col-status">Status</th>
+                      <th className="col-status">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4742,7 +5840,22 @@ export default function Tasks() {
                           })}
                           
                           <td className="col-status">
-                            {isComplete ? '✓ Complete' : `${totalSpent}/${weeklyTarget}`}
+                            <div className="action-buttons">
+                              <button 
+                                className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                onClick={() => handleWeeklyTaskComplete(task.id)}
+                                title="Mark as completed for this week only"
+                              >
+                                COMPLETED
+                              </button>
+                              <button 
+                                className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                onClick={() => handleWeeklyTaskNA(task.id)}
+                                title="Mark as NA for this week only"
+                              >
+                                NA
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -4772,7 +5885,7 @@ export default function Tasks() {
                       {weekDays.map(day => (
                         <th key={day.index} className="col-hour">{day.label}</th>
                       ))}
-                      <th className="col-status">Status</th>
+                      <th className="col-status">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4783,27 +5896,39 @@ export default function Tasks() {
                         return sum + (getWeeklyTime(task.id, day.index) || 0);
                       }, 0);
                       const daysDone = weekDays.filter(day => getWeeklyTime(task.id, day.index) > 0).length;
+                      
+                      // Check weekly status for completed/NA
+                      const weeklyStatus = weeklyTaskStatuses[task.id];
+                      const isWeeklyCompleted = weeklyStatus?.is_completed;
+                      const isWeeklyNA = weeklyStatus?.is_na;
+                      
                       const isComplete = totalCount >= weeklyTarget;
-                      const rowClassName = isComplete ? 'completed-row' : '';
+                      const rowClassName = isWeeklyCompleted ? 'completed-row' : isWeeklyNA ? 'na-row' : (isComplete ? 'completed-row' : '');
+                      
+                      const bgColor = isWeeklyCompleted ? '#c6f6d5' : isWeeklyNA ? '#e2e8f0' : undefined;
                       
                       return (
-                        <tr key={task.id} className={rowClassName}>
-                          <td className="col-task sticky-col sticky-col-1">
+                        <tr 
+                          key={task.id} 
+                          className={rowClassName}
+                          style={bgColor ? { backgroundColor: bgColor } : undefined}
+                        >
+                          <td className="col-task sticky-col sticky-col-1" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             <div className="task-name">
                               {task.name}
                               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                             </div>
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-2">
+                          <td className="col-time sticky-col sticky-col-2" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             {weeklyTarget} {task.unit}
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-3">
+                          <td className="col-time sticky-col sticky-col-3" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             {totalCount} {task.unit}
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-4">
+                          <td className="col-time sticky-col sticky-col-4" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             {daysDone}/7 days
                           </td>
                           
@@ -4811,7 +5936,7 @@ export default function Tasks() {
                             const dayCount = getWeeklyTime(task.id, day.index);
                             return (
                               <td key={day.index} className="col-hour" style={{ 
-                                backgroundColor: dayCount > 0 ? '#e6ffed' : '#fff',
+                                backgroundColor: bgColor || (dayCount > 0 ? '#e6ffed' : '#fff'),
                                 textAlign: 'center',
                                 fontSize: '12px'
                               }}>
@@ -4820,8 +5945,23 @@ export default function Tasks() {
                             );
                           })}
                           
-                          <td className="col-status">
-                            {isComplete ? '✓ Complete' : `${totalCount}/${weeklyTarget}`}
+                          <td className="col-status" style={bgColor ? { backgroundColor: bgColor } : undefined}>
+                            <div className="action-buttons">
+                              <button 
+                                className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                onClick={() => handleWeeklyTaskComplete(task.id)}
+                                title="Mark as completed for this week only"
+                              >
+                                COMPLETED
+                              </button>
+                              <button 
+                                className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                onClick={() => handleWeeklyTaskNA(task.id)}
+                                title="Mark as NA for this week only"
+                              >
+                                NA
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -4851,7 +5991,7 @@ export default function Tasks() {
                       {weekDays.map(day => (
                         <th key={day.index} className="col-hour">{day.label}</th>
                       ))}
-                      <th className="col-status">Status</th>
+                      <th className="col-status">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -4907,7 +6047,22 @@ export default function Tasks() {
                           })}
                           
                           <td className="col-status">
-                            {isComplete ? '🌟 Perfect Week!' : `${completionRate}%`}
+                            <div className="action-buttons">
+                              <button 
+                                className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                onClick={() => handleWeeklyTaskComplete(task.id)}
+                                title="Mark as completed for this week only"
+                              >
+                                COMPLETED
+                              </button>
+                              <button 
+                                className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                onClick={() => handleWeeklyTaskNA(task.id)}
+                                title="Mark as NA for this week only"
+                              >
+                                NA
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -4933,7 +6088,7 @@ export default function Tasks() {
                     {weekDays.map(day => (
                       <th key={day.index} className="col-hour">{day.label}</th>
                     ))}
-                    <th className="col-status">Status</th>
+                    <th className="col-status">Actions</th>
                   </>
                 ) : activeTab === 'monthly' ? (
                   <>
@@ -4948,7 +6103,7 @@ export default function Tasks() {
                       }
                       return days;
                     })()}
-                    <th className="col-status">Status</th>
+                    <th className="col-status">Actions</th>
                   </>
                 ) : activeTab === 'yearly' ? (
                   <>
@@ -4964,14 +6119,14 @@ export default function Tasks() {
                         </th>
                       ));
                     })()}
-                    <th className="col-status">Status</th>
+                    <th className="col-status">Actions</th>
                   </>
                 ) : (
                   <>
                     <th className="col-time">Allocated</th>
                     {activeTab !== 'today' && <th className="col-time">Spent</th>}
                     {activeTab !== 'today' && <th className="col-time">Remaining</th>}
-                    <th className="col-status">Status</th>
+                    <th className="col-status">Actions</th>
                     {activeTab !== 'today' && <th className="col-due">Due Date</th>}
                   </>
                 )}
@@ -4984,6 +6139,51 @@ export default function Tasks() {
                 const hasMonthlyDailyAggs = activeTab === 'monthly' && hasMonthlyDailyAggregates(task.id);
                 const hasYearlyMonthlyAggs = activeTab === 'yearly' && hasYearlyMonthlyAggregates(task.id);
                 const hasDailyAggregates = hasWeeklyDailyAggregates || hasMonthlyDailyAggs || hasYearlyMonthlyAggs;
+                
+                // Add section headers for weekly/monthly/yearly tabs
+                const shouldShowSectionHeader = (activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') && taskIndex === 0 || 
+                  (taskIndex > 0 && task.task_type !== filteredTasks[taskIndex - 1].task_type);
+                
+                let sectionHeader = null;
+                if (shouldShowSectionHeader && (activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly')) {
+                  const taskTypeCount = filteredTasks.filter(t => t.task_type === task.task_type).length;
+                  const colSpan = activeTab === 'weekly' ? 11 : 
+                                  activeTab === 'monthly' ? (new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate() + 4) : 
+                                  16; // yearly
+                  
+                  let sectionName = '';
+                  let sectionEmoji = '';
+                  let sectionClass = '';
+                  
+                  if (task.task_type === TaskType.TIME) {
+                    sectionName = 'Time-Based Tasks';
+                    sectionEmoji = '⏱️';
+                    sectionClass = 'time-based';
+                  } else if (task.task_type === TaskType.COUNT) {
+                    sectionName = 'Count-Based Tasks';
+                    sectionEmoji = '🔢';
+                    sectionClass = 'count-based';
+                  } else if (task.task_type === TaskType.BOOLEAN) {
+                    sectionName = 'Yes/No Tasks';
+                    sectionEmoji = '✅';
+                    sectionClass = 'boolean-based';
+                  } else {
+                    sectionName = 'Other Tasks';
+                    sectionEmoji = '📋';
+                  }
+                  
+                  sectionHeader = (
+                    <tr key={`section-${task.task_type}-${taskIndex}`} className="task-type-section-header">
+                      <td colSpan={colSpan} className={`section-header-cell ${sectionClass}`}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '700', fontSize: '14px', padding: '8px 0' }}>
+                          <span style={{ fontSize: '18px' }}>{sectionEmoji}</span>
+                          <span>{sectionName}</span>
+                          <span style={{ fontSize: '12px', color: '#666', fontWeight: '400' }}>({taskTypeCount} tasks)</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
                 
                 // Get row color class for weekly/monthly/yearly view
                 const weeklyColorClass = getWeeklyRowColorClass(task);
@@ -5004,7 +6204,19 @@ export default function Tasks() {
                 const rowClassName = isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted ? 'completed-row' : isWeeklyNA || isMonthlyNA || isYearlyNA ? 'na-row' : (task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '');
                 
                 return (
-                <tr key={task.id} className={rowClassName}>
+                <React.Fragment key={`task-fragment-${task.id}`}>
+                {sectionHeader}
+                <tr 
+                  key={task.id} 
+                  className={rowClassName}
+                  style={
+                    isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted 
+                      ? { backgroundColor: '#c6f6d5' } 
+                      : isWeeklyNA || isMonthlyNA || isYearlyNA 
+                        ? { backgroundColor: '#e2e8f0' }
+                        : undefined
+                  }
+                >
                   <td className={`col-task sticky-col sticky-col-1 ${colorClass}`}>
                     <div 
                       className={`task-name ${hasDailyAggregates ? '' : 'task-link'}`}
@@ -5221,8 +6433,9 @@ export default function Tasks() {
                         const isBoolean = task.task_type === TaskType.BOOLEAN;
                         // If task has ANY daily aggregates, disable ALL days for this task
                         const isTaskFromDaily = hasDailyAggregates;
+                        const cellColorClass = getWeeklyCellColorClass(task, day.index);
                         return (
-                          <td key={day.index} className={`col-hour ${colorClass}`}>
+                          <td key={day.index} className={`col-hour ${cellColorClass || colorClass}`}>
                             {isBoolean ? (
                               <input
                                 type="checkbox"
@@ -5293,30 +6506,24 @@ export default function Tasks() {
                           </td>
                         );
                       })}
-                      {/* Status column at the end - Weekly specific status */}
+                      {/* Actions column at the end - Always show buttons like daily tab */}
                       <td className="col-status">
-                        {weeklyTaskStatuses[task.id]?.is_completed ? (
-                          <span className="completed-text">✓ Completed (Week)</span>
-                        ) : weeklyTaskStatuses[task.id]?.is_na ? (
-                          <span className="na-text">NA (Week)</span>
-                        ) : (
-                          <div className="action-buttons">
-                            <button 
-                              className="btn-complete"
-                              onClick={() => handleWeeklyTaskComplete(task.id)}
-                              title="Mark as completed for this week only"
-                            >
-                              Completed
-                            </button>
-                            <button 
-                              className="btn-na"
-                              onClick={() => handleWeeklyTaskNA(task.id)}
-                              title="Mark as NA for this week only"
-                            >
-                              NA
-                            </button>
-                          </div>
-                        )}
+                        <div className="action-buttons">
+                          <button 
+                            className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                            onClick={() => handleWeeklyTaskComplete(task.id)}
+                            title="Mark as completed for this week only"
+                          >
+                            COMPLETED
+                          </button>
+                          <button 
+                            className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                            onClick={() => handleWeeklyTaskNA(task.id)}
+                            title="Mark as NA for this week only"
+                          >
+                            NA
+                          </button>
+                        </div>
                       </td>
                     </>
                   ) : activeTab === 'monthly' ? (
@@ -5433,8 +6640,9 @@ export default function Tasks() {
                         const isTaskFromDaily = hasDailyAggregates;
                         
                         for (let day = 1; day <= daysInMonth; day++) {
+                          const cellColorClass = getMonthlyCellColorClass(task, day);
                           days.push(
-                            <td key={day} className={`col-hour ${colorClass}`}>
+                            <td key={day} className={`col-hour ${cellColorClass || colorClass}`}>
                               {isBoolean ? (
                                 <input
                                   type="checkbox"
@@ -5507,30 +6715,24 @@ export default function Tasks() {
                         }
                         return days;
                       })()}
-                      {/* Status column at the end - Monthly specific status */}
+                      {/* Actions column at the end - Always show buttons like daily tab */}
                       <td className="col-status">
-                        {monthlyTaskStatuses[task.id]?.is_completed ? (
-                          <span className="completed-text">✓ Completed (Month)</span>
-                        ) : monthlyTaskStatuses[task.id]?.is_na ? (
-                          <span className="na-text">NA (Month)</span>
-                        ) : (
-                          <div className="action-buttons">
-                            <button 
-                              className="btn-complete"
-                              onClick={() => handleMonthlyTaskComplete(task.id)}
-                              title="Mark as completed for this month only"
-                            >
-                              Completed
-                            </button>
-                            <button 
-                              className="btn-na"
-                              onClick={() => handleMonthlyTaskNA(task.id)}
-                              title="Mark as NA for this month only"
-                            >
-                              NA
-                            </button>
-                          </div>
-                        )}
+                        <div className="action-buttons">
+                          <button 
+                            className={`btn-complete ${monthlyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                            onClick={() => handleMonthlyTaskComplete(task.id)}
+                            title="Mark as completed for this month only"
+                          >
+                            COMPLETED
+                          </button>
+                          <button 
+                            className={`btn-na ${monthlyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                            onClick={() => handleMonthlyTaskNA(task.id)}
+                            title="Mark as NA for this month only"
+                          >
+                            NA
+                          </button>
+                        </div>
                       </td>
                     </>
                   ) : activeTab === 'yearly' ? (
@@ -5713,30 +6915,24 @@ export default function Tasks() {
                         }
                         return months;
                       })()}
-                      {/* Status column at the end - Yearly specific status */}
+                      {/* Actions column at the end - Always show buttons like daily tab */}
                       <td className="col-status">
-                        {yearlyTaskStatuses[task.id]?.is_completed ? (
-                          <span className="completed-text">✓ Completed (Year)</span>
-                        ) : yearlyTaskStatuses[task.id]?.is_na ? (
-                          <span className="na-text">NA (Year)</span>
-                        ) : (
-                          <div className="action-buttons">
-                            <button 
-                              className="btn-complete"
-                              onClick={() => handleYearlyStatusChange(task.id, true, false)}
-                              title="Mark as completed for this year only"
-                            >
-                              Completed
-                            </button>
-                            <button 
-                              className="btn-na"
-                              onClick={() => handleYearlyStatusChange(task.id, false, true)}
-                              title="Mark as NA for this year only"
-                            >
-                              NA
-                            </button>
-                          </div>
-                        )}
+                        <div className="action-buttons">
+                          <button 
+                            className={`btn-complete ${yearlyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                            onClick={() => handleYearlyStatusChange(task.id, true, false)}
+                            title="Mark as completed for this year only"
+                          >
+                            COMPLETED
+                          </button>
+                          <button 
+                            className={`btn-na ${yearlyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                            onClick={() => handleYearlyStatusChange(task.id, false, true)}
+                            title="Mark as NA for this year only"
+                          >
+                            NA
+                          </button>
+                        </div>
                       </td>
                     </>
                   ) : (
@@ -5778,6 +6974,7 @@ export default function Tasks() {
                     </>
                   )}
                 </tr>
+                </React.Fragment>
               );
               })}
             </tbody>
@@ -6934,6 +8131,93 @@ export default function Tasks() {
                   </button>
                   <button type="submit" className="btn btn-primary">
                     Create Project
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Milestone to Project Modal */}
+      {showAddProjectMilestoneModal && selectedProject && (
+        <div className="modal-overlay" onClick={() => setShowAddProjectMilestoneModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Milestone to {selectedProject.name}</h2>
+              <button className="btn-close" onClick={() => setShowAddProjectMilestoneModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                
+                await handleCreateProjectMilestone({
+                  name: formData.get('name'),
+                  description: formData.get('description') || null,
+                  target_date: formData.get('target_date'),
+                  order: parseInt(formData.get('order') as string) || 0
+                });
+              }}>
+                <div className="form-group">
+                  <label htmlFor="milestone-name">Milestone Name *</label>
+                  <input
+                    type="text"
+                    id="milestone-name"
+                    name="name"
+                    className="form-control"
+                    required
+                    placeholder="e.g., Design Phase, Development Complete"
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="milestone-description">Description</label>
+                  <textarea
+                    id="milestone-description"
+                    name="description"
+                    className="form-control"
+                    rows={2}
+                    placeholder="What needs to be completed for this milestone?"
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="milestone-date">Target Date *</label>
+                  <input
+                    type="date"
+                    id="milestone-date"
+                    name="target_date"
+                    className="form-control"
+                    required
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="milestone-order">Order</label>
+                  <input
+                    type="number"
+                    id="milestone-order"
+                    name="order"
+                    className="form-control"
+                    defaultValue={0}
+                    min={0}
+                  />
+                  <small className="form-text">
+                    Order in which milestones appear (lower numbers first)
+                  </small>
+                </div>
+                
+                <div className="modal-footer">
+                  <button 
+                    type="button"
+                    className="btn btn-secondary" 
+                    onClick={() => setShowAddProjectMilestoneModal(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Add Milestone
                   </button>
                 </div>
               </form>

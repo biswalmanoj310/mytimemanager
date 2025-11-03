@@ -23,6 +23,7 @@ class ProjectCreate(BaseModel):
     pillar_id: Optional[int] = None
     category_id: Optional[int] = None
     goal_id: Optional[int] = None  # Link to Life Goal
+    related_wish_id: Optional[int] = None  # Link to Dream/Wish
     start_date: Optional[date] = None
     target_completion_date: Optional[date] = None
 
@@ -32,6 +33,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     pillar_id: Optional[int] = None
     category_id: Optional[int] = None
+    related_wish_id: Optional[int] = None
     start_date: Optional[date] = None
     target_completion_date: Optional[date] = None
     status: Optional[str] = None
@@ -58,6 +60,21 @@ class ProjectTaskUpdate(BaseModel):
     order: Optional[int] = None
 
 
+class MilestoneCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    target_date: date
+    order: int = 0
+
+
+class MilestoneUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    target_date: Optional[date] = None
+    is_completed: Optional[bool] = None
+    order: Optional[int] = None
+
+
 # ============ Project Routes ============
 
 @router.get("/")
@@ -68,7 +85,7 @@ def get_projects(
     """Get all projects"""
     projects = project_service.get_all_projects(db, include_completed)
     
-    # Add progress to each project
+    # Add progress and milestones to each project
     result = []
     for project in projects:
         project_dict = {
@@ -85,7 +102,8 @@ def get_projects(
             "completed_at": project.completed_at,
             "created_at": project.created_at,
             "updated_at": project.updated_at,
-            "progress": project_service.get_project_progress(db, project.id)
+            "progress": project_service.get_project_progress(db, project.id),
+            "milestone_progress": project_service.get_milestone_progress(db, project.id)
         }
         result.append(project_dict)
     
@@ -97,13 +115,15 @@ def get_project(
     project_id: int,
     db: Session = Depends(get_db)
 ):
-    """Get project by ID with tasks"""
+    """Get project by ID with tasks and milestones"""
     project = project_service.get_project_by_id(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     
     tasks = project_service.get_project_tasks(db, project_id)
+    milestones = project_service.get_project_milestones(db, project_id)
     progress = project_service.get_project_progress(db, project_id)
+    milestone_progress = project_service.get_milestone_progress(db, project_id)
     
     return {
         "id": project.id,
@@ -136,7 +156,23 @@ def get_project(
             }
             for task in tasks
         ],
-        "progress": progress
+        "milestones": [
+            {
+                "id": milestone.id,
+                "project_id": milestone.project_id,
+                "name": milestone.name,
+                "description": milestone.description,
+                "target_date": milestone.target_date.isoformat() if milestone.target_date else None,
+                "is_completed": milestone.is_completed,
+                "completed_at": milestone.completed_at,
+                "order": milestone.order,
+                "created_at": milestone.created_at,
+                "updated_at": milestone.updated_at
+            }
+            for milestone in milestones
+        ],
+        "progress": progress,
+        "milestone_progress": milestone_progress
     }
 
 
@@ -181,30 +217,34 @@ def update_project(
     db: Session = Depends(get_db)
 ):
     """Update a project"""
-    updated_project = project_service.update_project(
-        db,
-        project_id,
-        **project.dict(exclude_unset=True)
-    )
-    
-    if not updated_project:
-        raise HTTPException(status_code=404, detail="Project not found")
-    
-    return {
-        "id": updated_project.id,
-        "name": updated_project.name,
-        "description": updated_project.description,
-        "pillar_id": updated_project.pillar_id,
-        "category_id": updated_project.category_id,
-        "start_date": updated_project.start_date.date() if updated_project.start_date else None,
-        "target_completion_date": updated_project.target_completion_date.date() if updated_project.target_completion_date else None,
-        "status": updated_project.status,
-        "is_active": updated_project.is_active,
-        "is_completed": updated_project.is_completed,
-        "completed_at": updated_project.completed_at,
-        "created_at": updated_project.created_at,
-        "updated_at": updated_project.updated_at
-    }
+    try:
+        updated_project = project_service.update_project(
+            db,
+            project_id,
+            **project.dict(exclude_unset=True)
+        )
+        
+        if not updated_project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        return {
+            "id": updated_project.id,
+            "name": updated_project.name,
+            "description": updated_project.description,
+            "pillar_id": updated_project.pillar_id,
+            "category_id": updated_project.category_id,
+            "start_date": updated_project.start_date.date() if updated_project.start_date else None,
+            "target_completion_date": updated_project.target_completion_date.date() if updated_project.target_completion_date else None,
+            "status": updated_project.status,
+            "is_active": updated_project.is_active,
+            "is_completed": updated_project.is_completed,
+            "completed_at": updated_project.completed_at,
+            "created_at": updated_project.created_at,
+            "updated_at": updated_project.updated_at
+        }
+    except ValueError as e:
+        # Handle validation errors (e.g., trying to complete project with pending tasks)
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.delete("/{project_id}")
@@ -330,6 +370,110 @@ def delete_task(
     if not success:
         raise HTTPException(status_code=404, detail="Task not found")
     return {"message": "Task deleted successfully"}
+
+
+# ============ Project Milestone Routes ============
+
+@router.get("/{project_id}/milestones")
+def get_milestones(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get all milestones for a project"""
+    milestones = project_service.get_project_milestones(db, project_id)
+    
+    return [
+        {
+            "id": milestone.id,
+            "project_id": milestone.project_id,
+            "name": milestone.name,
+            "description": milestone.description,
+            "target_date": milestone.target_date.isoformat() if milestone.target_date else None,
+            "is_completed": milestone.is_completed,
+            "completed_at": milestone.completed_at,
+            "order": milestone.order,
+            "created_at": milestone.created_at,
+            "updated_at": milestone.updated_at
+        }
+        for milestone in milestones
+    ]
+
+
+@router.post("/{project_id}/milestones")
+def create_milestone(
+    project_id: int,
+    milestone: MilestoneCreate,
+    db: Session = Depends(get_db)
+):
+    """Create a new milestone for a project"""
+    # Verify project exists
+    project = project_service.get_project_by_id(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    new_milestone = project_service.create_milestone(
+        db,
+        project_id=project_id,
+        name=milestone.name,
+        description=milestone.description,
+        target_date=milestone.target_date,
+        order=milestone.order
+    )
+    
+    return {
+        "id": new_milestone.id,
+        "project_id": new_milestone.project_id,
+        "name": new_milestone.name,
+        "description": new_milestone.description,
+        "target_date": new_milestone.target_date.isoformat() if new_milestone.target_date else None,
+        "is_completed": new_milestone.is_completed,
+        "completed_at": new_milestone.completed_at,
+        "order": new_milestone.order,
+        "created_at": new_milestone.created_at,
+        "updated_at": new_milestone.updated_at
+    }
+
+
+@router.put("/milestones/{milestone_id}")
+def update_milestone(
+    milestone_id: int,
+    milestone: MilestoneUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a milestone"""
+    updated_milestone = project_service.update_milestone(
+        db,
+        milestone_id,
+        **milestone.dict(exclude_unset=True)
+    )
+    
+    if not updated_milestone:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    
+    return {
+        "id": updated_milestone.id,
+        "project_id": updated_milestone.project_id,
+        "name": updated_milestone.name,
+        "description": updated_milestone.description,
+        "target_date": updated_milestone.target_date.isoformat() if updated_milestone.target_date else None,
+        "is_completed": updated_milestone.is_completed,
+        "completed_at": updated_milestone.completed_at,
+        "order": updated_milestone.order,
+        "created_at": updated_milestone.created_at,
+        "updated_at": updated_milestone.updated_at
+    }
+
+
+@router.delete("/milestones/{milestone_id}")
+def delete_milestone(
+    milestone_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a milestone"""
+    success = project_service.delete_milestone(db, milestone_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    return {"message": "Milestone deleted successfully"}
 
 
 # ============ Special Routes ============

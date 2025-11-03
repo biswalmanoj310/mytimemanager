@@ -17,6 +17,11 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Import all models to ensure they're registered with SQLAlchemy
+# This prevents relationship resolution errors
+from app.models import models  # noqa: F401
+from app.models import goal  # noqa: F401
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -59,7 +64,7 @@ async def health_check():
 
 
 # Import and include routers
-from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar, comparative_analytics, daily_time, weekly_time, monthly_time, yearly_time, one_time_tasks, projects, life_goals, streaks, completed, misc_tasks, habits, wishes
+from app.routes import pillars, categories, sub_categories, tasks, goals, dashboard, time_entries, analytics, calendar, comparative_analytics, daily_time, weekly_time, monthly_time, yearly_time, one_time_tasks, projects, life_goals, streaks, completed, misc_tasks, habits, wishes, challenges
 
 app.include_router(pillars.router, prefix="/api/pillars", tags=["Pillars"])
 app.include_router(categories.router, prefix="/api/categories", tags=["Categories"])
@@ -83,6 +88,7 @@ app.include_router(streaks.router)
 app.include_router(completed.router)
 app.include_router(habits.router)
 app.include_router(wishes.router)
+app.include_router(challenges.router)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
-from app.models.models import Project, ProjectTask
+from app.models.models import Project, ProjectTask, ProjectMilestone
 
 
 # ============ Project CRUD Operations ============
@@ -61,6 +61,12 @@ def update_project(
     if not project:
         return None
     
+    # IMPORTANT: Prevent completing project if there are pending tasks
+    if 'is_completed' in kwargs and kwargs['is_completed']:
+        progress = get_project_progress(db, project_id)
+        if progress['pending_tasks'] > 0:
+            raise ValueError(f"Cannot complete project: {progress['pending_tasks']} task(s) still pending. Complete all tasks first.")
+    
     for key, value in kwargs.items():
         if hasattr(project, key):
             # Convert dates to datetime
@@ -85,7 +91,9 @@ def delete_project(db: Session, project_id: int) -> bool:
 
 
 def get_project_progress(db: Session, project_id: int) -> Dict:
-    """Calculate project progress"""
+    """Calculate project progress including overdue tasks"""
+    from datetime import date as date_type
+    
     tasks = db.query(ProjectTask).filter(
         ProjectTask.project_id == project_id
     ).all()
@@ -93,11 +101,22 @@ def get_project_progress(db: Session, project_id: int) -> Dict:
     total_tasks = len(tasks)
     completed_tasks = sum(1 for task in tasks if task.is_completed)
     
+    # Calculate overdue tasks (incomplete tasks past their due date)
+    today = date_type.today()
+    overdue_tasks = sum(
+        1 for task in tasks 
+        if not task.is_completed 
+        and task.due_date 
+        and task.due_date.date() < today
+    )
+    
     progress_percentage = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
     
     return {
         "total_tasks": total_tasks,
         "completed_tasks": completed_tasks,
+        "pending_tasks": total_tasks - completed_tasks,
+        "overdue_tasks": overdue_tasks,
         "progress_percentage": round(progress_percentage, 1)
     }
 
@@ -140,6 +159,16 @@ def create_project_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    
+    # IMPORTANT: If adding a pending task to a completed project, reopen the project
+    project = get_project_by_id(db, project_id)
+    if project and project.is_completed:
+        project.is_completed = False
+        project.completed_at = None
+        project.status = "in_progress"  # Reset status when reopening
+        project.updated_at = datetime.now()
+        db.commit()
+    
     return task
 
 
@@ -168,6 +197,16 @@ def update_project_task(
     task.updated_at = datetime.now()
     db.commit()
     db.refresh(task)
+    
+    # IMPORTANT: If marking task as incomplete and project is completed, reopen the project
+    if 'is_completed' in kwargs and not kwargs['is_completed']:
+        project = get_project_by_id(db, task.project_id)
+        if project and project.is_completed:
+            project.is_completed = False
+            project.completed_at = None
+            project.status = "in_progress"  # Reset status when reopening
+            project.updated_at = datetime.now()
+            db.commit()
     
     # Auto-update project status
     _update_project_status(db, task.project_id)
@@ -199,15 +238,20 @@ def _update_project_status(db: Session, project_id: int):
             status_changed = True
     elif completed_count > 0 and completed_count < total_count:
         # Some tasks completed - mark as in_progress (unless on_hold)
-        if project.status == 'not_started' or project.status == 'completed':
+        if project.status == 'not_started':
+            project.status = 'in_progress'
+            status_changed = True
+        # If project was marked completed but still has pending tasks, revert status
+        if project.is_completed:
+            project.is_completed = False
+            project.completed_at = None
             project.status = 'in_progress'
             status_changed = True
     elif completed_count == total_count and total_count > 0:
-        # All tasks completed - mark as completed
-        if not project.is_completed:
-            project.status = 'completed'
-            project.is_completed = True
-            project.completed_at = datetime.now()
+        # All tasks completed - update status to 'ready_for_completion' but DON'T auto-complete
+        # Project must be manually marked as completed
+        if project.status not in ['completed', 'on_hold'] and not project.is_completed:
+            project.status = 'in_progress'  # Keep as in_progress, ready for manual completion
             status_changed = True
     
     if status_changed:
@@ -296,3 +340,97 @@ def get_upcoming_tasks(db: Session, days: int = 7) -> List[ProjectTask]:
             ProjectTask.is_completed == False
         )
     ).order_by(ProjectTask.due_date).all()
+
+
+# ============ Project Milestone Operations ============
+
+def get_project_milestones(db: Session, project_id: int) -> List[ProjectMilestone]:
+    """Get all milestones for a project"""
+    return db.query(ProjectMilestone).filter(
+        ProjectMilestone.project_id == project_id
+    ).order_by(ProjectMilestone.order, ProjectMilestone.target_date).all()
+
+
+def get_milestone_by_id(db: Session, milestone_id: int) -> Optional[ProjectMilestone]:
+    """Get milestone by ID"""
+    return db.query(ProjectMilestone).filter(ProjectMilestone.id == milestone_id).first()
+
+
+def create_milestone(
+    db: Session,
+    project_id: int,
+    name: str,
+    target_date: date,
+    description: Optional[str] = None,
+    order: int = 0
+) -> ProjectMilestone:
+    """Create a new milestone"""
+    milestone = ProjectMilestone(
+        project_id=project_id,
+        name=name,
+        description=description,
+        target_date=target_date,
+        order=order,
+        is_completed=False
+    )
+    db.add(milestone)
+    db.commit()
+    db.refresh(milestone)
+    return milestone
+
+
+def update_milestone(
+    db: Session,
+    milestone_id: int,
+    **kwargs
+) -> Optional[ProjectMilestone]:
+    """Update a milestone"""
+    milestone = get_milestone_by_id(db, milestone_id)
+    if not milestone:
+        return None
+    
+    # Handle completion
+    if 'is_completed' in kwargs:
+        if kwargs['is_completed'] and not milestone.is_completed:
+            kwargs['completed_at'] = datetime.now()
+        elif not kwargs['is_completed'] and milestone.is_completed:
+            kwargs['completed_at'] = None
+    
+    for key, value in kwargs.items():
+        if hasattr(milestone, key):
+            setattr(milestone, key, value)
+    
+    db.commit()
+    db.refresh(milestone)
+    return milestone
+
+
+def delete_milestone(db: Session, milestone_id: int) -> bool:
+    """Delete a milestone"""
+    milestone = get_milestone_by_id(db, milestone_id)
+    if not milestone:
+        return False
+    db.delete(milestone)
+    db.commit()
+    return True
+
+
+def get_milestone_progress(db: Session, project_id: int) -> Dict:
+    """Get milestone progress for a project"""
+    milestones = get_project_milestones(db, project_id)
+    
+    total = len(milestones)
+    completed = sum(1 for m in milestones if m.is_completed)
+    pending = total - completed
+    
+    # Count overdue milestones
+    today = datetime.now().date()
+    overdue = sum(1 for m in milestones if not m.is_completed and m.target_date < today)
+    
+    return {
+        "total_milestones": total,
+        "completed_milestones": completed,
+        "pending_milestones": pending,
+        "overdue_milestones": overdue,
+        "progress_percentage": round((completed / total * 100) if total > 0 else 0, 1)
+    }

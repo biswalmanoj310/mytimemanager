@@ -8,8 +8,12 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
 import enum
+from typing import TYPE_CHECKING
 
 from app.database.config import Base
+
+if TYPE_CHECKING:
+    from app.models.goal import LifeGoal
 
 
 # Enums for consistent values
@@ -182,6 +186,7 @@ class Task(Base):
     # Goal linkage
     goal_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
     is_part_of_goal = Column(Boolean, default=False)
+    related_wish_id = Column(Integer, ForeignKey("wishes.id", ondelete="SET NULL"), nullable=True)  # Link to Dream/Wish
     
     # Motivation
     why_reason = Column(Text, nullable=True)  # Why this task is important
@@ -478,6 +483,7 @@ class Project(Base):
     pillar_id = Column(Integer, ForeignKey("pillars.id", ondelete="SET NULL"), nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     goal_id = Column(Integer, ForeignKey("life_goals.id", ondelete="SET NULL"), nullable=True)  # Link to Life Goal
+    related_wish_id = Column(Integer, ForeignKey("wishes.id", ondelete="SET NULL"), nullable=True)  # Link to Dream/Wish
     start_date = Column(DateTime(timezone=True), nullable=True)
     target_completion_date = Column(DateTime(timezone=True), nullable=True)
     status = Column(String(20), nullable=False, default="not_started")  # not_started, in_progress, completed, on_hold
@@ -809,8 +815,15 @@ class Wish(Base):
     related_goal_id = Column(Integer, ForeignKey('life_goals.id', ondelete='SET NULL'), nullable=True)
     
     # Status tracking
-    status = Column(String(50), default='dreaming', index=True)  # dreaming, exploring, planning, ready_to_commit, converted, archived
+    status = Column(String(50), default='dreaming', index=True)  # dreaming, exploring, ready, moved_to_goal, achieved, released
     converted_to_goal_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Dream lifecycle fields (Migration 014)
+    achieved_at = Column(DateTime(timezone=True), nullable=True)
+    released_at = Column(DateTime(timezone=True), nullable=True)
+    release_reason = Column(Text, nullable=True)
+    achievement_notes = Column(Text, nullable=True)
+    linked_goal_id = Column(Integer, nullable=True)
     
     # Metadata
     is_active = Column(Boolean, default=True, index=True)
@@ -821,12 +834,45 @@ class Wish(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    pillar = relationship("Pillar", foreign_keys=[pillar_id])
-    category = relationship("Category", foreign_keys=[category_id])
-    related_goal = relationship("LifeGoal", foreign_keys=[related_goal_id])
+    pillar_relation = relationship("Pillar", foreign_keys=[pillar_id])
+    category_relation = relationship("Category", foreign_keys=[category_id])
+    related_goal_relation = relationship("LifeGoal", foreign_keys=[related_goal_id])
     reflections = relationship("WishReflection", back_populates="wish", cascade="all, delete-orphan")
     exploration_steps = relationship("WishExplorationStep", back_populates="wish", cascade="all, delete-orphan")
     inspirations = relationship("WishInspiration", back_populates="wish", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        """Convert wish to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'title': self.title,
+            'description': self.description,
+            'category': self.category,
+            'dream_type': self.dream_type,
+            'estimated_timeframe': self.estimated_timeframe,
+            'estimated_cost': self.estimated_cost,
+            'priority': self.priority,
+            'why_important': self.why_important,
+            'emotional_impact': self.emotional_impact,
+            'life_area': self.life_area,
+            'image_url': self.image_url,
+            'inspiration_notes': self.inspiration_notes,
+            'pillar_id': self.pillar_id,
+            'category_id': self.category_id,
+            'related_goal_id': self.related_goal_id,
+            'status': self.status,
+            'converted_to_goal_at': self.converted_to_goal_at.isoformat() if self.converted_to_goal_at else None,
+            'achieved_at': self.achieved_at.isoformat() if self.achieved_at else None,
+            'released_at': self.released_at.isoformat() if self.released_at else None,
+            'release_reason': self.release_reason,
+            'achievement_notes': self.achievement_notes,
+            'linked_goal_id': self.linked_goal_id,
+            'is_active': self.is_active,
+            'is_private': self.is_private,
+            'tags': self.tags,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
 
     def __repr__(self):
         return f"<Wish(id={self.id}, title='{self.title}', status='{self.status}')>"
@@ -903,3 +949,109 @@ class WishInspiration(Base):
 
     def __repr__(self):
         return f"<WishInspiration(wish_id={self.wish_id}, type='{self.inspiration_type}')>"
+
+
+class Challenge(Base):
+    """
+    Time-bound personal challenges (7-30 days)
+    Fun experiments to build new behaviors
+    """
+    __tablename__ = "challenges"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    challenge_type = Column(String(50), nullable=False)  # daily_streak, count_based, accumulation
+    
+    # Challenge parameters
+    start_date = Column(Date, nullable=False, index=True)
+    end_date = Column(Date, nullable=False, index=True)
+    target_days = Column(Integer, nullable=True)  # For daily_streak
+    target_count = Column(Integer, nullable=True)  # For count_based
+    target_value = Column(Float, nullable=True)  # For accumulation
+    unit = Column(String(50), nullable=True)  # fruits, treks, km, pages, etc.
+    
+    # Tracking
+    current_streak = Column(Integer, default=0)
+    longest_streak = Column(Integer, default=0)
+    completed_days = Column(Integer, default=0)
+    current_count = Column(Integer, default=0)
+    current_value = Column(Float, default=0.0)
+    
+    # Status
+    status = Column(String(20), default='active', index=True)  # active, completed, failed, abandoned
+    is_completed = Column(Boolean, default=False, index=True)
+    completion_date = Column(DateTime(timezone=True), nullable=True)
+    
+    # Gamification
+    difficulty = Column(String(20), nullable=True)  # easy, medium, hard
+    reward = Column(Text, nullable=True)
+    why_reason = Column(Text, nullable=True)
+    
+    # Links
+    pillar_id = Column(Integer, ForeignKey('pillars.id', ondelete='SET NULL'), nullable=True, index=True)
+    can_graduate_to_habit = Column(Boolean, default=False)
+    graduated_habit_id = Column(Integer, ForeignKey('habits.id', ondelete='SET NULL'), nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    pillar = relationship("Pillar")
+    entries = relationship("ChallengeEntry", back_populates="challenge", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<Challenge(id={self.id}, name='{self.name}', type='{self.challenge_type}')>"
+
+
+class ChallengeEntry(Base):
+    """
+    Daily entries for challenge tracking
+    """
+    __tablename__ = "challenge_entries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    challenge_id = Column(Integer, ForeignKey('challenges.id', ondelete='CASCADE'), nullable=False, index=True)
+    entry_date = Column(Date, nullable=False, index=True)
+    
+    # Entry data
+    is_completed = Column(Boolean, default=False, index=True)
+    count_value = Column(Integer, default=0)
+    numeric_value = Column(Float, default=0.0)
+    
+    # Optional
+    note = Column(Text, nullable=True)
+    mood = Column(String(20), nullable=True)  # great, good, okay, struggled
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    challenge = relationship("Challenge", back_populates="entries")
+
+    def __repr__(self):
+        return f"<ChallengeEntry(challenge_id={self.challenge_id}, date={self.entry_date})>"
+
+
+class ProjectMilestone(Base):
+    """
+    Milestones for project phase tracking
+    """
+    __tablename__ = "project_milestones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete='CASCADE'), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    target_date = Column(Date, nullable=False, index=True)
+    is_completed = Column(Boolean, default=False, index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    order = Column(Integer, default=0)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    project = relationship("Project")
+
+    def __repr__(self):
+        return f"<ProjectMilestone(project_id={self.project_id}, name='{self.name}')>"
