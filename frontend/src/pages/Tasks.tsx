@@ -131,8 +131,8 @@ export default function Tasks() {
   // Selected week start date for weekly tab
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
     const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday (0=Sun, so -6; else +1)
+    const day = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday (if Sunday, go back 6 days)
     return new Date(today.setDate(diff));
   });
   const [weeklySaveTimeout, setWeeklySaveTimeout] = useState<number | null>(null);
@@ -146,7 +146,8 @@ export default function Tasks() {
   // Focused cell state (for keyboard navigation highlighting)
   const [focusedCell, setFocusedCell] = useState<{ row: number; col: number } | null>(null);
   // Needs Attention section state
-  const [showNeedsAttention, setShowNeedsAttention] = useState(true);
+  const [showNeedsAttentionWeekly, setShowNeedsAttentionWeekly] = useState(true);
+  const [showNeedsAttentionMonthly, setShowNeedsAttentionMonthly] = useState(true);
   
   // Monthly tab state - key format: "taskId-dayOfMonth" (1-31)
   const [monthlyEntries, setMonthlyEntries] = useState<Record<string, number>>({});
@@ -682,7 +683,29 @@ export default function Tasks() {
 
   const handleTaskComplete = async (taskId: number) => {
     try {
+      // Find the task to check its frequency
+      const task = tasks.find(t => t.id === taskId);
+      
+      // Mark task as globally completed
       await api.post(`/api/tasks/${taskId}/complete`, {});
+      
+      // If this is a DAILY task, also mark it complete for current week and month
+      // This ensures it doesn't reappear in Weekly/Monthly tabs next period
+      if (task && task.follow_up_frequency === 'daily') {
+        try {
+          // Mark complete for current week
+          const weekDateStr = formatDateForInput(selectedWeekStart);
+          await api.post(`/api/weekly-time/status/${taskId}/complete?week_start_date=${weekDateStr}`, {});
+          
+          // Mark complete for current month
+          const monthDateStr = formatDateForInput(selectedMonthStart);
+          await api.post(`/api/monthly-time/status/${taskId}/complete?month_start_date=${monthDateStr}`, {});
+        } catch (statusErr) {
+          console.warn('Failed to mark weekly/monthly status:', statusErr);
+          // Don't fail the whole operation if status marking fails
+        }
+      }
+      
       // Reload tasks to get updated data
       loadTasks();
     } catch (err: any) {
@@ -694,8 +717,29 @@ export default function Tasks() {
 
   const handleTaskNA = async (taskId: number) => {
     try {
-      // Mark as inactive for NA status
+      // Find the task to check its frequency
+      const task = tasks.find(t => t.id === taskId);
+      
+      // Mark task as globally NA (inactive)
       await api.put(`/api/tasks/${taskId}`, { is_active: false });
+      
+      // If this is a DAILY task, also mark it NA for current week and month
+      // This ensures it doesn't reappear in Weekly/Monthly tabs next period
+      if (task && task.follow_up_frequency === 'daily') {
+        try {
+          // Mark NA for current week
+          const weekDateStr = formatDateForInput(selectedWeekStart);
+          await api.post(`/api/weekly-time/status/${taskId}/na?week_start_date=${weekDateStr}`, {});
+          
+          // Mark NA for current month
+          const monthDateStr = formatDateForInput(selectedMonthStart);
+          await api.post(`/api/monthly-time/status/${taskId}/na?month_start_date=${monthDateStr}`, {});
+        } catch (statusErr) {
+          console.warn('Failed to mark weekly/monthly NA status:', statusErr);
+          // Don't fail the whole operation if status marking fails
+        }
+      }
+      
       // Reload tasks to get updated data
       loadTasks();
     } catch (err: any) {
@@ -902,7 +946,7 @@ export default function Tasks() {
   // Generate week days with dates
   const generateWeekDays = (weekStart: Date) => {
     const days = [];
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
     for (let i = 0; i < 7; i++) {
       const date = new Date(weekStart);
@@ -1189,8 +1233,8 @@ export default function Tasks() {
   // Go to current week
   const goToCurrentWeek = () => {
     const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+    const day = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday (if Sunday, go back 6 days)
     const currentWeek = new Date(today.setDate(diff));
     setSelectedWeekStart(currentWeek);
     loadWeeklyEntries(currentWeek);
@@ -2013,6 +2057,31 @@ export default function Tasks() {
     } else {
       return 'task-ok'; // Green - >7 days
     }
+  };
+
+  // Get color class for tasks based on due_date OR created_at (for 'today' frequency tasks)
+  const getTaskColorClass = (task: TaskData): string => {
+    // If task has explicit due_date, use that
+    if (task.due_date) {
+      return getDueDateColorClass(task.due_date);
+    }
+    
+    // For 'today' frequency tasks without due_date, use created_at as implicit due date
+    if (task.follow_up_frequency === 'today' && task.created_at && !task.is_completed) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const created = new Date(task.created_at);
+      created.setHours(0, 0, 0, 0);
+      
+      const diffTime = today.getTime() - created.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 0) {
+        return 'task-overdue'; // Red - created before today, still incomplete
+      }
+    }
+    
+    return '';
   };
 
   const hasOverdueTasks = (projectId: number): boolean => {
@@ -3474,17 +3543,33 @@ export default function Tasks() {
 
           const remaining = weeklyTarget - totalSpent;
           const daysLeft = 7 - totalDaysElapsed;
-          const perDayNeeded = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : remaining;
-
+          
+          // Calculate daily target
+          let dailyTarget = 0;
+          if (task.task_type === TaskType.COUNT) {
+            dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 7;
+          } else if (task.task_type === TaskType.BOOLEAN) {
+            dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/7;
+          } else {
+            dailyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7;
+          }
+          
+          // Calculate expected vs actual
+          const expectedByNow = dailyTarget * totalDaysElapsed;
+          const deficit = expectedByNow - totalSpent;
+          
+          // TODAY = daily target + ALL catch-up (front-loaded)
+          const neededToday = dailyTarget + deficit;
+          
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0 
-            ? `Need ${perDayNeeded} ${unit} today (${daysLeft} days left, avg ${Math.round(totalSpent / totalDaysElapsed)} so far)`
-            : `Need ${remaining} ${unit} today to hit target`;
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
+            : `Need ${Math.ceil(remaining)} ${unit} today to hit target`;
 
           needsAttention.push({
             task,
             reason: 'weekly',
-            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysElapsed },
+            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysElapsed, neededToday: Math.ceil(neededToday), dailyTarget: Math.round(dailyTarget), deficit: Math.round(deficit) },
             recommendation
           });
         }
@@ -3525,7 +3610,7 @@ export default function Tasks() {
           }
 
           const percentBehind = Math.round(((expectedTarget - totalSpent) / expectedTarget) * 100);
-          const daysLeft = daysInMonth - daysElapsed;
+          const daysLeft = daysInMonth - daysElapsed + 1; // +1 to include today
           const deficit = expectedTarget - totalSpent; // Total amount behind
           
           // Calculate daily target
@@ -3536,13 +3621,12 @@ export default function Tasks() {
           // Calculate current average
           const currentAverage = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
           
-          // Amount needed today = daily target + catch up for deficit
-          const catchUpPerDay = daysLeft > 0 ? deficit / daysLeft : deficit;
-          const neededToday = dailyTarget + catchUpPerDay;
+          // TODAY = daily target + ALL catch-up (front-loaded)
+          const neededToday = dailyTarget + deficit;
 
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal Avg: ${Math.round(dailyTarget)}, Current Avg: ${Math.round(currentAverage)}, ${daysLeft} days left)`
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
             : `Need ${Math.ceil(deficit)} ${unit} today to hit target (month ended)`;
 
           // Check if already added from weekly - if so, also add as separate monthly entry
@@ -3556,7 +3640,8 @@ export default function Tasks() {
               expectedTarget,
               dailyTarget: Math.round(dailyTarget),
               currentAverage: Math.round(currentAverage),
-              neededToday: Math.ceil(neededToday)
+              neededToday: Math.ceil(neededToday),
+              deficit: Math.round(deficit)
             },
             recommendation
           });
@@ -3717,26 +3802,18 @@ export default function Tasks() {
         const taskStatus = weeklyTaskStatuses[task.id];
         
         // If task is marked completed/NA for THIS week:
-        // - For DAILY tasks: HIDE them (they belong in daily tab)
-        // - For WEEKLY tasks: SHOW them with status
+        // SHOW all tasks (both daily and weekly) with green/gray background
+        // They will disappear automatically next week when weeklyTaskStatuses changes
         if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
-          if (task.follow_up_frequency === 'daily') {
-            return false; // Hide daily tasks when marked complete in weekly
-          }
-          return true; // Show weekly tasks with their status
+          return true; // Show all tasks with their week-specific completion status
         }
         
         // Don't filter out based on "ever completed" since weekly status is independent
         // This allows the same task to be tracked in multiple weeks
         
-        // Only filter out if the task itself is globally completed/NA (from daily or other tabs)
-        // But since we removed that from weekly handlers, this should rarely happen
-        if (task.is_completed || !task.is_active) {
-          // Only hide if it's a weekly task (not a daily task showing in weekly view)
-          if (task.follow_up_frequency === 'weekly') {
-            return false;
-          }
-        }
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Weekly tab has its own week-specific completion tracking via weeklyTaskStatuses
+        // A task can be completed in Daily tab but still active in Weekly tab
         
         return true;
       }
@@ -3753,10 +3830,9 @@ export default function Tasks() {
         // Don't filter out based on "ever completed" since monthly status is independent
         // This allows the same task to be tracked in multiple months
         
-        // Only filter out if the task itself is globally completed/NA (from daily or other tabs)
-        if (task.is_completed || !task.is_active) {
-          return false;
-        }
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Monthly tab has its own month-specific completion tracking via monthlyTaskStatuses
+        // A task can be completed in Daily tab but still active in Monthly tab
         
         return true;
       }
@@ -3773,10 +3849,9 @@ export default function Tasks() {
         // Don't filter out based on "ever completed" since yearly status is independent
         // This allows the same task to be tracked in multiple years
         
-        // Only filter out if the task itself is globally completed/NA (from daily or other tabs)
-        if (task.is_completed || !task.is_active) {
-          return false;
-        }
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Yearly tab has its own year-specific completion tracking via yearlyTaskStatuses
+        // A task can be completed in Daily tab but still active in Yearly tab
         
         return true;
       }
@@ -3806,20 +3881,28 @@ export default function Tasks() {
         return task.is_active && !task.is_completed;
       }
       
-      // For other tabs (daily, etc.): If task is completed, only show if completed today
-      if (task.is_completed && task.completed_at) {
-        const completedDate = new Date(task.completed_at);
-        completedDate.setHours(0, 0, 0, 0);
-        return completedDate.getTime() === today.getTime();
+      // For DAILY tab: Show completed/NA tasks only if marked today (they disappear after midnight)
+      if (activeTab === 'daily') {
+        // If task is completed, only show if completed today
+        if (task.is_completed && task.completed_at) {
+          const completedDate = new Date(task.completed_at);
+          completedDate.setHours(0, 0, 0, 0);
+          return completedDate.getTime() === today.getTime();
+        }
+        
+        // If task is marked as NA (inactive), only show if marked today
+        if (!task.is_active && task.na_marked_at) {
+          const naMarkedDate = new Date(task.na_marked_at);
+          naMarkedDate.setHours(0, 0, 0, 0);
+          return naMarkedDate.getTime() === today.getTime();
+        }
+        
+        // Show all other active tasks
+        return task.is_active && !task.is_completed;
       }
       
-      // If task is marked as NA (inactive), only show if marked today
-      if (!task.is_active && task.na_marked_at) {
-        const naMarkedDate = new Date(task.na_marked_at);
-        naMarkedDate.setHours(0, 0, 0, 0);
-        return naMarkedDate.getTime() === today.getTime();
-      }
-      
+      // For other tabs (quarterly, etc.): Don't filter by completion status
+      // Let them show all tasks (weekly/monthly have their own status tracking)
       return true;
     })
     .sort((a, b) => {
@@ -3847,7 +3930,7 @@ export default function Tasks() {
     });
 
   // Separate tasks by type for daily and weekly tabs
-  const timeBasedTasks = (activeTab === 'daily' || activeTab === 'weekly')
+  const timeBasedTasks = (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly')
     ? filteredTasks.filter(task => task.task_type === TaskType.TIME)
     : [];
   
@@ -6654,9 +6737,38 @@ export default function Tasks() {
                     {timeBasedTasks.map((task) => {
                       const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
                       const weeklyTarget = task.allocated_minutes * 7;
-                      const avgSpentPerDay = Math.round(totalSpent / 7);
+                      
+                      // Calculate days elapsed and actual average
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const weekStart = new Date(selectedWeekStart);
+                      weekStart.setHours(0, 0, 0, 0);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekEnd.getDate() + 6);
+                      
+                      let daysElapsed = 1; // Default to at least 1 day
+                      if (today >= weekStart) {
+                        if (today <= weekEnd) {
+                          // Current week: count days from week start to today (inclusive)
+                          const diffTime = today.getTime() - weekStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        } else {
+                          // Past week: all 7 days
+                          daysElapsed = 7;
+                        }
+                      }
+                      
+                      const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
                       const remaining = weeklyTarget - totalSpent;
-                      const avgRemainingPerDay = Math.round(remaining / 7);
+                      
+                      // Calculate days remaining (INCLUDING today)
+                      let daysRemaining = 0;
+                      if (today >= weekStart && today <= weekEnd) {
+                        const diffTime = weekEnd.getTime() - today.getTime();
+                        daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                      }
+                      
+                      const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
                       const isComplete = totalSpent >= weeklyTarget;
                       const colorClass = getWeeklyRowColorClass(task);
                       const rowClassName = isComplete ? 'completed-row' : '';
@@ -6696,22 +6808,65 @@ export default function Tasks() {
                           })}
                           
                           <td className="col-status">
-                            <div className="action-buttons">
-                              <button 
-                                className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
-                                onClick={() => handleWeeklyTaskComplete(task.id)}
-                                title="Mark as completed for this week only"
-                              >
-                                COMPLETED
-                              </button>
-                              <button 
-                                className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
-                                onClick={() => handleWeeklyTaskNA(task.id)}
-                                title="Mark as NA for this week only"
-                              >
-                                NA
-                              </button>
-                            </div>
+                            {/* Show badge if completed/NA via Daily */}
+                            {task.is_completed && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                                }}>
+                                  ✓ Completed via Daily
+                                </span>
+                              </div>
+                            ) : !task.is_active && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)'
+                                }}>
+                                  ⊘ NA via Daily
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="action-buttons">
+                                <button 
+                                  className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                  onClick={() => handleWeeklyTaskComplete(task.id)}
+                                  title="Mark as completed for this week only"
+                                >
+                                  COMPLETED
+                                </button>
+                                <button 
+                                  className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                  onClick={() => handleWeeklyTaskNA(task.id)}
+                                  title="Mark as NA for this week only"
+                                >
+                                  NA
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -6810,22 +6965,65 @@ export default function Tasks() {
                           })}
                           
                           <td className="col-status" style={bgColor ? { backgroundColor: bgColor } : undefined}>
-                            <div className="action-buttons">
-                              <button 
-                                className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
-                                onClick={() => handleWeeklyTaskComplete(task.id)}
-                                title="Mark as completed for this week only"
-                              >
-                                COMPLETED
-                              </button>
-                              <button 
-                                className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
-                                onClick={() => handleWeeklyTaskNA(task.id)}
-                                title="Mark as NA for this week only"
-                              >
-                                NA
-                              </button>
-                            </div>
+                            {/* Show badge if completed/NA via Daily */}
+                            {task.is_completed && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                                }}>
+                                  ✓ Completed via Daily
+                                </span>
+                              </div>
+                            ) : !task.is_active && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)'
+                                }}>
+                                  ⊘ NA via Daily
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="action-buttons">
+                                <button 
+                                  className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                  onClick={() => handleWeeklyTaskComplete(task.id)}
+                                  title="Mark as completed for this week only"
+                                >
+                                  COMPLETED
+                                </button>
+                                <button 
+                                  className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                  onClick={() => handleWeeklyTaskNA(task.id)}
+                                  title="Mark as NA for this week only"
+                                >
+                                  NA
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -6919,18 +7117,435 @@ export default function Tasks() {
                           })}
                           
                           <td className="col-status">
+                            {/* Show badge if completed/NA via Daily */}
+                            {task.is_completed && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                                }}>
+                                  ✓ Completed via Daily
+                                </span>
+                              </div>
+                            ) : !task.is_active && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)'
+                                }}>
+                                  ⊘ NA via Daily
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="action-buttons">
+                                <button 
+                                  className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                  onClick={() => handleWeeklyTaskComplete(task.id)}
+                                  title="Mark as completed for this week only"
+                                >
+                                  COMPLETED
+                                </button>
+                                <button 
+                                  className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                  onClick={() => handleWeeklyTaskNA(task.id)}
+                                  title="Mark as NA for this week only"
+                                >
+                                  NA
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      ) : activeTab === 'monthly' ? (
+        /* MONTHLY TAB: Three separate tables with aggregated data from daily */
+        <>
+          {/* TIME-BASED TASKS TABLE */}
+          {timeBasedTasks.length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header time-based">
+                <span className="emoji">⏰</span>
+                <span>Time-Based Tasks</span>
+                <span className="subtitle">(Auto-calculated from Daily)</span>
+              </h3>
+              <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+                <table className="tasks-table daily-table">
+                  <thead style={{ 
+                    display: 'table-header-group', 
+                    visibility: 'visible',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 20,
+                    borderBottom: '2px solid #5a67d8'
+                  }}>
+                    <tr>
+                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
+                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Day</th>
+                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual<br/>Average/Day</th>
+                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Day</th>
+                      {(() => {
+                        const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+                        const days = [];
+                        for (let i = 1; i <= daysInMonth; i++) {
+                          days.push(<th key={i} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{i}</th>);
+                        }
+                        return days;
+                      })()}
+                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {timeBasedTasks.map((task) => {
+                      const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+                      let totalSpent = 0;
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        totalSpent += getMonthlyTime(task.id, day);
+                      }
+                      
+                      const monthlyTarget = task.allocated_minutes * daysInMonth;
+                      
+                      // Calculate days elapsed and actual average
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const monthStart = new Date(selectedMonthStart);
+                      monthStart.setHours(0, 0, 0, 0);
+                      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+                      monthEnd.setHours(0, 0, 0, 0);
+                      
+                      let daysElapsed = 1; // Default to at least 1 day
+                      if (today >= monthStart) {
+                        if (today <= monthEnd) {
+                          // Current month: count days from month start to today (inclusive)
+                          const diffTime = today.getTime() - monthStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        } else {
+                          // Past month: all days in month
+                          daysElapsed = daysInMonth;
+                        }
+                      }
+                      
+                      const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+                      const remaining = monthlyTarget - totalSpent;
+                      
+                      // Calculate days remaining (INCLUDING today)
+                      let daysRemaining = 0;
+                      if (today >= monthStart && today <= monthEnd) {
+                        const diffTime = monthEnd.getTime() - today.getTime();
+                        daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                      }
+                      
+                      const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+                      const isComplete = totalSpent >= monthlyTarget;
+                      const colorClass = getMonthlyRowColorClass(task);
+                      const rowClassName = isComplete ? 'completed-row' : '';
+                      
+                      return (
+                        <tr key={task.id} className={rowClassName}>
+                          <td className={`col-task sticky-col sticky-col-1 ${colorClass}`}>
+                            <div className="task-name">
+                              {task.name}
+                              <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
+                            </div>
+                          </td>
+                          
+                          <td className={`col-time sticky-col sticky-col-2 ${colorClass}`} style={{ textAlign: 'center' }}>
+                            {task.allocated_minutes} min
+                          </td>
+                          
+                          <td className={`col-time sticky-col sticky-col-3 ${colorClass}`} style={{ textAlign: 'center' }}>
+                            {avgSpentPerDay} min
+                          </td>
+                          
+                          <td className={`col-time sticky-col sticky-col-4 ${colorClass}`} style={{ textAlign: 'center' }}>
+                            {avgRemainingPerDay} min
+                          </td>
+                          
+                          {(() => {
+                            const days = [];
+                            for (let day = 1; day <= daysInMonth; day++) {
+                              const dayTotal = getMonthlyTime(task.id, day);
+                              days.push(
+                                <td key={day} className="col-hour" style={{ 
+                                  backgroundColor: dayTotal > 0 ? '#e6ffed' : '#fff',
+                                  textAlign: 'center',
+                                  fontSize: '12px'
+                                }}>
+                                  {dayTotal || '-'}
+                                </td>
+                              );
+                            }
+                            return days;
+                          })()}
+                          
+                          <td className="col-status">
+                            {/* Show badge if completed/NA via Daily */}
+                            {task.is_completed && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                                }}>
+                                  ✓ Completed via Daily
+                                </span>
+                              </div>
+                            ) : !task.is_active && task.follow_up_frequency === 'daily' ? (
+                              <div style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                gap: '8px',
+                                fontSize: '12px'
+                              }}>
+                                <span style={{
+                                  background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                                  color: 'white',
+                                  padding: '4px 10px',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)'
+                                }}>
+                                  ⊘ NA via Daily
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="action-buttons">
+                                <button 
+                                  className={`btn-complete ${monthlyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                                  onClick={() => handleMonthlyTaskComplete(task.id)}
+                                  title="Mark as completed for this month only"
+                                >
+                                  COMPLETED
+                                </button>
+                                <button 
+                                  className={`btn-na ${monthlyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                                  onClick={() => handleMonthlyTaskNA(task.id)}
+                                  title="Mark as NA for this month only"
+                                >
+                                  NA
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* MANUAL ENTRY TASKS TABLE */}
+          {filteredTasks.filter(task => task.task_type !== TaskType.TIME && task.follow_up_frequency !== 'daily').length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header">
+                <span className="emoji">✏️</span>
+                <span>Manual Entry Tasks</span>
+              </h3>
+              <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+                <table className="tasks-table daily-table">
+                  <thead style={{ 
+                    display: 'table-header-group', 
+                    visibility: 'visible',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 20,
+                    borderBottom: '2px solid #5a67d8'
+                  }}>
+                    <tr>
+                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
+                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Allocated</th>
+                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Spent<br/>(Average)</th>
+                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Day</th>
+                      {(() => {
+                        const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+                        const days = [];
+                        for (let i = 1; i <= daysInMonth; i++) {
+                          days.push(<th key={i} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{i}</th>);
+                        }
+                        return days;
+                      })()}
+                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredTasks.filter(task => task.task_type !== TaskType.TIME && task.follow_up_frequency !== 'daily').map((task) => {
+                      const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+                      let totalSpent = 0;
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        totalSpent += getMonthlyTime(task.id, day);
+                      }
+                      
+                      // Calculate monthly target
+                      let monthlyTarget = 0;
+                      if (task.task_type === TaskType.COUNT) {
+                        if (task.follow_up_frequency === 'weekly') {
+                          monthlyTarget = Math.round((task.target_value || 0) * (daysInMonth / 7));
+                        } else {
+                          monthlyTarget = task.target_value || 0;
+                        }
+                      } else {
+                        if (task.follow_up_frequency === 'weekly') {
+                          monthlyTarget = Math.round(task.allocated_minutes * (daysInMonth / 7));
+                        } else {
+                          monthlyTarget = task.allocated_minutes;
+                        }
+                      }
+                      
+                      // Calculate days elapsed and actual average
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      const monthStart = new Date(selectedMonthStart);
+                      monthStart.setHours(0, 0, 0, 0);
+                      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+                      monthEnd.setHours(0, 0, 0, 0);
+                      
+                      let daysElapsed = 1;
+                      if (today >= monthStart) {
+                        if (today <= monthEnd) {
+                          const diffTime = today.getTime() - monthStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                        } else {
+                          daysElapsed = daysInMonth;
+                        }
+                      }
+                      
+                      const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+                      const remaining = monthlyTarget - totalSpent;
+                      
+                      // Calculate days remaining (INCLUDING today)
+                      let daysRemaining = 0;
+                      if (today >= monthStart && today <= monthEnd) {
+                        const diffTime = monthEnd.getTime() - today.getTime();
+                        daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                      }
+                      
+                      const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+                      
+                      const monthlyStatus = monthlyTaskStatuses[task.id];
+                      const isMonthlyCompleted = monthlyStatus?.is_completed;
+                      const isMonthlyNA = monthlyStatus?.is_na;
+                      const colorClass = getMonthlyRowColorClass(task);
+                      const rowClassName = isMonthlyCompleted ? 'completed-row' : isMonthlyNA ? 'na-row' : '';
+                      const bgColor = isMonthlyCompleted ? '#c6f6d5' : isMonthlyNA ? '#e2e8f0' : undefined;
+                      
+                      return (
+                        <tr key={task.id} className={rowClassName} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+                          <td className={`col-task sticky-col sticky-col-1 ${colorClass}`} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+                            <div 
+                              className="task-name task-link"
+                              onClick={() => handleTaskClick(task.id)}
+                              style={{ cursor: 'pointer' }}
+                              title={
+                                task.pillar_name 
+                                  ? `${task.pillar_name}${task.category_name ? ` - ${task.category_name}` : ''}\nClick to edit`
+                                  : 'Click to edit'
+                              }
+                            >
+                              {task.name}
+                            </div>
+                          </td>
+                          
+                          <td className={`col-time sticky-col sticky-col-2 ${colorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+                            {formatTaskTarget(task, true, true)}
+                          </td>
+                          
+                          <td className={`col-time sticky-col sticky-col-3 ${colorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+                            {formatTaskValue(task, avgSpentPerDay)}
+                          </td>
+                          
+                          <td className={`col-time sticky-col sticky-col-4 ${colorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+                            {formatTaskValue(task, avgRemainingPerDay)}
+                          </td>
+                          
+                          {(() => {
+                            const days = [];
+                            for (let day = 1; day <= daysInMonth; day++) {
+                              const dayTotal = getMonthlyTime(task.id, day);
+                              const isBoolean = task.task_type === TaskType.BOOLEAN;
+                              
+                              days.push(
+                                <td key={day} className={`col-hour ${colorClass}`} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+                                  {isBoolean ? (
+                                    <input
+                                      type="checkbox"
+                                      checked={dayTotal > 0}
+                                      onChange={(e) => handleMonthlyTimeChange(task.id, day, e.target.checked ? '1' : '0')}
+                                      disabled={isMonthlyCompleted || isMonthlyNA}
+                                      className="hour-input"
+                                    />
+                                  ) : (
+                                    <input
+                                      type="text"
+                                      value={dayTotal || ''}
+                                      onChange={(e) => handleMonthlyTimeChange(task.id, day, e.target.value)}
+                                      disabled={isMonthlyCompleted || isMonthlyNA}
+                                      placeholder="-"
+                                      className="hour-input"
+                                    />
+                                  )}
+                                </td>
+                              );
+                            }
+                            return days;
+                          })()}
+                          
+                          <td className="col-status" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             <div className="action-buttons">
                               <button 
-                                className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
-                                onClick={() => handleWeeklyTaskComplete(task.id)}
-                                title="Mark as completed for this week only"
+                                className={`btn-complete ${isMonthlyCompleted ? 'active' : ''}`}
+                                onClick={() => handleMonthlyTaskComplete(task.id)}
+                                title="Mark as completed for this month only"
                               >
                                 COMPLETED
                               </button>
                               <button 
-                                className={`btn-na ${weeklyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
-                                onClick={() => handleWeeklyTaskNA(task.id)}
-                                title="Mark as NA for this week only"
+                                className={`btn-na ${isMonthlyNA ? 'active' : ''}`}
+                                onClick={() => handleMonthlyTaskNA(task.id)}
+                                title="Mark as NA for this month only"
                               >
                                 NA
                               </button>
@@ -6948,36 +7563,11 @@ export default function Tasks() {
       ) : (
         /* OTHER TABS: Keep existing single table */
         <div className="tasks-table-container">
-          <table className={`tasks-table ${activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly' ? 'daily-table' : ''}`}>
+          <table className={`tasks-table ${activeTab === 'yearly' ? 'daily-table' : ''}`}>
             <thead>
               <tr>
                 <th className="col-task sticky-col sticky-col-1">Task</th>
-                {activeTab === 'weekly' ? (
-                  <>
-                    <th className="col-time sticky-col sticky-col-2">Allocated</th>
-                    <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
-                    <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average)</th>
-                    {weekDays.map(day => (
-                      <th key={day.index} className="col-hour">{day.label}</th>
-                    ))}
-                    <th className="col-status">Actions</th>
-                  </>
-                ) : activeTab === 'monthly' ? (
-                  <>
-                    <th className="col-time sticky-col sticky-col-2">Allocated</th>
-                    <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
-                    <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average)</th>
-                    {(() => {
-                      const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
-                      const days = [];
-                      for (let i = 1; i <= daysInMonth; i++) {
-                        days.push(<th key={i} className="col-hour">{i}</th>);
-                      }
-                      return days;
-                    })()}
-                    <th className="col-status">Actions</th>
-                  </>
-                ) : activeTab === 'yearly' ? (
+                {activeTab === 'yearly' ? (
                   <>
                     <th className="col-time sticky-col sticky-col-2">Allocated</th>
                     <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average)</th>
@@ -7075,8 +7665,8 @@ export default function Tasks() {
                 const isYearlyNA = activeTab === 'yearly' && yearlyStatus?.is_na;
                 const rowClassName = isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted ? 'completed-row' : isWeeklyNA || isMonthlyNA || isYearlyNA ? 'na-row' : (task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '');
                 
-                // For Today tab: Add due date color class for overdue highlighting
-                const dueDateClass = activeTab === 'today' && !task.is_completed ? getDueDateColorClass(task.due_date) : '';
+                // For Today tab: Add color class for overdue tasks (uses due_date or created_at)
+                const dueDateClass = activeTab === 'today' ? getTaskColorClass(task) : '';
                 
                 // Calculate background color for sticky columns
                 const bgColor = isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted 
@@ -7310,7 +7900,7 @@ export default function Tasks() {
                           const weeklyTarget = dailyTarget * 7;
                           const remaining = weeklyTarget - totalSpent;
                           
-                          // Calculate days remaining in the week
+                          // Calculate days remaining in the week (INCLUDING today)
                           const today = new Date();
                           today.setHours(0, 0, 0, 0);
                           const weekStart = new Date(selectedWeekStart);
@@ -7320,9 +7910,25 @@ export default function Tasks() {
                           
                           let daysRemaining = 0;
                           if (today >= weekStart && today <= weekEnd) {
-                            // Current week: days from tomorrow to end of week (inclusive)
+                            // Current week: days from TODAY to end of week (inclusive of today)
                             const diffTime = weekEnd.getTime() - today.getTime();
-                            daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include today
+                            
+                            // DEBUG: Log calculation - ALWAYS for Cloud task
+                            if (task.name && task.name.toLowerCase().includes('cloud')) {
+                              console.log('='.repeat(80));
+                              console.log('🔍 WEEKLY TAB CALCULATION - ' + task.name);
+                              console.log('='.repeat(80));
+                              console.log('Today:', today.toISOString().split('T')[0]);
+                              console.log('Week: ', weekStart.toISOString().split('T')[0], 'to', weekEnd.toISOString().split('T')[0]);
+                              console.log('Daily Target:', dailyTarget, 'min');
+                              console.log('Weekly Target:', weeklyTarget, 'min');
+                              console.log('Total Spent:', totalSpent, 'min');
+                              console.log('Remaining:', remaining, 'min');
+                              console.log('Days Remaining (including today):', daysRemaining);
+                              console.log('NEEDED AVERAGE/DAY:', Math.round(remaining / daysRemaining), 'min');
+                              console.log('='.repeat(80));
+                            }
                           }
                           
                           if (remaining <= 0) {
@@ -7513,7 +8119,7 @@ export default function Tasks() {
                           
                           const remaining = monthlyTarget - totalSpent;
                           
-                          // Calculate days remaining in the month
+                          // Calculate days remaining in the month (INCLUDING today)
                           const today = new Date();
                           today.setHours(0, 0, 0, 0);
                           const monthStart = new Date(selectedMonthStart);
@@ -7523,9 +8129,9 @@ export default function Tasks() {
                           
                           let daysRemaining = 0;
                           if (today >= monthStart && today <= monthEnd) {
-                            // Current month: days from tomorrow to end of month (inclusive)
+                            // Current month: days from TODAY to end of month (inclusive of today)
                             const diffTime = monthEnd.getTime() - today.getTime();
-                            daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                            daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include today
                           }
                           
                           if (remaining <= 0) {
@@ -7626,22 +8232,65 @@ export default function Tasks() {
                       })()}
                       {/* Actions column at the end - Always show buttons like daily tab */}
                       <td className="col-status">
-                        <div className="action-buttons">
-                          <button 
-                            className={`btn-complete ${monthlyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
-                            onClick={() => handleMonthlyTaskComplete(task.id)}
-                            title="Mark as completed for this month only"
-                          >
-                            COMPLETED
-                          </button>
-                          <button 
-                            className={`btn-na ${monthlyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
-                            onClick={() => handleMonthlyTaskNA(task.id)}
-                            title="Mark as NA for this month only"
-                          >
-                            NA
-                          </button>
-                        </div>
+                        {/* Show badge if completed/NA via Daily */}
+                        {task.is_completed && task.follow_up_frequency === 'daily' ? (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            gap: '8px',
+                            fontSize: '12px'
+                          }}>
+                            <span style={{
+                              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                              color: 'white',
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)'
+                            }}>
+                              ✓ Completed via Daily
+                            </span>
+                          </div>
+                        ) : !task.is_active && task.follow_up_frequency === 'daily' ? (
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center',
+                            gap: '8px',
+                            fontSize: '12px'
+                          }}>
+                            <span style={{
+                              background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)',
+                              color: 'white',
+                              padding: '4px 10px',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)'
+                            }}>
+                              ⊘ NA via Daily
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="action-buttons">
+                            <button 
+                              className={`btn-complete ${monthlyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
+                              onClick={() => handleMonthlyTaskComplete(task.id)}
+                              title="Mark as completed for this month only"
+                            >
+                              COMPLETED
+                            </button>
+                            <button 
+                              className={`btn-na ${monthlyTaskStatuses[task.id]?.is_na ? 'active' : ''}`}
+                              onClick={() => handleMonthlyTaskNA(task.id)}
+                              title="Mark as NA for this month only"
+                            >
+                              NA
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </>
                   ) : activeTab === 'yearly' ? (
@@ -8233,34 +8882,66 @@ export default function Tasks() {
         const weeklyTasks = tasksNeedingAttention.filter(item => item.reason === 'weekly');
         const monthlyTasks = tasksNeedingAttention.filter(item => item.reason === 'monthly');
         
+        // Motivational quotes that rotate daily
+        const motivationalQuotes = [
+          "💪 Today's effort = Tomorrow's freedom. Catch up now, coast later!",
+          "🎯 Small daily wins compound into massive yearly gains.",
+          "🔥 Discipline today = Regret avoided tomorrow.",
+          "⚡ The best time to catch up? Right now. The second best? Never comes.",
+          "🚀 Every minute you invest today is a minute you don't owe tomorrow.",
+          "💎 Consistency beats intensity. Get back on track today!",
+          "⏰ Future you will thank present you for catching up now."
+        ];
+        
+        // Pick quote based on day of year (consistent for the day)
+        const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+        const todaysQuote = motivationalQuotes[dayOfYear % motivationalQuotes.length];
+        
         return (
           <>
             {/* Weekly Tasks Needing Attention */}
             {weeklyTasks.length > 0 && (
               <div style={{ marginTop: '30px', marginBottom: '20px' }}>
+                {/* Motivational Quote */}
+                <div style={{
+                  padding: '12px 20px',
+                  backgroundColor: '#fff3cd',
+                  border: '2px solid #ffc107',
+                  borderRadius: '8px',
+                  marginBottom: '12px',
+                  textAlign: 'center',
+                  fontSize: '15px',
+                  fontWeight: '500',
+                  color: '#856404',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}>
+                  {todaysQuote}
+                </div>
+                
                 <div 
                   style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    backgroundColor: '#fff3e0',
-                    border: '2px solid #ff9800',
+                    padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)',
+                    border: 'none',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    boxShadow: '0 4px 6px rgba(255, 107, 107, 0.3)',
+                    animation: 'pulse 2s ease-in-out infinite'
                   }}
-                  onClick={() => setShowNeedsAttention(!showNeedsAttention)}
+                  onClick={() => setShowNeedsAttentionWeekly(!showNeedsAttentionWeekly)}
                 >
-                  <h3 style={{ margin: 0, color: '#e65100', fontSize: '18px', fontWeight: '600' }}>
-                    📅 Needs Attention - Weekly Tasks ({weeklyTasks.length} {weeklyTasks.length === 1 ? 'task' : 'tasks'})
+                  <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
+                    � Needs Attention - Weekly Tasks ({weeklyTasks.length} {weeklyTasks.length === 1 ? 'task' : 'tasks'})
                   </h3>
-                  <span style={{ fontSize: '20px', color: '#e65100' }}>
-                    {showNeedsAttention ? '▼' : '▶'}
+                  <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                    {showNeedsAttentionWeekly ? '▼' : '▶'}
                   </span>
                 </div>
 
-                {showNeedsAttention && (
+                {showNeedsAttentionWeekly && (
                   <div style={{ marginTop: '12px' }}>
                     {weeklyTasks.map((item, index) => (
                   <div 
@@ -8297,27 +8978,51 @@ export default function Tasks() {
                         </div>
 
                         {item.weeklyIssue && (
-                          <div style={{ fontSize: '14px', color: '#e53e3e', marginBottom: '6px' }}>
-                            📅 Weekly: {item.weeklyIssue.redDays}/{item.weeklyIssue.totalDays} days below target
+                          <div style={{ 
+                            fontSize: '13px', 
+                            color: '#721c24',
+                            backgroundColor: '#f8d7da',
+                            padding: '6px 10px',
+                            borderRadius: '4px',
+                            marginBottom: '8px',
+                            border: '1px solid #f5c6cb'
+                          }}>
+                            📅 {item.weeklyIssue.redDays}/{item.weeklyIssue.totalDays} days below target | 
+                            <span style={{ fontWeight: '600', marginLeft: '6px' }}>
+                              Lagged: {item.weeklyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                            </span>
                           </div>
                         )}
 
                         {item.monthlyIssue && (
-                          <div style={{ fontSize: '14px', color: '#e53e3e', marginBottom: '6px' }}>
-                            📊 Monthly: {item.monthlyIssue.percentBehind}% behind ({Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''})
+                          <div style={{ 
+                            fontSize: '13px', 
+                            color: '#721c24',
+                            backgroundColor: '#f8d7da',
+                            padding: '6px 10px',
+                            borderRadius: '4px',
+                            marginBottom: '8px',
+                            border: '1px solid #f5c6cb'
+                          }}>
+                            📊 {item.monthlyIssue.percentBehind}% behind ({Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}) | 
+                            <span style={{ fontWeight: '600', marginLeft: '6px' }}>
+                              Lagged: {item.monthlyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                            </span>
                           </div>
                         )}
 
                         <div style={{ 
-                          fontSize: '14px', 
-                          fontWeight: '600', 
-                          color: '#2c5282', 
-                          backgroundColor: '#e6f7ff', 
-                          padding: '8px 12px', 
-                          borderRadius: '4px',
-                          marginTop: '8px'
+                          fontSize: '16px', 
+                          fontWeight: '700', 
+                          color: '#ffffff', 
+                          background: 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)',
+                          padding: '12px 16px', 
+                          borderRadius: '6px',
+                          marginTop: '8px',
+                          boxShadow: '0 2px 4px rgba(229, 62, 62, 0.4)',
+                          textAlign: 'center'
                         }}>
-                          💡 {item.recommendation}
+                          🎯 {item.recommendation}
                         </div>
                       </div>
 
@@ -8356,29 +9061,48 @@ export default function Tasks() {
             {/* Monthly Tasks Needing Attention */}
             {monthlyTasks.length > 0 && (
               <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+                {/* Same motivational quote (shown once for both sections) */}
+                {weeklyTasks.length === 0 && (
+                  <div style={{
+                    padding: '12px 20px',
+                    backgroundColor: '#fff3cd',
+                    border: '2px solid #ffc107',
+                    borderRadius: '8px',
+                    marginBottom: '12px',
+                    textAlign: 'center',
+                    fontSize: '15px',
+                    fontWeight: '500',
+                    color: '#856404',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                  }}>
+                    {todaysQuote}
+                  </div>
+                )}
+                
                 <div 
                   style={{ 
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'space-between',
-                    padding: '12px 16px',
-                    backgroundColor: '#e3f2fd',
-                    border: '2px solid #2196f3',
+                    padding: '14px 16px',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    border: 'none',
                     borderRadius: '8px',
                     cursor: 'pointer',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    boxShadow: '0 4px 6px rgba(245, 158, 11, 0.3)',
+                    animation: 'pulse 2s ease-in-out infinite'
                   }}
-                  onClick={() => setShowNeedsAttention(!showNeedsAttention)}
+                  onClick={() => setShowNeedsAttentionMonthly(!showNeedsAttentionMonthly)}
                 >
-                  <h3 style={{ margin: 0, color: '#0d47a1', fontSize: '18px', fontWeight: '600' }}>
-                    📊 Needs Attention - Monthly Tasks ({monthlyTasks.length} {monthlyTasks.length === 1 ? 'task' : 'tasks'})
+                  <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
+                    � Needs Attention - Monthly Tasks ({monthlyTasks.length} {monthlyTasks.length === 1 ? 'task' : 'tasks'})
                   </h3>
-                  <span style={{ fontSize: '20px', color: '#0d47a1' }}>
-                    {showNeedsAttention ? '▼' : '▶'}
+                  <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                    {showNeedsAttentionMonthly ? '▼' : '▶'}
                   </span>
                 </div>
 
-                {showNeedsAttention && (
+                {showNeedsAttentionMonthly && (
                   <div style={{ marginTop: '12px' }}>
                     {monthlyTasks.map((item, index) => (
                       <div 
