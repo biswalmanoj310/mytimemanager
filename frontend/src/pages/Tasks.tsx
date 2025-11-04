@@ -689,17 +689,21 @@ export default function Tasks() {
       // Mark task as globally completed
       await api.post(`/api/tasks/${taskId}/complete`, {});
       
-      // If this is a DAILY task, also mark it complete for current week and month
-      // This ensures it doesn't reappear in Weekly/Monthly tabs next period
+      // If this is a DAILY task, cascade to Weekly/Monthly ONLY if already being monitored there
+      // This prevents unmonitored tasks from suddenly appearing in those tabs
       if (task && task.follow_up_frequency === 'daily') {
         try {
-          // Mark complete for current week
-          const weekDateStr = formatDateForInput(selectedWeekStart);
-          await api.post(`/api/weekly-time/status/${taskId}/complete?week_start_date=${weekDateStr}`, {});
+          // Only cascade to Weekly if task is already being monitored there
+          if (weeklyTaskStatuses[taskId] !== undefined) {
+            const weekDateStr = formatDateForInput(selectedWeekStart);
+            await api.post(`/api/weekly-time/status/${taskId}/complete?week_start_date=${weekDateStr}`, {});
+          }
           
-          // Mark complete for current month
-          const monthDateStr = formatDateForInput(selectedMonthStart);
-          await api.post(`/api/monthly-time/status/${taskId}/complete?month_start_date=${monthDateStr}`, {});
+          // Only cascade to Monthly if task is already being monitored there
+          if (monthlyTaskStatuses[taskId] !== undefined) {
+            const monthDateStr = formatDateForInput(selectedMonthStart);
+            await api.post(`/api/monthly-time/status/${taskId}/complete?month_start_date=${monthDateStr}`, {});
+          }
         } catch (statusErr) {
           console.warn('Failed to mark weekly/monthly status:', statusErr);
           // Don't fail the whole operation if status marking fails
@@ -723,17 +727,21 @@ export default function Tasks() {
       // Mark task as globally NA (inactive)
       await api.put(`/api/tasks/${taskId}`, { is_active: false });
       
-      // If this is a DAILY task, also mark it NA for current week and month
-      // This ensures it doesn't reappear in Weekly/Monthly tabs next period
+      // If this is a DAILY task, cascade to Weekly/Monthly ONLY if already being monitored there
+      // This prevents unmonitored tasks from suddenly appearing in those tabs
       if (task && task.follow_up_frequency === 'daily') {
         try {
-          // Mark NA for current week
-          const weekDateStr = formatDateForInput(selectedWeekStart);
-          await api.post(`/api/weekly-time/status/${taskId}/na?week_start_date=${weekDateStr}`, {});
+          // Only cascade to Weekly if task is already being monitored there
+          if (weeklyTaskStatuses[taskId] !== undefined) {
+            const weekDateStr = formatDateForInput(selectedWeekStart);
+            await api.post(`/api/weekly-time/status/${taskId}/na?week_start_date=${weekDateStr}`, {});
+          }
           
-          // Mark NA for current month
-          const monthDateStr = formatDateForInput(selectedMonthStart);
-          await api.post(`/api/monthly-time/status/${taskId}/na?month_start_date=${monthDateStr}`, {});
+          // Only cascade to Monthly if task is already being monitored there
+          if (monthlyTaskStatuses[taskId] !== undefined) {
+            const monthDateStr = formatDateForInput(selectedMonthStart);
+            await api.post(`/api/monthly-time/status/${taskId}/na?month_start_date=${monthDateStr}`, {});
+          }
         } catch (statusErr) {
           console.warn('Failed to mark weekly/monthly NA status:', statusErr);
           // Don't fail the whole operation if status marking fails
