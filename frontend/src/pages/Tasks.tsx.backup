@@ -88,18 +88,7 @@ export default function Tasks() {
   const [error, setError] = useState<string | null>(null);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<TabType>(() => {
-    // Initialize from URL if available
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab');
-    if (tabParam) {
-      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
-      if (validTabs.includes(tabParam as TabType)) {
-        return tabParam as TabType;
-      }
-    }
-    return 'today';
-  });
+  const [activeTab, setActiveTab] = useState<TabType>('today');
   // Hourly time entries for daily tab - key format: "taskId-hour"
   const [hourlyEntries, setHourlyEntries] = useState<Record<string, number>>({});
   // Ref to track latest hourly entries (avoids stale closure issues)
@@ -325,8 +314,6 @@ export default function Tasks() {
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showAddProjectMilestoneModal, setShowAddProjectMilestoneModal] = useState(false);
   const [showEditProjectMilestoneModal, setShowEditProjectMilestoneModal] = useState(false);
-  const [showMilestoneDetailModal, setShowMilestoneDetailModal] = useState(false);
-  const [selectedMilestone, setSelectedMilestone] = useState<ProjectMilestoneData | null>(null);
   const [editingMilestone, setEditingMilestone] = useState<ProjectMilestoneData | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectData | null>(null);
   const [editingTask, setEditingTask] = useState<ProjectTaskData | null>(null);
@@ -343,7 +330,6 @@ export default function Tasks() {
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
   const [showEditMiscTaskModal, setShowEditMiscTaskModal] = useState(false);
   const [expandedMiscTasks, setExpandedMiscTasks] = useState<Set<number>>(new Set());
-  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean }>({ milestones: true, allTasks: true });
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
@@ -529,6 +515,18 @@ export default function Tasks() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // Initialize activeTab from URL on mount
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
+      if (validTabs.includes(tabParam as TabType)) {
+        setActiveTab(tabParam as TabType);
+      }
+    }
+  }, []); // Run only on mount
+
   // Handle URL parameters on mount and when location changes
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -588,16 +586,30 @@ export default function Tasks() {
 
   // Select project when projects are loaded and we have a pending project ID
   useEffect(() => {
+    console.log('Project selection effect:', { pendingProjectId, projectsCount: projects.length });
     if (pendingProjectId !== null && projects.length > 0) {
+      console.log('Looking for project with ID:', pendingProjectId);
+      console.log('Available projects:', projects.map(p => ({ id: p.id, name: p.name })));
       const project = projects.find(p => p.id === pendingProjectId);
       if (project) {
+        console.log('Found and selecting project:', project.name);
         handleSelectProject(project);
         setPendingProjectId(null); // Clear pending ID after selection
       } else {
         console.warn('Project not found with ID:', pendingProjectId);
+        console.log('This might mean the project is linked to a goal but not in the projects list');
       }
     }
   }, [projects, pendingProjectId]);
+
+  // Monitor selectedProject state changes
+  useEffect(() => {
+    console.log('🟢 selectedProject state changed to:', selectedProject ? { id: selectedProject.id, name: selectedProject.name } : null);
+  }, [selectedProject]);
+
+  useEffect(() => {
+    console.log('🟡 projectMilestones state changed:', projectMilestones.length, 'milestones');
+  }, [projectMilestones]);
 
   useEffect(() => {
     loadTasks();
@@ -670,7 +682,9 @@ export default function Tasks() {
     try {
       setLoading(true);
       setError(null);
+      console.log('Loading tasks from API...');
       const data = await api.get<Task[]>('/api/tasks/');
+      console.log('Tasks loaded:', data);
       setTasks(data);
     } catch (err: any) {
       console.error('Error loading tasks:', err);
@@ -771,7 +785,7 @@ export default function Tasks() {
 
       // Create a weekly status entry to mark this task for tracking this week
       // This keeps the task as 'daily' but makes it appear in the weekly view
-      const weekStart = formatDateForInput(selectedWeekStart);
+      const weekStart = selectedWeekStart.toISOString().split('T')[0];
       await api.post(`/api/weekly-time/status/${selectedDailyTask}/${weekStart}`, {
         is_completed: false,
         is_na: false
@@ -942,6 +956,7 @@ export default function Tasks() {
       const day = String(weekStart.getDate()).padStart(2, '0');
       const dateStr = `${year}-${month}-${day}`;
       
+      console.log('🗓️ Loading weekly entries for date:', dateStr, 'from weekStart:', weekStart);
       // Load weekly entries
       const response: any = await api.get(`/api/weekly-time/entries/${dateStr}`);
       
@@ -984,7 +999,11 @@ export default function Tasks() {
 
       // Load weekly task statuses
       const statusResponse: any = await api.get(`/api/weekly-time/status/${dateStr}`);
+      
+      console.log('📊 Weekly status API response:', statusResponse);
+      
       const statusData = Array.isArray(statusResponse) ? statusResponse : (statusResponse.data || []);
+      console.log('📊 Weekly status data:', statusData);
       
       const statusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {};
       
@@ -997,8 +1016,11 @@ export default function Tasks() {
         });
       }
       
+      console.log('📊 Weekly status map created:', statusMap);
+      
       // Force new object reference to ensure React detects the change
       setWeeklyTaskStatuses({...statusMap});
+      console.log('📊 setWeeklyTaskStatuses called with:', {...statusMap});
 
       // Auto-copy incomplete tasks from previous week ONLY if viewing the current real week
       if (statusData.length === 0) {
@@ -1018,7 +1040,7 @@ export default function Tasks() {
           // This week has no tasks yet - check if we should copy from previous week
           const prevWeekStart = new Date(weekStart);
           prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-          const prevWeekDateStr = formatDateForInput(prevWeekStart);
+          const prevWeekDateStr = prevWeekStart.toISOString().split('T')[0];
           
           try {
             const prevWeekStatusResponse: any = await api.get(`/api/weekly-time/status/${prevWeekDateStr}`);
@@ -1082,10 +1104,12 @@ export default function Tasks() {
   // Save weekly entries to backend (debounced)
   const saveWeeklyEntries = async () => {
     try {
-      const dateStr = formatDateForInput(selectedWeekStart);
+      const dateStr = selectedWeekStart.toISOString().split('T')[0];
+      console.log('Saving weekly entries for week starting:', dateStr);
       
       // Use ref to get latest entries
       const entriesToSave = weeklyEntriesRef.current;
+      console.log('Current weeklyEntries:', entriesToSave);
       
       // Convert weeklyEntries map to array format
       const entries = Object.entries(entriesToSave)
@@ -1094,11 +1118,16 @@ export default function Tasks() {
           const [task_id, day_of_week] = key.split('-').map(Number);
           return { task_id, day_of_week, minutes };
         });
+
+      console.log('Entries to save:', entries);
       if (entries.length > 0) {
         const response = await api.post('/api/weekly-time/entries/bulk/', {
           week_start_date: dateStr,
           entries: entries
         });
+        console.log('Save response:', response);
+      } else {
+        console.log('No entries to save (all zero or empty)');
       }
     } catch (err) {
       console.error('Error saving weekly entries:', err);
@@ -1201,7 +1230,7 @@ export default function Tasks() {
   // Load monthly time entries and aggregates
   const loadMonthlyEntries = async (monthStart: Date) => {
     try {
-      const dateStr = formatDateForInput(monthStart);
+      const dateStr = monthStart.toISOString().split('T')[0];
       
       // Load monthly entries
       const response: any = await api.get(`/api/monthly-time/entries/${dateStr}`);
@@ -1273,7 +1302,7 @@ export default function Tasks() {
         if (isCurrentRealMonth) {
           // This month has no tasks yet - check if we should copy from previous month
           const prevMonthStart = new Date(monthStart.getFullYear(), monthStart.getMonth() - 1, 1);
-          const prevMonthDateStr = formatDateForInput(prevMonthStart);
+          const prevMonthDateStr = prevMonthStart.toISOString().split('T')[0];
           
           try {
             const prevMonthStatusResponse: any = await api.get(`/api/monthly-time/status/${prevMonthDateStr}`);
@@ -1331,7 +1360,7 @@ export default function Tasks() {
   // Save monthly entries to backend (debounced)
   const saveMonthlyEntries = async () => {
     try {
-      const dateStr = formatDateForInput(selectedMonthStart);
+      const dateStr = selectedMonthStart.toISOString().split('T')[0];
       
       // Use ref to get latest entries
       const entriesToSave = monthlyEntriesRef.current;
@@ -1411,7 +1440,7 @@ export default function Tasks() {
   // Handle monthly task complete
   const handleMonthlyTaskComplete = async (taskId: number) => {
     try {
-      const dateStr = formatDateForInput(selectedMonthStart);
+      const dateStr = selectedMonthStart.toISOString().split('T')[0];
       await api.post(`/api/monthly-time/status/${taskId}/complete?month_start_date=${dateStr}`, {});
       await loadMonthlyEntries(selectedMonthStart);
     } catch (err: any) {
@@ -1423,7 +1452,7 @@ export default function Tasks() {
   // Handle monthly task NA
   const handleMonthlyTaskNA = async (taskId: number) => {
     try {
-      const dateStr = formatDateForInput(selectedMonthStart);
+      const dateStr = selectedMonthStart.toISOString().split('T')[0];
       await api.post(`/api/monthly-time/status/${taskId}/na?month_start_date=${dateStr}`, {});
       await loadMonthlyEntries(selectedMonthStart);
     } catch (err: any) {
@@ -1447,7 +1476,7 @@ export default function Tasks() {
       if (!task) return;
 
       // Create a monthly status entry to mark this task for tracking this month
-      const monthStart = formatDateForInput(selectedMonthStart);
+      const monthStart = selectedMonthStart.toISOString().split('T')[0];
       await api.post(`/api/monthly-time/status/${selectedDailyTaskForMonthly}/${monthStart}`, {
         is_completed: false,
         is_na: false
@@ -1485,7 +1514,7 @@ export default function Tasks() {
   // Load yearly time entries and aggregates
   const loadYearlyEntries = async (yearStart: Date) => {
     try {
-      const dateStr = formatDateForInput(yearStart);
+      const dateStr = yearStart.toISOString().split('T')[0];
       
       // Load yearly entries
       const response: any = await api.get(`/api/yearly-time/entries/${dateStr}`);
@@ -1550,7 +1579,7 @@ export default function Tasks() {
   // Save yearly entries with debounce
   const saveYearlyEntries = async () => {
     try {
-      const dateStr = formatDateForInput(selectedYearStart);
+      const dateStr = selectedYearStart.toISOString().split('T')[0];
       const entries = Object.entries(yearlyEntries).map(([key, minutes]) => {
         const [taskId, month] = key.split('-').map(Number);
         return {
@@ -1610,7 +1639,7 @@ export default function Tasks() {
   // Handle yearly task status change
   const handleYearlyStatusChange = async (taskId: number, isCompleted: boolean, isNA: boolean) => {
     try {
-      const dateStr = formatDateForInput(selectedYearStart);
+      const dateStr = selectedYearStart.toISOString().split('T')[0];
       await api.post(`/api/yearly-time/status/${taskId}/${dateStr}`, {
         is_completed: isCompleted,
         is_na: isNA
@@ -1643,7 +1672,7 @@ export default function Tasks() {
       if (!task) return;
 
       // Create a yearly status entry to mark this task for tracking this year
-      const yearStart = formatDateForInput(selectedYearStart);
+      const yearStart = selectedYearStart.toISOString().split('T')[0];
       await api.post(`/api/yearly-time/status/${selectedDailyTaskForYearly}/${yearStart}`, {
         is_completed: false,
         is_na: false
@@ -1698,7 +1727,7 @@ export default function Tasks() {
     }
 
     try {
-      const today = formatDateForInput(new Date());
+      const today = new Date().toISOString().split('T')[0];
       await api.post('/api/one-time-tasks/', {
         task_id: selectedTaskForOneTime,
         start_date: today,
@@ -1769,6 +1798,7 @@ export default function Tasks() {
       const response: any = await api.get('/api/projects/');
       const data = response.data || response;
       const projectsList = Array.isArray(data) ? data : [];
+      console.log('Loaded projects from API:', projectsList.map(p => ({ id: p.id, name: p.name })));
       setProjects(projectsList);
       
       // Load all project tasks to check for overdue status
@@ -1880,22 +1910,25 @@ export default function Tasks() {
   };
 
   const handleSelectProject = async (project: ProjectData) => {
+    console.log('🔵 handleSelectProject called with:', { id: project.id, name: project.name });
+    console.log('🔵 Current selectedProject before:', selectedProject);
+    console.log('🔵 Setting selectedProject state...');
     setSelectedProject(project);
+    console.log('🔵 Loading project tasks and milestones...');
     await loadProjectTasks(project.id);
     await loadProjectMilestones(project.id);
-    
-    // Update URL to include project ID for refresh persistence
-    const searchParams = new URLSearchParams(location.search);
-    searchParams.set('project', project.id.toString());
-    navigate(`?${searchParams.toString()}`, { replace: true });
+    console.log('🔵 Project selected! Tasks loaded:', projectTasks.length, 'Milestones loaded:', projectMilestones.length);
   };
 
   const loadProjectMilestones = async (projectId: number) => {
     try {
+      console.log(`Loading milestones for project ${projectId}...`);
       const response = await api.get(`/api/projects/${projectId}/milestones`);
+      console.log('Milestones response:', response);
       const data = response.data || response;
+      console.log('Milestones data:', data);
       const milestonesArray = Array.isArray(data) ? data : [];
-      console.log('Loaded milestones for project', projectId, ':', milestonesArray);
+      console.log('Setting projectMilestones to:', milestonesArray);
       setProjectMilestones(milestonesArray);
     } catch (error) {
       console.error('Error loading project milestones:', error);
@@ -1916,21 +1949,12 @@ export default function Tasks() {
     }
   };
 
-  const handleUpdateProjectMilestone = async (milestoneIdOrData: number | any, updateData?: any) => {
-    if (!selectedProject) return;
-    
-    // Support both signatures: (milestoneId, data) and (data) for modal usage
-    const milestoneId = typeof milestoneIdOrData === 'number' ? milestoneIdOrData : editingMilestone?.id;
-    const data = typeof milestoneIdOrData === 'number' ? updateData : milestoneIdOrData;
-    
-    if (!milestoneId) return;
-    
+  const handleUpdateProjectMilestone = async (milestoneData: any) => {
+    if (!selectedProject || !editingMilestone) return;
     try {
-      await api.put(`/api/projects/milestones/${milestoneId}`, data);
-      if (editingMilestone) {
-        setShowEditProjectMilestoneModal(false);
-        setEditingMilestone(null);
-      }
+      await api.put(`/api/projects/${selectedProject.id}/milestones/${editingMilestone.id}`, milestoneData);
+      setShowEditProjectMilestoneModal(false);
+      setEditingMilestone(null);
       await loadProjectMilestones(selectedProject.id);
       await loadProjects(); // Refresh project list to update milestone progress
     } catch (error) {
@@ -1967,11 +1991,6 @@ export default function Tasks() {
     setSelectedProject(null);
     // Don't clear projectTasks - keep them for overdue status checking
     setExpandedTasks(new Set());
-    
-    // Remove project parameter from URL
-    const searchParams = new URLSearchParams(location.search);
-    searchParams.delete('project');
-    navigate(`?${searchParams.toString()}`, { replace: true });
   };
 
   const toggleTaskExpansion = (taskId: number) => {
@@ -2050,9 +2069,13 @@ export default function Tasks() {
 
   const handleToggleTaskCompletion = async (taskId: number, currentStatus: boolean) => {
     try {
+      console.log('Toggling task completion:', taskId, 'from', currentStatus, 'to', !currentStatus);
+      
       await api.put(`/api/projects/tasks/${taskId}`, {
         is_completed: !currentStatus
       });
+      
+      console.log('Task updated successfully, reloading data...');
       
       // Refresh both projects list and tasks
       await loadProjects(); // This will reload all projects with updated status
@@ -2061,6 +2084,8 @@ export default function Tasks() {
       if (selectedProject) {
         await loadProjectTasks(selectedProject.id);
       }
+      
+      console.log('Data reloaded successfully');
     } catch (err: any) {
       console.error('Error toggling task completion:', err);
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
@@ -2084,13 +2109,7 @@ export default function Tasks() {
     }
   };
 
-  const handleEditTask = async (task: ProjectTaskData) => {
-    console.log('Editing task:', task.name, 'milestone_id:', task.milestone_id, 'project_id:', task.project_id);
-    // Ensure milestones are loaded for this task's project FIRST
-    if (task.project_id) {
-      await loadProjectMilestones(task.project_id);
-    }
-    // Set the task and show modal together using a callback
+  const handleEditTask = (task: ProjectTaskData) => {
     setEditingTask(task);
     setShowEditTaskModal(true);
   };
@@ -2103,7 +2122,6 @@ export default function Tasks() {
       await api.put(`/api/projects/tasks/${editingTask.id}`, {
         name: editingTask.name,
         description: editingTask.description,
-        parent_task_id: editingTask.parent_task_id,
         milestone_id: editingTask.milestone_id,
         due_date: editingTask.due_date,
         priority: editingTask.priority
@@ -2116,7 +2134,6 @@ export default function Tasks() {
       await loadProjects();
       if (selectedProject) {
         await loadProjectTasks(selectedProject.id);
-        await loadProjectMilestones(selectedProject.id); // Reload milestones to update task counts
       }
       if (activeTab === 'today') {
         await loadProjectTasksDueToday();
@@ -2248,7 +2265,7 @@ export default function Tasks() {
         goal_id: project.goal_id,
         pillar_id: project.pillar_id,
         category_id: project.category_id,
-        start_date: formatDateForInput(new Date()), // Start today
+        start_date: new Date().toISOString().split('T')[0], // Start today
         target_completion_date: project.target_completion_date,
         status: 'not_started'
       });
@@ -2333,6 +2350,7 @@ export default function Tasks() {
       const response: any = await api.get('/api/misc-tasks/');
       const data = response.data || response;
       const groupsList = Array.isArray(data) ? data : [];
+      console.log('Loaded misc task groups from API:', groupsList.map(g => ({ id: g.id, name: g.name })));
       setMiscTaskGroups(groupsList);
       
       // Load all misc tasks to check for overdue status
@@ -2401,6 +2419,7 @@ export default function Tasks() {
       const response: any = await api.get('/api/habits/');
       const data = response.data || response;
       const habitsList = Array.isArray(data) ? data : [];
+      console.log('Loaded habits from API:', habitsList);
       setHabits(habitsList);
     } catch (err: any) {
       console.error('Error loading habits:', err);
@@ -2558,7 +2577,7 @@ export default function Tasks() {
     try {
       await api.post(`/api/habits/${habitId}/add-aggregate`, {
         value,
-        entry_date: entryDate || formatDateForInput(new Date())
+        entry_date: entryDate || new Date().toISOString().split('T')[0]
       });
       
       await loadPeriodStats(habitId);
@@ -2575,6 +2594,7 @@ export default function Tasks() {
       const response: any = await api.get('/api/wishes/');
       const data = response.data || response;
       const wishesList = Array.isArray(data) ? data : [];
+      console.log('Loaded wishes from API:', wishesList);
       setWishes(wishesList);
     } catch (err: any) {
       console.error('Error loading wishes:', err);
@@ -2627,7 +2647,9 @@ export default function Tasks() {
   const loadLifeGoals = async () => {
     try {
       const response = await api.get('/api/life-goals/');
+      console.log('Life goals response:', response);
       const data = response.data || response;
+      console.log('Life goals data:', data);
       setLifeGoals(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Error loading life goals:', error);
@@ -2707,7 +2729,7 @@ export default function Tasks() {
         pillar_id: goal.pillar_id,
         category_id: goal.category_id,
         time_period: goal.time_period,
-        start_date: formatDateForInput(new Date()), // Start today
+        start_date: new Date().toISOString().split('T')[0], // Start today
         target_date: goal.target_date,
         target_value: goal.target_value,
         current_value: 0, // Reset progress
@@ -3420,14 +3442,7 @@ export default function Tasks() {
       task: Task;
       reason: string;
       weeklyIssue?: { redDays: number; totalDays: number };
-      monthlyIssue?: { 
-        percentBehind: number; 
-        totalSpent: number; 
-        expectedTarget: number;
-        dailyTarget?: number;
-        currentAverage?: number;
-        neededToday?: number;
-      };
+      monthlyIssue?: { percentBehind: number; totalSpent: number; expectedTarget: number };
       recommendation: string;
     }> = [];
 
@@ -3526,38 +3541,20 @@ export default function Tasks() {
 
           const percentBehind = Math.round(((expectedTarget - totalSpent) / expectedTarget) * 100);
           const daysLeft = daysInMonth - daysElapsed;
-          const deficit = expectedTarget - totalSpent; // Total amount behind
-          
-          // Calculate daily target
-          const dailyTarget = task.task_type === TaskType.COUNT 
-            ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / daysInMonth)
-            : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / daysInMonth);
-          
-          // Calculate current average
-          const currentAverage = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
-          
-          // Amount needed today = daily target + catch up for deficit
-          const catchUpPerDay = daysLeft > 0 ? deficit / daysLeft : deficit;
-          const neededToday = dailyTarget + catchUpPerDay;
+          const remaining = expectedTarget - totalSpent;
+          const perDayNeeded = daysLeft > 0 ? Math.ceil(remaining / daysLeft) : remaining;
 
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal Avg: ${Math.round(dailyTarget)}, Current Avg: ${Math.round(currentAverage)}, ${daysLeft} days left)`
-            : `Need ${Math.ceil(deficit)} ${unit} today to hit target (month ended)`;
+            ? `Need ${perDayNeeded} ${unit} today (${percentBehind}% behind, ${daysLeft} days left)`
+            : `${percentBehind}% behind target`;
 
           // Check if already added from weekly - if so, also add as separate monthly entry
           // This allows tasks to appear in both Weekly and Monthly "Needs Attention" sections
           needsAttention.push({
             task,
             reason: 'monthly',
-            monthlyIssue: { 
-              percentBehind, 
-              totalSpent, 
-              expectedTarget,
-              dailyTarget: Math.round(dailyTarget),
-              currentAverage: Math.round(currentAverage),
-              neededToday: Math.ceil(neededToday)
-            },
+            monthlyIssue: { percentBehind, totalSpent, expectedTarget },
             recommendation
           });
         }
@@ -3679,11 +3676,26 @@ export default function Tasks() {
         // Check if task has been explicitly added to this week
         const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
         
+        // Debug logging for Cloud task
+        if (task.name === 'Cloud') {
+          console.log('🔍 Cloud Task Debug:', {
+            taskId: task.id,
+            hasBeenAddedToWeekly,
+            weeklyTaskStatus: weeklyTaskStatuses[task.id],
+            hasDailyDataThisWeek,
+            hasWeeklyDataThisWeek,
+            weeklyTaskStatusesKeys: Object.keys(weeklyTaskStatuses)
+          });
+        }
+        
         // Show task ONLY if it has been explicitly added to weekly tracking
         // (Same behavior as monthly tab - user adds tasks manually)
         if (!hasBeenAddedToWeekly) {
+          if (task.name === 'Cloud') console.log('❌ Cloud: Not added to weekly - hiding');
           return false; // Not explicitly added to weekly - don't show
         }
+        
+        if (task.name === 'Cloud') console.log('✅ Cloud: Passed initial weekly check');
         
       } else if (activeTab === 'monthly') {
         // For monthly tab: ONLY show tasks that have been explicitly added to monthly tracking
@@ -3716,13 +3728,17 @@ export default function Tasks() {
       if (activeTab === 'weekly') {
         const taskStatus = weeklyTaskStatuses[task.id];
         
+        if (task.name === 'Cloud') console.log('🔍 Cloud: Weekly status check:', { taskStatus, is_completed: task.is_completed, is_active: task.is_active, follow_up_frequency: task.follow_up_frequency });
+        
         // If task is marked completed/NA for THIS week:
         // - For DAILY tasks: HIDE them (they belong in daily tab)
         // - For WEEKLY tasks: SHOW them with status
         if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
           if (task.follow_up_frequency === 'daily') {
+            if (task.name === 'Cloud') console.log('❌ Cloud: Marked complete/NA + daily frequency - hiding');
             return false; // Hide daily tasks when marked complete in weekly
           }
+          if (task.name === 'Cloud') console.log('✅ Cloud: Weekly task with status - showing');
           return true; // Show weekly tasks with their status
         }
         
@@ -3734,10 +3750,12 @@ export default function Tasks() {
         if (task.is_completed || !task.is_active) {
           // Only hide if it's a weekly task (not a daily task showing in weekly view)
           if (task.follow_up_frequency === 'weekly') {
+            if (task.name === 'Cloud') console.log('❌ Cloud: Globally completed/inactive + weekly frequency - hiding');
             return false;
           }
         }
         
+        if (task.name === 'Cloud') console.log('✅ Cloud: Passed all checks - showing in weekly');
         return true;
       }
       
@@ -3789,6 +3807,9 @@ export default function Tasks() {
           // Get local date components (not UTC)
           const completedLocalDate = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate());
           const todayLocalDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          
+          // Debug logging
+          console.log(`Task: ${task.name}, completed_at: ${task.completed_at}, completedDate: ${completedDate}, completedLocal: ${completedLocalDate}, today: ${todayLocalDate}, match: ${completedLocalDate.getTime() === todayLocalDate.getTime()}`);
           
           return completedLocalDate.getTime() === todayLocalDate.getTime();
         }
@@ -3926,77 +3947,40 @@ export default function Tasks() {
           </div>
           
           <div className="task-content">
-            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-              <span 
-                className={`task-name ${task.is_completed ? 'strikethrough' : ''}`}
-                onClick={() => onEdit(task)}
-                style={{ 
-                  cursor: 'pointer', 
-                  textDecoration: task.is_completed ? 'line-through' : 'underline',
-                  color: '#3182ce'
-                }}
-                title="Click to edit task"
-              >
-                {task.name}
-              </span>
-              {/* Show subtask count for root tasks and tasks with children */}
-              {(() => {
-                // Get all descendants (subtasks and sub-subtasks)
-                const getAllDescendants = (taskId: number): ProjectTaskData[] => {
-                  const directChildren = allTasks.filter(t => t.parent_task_id === taskId);
-                  const allDescendants = [...directChildren];
-                  directChildren.forEach(child => {
-                    allDescendants.push(...getAllDescendants(child.id));
-                  });
-                  return allDescendants;
-                };
-                
-                const descendants = getAllDescendants(task.id);
-                const completedDescendants = descendants.filter(t => t.is_completed).length;
-                const totalDescendants = descendants.length;
-                
-                if (totalDescendants > 0) {
-                  return (
-                    <span 
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                        background: completedDescendants === totalDescendants ? '#c6f6d5' : '#e6f3ff',
-                        color: completedDescendants === totalDescendants ? '#22543d' : '#1e5a8e',
-                        border: `1px solid ${completedDescendants === totalDescendants ? '#9ae6b4' : '#b3d9ff'}`
-                      }}
-                      title={`${completedDescendants} of ${totalDescendants} subtasks completed`}
-                    >
-                      📊 {completedDescendants}/{totalDescendants}
-                    </span>
-                  );
-                }
-                return null;
-              })()}
-              {task.milestone_id && (() => {
-                const milestone = projectMilestones.find(m => m.id === task.milestone_id);
-                return milestone ? (
-                  <span 
-                    className="milestone-badge"
-                    title={`Milestone: ${milestone.name} (Target: ${new Date(milestone.target_date).toLocaleDateString()})`}
-                    style={{
-                      display: 'inline-block',
-                      padding: '2px 8px',
-                      borderRadius: '12px',
-                      fontSize: '11px',
-                      fontWeight: '500',
-                      background: '#e6f3ff',
-                      color: '#1e5a8e',
-                      border: '1px solid #b3d9ff'
-                    }}
-                  >
-                    🎯 {milestone.name}
-                  </span>
-                ) : null;
-              })()}
-            </div>
+            <span 
+              className={`task-name ${task.is_completed ? 'strikethrough' : ''}`}
+              onClick={() => onEdit(task)}
+              style={{ 
+                cursor: 'pointer', 
+                textDecoration: task.is_completed ? 'line-through' : 'underline',
+                color: '#3182ce'
+              }}
+              title="Click to edit task"
+            >
+              {task.name}
+            </span>
+            {task.milestone_id && (() => {
+              const milestone = projectMilestones.find(m => m.id === task.milestone_id);
+              return milestone ? (
+                <span 
+                  className="milestone-badge"
+                  title={`Milestone: ${milestone.name} (Target: ${new Date(milestone.target_date).toLocaleDateString()})`}
+                  style={{
+                    display: 'inline-block',
+                    marginLeft: '8px',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '11px',
+                    fontWeight: '500',
+                    background: '#e6f3ff',
+                    color: '#1e5a8e',
+                    border: '1px solid #b3d9ff'
+                  }}
+                >
+                  🎯 {milestone.name}
+                </span>
+              ) : null;
+            })()}
             {task.description && (
               <span className="task-description">{task.description}</span>
             )}
@@ -4006,7 +3990,7 @@ export default function Tasks() {
             <div className="task-due-date">
               📅 <input 
                 type="date"
-                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                 onChange={(e) => onUpdateDueDate(task.id, e.target.value)}
                 style={{
                   border: 'none',
@@ -4285,7 +4269,7 @@ export default function Tasks() {
                       <td className="col-date">
                         <input
                           type="date"
-                          value={oneTimeTask.start_date ? formatDateForInput(new Date(oneTimeTask.start_date)) : ''}
+                          value={oneTimeTask.start_date ? new Date(oneTimeTask.start_date).toISOString().split('T')[0] : ''}
                           onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { start_date: e.target.value })}
                           style={{ width: '100%', padding: '4px' }}
                         />
@@ -4306,7 +4290,7 @@ export default function Tasks() {
                       <td className="col-date">
                         <input
                           type="date"
-                          value={oneTimeTask.updated_date ? formatDateForInput(new Date(oneTimeTask.updated_date)) : ''}
+                          value={oneTimeTask.updated_date ? new Date(oneTimeTask.updated_date).toISOString().split('T')[0] : ''}
                           onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { updated_date: e.target.value })}
                           style={{ width: '100%', padding: '4px' }}
                         />
@@ -4406,9 +4390,12 @@ export default function Tasks() {
                         onClick={(e) => {
                           // Don't navigate if clicking on buttons or inputs
                           const target = e.target as HTMLElement;
+                          console.log('🔴 Card clicked!', { target: target.tagName, closest: target.closest('button, input') });
                           if (target.closest('button, input')) {
+                            console.log('🔴 Click was on button/input, ignoring');
                             return;
                           }
+                          console.log('🔴 Calling handleSelectProject for:', project.name);
                           handleSelectProject(project);
                         }}
                         style={{ cursor: 'pointer' }}
@@ -5359,44 +5346,36 @@ export default function Tasks() {
                   📊 Project Overview
                 </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                  {(() => {
-                    // Filter tasks for THIS project only
-                    const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                    return (
-                      <>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Total Tasks (All Levels)</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2c3e50' }}>
-                            {thisProjectTasks.length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Completed</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#48BB78' }}>
-                            {thisProjectTasks.filter(t => t.is_completed).length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>In Progress</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4299E1' }}>
-                            {thisProjectTasks.filter(t => !t.is_completed).length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Root Tasks</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#805AD5' }}>
-                            {thisProjectTasks.filter(t => !t.parent_task_id).length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Sub-tasks</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ED8936' }}>
-                            {thisProjectTasks.filter(t => t.parent_task_id).length}
-                          </div>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Total Tasks (All Levels)</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2c3e50' }}>
+                      {projectTasks.length}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Completed</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#48BB78' }}>
+                      {projectTasks.filter(t => t.is_completed).length}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>In Progress</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4299E1' }}>
+                      {projectTasks.filter(t => !t.is_completed).length}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Root Tasks</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#805AD5' }}>
+                      {projectTasks.filter(t => !t.parent_task_id).length}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Sub-tasks</div>
+                    <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ED8936' }}>
+                      {projectTasks.filter(t => t.parent_task_id).length}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ marginTop: '15px' }}>
                   <div className="progress-bar" style={{ height: '12px', borderRadius: '6px' }}>
@@ -5417,142 +5396,128 @@ export default function Tasks() {
 
               {/* Project Milestones Section */}
               <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', cursor: 'pointer' }}
-                  onClick={() => setExpandedSections(prev => ({ ...prev, milestones: !prev.milestones }))}
-                >
-                  <h3 style={{ margin: 0 }}>
-                    {expandedSections.milestones ? '▼' : '▶'} 🎯 Milestones ({projectMilestones.length})
-                  </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0 }}>🎯 Milestones</h3>
                   <button 
                     className="btn btn-secondary" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAddProjectMilestoneModal(true);
-                    }}
+                    onClick={() => setShowAddProjectMilestoneModal(true)}
                   >
                     ➕ Add Milestone
                   </button>
                 </div>
                 
-                {expandedSections.milestones && (
-                  !projectMilestones || projectMilestones.length === 0 ? (
-                    <div className="empty-state" style={{ padding: '20px', fontSize: '14px' }}>
-                      <p>No milestones yet. Add milestones to track project phases.</p>
-                    </div>
-                  ) : (
-                    <div className="milestones-list">
-                      {projectMilestones.map((milestone, index) => {
-                      // Calculate all tasks for this milestone
+                {!projectMilestones || projectMilestones.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '20px', fontSize: '14px' }}>
+                    <p>No milestones yet. Add milestones to track project phases.</p>
+                  </div>
+                ) : (
+                  <div className="milestones-list">
+                    {projectMilestones.map((milestone) => {
+                      // Calculate progress for this milestone
                       const milestoneTasks = projectTasks.filter(task => task.milestone_id === milestone.id);
                       const completedTasks = milestoneTasks.filter(task => task.is_completed).length;
                       const totalTasks = milestoneTasks.length;
+                      const progressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
                       
                       return (
                         <div 
                           key={milestone.id} 
-                          style={{ 
-                            display: 'flex',
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            padding: '10px 15px', 
-                            background: milestone.is_completed ? '#e6f7ed' : '#f8f9fa',
-                            border: `1px solid ${milestone.is_completed ? '#9ae6b4' : '#e0e0e0'}`,
-                            borderRadius: '6px',
-                            marginBottom: '8px',
-                            fontSize: '13px',
-                            gap: '15px'
-                          }}
+                          className={`milestone-card ${milestone.is_completed ? 'completed' : ''} ${new Date(milestone.target_date) < new Date() && !milestone.is_completed ? 'overdue' : ''}`}
                         >
-                          {/* Left side: Checkbox + Number + Name (fixed width) + Stats + Date (aligned columns) */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                          <div className="milestone-header">
                             <input
                               type="checkbox"
                               checked={milestone.is_completed}
                               onChange={() => handleToggleProjectMilestone(milestone.id, !milestone.is_completed)}
-                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                              style={{ marginRight: '10px' }}
                             />
-                            <span style={{ fontWeight: 'bold', color: '#666', minWidth: '25px' }}>#{index + 1}</span>
-                            <span 
-                              onClick={() => {
-                                setSelectedMilestone(milestone);
-                                setShowMilestoneDetailModal(true);
-                              }}
-                              style={{ 
-                                fontWeight: '600', 
-                                color: '#3182ce', 
-                                fontSize: '14px', 
-                                width: '280px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                cursor: 'pointer',
-                                textDecoration: 'underline'
-                              }}
-                              title={`Click to view details: ${milestone.name}`}
-                            >
-                              {milestone.name}
-                            </span>
-                            <span style={{ color: '#805ad5', fontWeight: '500', minWidth: '80px' }}>Tasks: {completedTasks}/{totalTasks}</span>
-                            <span style={{ color: '#666', minWidth: '100px' }}>
-                              {new Date(milestone.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
+                            <span className="milestone-name">{milestone.name}</span>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                className="btn-edit-small"
+                                onClick={() => {
+                                  setEditingMilestone(milestone);
+                                  setShowEditProjectMilestoneModal(true);
+                                }}
+                                title="Edit milestone"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                className="btn-delete-small"
+                                onClick={() => handleDeleteProjectMilestone(milestone.id)}
+                                title="Delete milestone"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+                          {milestone.description && (
+                            <p className="milestone-description">{milestone.description}</p>
+                          )}
+                          
+                          {/* Milestone Association Info */}
+                          <div style={{ 
+                            marginTop: '10px', 
+                            padding: '10px', 
+                            background: '#f0f7ff', 
+                            borderRadius: '6px',
+                            border: '1px solid #d0e4ff',
+                            fontSize: '12px'
+                          }}>
+                            <div style={{ marginBottom: '5px' }}>
+                              <strong>🏗️ Project:</strong> {selectedProject.name}
+                            </div>
+                            {selectedProject.goal_id && (() => {
+                              const goal = lifeGoals?.find(g => g.id === selectedProject.goal_id);
+                              return goal ? (
+                                <div>
+                                  <strong>🎯 Life Goal:</strong> {goal.name}
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                           
-                          {/* Right side: Overdue badge + Action Buttons */}
-                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <div className="milestone-date">
+                            📅 Target: {new Date(milestone.target_date).toLocaleDateString()}
                             {new Date(milestone.target_date) < new Date() && !milestone.is_completed && (
-                              <span style={{ 
-                                color: '#fff',
-                                background: '#f56565',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 'bold'
-                              }}>
-                                ⚠️ Overdue
-                              </span>
+                              <span style={{ color: '#D13438', marginLeft: '8px' }}>⚠️ Overdue</span>
                             )}
-                            <button
-                              onClick={() => {
-                                setEditingMilestone(milestone);
-                                setShowEditProjectMilestoneModal(true);
-                              }}
-                              style={{ 
-                                padding: '5px 10px', 
-                                fontSize: '12px',
-                                background: '#4299e1', 
-                                color: 'white', 
-                                border: 'none', 
-                                borderRadius: '4px', 
-                                cursor: 'pointer',
-                                fontWeight: '500'
-                              }}
-                              title="Edit milestone"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteProjectMilestone(milestone.id)}
-                              style={{ 
-                                padding: '5px 10px', 
-                                fontSize: '12px',
-                                background: '#f56565', 
-                                color: 'white', 
-                                border: 'none', 
-                                borderRadius: '4px', 
-                                cursor: 'pointer',
-                                fontWeight: '500'
-                              }}
-                              title="Delete milestone"
-                            >
-                              Delete
-                            </button>
                           </div>
+                          {totalTasks > 0 && (
+                            <div className="milestone-progress" style={{ marginTop: '10px' }}>
+                              <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                fontSize: '12px',
+                                marginBottom: '5px',
+                                color: '#666'
+                              }}>
+                                <span>📊 Tasks: {completedTasks} / {totalTasks}</span>
+                                <span>{progressPercentage}%</span>
+                              </div>
+                              <div style={{
+                                width: '100%',
+                                height: '8px',
+                                background: '#e0e0e0',
+                                borderRadius: '4px',
+                                overflow: 'hidden'
+                              }}>
+                                <div style={{
+                                  width: `${progressPercentage}%`,
+                                  height: '100%',
+                                  background: progressPercentage === 100 ? '#48BB78' : '#4299E1',
+                                  borderRadius: '4px',
+                                  transition: 'width 0.3s ease'
+                                }} />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-                  )
                 )}
               </div>
 
@@ -5564,52 +5529,42 @@ export default function Tasks() {
                   alignItems: 'center', 
                   marginBottom: '15px',
                   borderBottom: '2px solid #3182ce',
-                  paddingBottom: '10px',
-                  cursor: 'pointer'
-                }}
-                  onClick={() => setExpandedSections(prev => ({ ...prev, allTasks: !prev.allTasks }))}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <h3 style={{ margin: 0, fontSize: '20px', color: '#2c3e50' }}>
-                      {expandedSections.allTasks ? '▼' : '▶'} 📋 All Tasks
-                    </h3>
-                    <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
-                      {(() => {
-                        const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                        return `${thisProjectTasks.filter(t => t.is_completed).length} / ${thisProjectTasks.length} completed`;
-                      })()}
-                    </span>
-                  </div>
+                  paddingBottom: '10px'
+                }}>
+                  <h3 style={{ margin: 0, fontSize: '20px', color: '#2c3e50' }}>
+                    📋 All Tasks
+                  </h3>
+                  <span style={{ fontSize: '14px', color: '#666' }}>
+                    {projectTasks.filter(t => t.is_completed).length} / {projectTasks.length} completed
+                  </span>
                 </div>
                 
-                {expandedSections.allTasks && (
-                  <div className="project-tasks-tree">
-                    {!projectTasks || projectTasks.length === 0 ? (
-                      <div className="empty-state">
-                        <p>No tasks yet. Click "Add Project Task" to get started.</p>
-                      </div>
-                    ) : (
-                      <div className="task-list">
-                        {getTasksByParentId(null).filter(task => task.project_id === selectedProject.id).map((task) => (
-                          <TaskNode 
-                          key={task.id} 
-                          task={task} 
-                          level={0}
-                          allTasks={projectTasks.filter(t => t.project_id === selectedProject.id)}
-                          expandedTasks={expandedTasks}
-                          onToggleExpand={toggleTaskExpansion}
-                          onToggleComplete={handleToggleTaskCompletion}
-                          onDelete={handleDeleteTask}
-                          onEdit={handleEditTask}
-                          onUpdateDueDate={handleUpdateTaskDueDate}
-                          getDueDateColorClass={getDueDateColorClass}
-                          getTasksByParentId={getTasksByParentId}
-                        />
-                      ))}
+                <div className="project-tasks-tree">
+                  {!projectTasks || projectTasks.length === 0 ? (
+                    <div className="empty-state">
+                      <p>No tasks yet. Click "Add Project Task" to get started.</p>
                     </div>
-                  )}
+                  ) : (
+                    <div className="task-list">
+                      {getTasksByParentId(null).map((task) => (
+                        <TaskNode 
+                        key={task.id} 
+                        task={task} 
+                        level={0}
+                        allTasks={projectTasks}
+                        expandedTasks={expandedTasks}
+                        onToggleExpand={toggleTaskExpansion}
+                        onToggleComplete={handleToggleTaskCompletion}
+                        onDelete={handleDeleteTask}
+                        onEdit={handleEditTask}
+                        onUpdateDueDate={handleUpdateTaskDueDate}
+                        getDueDateColorClass={getDueDateColorClass}
+                        getTasksByParentId={getTasksByParentId}
+                      />
+                    ))}
                   </div>
                 )}
+                </div>
               </div>
             </>
           ) : (
@@ -6106,7 +6061,7 @@ export default function Tasks() {
                           fontSize: '14px',
                           fontWeight: '500'
                         }}
-                        onClick={() => handleMarkHabitEntry(habit.id, formatDateForInput(new Date()), true)}
+                        onClick={() => handleMarkHabitEntry(habit.id, new Date().toISOString().split('T')[0], true)}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#38a169'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#48bb78'}
                       >
@@ -6125,7 +6080,7 @@ export default function Tasks() {
                           fontSize: '14px',
                           fontWeight: '500'
                         }}
-                        onClick={() => handleMarkHabitEntry(habit.id, formatDateForInput(new Date()), false)}
+                        onClick={() => handleMarkHabitEntry(habit.id, new Date().toISOString().split('T')[0], false)}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fc8181'}
                       >
@@ -6630,24 +6585,16 @@ export default function Tasks() {
               </h3>
               <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
                 <table className="tasks-table daily-table">
-                  <thead style={{ 
-                    display: 'table-header-group', 
-                    visibility: 'visible',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 20,
-                    borderBottom: '2px solid #5a67d8'
-                  }}>
+                  <thead>
                     <tr>
-                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Day</th>
-                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual<br/>Average/Day</th>
-                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Day</th>
+                      <th className="col-task sticky-col sticky-col-1">Task</th>
+                      <th className="col-time sticky-col sticky-col-2">Target</th>
+                      <th className="col-time sticky-col sticky-col-3">Spent<br/>(Average/day)</th>
+                      <th className="col-time sticky-col sticky-col-4">Remaining<br/>(Average/day)</th>
                       {weekDays.map(day => (
-                        <th key={day.index} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.label}</th>
+                        <th key={day.index} className="col-hour">{day.label}</th>
                       ))}
-                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                      <th className="col-status">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -6670,15 +6617,15 @@ export default function Tasks() {
                             </div>
                           </td>
                           
-                          <td className={`col-time sticky-col sticky-col-2 ${colorClass}`} style={{ textAlign: 'center' }}>
-                            {task.allocated_minutes} min
+                          <td className={`col-time sticky-col sticky-col-2 ${colorClass}`}>
+                            {weeklyTarget} min
                           </td>
                           
-                          <td className={`col-time sticky-col sticky-col-3 ${colorClass}`} style={{ textAlign: 'center' }}>
+                          <td className={`col-time sticky-col sticky-col-3 ${colorClass}`}>
                             {avgSpentPerDay} min
                           </td>
                           
-                          <td className={`col-time sticky-col sticky-col-4 ${colorClass}`} style={{ textAlign: 'center' }}>
+                          <td className={`col-time sticky-col sticky-col-4 ${colorClass}`}>
                             {avgRemainingPerDay} min
                           </td>
                           
@@ -6732,24 +6679,16 @@ export default function Tasks() {
               </h3>
               <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
                 <table className="tasks-table daily-table">
-                  <thead style={{ 
-                    display: 'table-header-group', 
-                    visibility: 'visible',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 20,
-                    borderBottom: '2px solid #5a67d8'
-                  }}>
+                  <thead>
                     <tr>
-                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Day</th>
-                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Total Count</th>
-                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Days Done</th>
+                      <th className="col-task sticky-col sticky-col-1">Task</th>
+                      <th className="col-time sticky-col sticky-col-2">Target</th>
+                      <th className="col-time sticky-col sticky-col-3">Total Count</th>
+                      <th className="col-time sticky-col sticky-col-4">Days Done</th>
                       {weekDays.map(day => (
-                        <th key={day.index} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.label}</th>
+                        <th key={day.index} className="col-hour">{day.label}</th>
                       ))}
-                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                      <th className="col-status">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -6784,15 +6723,15 @@ export default function Tasks() {
                             </div>
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-2" style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-                            {task.target_value || 0} {task.unit}
+                          <td className="col-time sticky-col sticky-col-2" style={bgColor ? { backgroundColor: bgColor } : undefined}>
+                            {weeklyTarget} {task.unit}
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-3" style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+                          <td className="col-time sticky-col sticky-col-3" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             {totalCount} {task.unit}
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-4" style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+                          <td className="col-time sticky-col sticky-col-4" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             {daysDone}/7 days
                           </td>
                           
@@ -6846,24 +6785,16 @@ export default function Tasks() {
               </h3>
               <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
                 <table className="tasks-table daily-table">
-                  <thead style={{ 
-                    display: 'table-header-group', 
-                    visibility: 'visible',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    position: 'sticky',
-                    top: 0,
-                    zIndex: 20,
-                    borderBottom: '2px solid #5a67d8'
-                  }}>
+                  <thead>
                     <tr>
-                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Days Completed</th>
-                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Completion Rate</th>
-                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Current Streak</th>
+                      <th className="col-task sticky-col sticky-col-1">Task</th>
+                      <th className="col-time sticky-col sticky-col-2">Days Completed</th>
+                      <th className="col-time sticky-col sticky-col-3">Completion Rate</th>
+                      <th className="col-time sticky-col sticky-col-4">Current Streak</th>
                       {weekDays.map(day => (
-                        <th key={day.index} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.label}</th>
+                        <th key={day.index} className="col-hour">{day.label}</th>
                       ))}
-                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                      <th className="col-status">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -7075,9 +7006,6 @@ export default function Tasks() {
                 const isYearlyNA = activeTab === 'yearly' && yearlyStatus?.is_na;
                 const rowClassName = isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted ? 'completed-row' : isWeeklyNA || isMonthlyNA || isYearlyNA ? 'na-row' : (task.is_completed ? 'completed-row' : !task.is_active ? 'na-row' : '');
                 
-                // For Today tab: Add due date color class for overdue highlighting
-                const dueDateClass = activeTab === 'today' && !task.is_completed ? getDueDateColorClass(task.due_date) : '';
-                
                 // Calculate background color for sticky columns
                 const bgColor = isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted 
                   ? '#c6f6d5' 
@@ -7090,7 +7018,7 @@ export default function Tasks() {
                 {sectionHeader}
                 <tr 
                   key={task.id} 
-                  className={`${rowClassName} ${dueDateClass} ${focusedCell && focusedCell.row === taskIndex ? 'focused-row' : ''}`}
+                  className={`${rowClassName} ${focusedCell && focusedCell.row === taskIndex ? 'focused-row' : ''}`}
                   style={
                     isWeeklyCompleted || isMonthlyCompleted || isYearlyCompleted 
                       ? { backgroundColor: '#c6f6d5' } 
@@ -8016,6 +7944,7 @@ export default function Tasks() {
                           type="checkbox"
                           checked={task.is_completed}
                           onChange={(e) => {
+                            console.log('Checkbox clicked for task:', task.id, 'Current status:', task.is_completed);
                             handleToggleTaskCompletion(task.id, task.is_completed);
                           }}
                           style={{ width: '18px', height: '18px', cursor: 'pointer', pointerEvents: 'auto' }}
@@ -8051,7 +7980,7 @@ export default function Tasks() {
                       <td className="col-time">
                         <input 
                           type="date"
-                          value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                          value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                           onChange={(e) => handleUpdateTaskDueDate(task.id, e.target.value)}
                           style={{
                             border: '1px solid #e2e8f0',
@@ -8137,7 +8066,7 @@ export default function Tasks() {
                       <td className="col-time">
                         <input 
                           type="date"
-                          value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                          value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                           onChange={(e) => handleUpdateGoalTaskDueDate(task.id, e.target.value)}
                           style={{
                             border: '1px solid #e2e8f0',
@@ -8195,7 +8124,7 @@ export default function Tasks() {
                       <td className="col-date">
                         <input
                           type="date"
-                          value={oneTimeTask.updated_date ? formatDateForInput(new Date(oneTimeTask.updated_date)) : ''}
+                          value={oneTimeTask.updated_date ? new Date(oneTimeTask.updated_date).toISOString().split('T')[0] : ''}
                           onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { updated_date: e.target.value })}
                           style={{
                             border: '1px solid #e2e8f0',
@@ -8213,7 +8142,7 @@ export default function Tasks() {
                       <td className="col-action">
                         <button 
                           className="btn btn-sm btn-success"
-                          onClick={() => updateOneTimeTask(oneTimeTask.task_id, { updated_date: formatDateForInput(new Date()) })}
+                          onClick={() => updateOneTimeTask(oneTimeTask.task_id, { updated_date: new Date().toISOString().split('T')[0] })}
                           title="Mark as done today"
                         >
                           ✓ Done
@@ -8410,45 +8339,14 @@ export default function Tasks() {
                               </span>
                             </div>
 
-                            <div style={{ fontSize: '13px', color: '#718096', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '13px', color: '#718096', marginBottom: '4px' }}>
                               {item.task.pillar_name} - {item.task.category_name}
                             </div>
 
                             {item.monthlyIssue && (
-                              <>
-                                <div style={{ 
-                                  display: 'grid', 
-                                  gridTemplateColumns: 'repeat(3, 1fr)', 
-                                  gap: '12px', 
-                                  marginBottom: '8px',
-                                  padding: '10px',
-                                  backgroundColor: '#f7fafc',
-                                  borderRadius: '4px',
-                                  border: '1px solid #e2e8f0'
-                                }}>
-                                  <div>
-                                    <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Ideal Average/Day</div>
-                                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#2563eb' }}>
-                                      {item.monthlyIssue.dailyTarget} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Current Average</div>
-                                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#10b981' }}>
-                                      {item.monthlyIssue.currentAverage} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Need Today</div>
-                                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#dc2626' }}>
-                                      {item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
-                                    </div>
-                                  </div>
-                                </div>
-                                <div style={{ fontSize: '13px', color: '#1976d2', marginBottom: '6px' }}>
-                                  📊 Progress: {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} ({item.monthlyIssue.percentBehind}% behind)
-                                </div>
-                              </>
+                              <div style={{ fontSize: '14px', color: '#1976d2', marginBottom: '6px' }}>
+                                📊 Monthly: {item.monthlyIssue.percentBehind}% behind ({Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''})
+                              </div>
                             )}
 
                             <div style={{ 
@@ -9291,7 +9189,7 @@ export default function Tasks() {
                     name="start_date"
                     className="form-control"
                     required
-                    defaultValue={editingProject?.start_date || formatDateForInput(new Date())}
+                    defaultValue={editingProject?.start_date || new Date().toISOString().split('T')[0]}
                   />
                   <small className="form-text">
                     When did/will you start this project? (Editable - can be in the past)
@@ -9654,57 +9552,6 @@ export default function Tasks() {
               <button className="btn-close" onClick={() => setShowEditTaskModal(false)}>×</button>
             </div>
             <div className="modal-body">
-              {/* Show parent task hierarchy if this is a subtask */}
-              {editingTask.parent_task_id && (() => {
-                // Build the hierarchy path from root to immediate parent
-                const getTaskPath = (taskId: number): string[] => {
-                  const task = projectTasks.find(t => t.id === taskId);
-                  if (!task) return [];
-                  if (task.parent_task_id) {
-                    return [...getTaskPath(task.parent_task_id), task.name];
-                  }
-                  return [task.name];
-                };
-                
-                const path = getTaskPath(editingTask.parent_task_id);
-                const parentTask = projectTasks.find(t => t.id === editingTask.parent_task_id);
-                
-                return (
-                  <div style={{ 
-                    marginBottom: '15px', 
-                    padding: '12px', 
-                    backgroundColor: '#f7fafc', 
-                    borderLeft: '4px solid #4299e1',
-                    borderRadius: '4px'
-                  }}>
-                    <div style={{ fontSize: '12px', color: '#718096', marginBottom: '4px', fontWeight: '500' }}>
-                      📂 Task Hierarchy
-                    </div>
-                    <div style={{ fontSize: '13px', color: '#2d3748' }}>
-                      {path.join(' → ')}
-                    </div>
-                    {parentTask && (
-                      <button
-                        type="button"
-                        onClick={() => setEditingTask(parentTask)}
-                        style={{
-                          marginTop: '8px',
-                          padding: '4px 10px',
-                          fontSize: '12px',
-                          backgroundColor: '#4299e1',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✏️ Edit Parent Task
-                      </button>
-                    )}
-                  </div>
-                );
-              })()}
-              
               <form onSubmit={handleUpdateTask}>
                 <div className="form-group">
                   <label htmlFor="edit-task-name">Task Name *</label>
@@ -9730,74 +9577,22 @@ export default function Tasks() {
                 </div>
                 
                 <div className="form-group">
-                  <label htmlFor="edit-task-parent">Parent Task</label>
-                  <select
-                    id="edit-task-parent"
-                    className="form-control"
-                    value={editingTask.parent_task_id || ''}
-                    onChange={(e) => setEditingTask({...editingTask, parent_task_id: e.target.value ? Number(e.target.value) : null})}
-                  >
-                    <option value="">-- Root Task (No Parent) --</option>
-                    {projectTasks
-                      .filter(task => 
-                        task.project_id === editingTask.project_id && 
-                        task.id !== editingTask.id && // Can't be parent of itself
-                        !(() => {
-                          // Prevent circular dependencies: can't select a descendant as parent
-                          const isDescendant = (potentialDescendantId: number, ancestorId: number): boolean => {
-                            const task = projectTasks.find(t => t.id === potentialDescendantId);
-                            if (!task) return false;
-                            if (task.parent_task_id === ancestorId) return true;
-                            if (task.parent_task_id) return isDescendant(task.parent_task_id, ancestorId);
-                            return false;
-                          };
-                          return isDescendant(task.id, editingTask.id);
-                        })()
-                      )
-                      .map(task => {
-                        // Build path to show hierarchy
-                        const getPath = (taskId: number): string => {
-                          const t = projectTasks.find(x => x.id === taskId);
-                          if (!t) return '';
-                          if (t.parent_task_id) {
-                            const parentPath = getPath(t.parent_task_id);
-                            return parentPath ? `${parentPath} → ${t.name}` : t.name;
-                          }
-                          return t.name;
-                        };
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {getPath(task.id)}
-                          </option>
-                        );
-                      })}
-                  </select>
-                  <small className="form-text">Change the parent task to move this task to a different location in the hierarchy</small>
-                </div>
-                
-                <div className="form-group">
                   <label htmlFor="edit-task-milestone">Milestone</label>
                   <select
                     id="edit-task-milestone"
                     className="form-control"
-                    value={editingTask.milestone_id ? String(editingTask.milestone_id) : ''}
+                    value={editingTask.milestone_id || ''}
                     onChange={(e) => setEditingTask({...editingTask, milestone_id: e.target.value ? Number(e.target.value) : null})}
                   >
                     <option value="">-- None --</option>
-                    {(() => {
-                      const filteredMilestones = projectMilestones.filter(milestone => 
-                        editingTask.project_id && milestone.project_id === editingTask.project_id
-                      );
-                      console.log('Available milestones for project', editingTask.project_id, ':', filteredMilestones);
-                      console.log('Current milestone_id:', editingTask.milestone_id);
-                      return filteredMilestones
-                        .sort((a, b) => a.order - b.order)
-                        .map(milestone => (
-                          <option key={milestone.id} value={milestone.id}>
-                            {milestone.name} {milestone.target_date ? `(${new Date(milestone.target_date).toLocaleDateString()})` : ''}
-                          </option>
-                        ));
-                    })()}
+                    {projectMilestones
+                      .filter(milestone => editingTask.project_id && milestone.project_id === editingTask.project_id)
+                      .sort((a, b) => a.order - b.order)
+                      .map(milestone => (
+                        <option key={milestone.id} value={milestone.id}>
+                          {milestone.name} {milestone.target_date ? `(${new Date(milestone.target_date).toLocaleDateString()})` : ''}
+                        </option>
+                      ))}
                   </select>
                   <small className="form-text">Link this task to a milestone for better tracking</small>
                 </div>
@@ -9808,7 +9603,7 @@ export default function Tasks() {
                     type="date"
                     id="edit-task-due-date"
                     className="form-control"
-                    value={editingTask.due_date ? formatDateForInput(new Date(editingTask.due_date)) : ''}
+                    value={editingTask.due_date ? new Date(editingTask.due_date).toISOString().split('T')[0] : ''}
                     onChange={(e) => setEditingTask({...editingTask, due_date: e.target.value})}
                   />
                 </div>
@@ -9879,28 +9674,28 @@ export default function Tasks() {
           if (addToTrackingAfterCreate && createdTaskId) {
             try {
               if (addToTrackingAfterCreate === 'weekly') {
-                const weekStart = formatDateForInput(selectedWeekStart);
+                const weekStart = selectedWeekStart.toISOString().split('T')[0];
                 await api.post(`/api/weekly-time/status/${createdTaskId}/${weekStart}`, {
                   is_completed: false,
                   is_na: false
                 });
                 await loadWeeklyEntries(selectedWeekStart);
               } else if (addToTrackingAfterCreate === 'monthly') {
-                const monthStart = formatDateForInput(selectedMonthStart);
+                const monthStart = selectedMonthStart.toISOString().split('T')[0];
                 await api.post(`/api/monthly-time/status/${createdTaskId}/${monthStart}`, {
                   is_completed: false,
                   is_na: false
                 });
                 await loadMonthlyEntries(selectedMonthStart);
               } else if (addToTrackingAfterCreate === 'yearly') {
-                const yearStart = formatDateForInput(selectedYearStart);
+                const yearStart = selectedYearStart.toISOString().split('T')[0];
                 await api.post(`/api/yearly-time/status/${createdTaskId}/${yearStart}`, {
                   is_completed: false,
                   is_na: false
                 });
                 await loadYearlyEntries(selectedYearStart);
               } else if (addToTrackingAfterCreate === 'onetime') {
-                const today = formatDateForInput(new Date());
+                const today = new Date().toISOString().split('T')[0];
                 await api.post('/api/one-time-tasks/', {
                   task_id: createdTaskId,
                   start_date: today,
@@ -10978,341 +10773,6 @@ export default function Tasks() {
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Milestone Detail Modal */}
-      {showMilestoneDetailModal && selectedMilestone && (
-        <div className="modal-overlay" onClick={() => setShowMilestoneDetailModal(false)}>
-          <div className="modal-content" style={{ maxWidth: '900px', maxHeight: '90vh', overflow: 'auto' }} onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>🎯 {selectedMilestone.name}</h2>
-              <button className="btn-close" onClick={() => setShowMilestoneDetailModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              {/* Milestone Info */}
-              <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#f7fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '15px', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginBottom: '4px' }}>Target Date</div>
-                    <div style={{ fontSize: '16px', fontWeight: '600', color: '#2d3748' }}>
-                      {new Date(selectedMilestone.target_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginBottom: '4px' }}>Status</div>
-                    <div style={{ fontSize: '16px', fontWeight: '600' }}>
-                      {selectedMilestone.is_completed ? (
-                        <span style={{ color: '#22543d', background: '#c6f6d5', padding: '4px 12px', borderRadius: '12px' }}>✓ Completed</span>
-                      ) : new Date(selectedMilestone.target_date) < new Date() ? (
-                        <span style={{ color: '#c53030', background: '#fed7d7', padding: '4px 12px', borderRadius: '12px' }}>⚠️ Overdue</span>
-                      ) : (
-                        <span style={{ color: '#2c5282', background: '#bee3f8', padding: '4px 12px', borderRadius: '12px' }}>📅 In Progress</span>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginBottom: '4px' }}>Progress</div>
-                    <div style={{ fontSize: '16px', fontWeight: '600', color: '#2d3748' }}>
-                      {(() => {
-                        const milestoneTasks = projectTasks.filter(t => t.milestone_id === selectedMilestone.id);
-                        const completed = milestoneTasks.filter(t => t.is_completed).length;
-                        const total = milestoneTasks.length;
-                        const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-                        return `${percentage}% (${completed}/${total} tasks)`;
-                      })()}
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Detailed Progress Bar */}
-                <div style={{ marginTop: '15px' }}>
-                  {(() => {
-                    const milestoneTasks = projectTasks.filter(t => t.milestone_id === selectedMilestone.id);
-                    const completed = milestoneTasks.filter(t => t.is_completed).length;
-                    const total = milestoneTasks.length;
-                    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-                    
-                    return (
-                      <>
-                        <div style={{ 
-                          height: '24px', 
-                          backgroundColor: '#e2e8f0', 
-                          borderRadius: '12px', 
-                          overflow: 'hidden',
-                          position: 'relative'
-                        }}>
-                          <div 
-                            style={{ 
-                              height: '100%',
-                              width: `${percentage}%`,
-                              background: percentage === 100 
-                                ? 'linear-gradient(90deg, #48bb78 0%, #38a169 100%)'
-                                : 'linear-gradient(90deg, #4299e1 0%, #3182ce 100%)',
-                              transition: 'width 0.3s ease',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              color: 'white',
-                              fontWeight: '600',
-                              fontSize: '13px'
-                            }}
-                          >
-                            {percentage > 15 && `${percentage}%`}
-                          </div>
-                          {percentage <= 15 && (
-                            <div style={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              fontWeight: '600',
-                              fontSize: '13px',
-                              color: '#4a5568'
-                            }}>
-                              {percentage}%
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          marginTop: '8px',
-                          fontSize: '12px',
-                          color: '#718096'
-                        }}>
-                          <span>✓ {completed} completed</span>
-                          <span>📋 {total - completed} remaining</span>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-                
-                {selectedMilestone.description && (
-                  <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: '12px', color: '#718096', marginBottom: '4px' }}>Description</div>
-                    <div style={{ fontSize: '14px', color: '#4a5568' }}>{selectedMilestone.description}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Sub-Projects (Root tasks) */}
-              {(() => {
-                const rootTasks = projectTasks.filter(t => 
-                  t.milestone_id === selectedMilestone.id && !t.parent_task_id
-                );
-                if (rootTasks.length === 0) return null;
-                
-                return (
-                  <div style={{ marginBottom: '20px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#2d3748', marginBottom: '12px', borderBottom: '2px solid #4299e1', paddingBottom: '8px' }}>
-                      📁 Sub-Projects ({rootTasks.length})
-                    </h3>
-                    <div>
-                      {rootTasks.map(rootTask => {
-                        const allDescendants = projectTasks.filter(t => {
-                          let current: ProjectTaskData | undefined = t;
-                          while (current && current.parent_task_id) {
-                            if (current.parent_task_id === rootTask.id) return true;
-                            current = projectTasks.find(p => p.id === current!.parent_task_id);
-                          }
-                          return false;
-                        });
-                        const completedDescendants = allDescendants.filter(t => t.is_completed).length;
-                        const totalDescendants = allDescendants.length;
-                        
-                        return (
-                          <div 
-                            key={rootTask.id}
-                            style={{ 
-                              padding: '12px', 
-                              marginBottom: '8px', 
-                              backgroundColor: rootTask.is_completed ? '#f0fff4' : '#fff',
-                              border: '1px solid #e2e8f0',
-                              borderLeft: `4px solid ${rootTask.is_completed ? '#48bb78' : '#4299e1'}`,
-                              borderRadius: '6px'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', textDecoration: rootTask.is_completed ? 'line-through' : 'none' }}>
-                                  {rootTask.is_completed && '✓ '}{rootTask.name}
-                                </div>
-                                {totalDescendants > 0 && (
-                                  <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                                    📊 {completedDescendants}/{totalDescendants} subtasks completed
-                                  </div>
-                                )}
-                                {rootTask.due_date && (
-                                  <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                                    📅 Due: {new Date(rootTask.due_date).toLocaleDateString()}
-                                  </div>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => {
-                                  handleEditTask(rootTask);
-                                  setShowMilestoneDetailModal(false);
-                                }}
-                                style={{
-                                  padding: '6px 12px',
-                                  fontSize: '12px',
-                                  backgroundColor: '#4299e1',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* All Tasks */}
-              {(() => {
-                const allTasks = projectTasks.filter(t => t.milestone_id === selectedMilestone.id);
-                const groupedByCompletion = {
-                  incomplete: allTasks.filter(t => !t.is_completed),
-                  completed: allTasks.filter(t => t.is_completed)
-                };
-                
-                return (
-                  <div>
-                    <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#2d3748', marginBottom: '12px', borderBottom: '2px solid #805ad5', paddingBottom: '8px' }}>
-                      ✓ All Tasks ({allTasks.length})
-                    </h3>
-                    
-                    {groupedByCompletion.incomplete.length > 0 && (
-                      <div style={{ marginBottom: '20px' }}>
-                        <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#4a5568', marginBottom: '8px' }}>
-                          📋 Incomplete ({groupedByCompletion.incomplete.length})
-                        </h4>
-                        {groupedByCompletion.incomplete.map(task => (
-                          <div 
-                            key={task.id}
-                            style={{ 
-                              padding: '10px 12px', 
-                              marginBottom: '6px', 
-                              backgroundColor: '#fff',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '4px',
-                              fontSize: '13px'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div>
-                                {task.parent_task_id && '└─ '}{task.name}
-                                {task.due_date && (
-                                  <span style={{ marginLeft: '10px', fontSize: '11px', color: '#718096' }}>
-                                    📅 {new Date(task.due_date).toLocaleDateString()}
-                                  </span>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => {
-                                  handleEditTask(task);
-                                  setShowMilestoneDetailModal(false);
-                                }}
-                                style={{
-                                  padding: '4px 10px',
-                                  fontSize: '11px',
-                                  backgroundColor: '#4299e1',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {groupedByCompletion.completed.length > 0 && (
-                      <div>
-                        <h4 style={{ fontSize: '14px', fontWeight: '600', color: '#4a5568', marginBottom: '8px' }}>
-                          ✓ Completed ({groupedByCompletion.completed.length})
-                        </h4>
-                        {groupedByCompletion.completed.map(task => (
-                          <div 
-                            key={task.id}
-                            style={{ 
-                              padding: '10px 12px', 
-                              marginBottom: '6px', 
-                              backgroundColor: '#f7fafc',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '4px',
-                              fontSize: '13px',
-                              textDecoration: 'line-through',
-                              color: '#718096'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div>
-                                ✓ {task.parent_task_id && '└─ '}{task.name}
-                              </div>
-                              <button
-                                onClick={() => {
-                                  handleEditTask(task);
-                                  setShowMilestoneDetailModal(false);
-                                }}
-                                style={{
-                                  padding: '4px 10px',
-                                  fontSize: '11px',
-                                  backgroundColor: '#a0aec0',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                Edit
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {allTasks.length === 0 && (
-                      <div style={{ padding: '20px', textAlign: 'center', color: '#718096', fontSize: '14px' }}>
-                        No tasks assigned to this milestone yet.
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-            <div className="modal-footer">
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => {
-                  setEditingMilestone(selectedMilestone);
-                  setShowMilestoneDetailModal(false);
-                  setShowEditProjectMilestoneModal(true);
-                }}
-              >
-                ✏️ Edit Milestone
-              </button>
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => setShowMilestoneDetailModal(false)}
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

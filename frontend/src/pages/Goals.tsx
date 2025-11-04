@@ -7,7 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
-import './Tasks.css'; // Reuse the same CSS for now
+import './Goals.css'; // Goals page styling
 import { Task } from '../types';
 import confetti from 'canvas-confetti';
 import TaskForm from '../components/TaskForm';
@@ -113,6 +113,7 @@ interface ProjectTaskData {
   id: number;
   project_id: number;
   parent_task_id: number | null;
+  milestone_id: number | null;
   name: string;
   description: string | null;
   due_date: string | null;
@@ -353,6 +354,7 @@ export default function Goals() {
     id: number;
     project_id: number;
     parent_task_id: number | null;
+    milestone_id: number | null;
     name: string;
     description: string | null;
     due_date: string | null;
@@ -1022,9 +1024,9 @@ export default function Goals() {
         key={goal.id}
         className={`goal-card status-${goal.status.replace('_', '-')}`}
         style={{ 
-          position: 'relative', 
-          width: '360px', 
-          flexShrink: 0, 
+          position: 'relative',
+          width: '360px',
+          flexShrink: 0,
           border: `4px solid ${cardColor.border}`,
           background: cardColor.bg,
           padding: '16px',
@@ -1334,86 +1336,195 @@ export default function Goals() {
         </div>
         {/* Close inner light container */}
 
-        {/* Action Buttons Row - Outside light container */}
+        {/* Action Buttons - Two Rows */}
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
+          display: 'flex',
+          flexDirection: 'column',
           gap: '8px',
           marginTop: '12px'
         }}>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedGoal(goal);
-              loadGoalDetails(goal.id);
-              navigate(`/goals?goal=${goal.id}`);
-            }}
-            style={{
-              background: '#2563eb',
-              border: '2px solid rgba(0,0,0,0.3)',
-              padding: '10px 8px',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
-          >
-            👁️ View
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditingGoal(goal);
-              setShowAddGoalModal(true);
-            }}
-            style={{
-              background: '#f59e0b',
-              border: '2px solid rgba(0,0,0,0.3)',
-              padding: '10px 8px',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
-          >
-            ✏️ Edit
-          </button>
-          <button
-            onClick={async (e) => {
-              e.stopPropagation();
-              if (window.confirm(`Are you sure you want to delete "${goal.name}"?`)) {
+          {/* First Row: View + Edit */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px'
+          }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedGoal(goal);
+                loadGoalDetails(goal.id);
+                navigate(`/goals?goal=${goal.id}`);
+              }}
+              style={{
+                background: '#2563eb',
+                border: '2px solid rgba(0,0,0,0.3)',
+                padding: '10px 8px',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
+            >
+              👁️ View
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingGoal(goal);
+                setShowAddGoalModal(true);
+              }}
+              style={{
+                background: '#f59e0b',
+                border: '2px solid rgba(0,0,0,0.3)',
+                padding: '10px 8px',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
+            >
+              ✏️ Edit
+            </button>
+          </div>
+          
+          {/* Second Row: Duplicate + Delete */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '8px'
+          }}>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                const newName = prompt('Enter name for the duplicated goal:', `${goal.name} (Copy)`);
+                if (!newName) return;
+
                 try {
-                  await api.delete(`/api/life-goals/${goal.id}`);
+                  // Create new goal
+                  const newGoalResponse = await api.post('/api/life-goals/', {
+                    name: newName,
+                    description: goal.description,
+                    pillar_id: goal.pillar_id,
+                    category_id: goal.category_id,
+                    time_period: goal.time_period,
+                    start_date: new Date().toISOString().split('T')[0],
+                    target_date: goal.target_date,
+                    target_value: goal.target_value,
+                    current_value: 0,
+                    unit: goal.unit,
+                    parent_goal_id: goal.parent_goal_id
+                  });
+                  const newGoalId = newGoalResponse.data.id;
+
+                  // Copy milestones
+                  const milestonesResponse = await api.get(`/api/life-goals/${goal.id}/milestones`);
+                  for (const m of milestonesResponse.data) {
+                    await api.post(`/api/life-goals/${newGoalId}/milestones`, {
+                      name: m.name,
+                      description: m.description,
+                      target_date: m.target_date,
+                      target_value: m.target_value,
+                      unit: m.unit
+                    });
+                  }
+
+                  // Copy tasks
+                  const tasksResponse = await api.get(`/api/life-goals/${goal.id}/tasks`);
+                  const tasks = tasksResponse.data;
+                  if (tasks.length > 0) {
+                    const taskIdMap = new Map();
+                    const parentTasks = tasks.filter((t: any) => !t.parent_task_id);
+                    for (const t of parentTasks) {
+                      const r = await api.post(`/api/life-goals/${newGoalId}/tasks`, {
+                        name: t.name, description: t.description, start_date: t.start_date,
+                        due_date: t.due_date, priority: t.priority, parent_task_id: null
+                      });
+                      taskIdMap.set(t.id, r.data.id);
+                    }
+                    const subTasks = tasks.filter((t: any) => t.parent_task_id && !tasks.find((st: any) => st.id === t.parent_task_id && st.parent_task_id));
+                    for (const t of subTasks) {
+                      const pid = taskIdMap.get(t.parent_task_id);
+                      if (pid) {
+                        const r = await api.post(`/api/life-goals/${newGoalId}/tasks`, {
+                          name: t.name, description: t.description, start_date: t.start_date,
+                          due_date: t.due_date, priority: t.priority, parent_task_id: pid
+                        });
+                        taskIdMap.set(t.id, r.data.id);
+                      }
+                    }
+                    const subSubTasks = tasks.filter((t: any) => t.parent_task_id && tasks.find((st: any) => st.id === t.parent_task_id && st.parent_task_id));
+                    for (const t of subSubTasks) {
+                      const pid = taskIdMap.get(t.parent_task_id);
+                      if (pid) {
+                        await api.post(`/api/life-goals/${newGoalId}/tasks`, {
+                          name: t.name, description: t.description, start_date: t.start_date,
+                          due_date: t.due_date, priority: t.priority, parent_task_id: pid
+                        });
+                      }
+                    }
+                  }
+
+                  alert(`Goal duplicated as "${newName}"!`);
                   await loadLifeGoals();
                 } catch (err) {
-                  console.error('Error deleting goal:', err);
+                  console.error('Error duplicating goal:', err);
+                  alert('Failed to duplicate goal');
                 }
-              }
-            }}
-            style={{
-              background: '#dc2626',
-              border: '2px solid rgba(0,0,0,0.3)',
-              padding: '10px 8px',
-              borderRadius: '8px',
-              color: 'white',
-              fontSize: '12px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
-            onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
-          >
-            🗑️ Delete
-          </button>
+              }}
+              style={{
+                background: '#0891b2',
+                border: '2px solid rgba(0,0,0,0.3)',
+                padding: '10px 8px',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#0e7490'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#0891b2'}
+            >
+              📋 Duplicate
+            </button>
+            <button
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (window.confirm(`Are you sure you want to delete "${goal.name}"?`)) {
+                  try {
+                    await api.delete(`/api/life-goals/${goal.id}`);
+                    await loadLifeGoals();
+                  } catch (err) {
+                    console.error('Error deleting goal:', err);
+                  }
+                }
+              }}
+              style={{
+                background: '#dc2626',
+                border: '2px solid rgba(0,0,0,0.3)',
+                padding: '10px 8px',
+                borderRadius: '8px',
+                color: 'white',
+                fontSize: '12px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
+              onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
+            >
+              🗑️ Delete
+            </button>
+          </div>
         </div>
       </div>
     );

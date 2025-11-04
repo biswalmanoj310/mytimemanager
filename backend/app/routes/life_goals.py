@@ -118,7 +118,7 @@ def get_all_goals(include_completed: bool = False, db: Session = Depends(get_db)
             "status": goal.status,
             "category": goal.category,
             "priority": goal.priority,
-            "why_statements": json.loads(goal.why_statements) if goal.why_statements else [],
+            "why_statements": goal.why_statements if isinstance(goal.why_statements, list) else (json.loads(goal.why_statements) if goal.why_statements else []),
             "description": goal.description,
             "progress_percentage": goal.progress_percentage,
             "time_allocated_hours": goal.time_allocated_hours,
@@ -168,7 +168,7 @@ def get_goal(goal_id: int, db: Session = Depends(get_db)):
         "status": goal.status,
         "category": goal.category,
         "priority": goal.priority,
-        "why_statements": json.loads(goal.why_statements) if goal.why_statements else [],
+        "why_statements": goal.why_statements if isinstance(goal.why_statements, list) else (json.loads(goal.why_statements) if goal.why_statements else []),
         "description": goal.description,
         "progress_percentage": goal.progress_percentage,
         "time_allocated_hours": goal.time_allocated_hours,
@@ -543,15 +543,14 @@ def get_goal_projects_for_task(task_id: int, db: Session = Depends(get_db)):
 
 @router.get("/goal-tasks/due-today")
 def get_goal_tasks_due_today(db: Session = Depends(get_db)):
-    """Get all goal tasks that are due today (including completed from today - visible until next day midnight)"""
+    """Get all goal tasks that are due today (including completed from today - visible until midnight)"""
     from app.models.goal import LifeGoalTask, LifeGoal
     from datetime import date, datetime, timedelta
     from sqlalchemy import or_, and_, cast, Date
     
     today = date.today()
-    yesterday = today - timedelta(days=1)
     
-    # Get tasks due today - include completed if completed today or yesterday
+    # Get tasks due today - include completed if completed today only
     tasks = db.query(LifeGoalTask).join(
         LifeGoal, LifeGoalTask.goal_id == LifeGoal.id
     ).filter(
@@ -560,10 +559,10 @@ def get_goal_tasks_due_today(db: Session = Depends(get_db)):
         or_(
             # Not completed
             LifeGoalTask.is_completed == False,
-            # Completed today or yesterday - show until next day midnight
+            # Completed today only - show until midnight
             and_(
                 LifeGoalTask.is_completed == True, 
-                cast(LifeGoalTask.updated_at, Date) >= yesterday
+                cast(LifeGoalTask.updated_at, Date) >= today
             )
         )
     ).all()
@@ -593,13 +592,12 @@ def get_goal_tasks_due_today(db: Session = Depends(get_db)):
 
 @router.get("/goal-tasks/overdue")
 def get_goal_tasks_overdue(db: Session = Depends(get_db)):
-    """Get all goal tasks that are overdue (including completed from today - visible until next day midnight)"""
+    """Get all goal tasks that are overdue (including completed from today - visible until midnight)"""
     from app.models.goal import LifeGoalTask, LifeGoal
     from datetime import date, timedelta
     from sqlalchemy import or_, and_, cast, Date
     
     today = date.today()
-    yesterday = today - timedelta(days=1)
     
     tasks = db.query(LifeGoalTask).join(
         LifeGoal, LifeGoalTask.goal_id == LifeGoal.id
@@ -609,10 +607,10 @@ def get_goal_tasks_overdue(db: Session = Depends(get_db)):
         or_(
             # Not completed
             LifeGoalTask.is_completed == False,
-            # Completed today or yesterday - show until next day midnight
+            # Completed today only - show until midnight
             and_(
                 LifeGoalTask.is_completed == True,
-                cast(LifeGoalTask.updated_at, Date) >= yesterday
+                cast(LifeGoalTask.updated_at, Date) >= today
             )
         )
     ).all()

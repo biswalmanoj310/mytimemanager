@@ -14,10 +14,7 @@ import TimeTracking from './pages/TimeTracking';
 import Completed from './pages/Completed';
 import Challenges from './pages/Challenges';
 
-console.log('[APP] App component loaded');
-
 function App() {
-  console.log('[APP] App component rendering');
   return (
     <Router>
       <Layout>

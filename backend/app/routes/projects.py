@@ -33,6 +33,7 @@ class ProjectUpdate(BaseModel):
     description: Optional[str] = None
     pillar_id: Optional[int] = None
     category_id: Optional[int] = None
+    goal_id: Optional[int] = None  # Link to Life Goal
     related_wish_id: Optional[int] = None
     start_date: Optional[date] = None
     target_completion_date: Optional[date] = None
@@ -44,6 +45,7 @@ class ProjectUpdate(BaseModel):
 class ProjectTaskCreate(BaseModel):
     name: str
     parent_task_id: Optional[int] = None
+    milestone_id: Optional[int] = None
     description: Optional[str] = None
     due_date: Optional[date] = None
     priority: str = "medium"
@@ -53,6 +55,7 @@ class ProjectTaskCreate(BaseModel):
 class ProjectTaskUpdate(BaseModel):
     name: Optional[str] = None
     parent_task_id: Optional[int] = None
+    milestone_id: Optional[int] = None
     description: Optional[str] = None
     due_date: Optional[date] = None
     priority: Optional[str] = None
@@ -92,6 +95,7 @@ def get_projects(
             "id": project.id,
             "name": project.name,
             "description": project.description,
+            "goal_id": project.goal_id,  # Add goal_id for goal linking
             "pillar_id": project.pillar_id,
             "category_id": project.category_id,
             "start_date": project.start_date.date() if project.start_date else None,
@@ -233,6 +237,7 @@ def update_project(
             "description": updated_project.description,
             "pillar_id": updated_project.pillar_id,
             "category_id": updated_project.category_id,
+            "goal_id": updated_project.goal_id,
             "start_date": updated_project.start_date.date() if updated_project.start_date else None,
             "target_completion_date": updated_project.target_completion_date.date() if updated_project.target_completion_date else None,
             "status": updated_project.status,
@@ -275,6 +280,7 @@ def get_project_tasks(
             "id": task.id,
             "project_id": task.project_id,
             "parent_task_id": task.parent_task_id,
+            "milestone_id": task.milestone_id,
             "name": task.name,
             "description": task.description,
             "due_date": task.due_date.date() if task.due_date else None,

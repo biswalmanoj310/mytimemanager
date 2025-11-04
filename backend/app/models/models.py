@@ -512,6 +512,7 @@ class ProjectTask(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     parent_task_id = Column(Integer, ForeignKey("project_tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    milestone_id = Column(Integer, ForeignKey("project_milestones.id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String(300), nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True, index=True)
@@ -525,6 +526,7 @@ class ProjectTask(Base):
     # Relationships
     project = relationship("Project", back_populates="tasks")
     parent_task = relationship("ProjectTask", remote_side=[id], backref="sub_tasks")
+    milestone = relationship("ProjectMilestone", foreign_keys=[milestone_id])
 
     def __repr__(self):
         return f"<ProjectTask(id={self.id}, name='{self.name}', completed={self.is_completed})>"

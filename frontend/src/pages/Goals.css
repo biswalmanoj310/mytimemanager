@@ -39,12 +39,17 @@
   gap: var(--spacing-md);
 }
 
-/* Goals Grid Layout */
+/* Goals Grid Layout - Horizontal Row Like Projects Dashboard */
 .goals-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
   gap: 20px;
   margin-bottom: 32px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 10px;
+  align-items: stretch;
 }
 
 /* Goal Card Styles - Vibrant Like Projects */
@@ -555,7 +560,7 @@
   }
 
   .goals-grid {
-    grid-template-columns: 1fr;
+    /* Keep horizontal scroll on mobile */
     gap: var(--spacing-lg);
   }
 
@@ -571,6 +576,7 @@
 
   .goal-card {
     min-height: auto;
+    width: 300px; /* Slightly smaller on mobile */
   }
 
   .goal-card-stats {
