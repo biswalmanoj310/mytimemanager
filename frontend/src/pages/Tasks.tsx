@@ -8986,37 +8986,77 @@ export default function Tasks() {
                         </div>
 
                         {item.weeklyIssue && (
-                          <div style={{ 
-                            fontSize: '13px', 
-                            color: '#721c24',
-                            backgroundColor: '#f8d7da',
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            marginBottom: '8px',
-                            border: '1px solid #f5c6cb'
-                          }}>
-                            📅 {item.weeklyIssue.redDays}/{item.weeklyIssue.totalDays} days below target | 
-                            <span style={{ fontWeight: '600', marginLeft: '6px' }}>
-                              Lagged: {item.weeklyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
-                            </span>
-                          </div>
+                          <>
+                            <div style={{ 
+                              display: 'grid', 
+                              gridTemplateColumns: 'repeat(3, 1fr)', 
+                              gap: '12px', 
+                              marginBottom: '8px',
+                              padding: '10px',
+                              backgroundColor: '#fff5f5',
+                              borderRadius: '4px',
+                              border: '1px solid #fed7d7'
+                            }}>
+                              <div>
+                                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Ideal Average/Day</div>
+                                <div style={{ fontSize: '18px', fontWeight: '600', color: '#e53e3e' }}>
+                                  {item.weeklyIssue.dailyTarget} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Current Average</div>
+                                <div style={{ fontSize: '18px', fontWeight: '600', color: '#10b981' }}>
+                                  {item.weeklyIssue.currentAverage} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Need Today</div>
+                                <div style={{ fontSize: '18px', fontWeight: '600', color: '#dc2626' }}>
+                                  {item.weeklyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#c53030', marginBottom: '6px' }}>
+                              📅 {item.weeklyIssue.redDays}/{item.weeklyIssue.totalDays} days below target | Lagged: {item.weeklyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                            </div>
+                          </>
                         )}
 
-                        {item.monthlyIssue && (
-                          <div style={{ 
-                            fontSize: '13px', 
-                            color: '#721c24',
-                            backgroundColor: '#f8d7da',
-                            padding: '6px 10px',
-                            borderRadius: '4px',
-                            marginBottom: '8px',
-                            border: '1px solid #f5c6cb'
-                          }}>
-                            📊 {item.monthlyIssue.percentBehind}% behind ({Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}) | 
-                            <span style={{ fontWeight: '600', marginLeft: '6px' }}>
-                              Lagged: {item.monthlyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
-                            </span>
-                          </div>
+                        {item.monthlyIssue && !item.weeklyIssue && (
+                          <>
+                            <div style={{ 
+                              display: 'grid', 
+                              gridTemplateColumns: 'repeat(3, 1fr)', 
+                              gap: '12px', 
+                              marginBottom: '8px',
+                              padding: '10px',
+                              backgroundColor: '#fff5f5',
+                              borderRadius: '4px',
+                              border: '1px solid #fed7d7'
+                            }}>
+                              <div>
+                                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Ideal Average/Day</div>
+                                <div style={{ fontSize: '18px', fontWeight: '600', color: '#e53e3e' }}>
+                                  {item.monthlyIssue.dailyTarget} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Current Average</div>
+                                <div style={{ fontSize: '18px', fontWeight: '600', color: '#10b981' }}>
+                                  {item.monthlyIssue.currentAverage} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                                </div>
+                              </div>
+                              <div>
+                                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Need Today</div>
+                                <div style={{ fontSize: '18px', fontWeight: '600', color: '#dc2626' }}>
+                                  {item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#c53030', marginBottom: '6px' }}>
+                              📊 {item.monthlyIssue.percentBehind}% behind | Progress: {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} | Lagged: {item.monthlyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
+                            </div>
+                          </>
                         )}
 
                         <div style={{ 
@@ -9028,7 +9068,7 @@ export default function Tasks() {
                           borderRadius: '6px',
                           marginTop: '8px',
                           boxShadow: '0 2px 4px rgba(229, 62, 62, 0.4)',
-                          textAlign: 'center'
+                          textAlign: 'left'
                         }}>
                           🎯 {item.recommendation}
                         </div>
@@ -9154,13 +9194,13 @@ export default function Tasks() {
                                   gap: '12px', 
                                   marginBottom: '8px',
                                   padding: '10px',
-                                  backgroundColor: '#f7fafc',
+                                  backgroundColor: '#fffbeb',
                                   borderRadius: '4px',
-                                  border: '1px solid #e2e8f0'
+                                  border: '1px solid #fde68a'
                                 }}>
                                   <div>
                                     <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>Ideal Average/Day</div>
-                                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#2563eb' }}>
+                                    <div style={{ fontSize: '18px', fontWeight: '600', color: '#f59e0b' }}>
                                       {item.monthlyIssue.dailyTarget} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
                                     </div>
                                   </div>
@@ -9177,22 +9217,24 @@ export default function Tasks() {
                                     </div>
                                   </div>
                                 </div>
-                                <div style={{ fontSize: '13px', color: '#1976d2', marginBottom: '6px' }}>
-                                  📊 Progress: {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} ({item.monthlyIssue.percentBehind}% behind)
+                                <div style={{ fontSize: '13px', color: '#d97706', marginBottom: '6px' }}>
+                                  📊 {item.monthlyIssue.percentBehind}% behind | Progress: {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} | Lagged: {item.monthlyIssue.deficit || 0} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}
                                 </div>
                               </>
                             )}
 
                             <div style={{ 
-                              fontSize: '14px', 
-                              fontWeight: '600', 
-                              color: '#2c5282', 
-                              backgroundColor: '#e6f7ff', 
-                              padding: '8px 12px', 
-                              borderRadius: '4px',
-                              marginTop: '8px'
+                              fontSize: '16px', 
+                              fontWeight: '700', 
+                              color: '#ffffff', 
+                              background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                              padding: '12px 16px', 
+                              borderRadius: '6px',
+                              marginTop: '8px',
+                              boxShadow: '0 2px 4px rgba(245, 158, 11, 0.4)',
+                              textAlign: 'left'
                             }}>
-                              💡 {item.recommendation}
+                              🎯 {item.recommendation}
                             </div>
                           </div>
 
