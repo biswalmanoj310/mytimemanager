@@ -10,6 +10,7 @@ import './Tasks.css';
 import './Projects.css';
 import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
+import { WeeklyTasks, MonthlyTasks, YearlyTasks, OneTimeTasks } from './index';
 
 type TabType = 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -4195,6 +4196,127 @@ export default function Tasks() {
       </div>
     );
   };
+
+  // Route to extracted page components for specific tabs
+  if (activeTab === 'weekly') {
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
+            ➕ Add Task
+          </button>
+        </header>
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <WeeklyTasks />
+      </div>
+    );
+  }
+
+  if (activeTab === 'monthly') {
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
+            ➕ Add Task
+          </button>
+        </header>
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <MonthlyTasks />
+      </div>
+    );
+  }
+
+  if (activeTab === 'yearly') {
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
+            ➕ Add Task
+          </button>
+        </header>
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <YearlyTasks />
+      </div>
+    );
+  }
+
+  if (activeTab === 'onetime') {
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
+            ➕ Add Task
+          </button>
+        </header>
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <OneTimeTasks />
+      </div>
+    );
+  }
 
   return (
     <div className="tasks-page">
