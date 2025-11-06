@@ -69,22 +69,43 @@ export interface OneTimeEntry {
   updated_at?: string;
 }
 
+// Task status tracking interfaces
+export interface TaskStatus {
+  is_completed: boolean;
+  is_na: boolean;
+}
+
 interface TimeEntriesContextValue {
   // Daily entries state
   dailyEntries: DailyEntry[];
   loadingDaily: boolean;
   
-  // Weekly entries state
+  // Weekly entries state (manual weekly entries)
   weeklyEntries: WeeklyEntry[];
   loadingWeekly: boolean;
   
-  // Monthly entries state
+  // Weekly task statuses (which tasks are tracked in weekly view)
+  weeklyTaskStatuses: Record<number, TaskStatus>;
+  
+  // Daily aggregates for weekly view (daily tasks shown in weekly)
+  dailyAggregatesWeekly: Record<string, number>; // key: "taskId-dayOfWeek", value: minutes/count
+  
+  // Monthly entries state (manual monthly entries)
   monthlyEntries: MonthlyEntry[];
   loadingMonthly: boolean;
+  
+  // Monthly task statuses (which tasks are tracked in monthly view)
+  monthlyTaskStatuses: Record<number, TaskStatus>;
+  
+  // Daily aggregates for monthly view (daily tasks shown in monthly)
+  dailyAggregatesMonthly: Record<string, number>; // key: "taskId-day", value: minutes/count
   
   // Yearly entries state
   yearlyEntries: YearlyEntry[];
   loadingYearly: boolean;
+  
+  // Yearly task statuses (which tasks are tracked in yearly view)
+  yearlyTaskStatuses: Record<number, TaskStatus>;
   
   // One-time entries state
   oneTimeEntries: OneTimeEntry[];
@@ -102,16 +123,24 @@ interface TimeEntriesContextValue {
   loadWeeklyEntries: (weekStartDate: string) => Promise<void>;
   saveWeeklyEntry: (entry: Partial<WeeklyEntry>) => Promise<WeeklyEntry>;
   updateWeeklyEntry: (entryId: number, updates: Partial<WeeklyEntry>) => Promise<WeeklyEntry>;
+  loadWeeklyTaskStatuses: (weekStartDate: string) => Promise<void>;
+  updateWeeklyTaskStatus: (taskId: number, weekStartDate: string, status: Partial<TaskStatus>) => Promise<void>;
+  loadDailyAggregatesForWeek: (weekStartDate: string) => Promise<void>;
   
   // Monthly operations
   loadMonthlyEntries: (monthStartDate: string) => Promise<void>;
   saveMonthlyEntry: (entry: Partial<MonthlyEntry>) => Promise<MonthlyEntry>;
   updateMonthlyEntry: (entryId: number, updates: Partial<MonthlyEntry>) => Promise<MonthlyEntry>;
+  loadMonthlyTaskStatuses: (monthStartDate: string) => Promise<void>;
+  updateMonthlyTaskStatus: (taskId: number, monthStartDate: string, status: Partial<TaskStatus>) => Promise<void>;
+  loadDailyAggregatesForMonth: (monthStartDate: string) => Promise<void>;
   
   // Yearly operations
   loadYearlyEntries: (year: number) => Promise<void>;
   saveYearlyEntry: (entry: Partial<YearlyEntry>) => Promise<YearlyEntry>;
   updateYearlyEntry: (entryId: number, updates: Partial<YearlyEntry>) => Promise<YearlyEntry>;
+  loadYearlyTaskStatuses: (year: number) => Promise<void>;
+  updateYearlyTaskStatus: (taskId: number, year: number, status: Partial<TaskStatus>) => Promise<void>;
   
   // One-time operations
   loadOneTimeEntries: () => Promise<void>;
@@ -131,6 +160,15 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
   const [monthlyEntries, setMonthlyEntries] = useState<MonthlyEntry[]>([]);
   const [yearlyEntries, setYearlyEntries] = useState<YearlyEntry[]>([]);
   const [oneTimeEntries, setOneTimeEntries] = useState<OneTimeEntry[]>([]);
+  
+  // Task status tracking
+  const [weeklyTaskStatuses, setWeeklyTaskStatuses] = useState<Record<number, TaskStatus>>({});
+  const [monthlyTaskStatuses, setMonthlyTaskStatuses] = useState<Record<number, TaskStatus>>({});
+  const [yearlyTaskStatuses, setYearlyTaskStatuses] = useState<Record<number, TaskStatus>>({});
+  
+  // Daily aggregates for weekly/monthly views
+  const [dailyAggregatesWeekly, setDailyAggregatesWeekly] = useState<Record<string, number>>({});
+  const [dailyAggregatesMonthly, setDailyAggregatesMonthly] = useState<Record<string, number>>({});
   
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
@@ -237,6 +275,71 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     }
   }, []);
 
+  const loadWeeklyTaskStatuses = useCallback(async (weekStartDate: string) => {
+    try {
+      setError(null);
+      const response: any = await api.get(`/api/weekly-time/status/${weekStartDate}`);
+      const statusData = Array.isArray(response) ? response : (response.data || []);
+      
+      const statusMap: Record<number, TaskStatus> = {};
+      if (Array.isArray(statusData)) {
+        statusData.forEach((status: any) => {
+          statusMap[status.task_id] = {
+            is_completed: status.is_completed,
+            is_na: status.is_na
+          };
+        });
+      }
+      
+      setWeeklyTaskStatuses(statusMap);
+    } catch (err: any) {
+      console.error('Error loading weekly task statuses:', err);
+      setError('Failed to load weekly task statuses');
+      setWeeklyTaskStatuses({});
+      throw err;
+    }
+  }, []);
+
+  const updateWeeklyTaskStatus = useCallback(async (taskId: number, weekStartDate: string, status: Partial<TaskStatus>) => {
+    try {
+      await api.post(`/api/weekly-time/status/${taskId}/${weekStartDate}`, status);
+      // Reload statuses after update
+      await loadWeeklyTaskStatuses(weekStartDate);
+    } catch (err: any) {
+      console.error('Error updating weekly task status:', err);
+      setError('Failed to update weekly task status');
+      throw err;
+    }
+  }, [loadWeeklyTaskStatuses]);
+
+  const loadDailyAggregatesForWeek = useCallback(async (weekStartDate: string) => {
+    try {
+      setError(null);
+      const response: any = await api.get(`/api/daily-time/entries/week/${weekStartDate}`);
+      
+      const aggregatesMap: Record<string, number> = {};
+      const dailyData = response.data || response;
+      
+      if (dailyData && typeof dailyData === 'object') {
+        Object.entries(dailyData).forEach(([taskId, dayData]: [string, any]) => {
+          if (dayData && typeof dayData === 'object') {
+            Object.entries(dayData).forEach(([dayOfWeek, minutes]: [string, any]) => {
+              const key = `${taskId}-${dayOfWeek}`;
+              aggregatesMap[key] = minutes;
+            });
+          }
+        });
+      }
+      
+      setDailyAggregatesWeekly(aggregatesMap);
+    } catch (err: any) {
+      console.error('Error loading daily aggregates for week:', err);
+      setError('Failed to load daily aggregates');
+      setDailyAggregatesWeekly({});
+      throw err;
+    }
+  }, []);
+
   // ==================== MONTHLY ENTRIES ====================
 
   const loadMonthlyEntries = useCallback(async (monthStartDate: string) => {
@@ -276,6 +379,71 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     } catch (err: any) {
       console.error('Error updating monthly entry:', err);
       setError('Failed to update monthly entry');
+      throw err;
+    }
+  }, []);
+
+  const loadMonthlyTaskStatuses = useCallback(async (monthStartDate: string) => {
+    try {
+      setError(null);
+      const response: any = await api.get(`/api/monthly-time/status/${monthStartDate}`);
+      const statusData = Array.isArray(response) ? response : (response.data || []);
+      
+      const statusMap: Record<number, TaskStatus> = {};
+      if (Array.isArray(statusData)) {
+        statusData.forEach((status: any) => {
+          statusMap[status.task_id] = {
+            is_completed: status.is_completed,
+            is_na: status.is_na
+          };
+        });
+      }
+      
+      setMonthlyTaskStatuses(statusMap);
+    } catch (err: any) {
+      console.error('Error loading monthly task statuses:', err);
+      setError('Failed to load monthly task statuses');
+      setMonthlyTaskStatuses({});
+      throw err;
+    }
+  }, []);
+
+  const updateMonthlyTaskStatus = useCallback(async (taskId: number, monthStartDate: string, status: Partial<TaskStatus>) => {
+    try {
+      await api.post(`/api/monthly-time/status/${taskId}/${monthStartDate}`, status);
+      // Reload statuses after update
+      await loadMonthlyTaskStatuses(monthStartDate);
+    } catch (err: any) {
+      console.error('Error updating monthly task status:', err);
+      setError('Failed to update monthly task status');
+      throw err;
+    }
+  }, [loadMonthlyTaskStatuses]);
+
+  const loadDailyAggregatesForMonth = useCallback(async (monthStartDate: string) => {
+    try {
+      setError(null);
+      const response: any = await api.get(`/api/daily-time/entries/month/${monthStartDate}`);
+      
+      const aggregatesMap: Record<string, number> = {};
+      const dailyData = response.data || response;
+      
+      if (dailyData && typeof dailyData === 'object') {
+        Object.entries(dailyData).forEach(([taskId, dayData]: [string, any]) => {
+          if (dayData && typeof dayData === 'object') {
+            Object.entries(dayData).forEach(([day, minutes]: [string, any]) => {
+              const key = `${taskId}-${day}`;
+              aggregatesMap[key] = minutes;
+            });
+          }
+        });
+      }
+      
+      setDailyAggregatesMonthly(aggregatesMap);
+    } catch (err: any) {
+      console.error('Error loading daily aggregates for month:', err);
+      setError('Failed to load daily aggregates');
+      setDailyAggregatesMonthly({});
       throw err;
     }
   }, []);
@@ -322,6 +490,43 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
       throw err;
     }
   }, []);
+
+  const loadYearlyTaskStatuses = useCallback(async (year: number) => {
+    try {
+      setError(null);
+      const response: any = await api.get(`/api/yearly-time/status/${year}`);
+      const statusData = Array.isArray(response) ? response : (response.data || []);
+      
+      const statusMap: Record<number, TaskStatus> = {};
+      if (Array.isArray(statusData)) {
+        statusData.forEach((status: any) => {
+          statusMap[status.task_id] = {
+            is_completed: status.is_completed,
+            is_na: status.is_na
+          };
+        });
+      }
+      
+      setYearlyTaskStatuses(statusMap);
+    } catch (err: any) {
+      console.error('Error loading yearly task statuses:', err);
+      setError('Failed to load yearly task statuses');
+      setYearlyTaskStatuses({});
+      throw err;
+    }
+  }, []);
+
+  const updateYearlyTaskStatus = useCallback(async (taskId: number, year: number, status: Partial<TaskStatus>) => {
+    try {
+      await api.post(`/api/yearly-time/status/${taskId}/${year}`, status);
+      // Reload statuses after update
+      await loadYearlyTaskStatuses(year);
+    } catch (err: any) {
+      console.error('Error updating yearly task status:', err);
+      setError('Failed to update yearly task status');
+      throw err;
+    }
+  }, [loadYearlyTaskStatuses]);
 
   // ==================== ONE-TIME ENTRIES ====================
 
@@ -371,10 +576,15 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     loadingDaily,
     weeklyEntries,
     loadingWeekly,
+    weeklyTaskStatuses,
+    dailyAggregatesWeekly,
     monthlyEntries,
     loadingMonthly,
+    monthlyTaskStatuses,
+    dailyAggregatesMonthly,
     yearlyEntries,
     loadingYearly,
+    yearlyTaskStatuses,
     oneTimeEntries,
     loadingOneTime,
     error,
@@ -385,12 +595,20 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     loadWeeklyEntries,
     saveWeeklyEntry,
     updateWeeklyEntry,
+    loadWeeklyTaskStatuses,
+    updateWeeklyTaskStatus,
+    loadDailyAggregatesForWeek,
     loadMonthlyEntries,
     saveMonthlyEntry,
     updateMonthlyEntry,
+    loadMonthlyTaskStatuses,
+    updateMonthlyTaskStatus,
+    loadDailyAggregatesForMonth,
     loadYearlyEntries,
     saveYearlyEntry,
     updateYearlyEntry,
+    loadYearlyTaskStatuses,
+    updateYearlyTaskStatus,
     loadOneTimeEntries,
     saveOneTimeEntry,
     updateOneTimeEntry,
