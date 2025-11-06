@@ -13,24 +13,31 @@ import Analytics from './pages/Analytics';
 import TimeTracking from './pages/TimeTracking';
 import Completed from './pages/Completed';
 import Challenges from './pages/Challenges';
+import { TaskProvider, TimeEntriesProvider, UserPreferencesProvider } from './contexts';
 
 function App() {
   return (
     <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/calendar" element={<Calendar />} />
-          <Route path="/tasks" element={<Tasks />} />
-          <Route path="/goals" element={<Goals />} />
-          <Route path="/challenges" element={<Challenges />} />
-          <Route path="/time-tracking" element={<TimeTracking />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/completed" element={<Completed />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
-      </Layout>
+      <TaskProvider>
+        <TimeEntriesProvider>
+          <UserPreferencesProvider>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/calendar" element={<Calendar />} />
+                <Route path="/tasks" element={<Tasks />} />
+                <Route path="/goals" element={<Goals />} />
+                <Route path="/challenges" element={<Challenges />} />
+                <Route path="/time-tracking" element={<TimeTracking />} />
+                <Route path="/analytics" element={<Analytics />} />
+                <Route path="/completed" element={<Completed />} />
+                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              </Routes>
+            </Layout>
+          </UserPreferencesProvider>
+        </TimeEntriesProvider>
+      </TaskProvider>
     </Router>
   );
 }
