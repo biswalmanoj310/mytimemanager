@@ -29,7 +29,15 @@ import {
 const YearlyTasks: React.FC = () => {
   // Context hooks
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
-  const { yearlyEntries, loadYearlyEntries, saveYearlyEntry, updateYearlyEntry } = useTimeEntriesContext();
+  const { 
+    yearlyEntries, 
+    loadYearlyEntries, 
+    saveYearlyEntry, 
+    updateYearlyEntry,
+    yearlyTaskStatuses,
+    loadYearlyTaskStatuses,
+    updateYearlyTaskStatus,
+  } = useTimeEntriesContext();
   const {
     selectedDate,
     setSelectedDate,
@@ -90,35 +98,51 @@ const YearlyTasks: React.FC = () => {
   }, []);
 
   /**
-   * Load yearly entries when year changes
+   * Load yearly entries and task statuses when year changes
    */
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        await loadYearlyEntries(yearInfo.year);
+        await Promise.all([
+          loadYearlyEntries(yearInfo.year),
+          loadYearlyTaskStatuses(yearInfo.year),
+        ]);
       } catch (err) {
-        console.error('Error loading yearly entries:', err);
-        setError('Failed to load yearly entries');
+        console.error('Error loading yearly data:', err);
+        setError('Failed to load yearly data');
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [yearStartString]);
+  }, [yearInfo.year, loadYearlyEntries, loadYearlyTaskStatuses]);
 
   /**
    * Filter tasks based on current criteria
+   * IMPORTANT: Yearly tab shows tasks that have been explicitly added to yearly tracking
+   * (tracked via yearlyTaskStatuses), NOT filtered by frequency
    */
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // Filter by yearly frequency
-      if (task.follow_up_frequency !== 'yearly' && task.follow_up_frequency !== 'monthly' && task.follow_up_frequency !== 'weekly' && task.follow_up_frequency !== 'daily') {
+      // CRITICAL: Only show tasks that have been explicitly added to yearly tracking
+      // This is determined by presence in yearlyTaskStatuses, not by frequency
+      const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
+      if (!hasBeenAddedToYearly) {
         return false;
       }
 
-      // Filter by status
+      // Check yearly-specific completion status
+      const taskStatus = yearlyTaskStatuses[task.id];
+      if (taskStatus) {
+        // If completed/NA for THIS year, show with proper status
+        if (taskStatus.is_completed || taskStatus.is_na) {
+          return true;
+        }
+      }
+
+      // Filter by status preferences
       if (!showInactive && !isTaskActive(task)) return false;
       if (!showCompleted && task.is_completed) return false;
       if (!showNA && task.na_marked_at) return false;
@@ -130,7 +154,7 @@ const YearlyTasks: React.FC = () => {
     filtered = filterByPillarAndCategory(filtered, selectedPillar, selectedCategory);
 
     return filtered;
-  }, [tasks, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
+  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
 
   /**
    * Group tasks by hierarchy
@@ -235,7 +259,9 @@ const YearlyTasks: React.FC = () => {
             Yearly Tasks
           </h2>
           <p className="text-muted">
-            Track your yearly tasks and monitor daily task aggregates
+            View daily tasks aggregated to yearly view - Track your daily habits throughout the year
+            <br />
+            <small><em>Tasks shown here have been explicitly added to yearly tracking</em></small>
           </p>
         </div>
       </div>

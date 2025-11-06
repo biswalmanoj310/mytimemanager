@@ -29,7 +29,17 @@ import {
 const MonthlyTasks: React.FC = () => {
   // Context hooks
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
-  const { monthlyEntries, loadMonthlyEntries, saveMonthlyEntry, updateMonthlyEntry } = useTimeEntriesContext();
+  const { 
+    monthlyEntries, 
+    loadMonthlyEntries, 
+    saveMonthlyEntry, 
+    updateMonthlyEntry,
+    monthlyTaskStatuses,
+    loadMonthlyTaskStatuses,
+    updateMonthlyTaskStatus,
+    dailyAggregatesMonthly,
+    loadDailyAggregatesForMonth,
+  } = useTimeEntriesContext();
   const {
     selectedDate,
     setSelectedDate,
@@ -93,35 +103,52 @@ const MonthlyTasks: React.FC = () => {
   }, []);
 
   /**
-   * Load monthly entries when month changes
+   * Load monthly entries, task statuses, and daily aggregates when month changes
    */
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        await loadMonthlyEntries(monthStartString);
+        await Promise.all([
+          loadMonthlyEntries(monthStartString),
+          loadMonthlyTaskStatuses(monthStartString),
+          loadDailyAggregatesForMonth(monthStartString),
+        ]);
       } catch (err) {
-        console.error('Error loading monthly entries:', err);
-        setError('Failed to load monthly entries');
+        console.error('Error loading monthly data:', err);
+        setError('Failed to load monthly data');
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [monthStartString]);
+  }, [monthStartString, loadMonthlyEntries, loadMonthlyTaskStatuses, loadDailyAggregatesForMonth]);
 
   /**
    * Filter tasks based on current criteria
+   * IMPORTANT: Monthly tab shows tasks that have been explicitly added to monthly tracking
+   * (tracked via monthlyTaskStatuses), NOT filtered by frequency
    */
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // Filter by monthly frequency
-      if (task.follow_up_frequency !== 'monthly' && task.follow_up_frequency !== 'weekly' && task.follow_up_frequency !== 'daily') {
+      // CRITICAL: Only show tasks that have been explicitly added to monthly tracking
+      // This is determined by presence in monthlyTaskStatuses, not by frequency
+      const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
+      if (!hasBeenAddedToMonthly) {
         return false;
       }
 
-      // Filter by status
+      // Check monthly-specific completion status
+      const taskStatus = monthlyTaskStatuses[task.id];
+      if (taskStatus) {
+        // If completed/NA for THIS month, show with proper status
+        if (taskStatus.is_completed || taskStatus.is_na) {
+          return true;
+        }
+      }
+
+      // Filter by status preferences
       if (!showInactive && !isTaskActive(task)) return false;
       if (!showCompleted && task.is_completed) return false;
       if (!showNA && task.na_marked_at) return false;
@@ -133,7 +160,7 @@ const MonthlyTasks: React.FC = () => {
     filtered = filterByPillarAndCategory(filtered, selectedPillar, selectedCategory);
 
     return filtered;
-  }, [tasks, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
+  }, [tasks, monthlyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
 
   /**
    * Group tasks by hierarchy
@@ -238,7 +265,9 @@ const MonthlyTasks: React.FC = () => {
             Monthly Tasks
           </h2>
           <p className="text-muted">
-            Track your monthly tasks and monitor daily task aggregates
+            View daily tasks aggregated to monthly view - Monitor your daily habits across the month
+            <br />
+            <small><em>Tasks shown here have been explicitly added to monthly tracking</em></small>
           </p>
         </div>
       </div>

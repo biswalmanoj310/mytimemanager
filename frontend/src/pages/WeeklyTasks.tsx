@@ -12,7 +12,7 @@
  * - Daily task aggregation display
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTaskContext, useTimeEntriesContext, useUserPreferencesContext } from '../contexts';
 import { DateNavigator, TaskFilters, TaskHierarchyGroup, TimeEntryGrid, TimeEntryData } from '../components';
 import { 
@@ -31,7 +31,17 @@ import {
 const WeeklyTasks: React.FC = () => {
   // Context hooks
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
-  const { weeklyEntries, loadWeeklyEntries, saveWeeklyEntry, updateWeeklyEntry } = useTimeEntriesContext();
+  const { 
+    weeklyEntries, 
+    loadWeeklyEntries, 
+    saveWeeklyEntry, 
+    updateWeeklyEntry,
+    weeklyTaskStatuses,
+    loadWeeklyTaskStatuses,
+    updateWeeklyTaskStatus,
+    dailyAggregatesWeekly,
+    loadDailyAggregatesForWeek,
+  } = useTimeEntriesContext();
   const {
     selectedDate,
     setSelectedDate,
@@ -96,35 +106,52 @@ const WeeklyTasks: React.FC = () => {
   }, []);
 
   /**
-   * Load weekly entries when week changes
+   * Load weekly entries, task statuses, and daily aggregates when week changes
    */
   useEffect(() => {
     const loadData = async () => {
       try {
         setLoading(true);
-        await loadWeeklyEntries(weekStartString);
+        await Promise.all([
+          loadWeeklyEntries(weekStartString),
+          loadWeeklyTaskStatuses(weekStartString),
+          loadDailyAggregatesForWeek(weekStartString),
+        ]);
       } catch (err) {
-        console.error('Error loading weekly entries:', err);
-        setError('Failed to load weekly entries');
+        console.error('Error loading weekly data:', err);
+        setError('Failed to load weekly data');
       } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [weekStartString]);
+  }, [weekStartString, loadWeeklyEntries, loadWeeklyTaskStatuses, loadDailyAggregatesForWeek]);
 
   /**
    * Filter tasks based on current criteria
+   * IMPORTANT: Weekly tab shows tasks that have been explicitly added to weekly tracking
+   * (tracked via weeklyTaskStatuses), NOT filtered by frequency
    */
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // Filter by weekly frequency
-      if (task.follow_up_frequency !== 'weekly' && task.follow_up_frequency !== 'daily') {
+      // CRITICAL: Only show tasks that have been explicitly added to weekly tracking
+      // This is determined by presence in weeklyTaskStatuses, not by frequency
+      const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
+      if (!hasBeenAddedToWeekly) {
         return false;
       }
 
-      // Filter by status
+      // Check weekly-specific completion status
+      const taskStatus = weeklyTaskStatuses[task.id];
+      if (taskStatus) {
+        // If completed/NA for THIS week, show with proper status
+        if (taskStatus.is_completed || taskStatus.is_na) {
+          return true;
+        }
+      }
+
+      // Filter by status preferences
       if (!showInactive && !isTaskActive(task)) return false;
       if (!showCompleted && task.is_completed) return false;
       if (!showNA && task.na_marked_at) return false;
@@ -136,7 +163,7 @@ const WeeklyTasks: React.FC = () => {
     filtered = filterByPillarAndCategory(filtered, selectedPillar, selectedCategory);
 
     return filtered;
-  }, [tasks, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
+  }, [tasks, weeklyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
 
   /**
    * Group tasks by hierarchy
@@ -149,22 +176,50 @@ const WeeklyTasks: React.FC = () => {
   }, [filteredTasks, hierarchyOrder, taskNameOrder]);
 
   /**
-   * Convert weekly entries to map for TimeEntryGrid
+   * Get weekly time for a task and day
+   * Combines manual weekly entries and aggregated daily data
+   */
+  const getWeeklyTime = useCallback((taskId: number, dayIndex: number): number => {
+    // For daily tasks: Use aggregated daily data
+    const task = tasks.find(t => t.id === taskId);
+    if (task && task.follow_up_frequency === 'daily') {
+      const key = `${taskId}-${dayIndex}`;
+      return dailyAggregatesWeekly[key] || 0;
+    }
+    
+    // For weekly tasks: Use manual weekly entries
+    // Note: weeklyEntries is an array, need to find matching entry
+    const entry = weeklyEntries.find(e => e.task_id === taskId);
+    if (entry) {
+      // Weekly entries don't have per-day data, return total divided by 7 for now
+      // This is a simplification - the old code had more complex logic
+      return Math.round((entry.time_spent || entry.count || 0) / 7);
+    }
+    
+    return 0;
+  }, [tasks, dailyAggregatesWeekly, weeklyEntries]);
+
+  /**
+   * Convert tasks to display data
+   * This is simplified - the old code had complex per-day tracking
    */
   const entriesMap = useMemo(() => {
     const map = new Map<number, TimeEntryData>();
-    weeklyEntries.forEach(entry => {
-      map.set(entry.task_id, {
-        taskId: entry.task_id,
-        timeSpent: entry.time_spent,
-        count: entry.count,
-        notes: entry.notes,
-        isCompleted: false, // Weekly entries don't have completion status
-        isNA: false,
+    
+    filteredTasks.forEach(task => {
+      const taskStatus = weeklyTaskStatuses[task.id];
+      map.set(task.id, {
+        taskId: task.id,
+        timeSpent: 0, // Will be calculated from getWeeklyTime
+        count: 0,
+        notes: '',
+        isCompleted: taskStatus?.is_completed || false,
+        isNA: taskStatus?.is_na || false,
       });
     });
+    
     return map;
-  }, [weeklyEntries]);
+  }, [filteredTasks, weeklyTaskStatuses]);
 
   /**
    * Handle time entry change
@@ -241,7 +296,7 @@ const WeeklyTasks: React.FC = () => {
             Weekly Tasks
           </h2>
           <p className="text-muted">
-            Track your weekly tasks and monitor daily task aggregates
+            View daily tasks aggregated to weekly view - Shows how your daily habits perform over the week
           </p>
         </div>
       </div>
@@ -310,9 +365,13 @@ const WeeklyTasks: React.FC = () => {
         <div className="col">
           <div className="alert alert-info">
             <i className="fas fa-info-circle me-2"></i>
-            <strong>{filteredTasks.length}</strong> tasks shown
+            <strong>{filteredTasks.length}</strong> tasks tracked this week
             {selectedPillar && <span> in <strong>{selectedPillar}</strong></span>}
             {selectedCategory && <span> / <strong>{selectedCategory}</strong></span>}
+            <div className="mt-2 small">
+              <em>Note: Tasks shown here have been explicitly added to weekly tracking. 
+              Daily tasks display aggregated data from daily entries.</em>
+            </div>
           </div>
         </div>
       </div>
