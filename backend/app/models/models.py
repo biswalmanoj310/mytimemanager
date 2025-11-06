@@ -1057,3 +1057,27 @@ class ProjectMilestone(Base):
 
     def __repr__(self):
         return f"<ProjectMilestone(project_id={self.project_id}, name='{self.name}')>"
+
+
+class DailyTaskStatus(Base):
+    """
+    Tracks daily task status: completion, N/A, and tracking status
+    This allows tasks to have different states on different dates
+    """
+    __tablename__ = "daily_task_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey('tasks.id', ondelete='CASCADE'), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    is_completed = Column(Boolean, default=False)
+    is_na = Column(Boolean, default=False)
+    is_tracked = Column(Boolean, default=True)  # Whether task is being tracked on this date
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    task = relationship("Task")
+
+    def __repr__(self):
+        return f"<DailyTaskStatus(task_id={self.task_id}, date={self.date}, completed={self.is_completed}, na={self.is_na}, tracked={self.is_tracked})>"

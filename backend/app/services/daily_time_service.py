@@ -103,16 +103,40 @@ def bulk_save_daily_entries(db: Session, entry_date: date, entries: List[Dict]) 
 
 def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
     """Calculate and update daily summary"""
+    from app.models.models import DailyTaskStatus
+    
     # Get all daily tasks (follow_up_frequency = 'daily')
+    # Exclude globally completed tasks (is_completed = 1) as they've been replaced with new tasks
     daily_tasks = db.query(Task).filter(
         and_(
             Task.follow_up_frequency == 'daily',
-            Task.is_active == True
+            Task.is_active == True,
+            Task.is_completed == False  # Exclude globally completed tasks
         )
     ).all()
 
-    # Calculate total allocated
-    total_allocated = sum(task.allocated_minutes for task in daily_tasks)
+    # Calculate total allocated - only count tasks being tracked on this date
+    total_allocated = 0
+    for task in daily_tasks:
+        # Check per-date status (new system)
+        # Note: Globally completed tasks are already excluded from the query above
+        
+        # SECOND: Check per-date status (new system)
+        status = db.query(DailyTaskStatus).filter(
+            and_(
+                DailyTaskStatus.task_id == task.id,
+                DailyTaskStatus.date == entry_date
+            )
+        ).first()
+        
+        # If no status record, task is tracked by default
+        # If status exists, only count if is_tracked is True AND not completed/NA
+        if not status:
+            # No status = tracked by default, not completed/NA
+            total_allocated += task.allocated_minutes
+        elif status.is_tracked and not status.is_completed and not status.is_na:
+            # Only count if tracked AND not completed AND not NA
+            total_allocated += task.allocated_minutes
 
     # Calculate total spent
     entries = db.query(DailyTimeEntry).filter(
@@ -121,7 +145,12 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
     total_spent = sum(entry.minutes for entry in entries)
 
     # Check if day is complete
-    is_complete = (total_allocated == total_spent) and total_spent > 0
+    # Day is complete if:
+    # 1. Spent >= allocated (overspent is OK, means you did extra work)
+    # 2. OR difference is within 5 minutes tolerance (small rounding errors)
+    # 3. AND total_spent > 0 (not a zero day)
+    difference = abs(total_allocated - total_spent)
+    is_complete = (total_spent >= total_allocated or difference <= 5) and total_spent > 0
 
     # Get or create daily summary
     summary = db.query(DailySummary).filter(
@@ -149,13 +178,18 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
 
 def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayResponse]:
     """Get list of incomplete days (where allocated != spent)
+    Shows incomplete days from Nov 1, 2025 onwards (active usage period)
+    - Days with 0 spent = forgot to track (shown as incomplete)
+    - Days before Nov 1, 2025 with 0 spent = test days (excluded)
     Excludes today since the day is not yet over
     """
     today = date.today()
+    active_start_date = date(2025, 11, 1)  # Start of active usage
     
     summaries = db.query(DailySummary).filter(
         and_(
             DailySummary.is_complete == False,
+            func.date(DailySummary.entry_date) >= active_start_date,  # Only from Nov 1, 2025
             func.date(DailySummary.entry_date) < today  # Exclude today
         )
     ).order_by(DailySummary.entry_date.desc()).limit(limit).all()

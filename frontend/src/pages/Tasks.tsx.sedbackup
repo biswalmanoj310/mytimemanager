@@ -71,7 +71,7 @@ const formatTaskTarget = (task: Task, showPeriod: boolean = false, showAvgPerDay
       return `${baseValue}${period}`;
     }
     return baseValue;
-  };
+  }
 }
 
 const formatTaskValue = (task: Task, value: number): string => {
@@ -81,7 +81,7 @@ const formatTaskValue = (task: Task, value: number): string => {
     return value > 0 ? '✓ Yes' : '✗ No';
   } else {
     return `${value} min`;
-  };
+  }
 }
 
 export default function Tasks() {
@@ -118,7 +118,6 @@ export default function Tasks() {
   });
   // Incomplete days list
   const [incompleteDays, setIncompleteDays] = useState<any[]>([]);
-  const [incompleteDaysLoaded, setIncompleteDaysLoaded] = useState(false);
   // Save timeout for debouncing
   const [saveTimeout, setSaveTimeout] = useState<number | null>(null);
   // Weekly tab state - key format: "taskId-dayIndex" (0=Sunday, 6=Saturday)
@@ -193,7 +192,7 @@ export default function Tasks() {
     start_date: string;
     target_gap: number | null;
     updated_date: string | null;
-  };
+  }
   const [oneTimeTasks, setOneTimeTasks] = useState<OneTimeTaskData[]>([]);
   const [showAddOneTimeTaskModal, setShowAddOneTimeTaskModal] = useState(false);
   const [selectedTaskForOneTime, setSelectedTaskForOneTime] = useState<number | null>(null);
@@ -208,7 +207,7 @@ export default function Tasks() {
     is_tracked: boolean;
     created_at: string;
     updated_at: string;
-  };
+  }
   const [dailyStatuses, setDailyStatuses] = useState<Map<number, DailyTaskStatus>>(new Map());
 
   // Projects state
@@ -242,7 +241,7 @@ export default function Tasks() {
       progress_percentage: number;
     }
     milestones?: ProjectMilestoneData[];
-  };
+  }
   
   interface ProjectMilestoneData {
     id: number;
@@ -255,7 +254,7 @@ export default function Tasks() {
     order: number;
     created_at: string;
     updated_at: string;
-  };
+  }
   
   interface ProjectTaskData {
     id: number;
@@ -271,7 +270,7 @@ export default function Tasks() {
     order: number;
     created_at: string;
     updated_at: string;
-  };
+  }
 
   // Life Goals state
   interface LifeGoalData {
@@ -292,7 +291,7 @@ export default function Tasks() {
     days_remaining: number | null;
     created_at: string;
     updated_at: string | null;
-  };
+  }
 
   interface MilestoneData {
     id: number;
@@ -305,7 +304,7 @@ export default function Tasks() {
     metric: string | null;
     order: number;
     created_at: string;
-  };
+  }
 
   interface GoalTaskLinkData {
     id: number;
@@ -316,7 +315,7 @@ export default function Tasks() {
     notes: string | null;
     created_at: string;
     task?: Task; // Populated task data
-  };
+  }
 
   interface GoalTaskData {
     id: number;
@@ -332,7 +331,7 @@ export default function Tasks() {
     order: number;
     created_at: string;
     updated_at: string | null;
-  };
+  }
 
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
@@ -398,7 +397,7 @@ export default function Tasks() {
       current_streak: number;
       longest_streak: number;
     }
-  };
+  }
 
   interface HabitEntry {
     id: number;
@@ -408,7 +407,7 @@ export default function Tasks() {
     actual_value?: number;
     note?: string;
     created_at: string;
-  };
+  }
 
   interface HabitStreak {
     id: number;
@@ -416,7 +415,7 @@ export default function Tasks() {
     end_date: string;
     streak_length: number;
     is_active: boolean;
-  };
+  }
 
   interface HabitSession {
     id: number;
@@ -429,7 +428,7 @@ export default function Tasks() {
     value_achieved?: number;
     meets_target: boolean;
     notes?: string;
-  };
+  }
 
   interface HabitPeriod {
     id: number;
@@ -444,7 +443,7 @@ export default function Tasks() {
     is_successful: boolean;
     success_percentage: number;
     quality_percentage?: number;
-  };
+  }
 
   interface PeriodStats {
     habit_id: number;
@@ -461,7 +460,7 @@ export default function Tasks() {
     is_successful: boolean;
     days_remaining: number;
     sessions: HabitSession[];
-  };
+  }
 
   const [habits, setHabits] = useState<HabitData[]>([]);
   const [selectedHabit, setSelectedHabit] = useState<HabitData | null>(null);
@@ -514,7 +513,7 @@ export default function Tasks() {
       inspirations_count: number;
       average_clarity_score?: number;
     }
-  };
+  }
 
   interface WishReflection {
     id: number;
@@ -524,7 +523,7 @@ export default function Tasks() {
     mood?: string;
     clarity_score?: number;
     created_at: string;
-  };
+  }
 
   interface ExplorationStep {
     id: number;
@@ -536,7 +535,7 @@ export default function Tasks() {
     completed_at?: string;
     notes?: string;
     created_at: string;
-  };
+  }
 
   const [wishes, setWishes] = useState<WishData[]>([]);
   const [selectedWish, setSelectedWish] = useState<WishData | null>(null);
@@ -553,14 +552,14 @@ export default function Tasks() {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
-  };
+  }
 
   const isToday = (date: Date): boolean => {
     const today = new Date();
     return date.getFullYear() === today.getFullYear() &&
            date.getMonth() === today.getMonth() &&
            date.getDate() === today.getDate();
-  };
+  }
 
   const isCurrentWeek = (weekStart: Date): boolean => {
     const today = new Date();
@@ -573,20 +572,20 @@ export default function Tasks() {
     return checkWeekStart.getFullYear() === currentWeekStart.getFullYear() &&
            checkWeekStart.getMonth() === currentWeekStart.getMonth() &&
            checkWeekStart.getDate() === currentWeekStart.getDate();
-  };
+  }
 
   const isCurrentMonth = (monthStart: Date): boolean => {
     const today = new Date();
     const checkMonth = new Date(monthStart);
     return checkMonth.getFullYear() === today.getFullYear() &&
            checkMonth.getMonth() === today.getMonth();
-  };
+  }
 
   const isCurrentYear = (yearStart: Date): boolean => {
     const today = new Date();
     const checkYear = new Date(yearStart);
     return checkYear.getFullYear() === today.getFullYear();
-  };
+  }
 
   const isFutureDate = (date: Date): boolean => {
     const today = new Date();
@@ -594,7 +593,7 @@ export default function Tasks() {
     const checkDate = new Date(date);
     checkDate.setHours(0, 0, 0, 0);
     return checkDate.getTime() > today.getTime();
-  };
+  }
 
   // Load tasks function (needed by error UI)
   const loadTasks = async () => {
@@ -609,7 +608,7 @@ export default function Tasks() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   // Handle URL parameters on mount and when location changes
   useEffect(() => {
@@ -723,194 +722,6 @@ export default function Tasks() {
     }
   }, [tasks, oneTimeTasks, activeTab]);
 
-  // Define hierarchy order for sorting (matches actual database pillar-category combinations)
-  const hierarchyOrder: { [key: string]: number } = {
-    // Hard Work
-    'Hard Work|Office-Tasks': 1,
-    'Hard Work|Learning': 2,
-    'Hard Work|Confidence': 3,
-    // Calmness
-    'Calmness|Yoga': 4,
-    'Calmness|Sleep': 5,
-    // Family
-    'Family|My Tasks': 6,
-    'Family|Home Tasks': 7,
-    'Family|Time Waste': 8,
-  };
-
-  // Define custom task name order
-  const taskNameOrder: { [key: string]: number } = {
-    'cd-Mails-Tickets': 1,
-    'Code Coverage': 2,
-    'Code - Scripts': 3,
-    'Cloud': 4,
-    'LLM GenAI': 5,
-    'Git Jenkin Tools': 6,
-    'Interview Q/A': 7,
-    'Interview Talk': 8,
-    'Life Coach & NLP': 9,
-    'Toastmaster Task': 10,
-    'Yoga - Dhyan': 11,
-    'Sleep': 12,
-    'Planning': 13,
-    'Stocks': 14,
-    'Task (Bank/ mail)': 15,
-    'Commute': 16,
-    'Nature Needs': 17,
-    'Eating': 18,
-    'My Games': 19,
-    'Parent Talk': 20,
-    'Home Task': 21,
-    'Task Trishna': 22,
-    'Task Divyanshi': 23,
-    'Daughter Sports': 24,
-    'Shopping': 25,
-    'Family Friends': 26,
-    'Youtube': 27,
-    'TV': 28,
-    'Facebook': 29,
-    'Nextdoor': 30,
-    'News': 31,
-    'Dark Future': 32,
-  };
-
-  const weekDays = generateWeekDays(selectedWeekStart);
-
-  // Memoized version that will recompute when dependencies change
-  const tasksNeedingAttention = useMemo(() => {
-    return getTasksNeedingAttention();
-  }, [tasks, weeklyTaskStatuses, monthlyTaskStatuses, weeklyEntries, dailyAggregates, monthlyEntries, monthlyDailyAggregates, selectedWeekStart, selectedMonthStart, activeTab]);
-
-  // Filter tasks by active tab
-  // Also filter out completed/NA tasks that are older than today
-  const filteredTasks = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    return tasks.filter(task => {
-      // Exclude one-time tasks from other tabs (they only appear in onetime tab)
-      if (activeTab !== 'onetime' && task.follow_up_frequency === 'one_time') {
-        return false;
-      }
-      
-      // For weekly tab: ONLY show tasks that have data or status for this specific week
-      if (activeTab === 'weekly') {
-        // Check if this task has daily aggregates for the current week
-        const hasDailyDataThisWeek = weekDays.some(day => {
-          const key = `${task.id}-${day.index}`;
-          return (dailyAggregates[key] || 0) > 0;
-        });
-        
-        // Check if this task has weekly time entries for the current week
-        const hasWeeklyDataThisWeek = weekDays.some(day => {
-          const key = `${task.id}-${day.index}`;
-          return (weeklyEntries[key] || 0) > 0;
-        });
-        
-        // Check if task has been explicitly added to this week
-        const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
-        
-        // Show task ONLY if it has been explicitly added to weekly tracking
-        if (!hasBeenAddedToWeekly) {
-          return false;
-        }
-        
-      } else if (activeTab === 'monthly') {
-        const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
-        if (!hasBeenAddedToMonthly) {
-          return false;
-        }
-        
-      } else if (activeTab === 'yearly') {
-        const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-        if (!hasBeenAddedToYearly) {
-          return false;
-        }
-        
-      } else {
-        if (task.follow_up_frequency !== activeTab) return false;
-      }
-      
-      // For weekly tab: Handle weekly-specific completion status
-      if (activeTab === 'weekly') {
-        const taskStatus = weeklyTaskStatuses[task.id];
-        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
-          return true;
-        }
-        return true;
-      }
-      
-      // For monthly tab: Handle monthly-specific completion status
-      if (activeTab === 'monthly') {
-        const taskStatus = monthlyTaskStatuses[task.id];
-        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
-          return true;
-        }
-        return true;
-      }
-      
-      // For yearly tab: Handle yearly-specific completion status
-      if (activeTab === 'yearly') {
-        const taskStatus = yearlyTaskStatuses[task.id];
-        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
-          return true;
-        }
-        return true;
-      }
-      
-      // For today tab: Filter completed/NA tasks
-      if (activeTab === 'today') {
-        const status = dailyStatuses.get(task.id);
-        if (status && (status.is_completed || status.is_na)) {
-          return false;
-        }
-      }
-      
-      return task.is_active && !task.is_completed;
-    })
-    .sort((a, b) => {
-      const keyA = `${a.pillar_name}|${a.category_name}`;
-      const keyB = `${b.pillar_name}|${b.category_name}`;
-      const orderA = hierarchyOrder[keyA] || 999;
-      const orderB = hierarchyOrder[keyB] || 999;
-      
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-      
-      const nameOrderA = taskNameOrder[a.name] || 999;
-      const nameOrderB = taskNameOrder[b.name] || 999;
-      
-      if (nameOrderA !== nameOrderB) {
-        return nameOrderA - nameOrderB;
-      }
-      
-      return a.name.localeCompare(b.name);
-    });
-  }, [tasks, activeTab, weekDays, dailyAggregates, weeklyEntries, weeklyTaskStatuses, monthlyTaskStatuses, yearlyTaskStatuses, dailyStatuses, selectedDate, hierarchyOrder, taskNameOrder]);
-
-  // Separate tasks by type for daily and weekly tabs
-  const timeBasedTasks = useMemo(() => {
-    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly') {
-      return filteredTasks.filter(task => task.task_type === TaskType.TIME);
-    }
-    return [];
-  }, [activeTab, filteredTasks]);
-  
-  const countBasedTasks = useMemo(() => {
-    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
-      return filteredTasks.filter(task => task.task_type === TaskType.COUNT);
-    }
-    return [];
-  }, [activeTab, filteredTasks]);
-  
-  const booleanTasks = useMemo(() => {
-    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
-      return filteredTasks.filter(task => task.task_type === TaskType.BOOLEAN);
-    }
-    return [];
-  }, [activeTab, filteredTasks]);
-
   // Early returns for loading and error states (must come AFTER all hooks)
   if (loading) {
     return (
@@ -943,7 +754,7 @@ export default function Tasks() {
       console.error('Error loading daily statuses:', err);
       // Don't set error state, just log - this is not critical
     }
-  };
+  }
 
   // Daily-specific completion handlers - mark only the daily entry for current date
   const handleDailyTaskComplete = async (taskId: number) => {
@@ -959,7 +770,7 @@ export default function Tasks() {
       console.error('Error marking daily task complete:', err);
       alert('Failed to mark task as completed: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleDailyTaskNA = async (taskId: number) => {
     try {
@@ -974,7 +785,7 @@ export default function Tasks() {
       console.error('Error marking daily task NA:', err);
       alert('Failed to mark task as NA: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Tracking management functions
   const handleRemoveFromTracking = async (taskId: number) => {
@@ -990,7 +801,7 @@ export default function Tasks() {
       console.error('Error removing task from tracking:', err);
       alert('Failed to remove task from tracking: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleAddToTracking = async (taskId: number) => {
     try {
@@ -1005,7 +816,7 @@ export default function Tasks() {
       console.error('Error adding task to tracking:', err);
       alert('Failed to add task to tracking: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleTaskComplete = async (taskId: number) => {
     try {
@@ -1048,7 +859,7 @@ export default function Tasks() {
       console.error('Error response:', err.response);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleTaskNA = async (taskId: number) => {
     try {
@@ -1091,7 +902,7 @@ export default function Tasks() {
       console.error('Error response:', err.response);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Weekly-specific completion handlers
   const handleWeeklyTaskComplete = async (taskId: number) => {
@@ -1105,7 +916,7 @@ export default function Tasks() {
       console.error('Error updating weekly task status:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleWeeklyTaskNA = async (taskId: number) => {
     try {
@@ -1118,7 +929,7 @@ export default function Tasks() {
       console.error('Error updating weekly task NA:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleTaskClick = (taskId: number) => {
     // Prevent editing daily tasks from the weekly tab
@@ -1132,14 +943,14 @@ export default function Tasks() {
     
     setSelectedTaskId(taskId);
     setIsTaskFormOpen(true);
-  };
+  }
 
   const handleFormClose = () => {
     setIsTaskFormOpen(false);
     setSelectedTaskId(null);
     setIsCreatingNewTask(false);
     setAddToTrackingAfterCreate(null);
-  };
+  }
 
   // Handle adding weekly task from daily task
   const handleAddWeeklyTask = async () => {
@@ -1174,7 +985,7 @@ export default function Tasks() {
       console.error('Error adding weekly task:', err);
       alert('Failed to add weekly task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Load daily time entries from backend for selected date
   async function loadDailyEntries(date: Date) {
@@ -1202,19 +1013,17 @@ export default function Tasks() {
       hourlyEntriesRef.current = emptyMap;
       setHourlyEntries(emptyMap);
     }
-  };
+  }
 
   // Load list of incomplete days
   async function loadIncompleteDays() {
     try {
       const days = await api.get<any[]>('/api/daily-time/incomplete-days/');
       setIncompleteDays(days);
-      setIncompleteDaysLoaded(true);
     } catch (err) {
       console.error('Error loading incomplete days:', err);
-      setIncompleteDaysLoaded(true); // Still mark as loaded even on error
     }
-  };
+  }
 
   // Save daily entries to backend (debounced)
   const saveDailyEntriesWithData = async (entriesToSave: Record<string, number>) => {
@@ -1256,11 +1065,11 @@ export default function Tasks() {
     } catch (err) {
       console.error('Error saving daily entries:', err);
     }
-  };
+  }
 
   const saveDailyEntries = async () => {
     await saveDailyEntriesWithData(hourlyEntries);
-  };
+  }
 
   // Change selected date
   const changeDate = (days: number) => {
@@ -1269,13 +1078,13 @@ export default function Tasks() {
     // Ensure we stay at midnight even across DST boundaries
     newDate.setHours(0, 0, 0, 0);
     setSelectedDate(newDate);
-  };
+  }
 
   // Open day in new tab
   const openDayInNewTab = (dateStr: string) => {
     const url = `${window.location.origin}${window.location.pathname}?tab=daily&date=${dateStr}`;
     window.open(url, '_blank');
-  };
+  }
 
   // Format date for display
   const formatDate = (dateStr: string) => {
@@ -1288,12 +1097,12 @@ export default function Tasks() {
       month: 'short',
       day: 'numeric'
     });
-  };
+  }
 
   // ========== WEEKLY TAB FUNCTIONS ==========
   
   // Generate week days with dates
-  function generateWeekDays(weekStart: Date) {
+  const generateWeekDays = (weekStart: Date) => {
     const days = [];
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
@@ -1315,6 +1124,8 @@ export default function Tasks() {
     return days;
   }
 
+  const weekDays = generateWeekDays(selectedWeekStart);
+
   // Get week number
   const getWeekNumber = (date: Date): number => {
     const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -1322,7 +1133,7 @@ export default function Tasks() {
     d.setUTCDate(d.getUTCDate() + 4 - dayNum);
     const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
     return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-  };
+  }
 
   // Load weekly time entries from backend
   async function loadWeeklyEntries(weekStart: Date) {
@@ -1468,7 +1279,7 @@ export default function Tasks() {
       setWeeklyTaskStatuses({});
       setEverCompletedTaskIds(new Set());
     }
-  };
+  }
 
   // Save weekly entries to backend (debounced)
   const saveWeeklyEntries = async () => {
@@ -1494,7 +1305,7 @@ export default function Tasks() {
     } catch (err) {
       console.error('Error saving weekly entries:', err);
     }
-  };
+  }
 
   // Handle weekly time entry change with auto-save
   const handleWeeklyTimeChange = (taskId: number, dayIndex: number, value: string) => {
@@ -1522,7 +1333,7 @@ export default function Tasks() {
     }, 1000);
     
     setWeeklySaveTimeout(timeout);
-  };
+  }
 
   // Handle blur event for weekly - save immediately when input loses focus
   const handleWeeklyTimeBlur = () => {
@@ -1532,11 +1343,11 @@ export default function Tasks() {
     }
     // Use ref to get latest value (no race condition, no delay needed)
     saveWeeklyEntries();
-  };
+  }
 
   // Get weekly time entry for a task and day
   // If no weekly entry exists, return the daily aggregate (sum from Daily tab)
-  function getWeeklyTime(taskId: number, dayIndex: number): number {
+  const getWeeklyTime = (taskId: number, dayIndex: number): number => {
     const key = `${taskId}-${dayIndex}`;
     // If there's a weekly entry, use it; otherwise use daily aggregate
     if (weeklyEntries[key] !== undefined) {
@@ -1549,7 +1360,7 @@ export default function Tasks() {
   const isFromDailyAggregate = (taskId: number, dayIndex: number): boolean => {
     const key = `${taskId}-${dayIndex}`;
     return weeklyEntries[key] === undefined && (dailyAggregates[key] || 0) > 0;
-  };
+  }
 
   // Check if a task has any daily aggregates in monthly view
   const hasMonthlyDailyAggregates = (taskId: number): boolean => {
@@ -1558,7 +1369,7 @@ export default function Tasks() {
       const [id] = key.split('-');
       return parseInt(id) === taskId;
     });
-  };
+  }
 
   // Check if a task has any monthly aggregates in yearly view
   const hasYearlyMonthlyAggregates = (taskId: number): boolean => {
@@ -1567,7 +1378,7 @@ export default function Tasks() {
       const [id] = key.split('-');
       return parseInt(id) === taskId;
     });
-  };
+  }
 
   // Change selected week
   const changeWeek = (weeks: number) => {
@@ -1575,7 +1386,7 @@ export default function Tasks() {
     newDate.setDate(newDate.getDate() + (weeks * 7));
     setSelectedWeekStart(newDate);
     loadWeeklyEntries(newDate);
-  };
+  }
 
   // Go to current week
   const goToCurrentWeek = () => {
@@ -1585,7 +1396,7 @@ export default function Tasks() {
     const currentWeek = new Date(today.setDate(diff));
     setSelectedWeekStart(currentWeek);
     loadWeeklyEntries(currentWeek);
-  };
+  }
 
   // ============= MONTHLY TAB FUNCTIONS =============
   
@@ -1717,7 +1528,7 @@ export default function Tasks() {
       setMonthlyDailyAggregates({});
       setMonthlyTaskStatuses({});
     }
-  };
+  }
 
   // Save monthly entries to backend (debounced)
   const saveMonthlyEntries = async () => {
@@ -1744,7 +1555,7 @@ export default function Tasks() {
     } catch (err) {
       console.error('Error saving monthly entries:', err);
     }
-  };
+  }
 
   // Handle monthly time entry change with auto-save
   const handleMonthlyTimeChange = (taskId: number, dayOfMonth: number, value: string) => {
@@ -1777,7 +1588,7 @@ export default function Tasks() {
     }, 1000);
     
     setMonthlySaveTimeout(timeout);
-  };
+  }
 
   // Handle blur event for monthly - save immediately when input loses focus
   const handleMonthlyTimeBlur = () => {
@@ -1787,10 +1598,10 @@ export default function Tasks() {
     }
     // Use ref to get latest value (no race condition, no delay needed)
     saveMonthlyEntries();
-  };
+  }
 
   // Get monthly time entry for a task and day
-  function getMonthlyTime(taskId: number, dayOfMonth: number): number {
+  const getMonthlyTime = (taskId: number, dayOfMonth: number): number => {
     const key = `${taskId}-${dayOfMonth}`;
     // If there's a monthly entry, use it; otherwise use daily aggregate
     if (monthlyEntries[key] !== undefined) {
@@ -1809,7 +1620,7 @@ export default function Tasks() {
       console.error('Error updating monthly task status:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Handle monthly task NA
   const handleMonthlyTaskNA = async (taskId: number) => {
@@ -1821,7 +1632,7 @@ export default function Tasks() {
       console.error('Error updating monthly task NA:', err);
       alert('Failed to update task status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Handle add monthly task
   const handleAddMonthlyTask = async () => {
@@ -1853,7 +1664,7 @@ export default function Tasks() {
       console.error('Error adding monthly task:', err);
       alert('Failed to add monthly task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Change selected month
   const changeMonth = (months: number) => {
@@ -1861,7 +1672,7 @@ export default function Tasks() {
     newDate.setMonth(newDate.getMonth() + months);
     setSelectedMonthStart(newDate);
     loadMonthlyEntries(newDate);
-  };
+  }
 
   // Go to current month
   const goToCurrentMonth = () => {
@@ -1869,7 +1680,7 @@ export default function Tasks() {
     const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     setSelectedMonthStart(currentMonth);
     loadMonthlyEntries(currentMonth);
-  };
+  }
 
   // ============= YEARLY TAB FUNCTIONS =============
   
@@ -1936,7 +1747,7 @@ export default function Tasks() {
       setYearlyMonthlyAggregates({});
       setYearlyTaskStatuses({});
     }
-  };
+  }
 
   // Save yearly entries with debounce
   const saveYearlyEntries = async () => {
@@ -1957,14 +1768,14 @@ export default function Tasks() {
       console.error('Error saving yearly entries:', err);
       alert('Failed to save yearly entries: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Get yearly time for a task and month
   const getYearlyTime = (taskId: number, month: number): number => {
     const key = `${taskId}-${month}`;
     // Check yearly entries first, then monthly aggregates
     return yearlyEntries[key] || yearlyMonthlyAggregates[key] || 0;
-  };
+  }
 
   // Handle yearly time input change
   const handleYearlyTimeChange = (taskId: number, month: number, value: string) => {
@@ -1996,7 +1807,7 @@ export default function Tasks() {
     }, 1000);
     
     setYearlySaveTimeout(timeout);
-  };
+  }
 
   // Handle yearly task status change
   const handleYearlyStatusChange = async (taskId: number, isCompleted: boolean, isNA: boolean) => {
@@ -2017,7 +1828,7 @@ export default function Tasks() {
       console.error('Error updating yearly status:', err);
       alert('Failed to update status: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Handle add yearly task
   const handleAddYearlyTask = async () => {
@@ -2049,7 +1860,7 @@ export default function Tasks() {
       console.error('Error adding yearly task:', err);
       alert('Failed to add yearly task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Change selected year
   const changeYear = (years: number) => {
@@ -2057,7 +1868,7 @@ export default function Tasks() {
     newDate.setFullYear(newDate.getFullYear() + years);
     setSelectedYearStart(newDate);
     loadYearlyEntries(newDate);
-  };
+  }
 
   // Go to current year
   const goToCurrentYear = () => {
@@ -2065,7 +1876,7 @@ export default function Tasks() {
     const currentYear = new Date(today.getFullYear(), 0, 1);
     setSelectedYearStart(currentYear);
     loadYearlyEntries(currentYear);
-  };
+  }
 
   // One-Time Tasks Functions
   async function loadOneTimeTasks() {
@@ -2077,7 +1888,7 @@ export default function Tasks() {
       console.error('Error loading one-time tasks:', err);
       setOneTimeTasks([]);
     }
-  };
+  }
 
   const handleAddOneTimeTask = async () => {
     if (!selectedTaskForOneTime) {
@@ -2105,7 +1916,7 @@ export default function Tasks() {
       console.error('Error adding one-time task:', err);
       alert('Failed to add one-time task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const updateOneTimeTask = async (taskId: number, updates: Partial<OneTimeTaskData>) => {
     try {
@@ -2118,7 +1929,7 @@ export default function Tasks() {
       console.error('Error updating one-time task:', err);
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const deleteOneTimeTask = async (taskId: number) => {
     try {
@@ -2131,7 +1942,7 @@ export default function Tasks() {
       console.error('Error deleting one-time task:', err);
       alert('Failed to delete task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const calculateDaysOver = (updatedDate: string | null): number => {
     if (!updatedDate) return 0;
@@ -2140,7 +1951,7 @@ export default function Tasks() {
     const diffTime = today.getTime() - updated.getTime();
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
-  };
+  }
 
   const getOneTimeRowColorClass = (targetGap: number | null, daysOver: number): string => {
     if (!targetGap) return '';
@@ -2152,7 +1963,7 @@ export default function Tasks() {
     } else {
       return 'row-good'; // Green
     }
-  };
+  }
 
   // Projects Functions
   const loadProjects = async () => {
@@ -2182,7 +1993,7 @@ export default function Tasks() {
       console.error('Error loading projects:', err);
       setProjects([]);
     }
-  };
+  }
 
   async function loadProjectTasksDueToday() {
     try {
@@ -2206,7 +2017,7 @@ export default function Tasks() {
       console.error('Error loading project tasks due today:', err);
       setProjectTasksDueToday([]);
     }
-  };
+  }
 
   async function loadGoalTasksDueToday() {
     try {
@@ -2230,7 +2041,7 @@ export default function Tasks() {
       console.error('Error loading goal tasks due today:', err);
       setGoalTasksDueToday([]);
     }
-  };
+  }
 
   const loadOverdueOneTimeTasks = () => {
     try {
@@ -2252,7 +2063,7 @@ export default function Tasks() {
       console.error('Error loading overdue one-time tasks:', err);
       setOverdueOneTimeTasks([]);
     }
-  };
+  }
 
   const loadProjectTasks = async (projectId: number) => {
     try {
@@ -2268,7 +2079,7 @@ export default function Tasks() {
     } catch (err: any) {
       console.error('Error loading project tasks:', err);
     }
-  };
+  }
 
   const handleSelectProject = async (project: ProjectData) => {
     setSelectedProject(project);
@@ -2279,7 +2090,7 @@ export default function Tasks() {
     const searchParams = new URLSearchParams(location.search);
     searchParams.set('project', project.id.toString());
     navigate(`?${searchParams.toString()}`, { replace: true });
-  };
+  }
 
   const loadProjectMilestones = async (projectId: number) => {
     try {
@@ -2292,7 +2103,7 @@ export default function Tasks() {
       console.error('Error loading project milestones:', error);
       setProjectMilestones([]);
     }
-  };
+  }
 
   const handleCreateProjectMilestone = async (milestoneData: any) => {
     if (!selectedProject) return;
@@ -2305,7 +2116,7 @@ export default function Tasks() {
       console.error('Error creating milestone:', error);
       alert('Failed to create milestone');
     }
-  };
+  }
 
   const handleUpdateProjectMilestone = async (milestoneIdOrData: number | any, updateData?: any) => {
     if (!selectedProject) return;
@@ -2328,7 +2139,7 @@ export default function Tasks() {
       console.error('Error updating milestone:', error);
       alert('Failed to update milestone');
     }
-  };
+  }
 
   const handleToggleProjectMilestone = async (milestoneId: number, isCompleted: boolean) => {
     if (!selectedProject) return;
@@ -2339,7 +2150,7 @@ export default function Tasks() {
     } catch (error) {
       console.error('Error updating milestone:', error);
     }
-  };
+  }
 
   const handleDeleteProjectMilestone = async (milestoneId: number) => {
     if (!selectedProject) return;
@@ -2352,7 +2163,7 @@ export default function Tasks() {
       console.error('Error deleting milestone:', error);
       alert('Failed to delete milestone');
     }
-  };
+  }
 
   const handleBackToProjects = () => {
     setSelectedProject(null);
@@ -2363,7 +2174,7 @@ export default function Tasks() {
     const searchParams = new URLSearchParams(location.search);
     searchParams.delete('project');
     navigate(`?${searchParams.toString()}`, { replace: true });
-  };
+  }
 
   const toggleTaskExpansion = (taskId: number) => {
     setExpandedTasks(prev => {
@@ -2383,14 +2194,14 @@ export default function Tasks() {
         taskElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }, 100);
-  };
+  }
 
   const getTasksByParentId = (parentId: number | null): ProjectTaskData[] => {
     if (!selectedProject) return [];
     return projectTasks.filter(t => 
       t.project_id === selectedProject.id && t.parent_task_id === parentId
     );
-  };
+  }
 
   const getDueDateColorClass = (dueDate: string | null): string => {
     if (!dueDate) return '';
@@ -2412,7 +2223,7 @@ export default function Tasks() {
     } else {
       return 'task-ok'; // Green - >7 days
     }
-  };
+  }
 
   // Get color class for tasks based on due_date OR created_at (for 'today' frequency tasks)
   const getTaskColorClass = (task: TaskData): string => {
@@ -2437,7 +2248,7 @@ export default function Tasks() {
     }
     
     return '';
-  };
+  }
 
   const hasOverdueTasks = (projectId: number): boolean => {
     const today = new Date();
@@ -2452,7 +2263,7 @@ export default function Tasks() {
       due.setHours(0, 0, 0, 0);
       return due < today;
     });
-  };
+  }
 
   const getProjectCardClass = (project: ProjectData): string => {
     // For list view, we need to fetch tasks to check for overdue
@@ -2470,7 +2281,7 @@ export default function Tasks() {
     }
     
     return '';
-  };
+  }
 
   const handleToggleTaskCompletion = async (taskId: number, currentStatus: boolean) => {
     try {
@@ -2489,7 +2300,7 @@ export default function Tasks() {
       console.error('Error toggling task completion:', err);
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleDeleteTask = async (taskId: number) => {
     if (!confirm('Are you sure you want to delete this task and all its sub-tasks?')) {
@@ -2506,7 +2317,7 @@ export default function Tasks() {
       console.error('Error deleting task:', err);
       alert('Failed to delete task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleEditTask = async (task: ProjectTaskData) => {
     console.log('Editing task:', task.name, 'milestone_id:', task.milestone_id, 'project_id:', task.project_id);
@@ -2514,7 +2325,7 @@ export default function Tasks() {
     // Set the task to edit and show modal
     setEditingTask(task);
     setShowEditTaskModal(true);
-  };
+  }
 
   const handleUpdateTask = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2546,7 +2357,7 @@ export default function Tasks() {
       console.error('Error updating task:', err);
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleUpdateTaskDueDate = async (taskId: number, newDueDate: string) => {
     try {
@@ -2566,7 +2377,7 @@ export default function Tasks() {
       console.error('Error updating task due date:', err);
       alert('Failed to update due date: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleToggleGoalTaskCompletion = async (taskId: number, isCompleted: boolean) => {
     try {
@@ -2580,7 +2391,7 @@ export default function Tasks() {
       console.error('Error toggling goal task completion:', err);
       alert('Failed to update goal task: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleUpdateGoalTaskDueDate = async (taskId: number, newDueDate: string) => {
     try {
@@ -2594,7 +2405,7 @@ export default function Tasks() {
       console.error('Error updating goal task due date:', err);
       alert('Failed to update due date: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleToggleProjectComplete = async (projectId: number, isCompleted: boolean) => {
     // Find the project to check its status
@@ -2626,7 +2437,7 @@ export default function Tasks() {
       console.error('Error updating project completion:', err);
       alert('Failed to update project: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleUpdateProject = async (projectId: number, updates: any) => {
     try {
@@ -2636,7 +2447,7 @@ export default function Tasks() {
       console.error('Error updating project:', err);
       alert('Failed to update project: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleDeleteProject = async (projectId: number) => {
     if (!confirm('Are you sure you want to delete this project and all its tasks?')) {
@@ -2652,7 +2463,7 @@ export default function Tasks() {
       console.error('Error deleting project:', err);
       alert('Failed to delete project: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleDuplicateProject = async (projectId: number) => {
     const project = projects.find(p => p.id === projectId);
@@ -2746,7 +2557,7 @@ export default function Tasks() {
       console.error('Error duplicating project:', err);
       alert('Failed to duplicate project: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Misc Tasks Functions (similar to Projects)
   const loadMiscTaskGroups = async () => {
@@ -2776,7 +2587,7 @@ export default function Tasks() {
       console.error('Error loading misc task groups:', err);
       setMiscTaskGroups([]);
     }
-  };
+  }
 
   const loadMiscTasks = async (groupId: number) => {
     try {
@@ -2787,18 +2598,18 @@ export default function Tasks() {
       console.error('Error loading misc tasks:', err);
       setMiscTasks([]);
     }
-  };
+  }
 
   const handleSelectMiscGroup = async (group: ProjectData) => {
     setSelectedMiscGroup(group);
     await loadMiscTasks(group.id);
-  };
+  }
 
   const handleBackToMiscGroups = () => {
     setSelectedMiscGroup(null);
     setMiscTasks([]);
     setExpandedMiscTasks(new Set());
-  };
+  }
 
   const handleDeleteMiscGroup = async (groupId: number) => {
     if (!confirm('Are you sure you want to delete this misc task group and all its tasks?')) {
@@ -2814,7 +2625,7 @@ export default function Tasks() {
       console.error('Error deleting misc task group:', err);
       alert('Failed to delete misc task group: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Habits Functions
   const loadHabits = async () => {
@@ -2827,7 +2638,7 @@ export default function Tasks() {
       console.error('Error loading habits:', err);
       setHabits([]);
     }
-  };
+  }
 
   const loadHabitEntries = async (habitId: number, startDate?: string, endDate?: string) => {
     try {
@@ -2844,7 +2655,7 @@ export default function Tasks() {
       console.error('Error loading habit entries:', err);
       setHabitEntries([]);
     }
-  };
+  }
 
   const loadHabitStreaks = async (habitId: number) => {
     try {
@@ -2855,14 +2666,14 @@ export default function Tasks() {
       console.error('Error loading habit streaks:', err);
       setHabitStreaks([]);
     }
-  };
+  }
 
   const handleSelectHabit = async (habit: HabitData) => {
     setSelectedHabit(habit);
     await loadHabitEntries(habit.id);
     await loadHabitStreaks(habit.id);
     setShowHabitDetailsModal(true);
-  };
+  }
 
   const handleMarkHabitEntry = async (habitId: number, entryDate: string, isSuccessful: boolean) => {
     try {
@@ -2883,7 +2694,7 @@ export default function Tasks() {
       console.error('Error marking habit entry:', err);
       alert('Failed to mark habit: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleCreateHabit = async (habitData: any) => {
     try {
@@ -2894,7 +2705,7 @@ export default function Tasks() {
       console.error('Error creating habit:', err);
       alert('Failed to create habit: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleUpdateHabit = async (habitId: number, updates: any) => {
     try {
@@ -2908,7 +2719,7 @@ export default function Tasks() {
       console.error('Error updating habit:', err);
       alert('Failed to update habit: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleDeleteHabit = async (habitId: number) => {
     if (!confirm('Are you sure you want to deactivate this habit?')) {
@@ -2924,7 +2735,7 @@ export default function Tasks() {
       console.error('Error deleting habit:', err);
       alert('Failed to delete habit: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // New Period & Session Functions
   const loadPeriodStats = async (habitId: number) => {
@@ -2940,7 +2751,7 @@ export default function Tasks() {
       console.error('Error loading period stats:', err);
       return null;
     }
-  };
+  }
 
   const initializePeriod = async (habitId: number) => {
     try {
@@ -2950,7 +2761,7 @@ export default function Tasks() {
       console.error('Error initializing period:', err);
       alert('Failed to initialize period: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const markSessionComplete = async (sessionId: number, value?: number, notes?: string) => {
     try {
@@ -2973,7 +2784,7 @@ export default function Tasks() {
       console.error('Error marking session complete:', err);
       alert('Failed to mark session: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const addToAggregate = async (habitId: number, value: number, entryDate?: string) => {
     try {
@@ -2988,7 +2799,7 @@ export default function Tasks() {
       console.error('Error adding to aggregate:', err);
       alert('Failed to add value: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Wish / Dream Board functions
   const loadWishes = async () => {
@@ -3001,7 +2812,7 @@ export default function Tasks() {
       console.error('Error loading wishes:', err);
       setWishes([]);
     }
-  };
+  }
 
   const handleCreateWish = async (wishData: any) => {
     try {
@@ -3012,7 +2823,7 @@ export default function Tasks() {
       console.error('Error creating wish:', err);
       alert('Failed to create wish: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleUpdateWish = async (wishId: number, updates: any) => {
     try {
@@ -3026,7 +2837,7 @@ export default function Tasks() {
       console.error('Error updating wish:', err);
       alert('Failed to update wish: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleArchiveWish = async (wishId: number) => {
     if (!confirm('Archive this wish? You can view archived wishes later.')) {
@@ -3042,7 +2853,7 @@ export default function Tasks() {
       console.error('Error archiving wish:', err);
       alert('Failed to archive wish: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   // Life Goals functions
   async function loadLifeGoals() {
@@ -3054,7 +2865,7 @@ export default function Tasks() {
       console.error('Error loading life goals:', error);
       setLifeGoals([]);
     }
-  };
+  }
 
   const loadGoalDetails = async (goalId: number) => {
     try {
@@ -3071,7 +2882,7 @@ export default function Tasks() {
     } catch (error) {
       console.error('Error loading goal details:', error);
     }
-  };
+  }
 
   const handleCreateLifeGoal = async (goalData: any) => {
     try {
@@ -3082,7 +2893,7 @@ export default function Tasks() {
       console.error('Error creating life goal:', error);
       alert('Failed to create goal');
     }
-  };
+  }
 
   const handleUpdateLifeGoal = async (goalId: number, updates: any) => {
     try {
@@ -3095,7 +2906,7 @@ export default function Tasks() {
       console.error('Error updating life goal:', error);
       alert('Failed to update goal');
     }
-  };
+  }
 
   const handleDeleteLifeGoal = async (goalId: number) => {
     if (!window.confirm('Are you sure you want to delete this goal? This will also delete all its sub-goals, milestones, and tasks.')) {
@@ -3111,7 +2922,7 @@ export default function Tasks() {
       console.error('Error deleting life goal:', error);
       alert('Failed to delete goal');
     }
-  };
+  }
 
   const handleDuplicateLifeGoal = async (goalId: number) => {
     const goal = lifeGoals.find(g => g.id === goalId);
@@ -3216,7 +3027,7 @@ export default function Tasks() {
       console.error('Error duplicating goal:', err);
       alert('Failed to duplicate goal: ' + (err.response?.data?.detail || err.message));
     }
-  };
+  }
 
   const handleCreateMilestone = async (goalId: number, milestoneData: any) => {
     try {
@@ -3227,7 +3038,7 @@ export default function Tasks() {
       console.error('Error creating milestone:', error);
       alert('Failed to create milestone');
     }
-  };
+  }
 
   const handleToggleMilestone = async (milestoneId: number, isCompleted: boolean) => {
     try {
@@ -3239,7 +3050,7 @@ export default function Tasks() {
       console.error('Error toggling milestone:', error);
       alert('Failed to update milestone');
     }
-  };
+  }
 
   const handleDeleteMilestone = async (milestoneId: number) => {
     if (!window.confirm('Are you sure you want to delete this milestone?')) {
@@ -3254,7 +3065,7 @@ export default function Tasks() {
       console.error('Error deleting milestone:', error);
       alert('Failed to delete milestone');
     }
-  };
+  }
 
   const handleLinkTask = async (goalId: number, taskId: number, taskType: string, timeAllocated?: number, notes?: string) => {
     try {
@@ -3270,7 +3081,7 @@ export default function Tasks() {
       console.error('Error linking task:', error);
       alert('Failed to link task');
     }
-  };
+  }
 
   const handleUnlinkTask = async (linkId: number) => {
     if (!window.confirm('Are you sure you want to unlink this task?')) {
@@ -3285,7 +3096,7 @@ export default function Tasks() {
       console.error('Error unlinking task:', error);
       alert('Failed to unlink task');
     }
-  };
+  }
 
   const handleCreateGoalTask = async (goalId: number, taskData: any) => {
     try {
@@ -3296,7 +3107,7 @@ export default function Tasks() {
       console.error('Error creating goal task:', error);
       alert('Failed to create task');
     }
-  };
+  }
 
   const handleUpdateGoalTask = async (taskId: number, updates: any) => {
     try {
@@ -3308,7 +3119,7 @@ export default function Tasks() {
       console.error('Error updating goal task:', error);
       alert('Failed to update task');
     }
-  };
+  }
 
   const handleDeleteGoalTask = async (taskId: number) => {
     if (!window.confirm('Are you sure you want to delete this task?')) {
@@ -3323,14 +3134,14 @@ export default function Tasks() {
       console.error('Error deleting goal task:', error);
       alert('Failed to delete task');
     }
-  };
+  }
 
   const handleBackToGoals = () => {
     setSelectedGoal(null);
     setGoalMilestones([]);
     setGoalTasks([]);
     setLinkedTasks([]);
-  };
+  }
 
   // Generate 24 hour labels (two-line format)
   const generateHourLabels = () => {
@@ -3355,7 +3166,7 @@ export default function Tasks() {
     }
     
     return hours;
-  };
+  }
 
   const hourLabels = generateHourLabels();
 
@@ -3392,7 +3203,7 @@ export default function Tasks() {
     }, 1000);
     
     setSaveTimeout(timeout);
-  };
+  }
 
   // Handle blur event - save immediately when input loses focus
   const handleHourlyTimeBlur = () => {
@@ -3403,7 +3214,7 @@ export default function Tasks() {
     saveDailyEntriesWithData(hourlyEntriesRef.current);
     // Clear focused cell highlighting
     setFocusedCell(null);
-  };
+  }
 
   // Handle paste event to ensure clean paste behavior
   const handleHourlyTimePaste = (taskId: number, hour: number, e: React.ClipboardEvent<HTMLInputElement>) => {
@@ -3424,7 +3235,7 @@ export default function Tasks() {
     input.value = String(pastedValue);
     
     handleHourlyTimeChange(taskId, hour, String(pastedValue));
-  };
+  }
 
   // Handle focus event to add paste protection
   const handleHourlyTimeFocus = (taskId: number, hour: number, e: React.FocusEvent<HTMLInputElement>) => {
@@ -3480,19 +3291,19 @@ export default function Tasks() {
       input.removeEventListener('blur', blurCleanup);
     }
     input.addEventListener('blur', blurCleanup, { once: true });
-  };
+  }
 
   // Get hourly time entry for a task and hour
   const getHourlyTime = (taskId: number, hour: number): number => {
     const key = `${taskId}-${hour}`;
     // Use state for display, as it's now in sync with ref
     return hourlyEntries[key] || 0;
-  };
+  }
 
   // Get total time for sleep column (hours 0-4)
   const getSleepColumnTime = (taskId: number): number => {
     return [0, 1, 2, 3, 4].reduce((sum, hour) => sum + getHourlyTime(taskId, hour), 0);
-  };
+  }
 
   // Calculate average daily time for a task in weekly view and get row color class
   const getWeeklyRowColorClass = (task: Task): string => {
@@ -3550,7 +3361,7 @@ export default function Tasks() {
     return ''; // No color if no progress yet
   }
 
-  function getMonthlyRowColorClass(task: Task): string {
+  const getMonthlyRowColorClass = (task: Task): string => {
     // Allow checking from today tab for "Needs Attention" feature
     if (activeTab !== 'monthly' && activeTab !== 'today') return '';
     
@@ -3615,7 +3426,7 @@ export default function Tasks() {
     return ''; // No color if no progress yet
   }
 
-  function getYearlyRowColorClass(task: Task): string {
+  const getYearlyRowColorClass = (task: Task): string => {
     if (activeTab !== 'yearly') return '';
     
     // Calculate total spent/count in the year so far
@@ -3690,10 +3501,10 @@ export default function Tasks() {
       return 'weekly-below-target'; // Light red - below target but has some progress (reuse weekly class)
     }
     return ''; // No color if no progress yet
-  };
+  }
 
   // Get cell-level color for weekly tab - determines if specific day meets target
-  function getWeeklyCellColorClass(task: Task, dayIndex: number): string {
+  const getWeeklyCellColorClass = (task: Task, dayIndex: number): string => {
     // Allow checking from today tab for "Needs Attention" feature
     if (activeTab !== 'weekly' && activeTab !== 'today') return '';
     
@@ -3795,7 +3606,7 @@ export default function Tasks() {
       return 'cell-below-target'; // Red - below target
     }
     return ''; // No expected value (shouldn't happen)
-  };
+  }
 
   // Calculate total allocated time by pillar for daily tasks
   const getPillarTimeAllocations = () => {
@@ -3820,10 +3631,10 @@ export default function Tasks() {
       .join(', ');
 
     return formattedAllocations;
-  };
+  }
 
   // Get tasks that need attention (showing red in current week or month)
-  function getTasksNeedingAttention() {
+  const getTasksNeedingAttention = () => {
     // Wait for data to load before checking
     // Check if we have ANY weekly or monthly data (statuses, entries, or aggregates)
     const hasWeeklyData = Object.keys(weeklyTaskStatuses).length > 0 || 
@@ -4008,6 +3819,283 @@ export default function Tasks() {
       return severityB - severityA;
     });
   }
+
+  // Memoized version that will recompute when dependencies change
+  const tasksNeedingAttention = useMemo(() => {
+    return getTasksNeedingAttention();
+  }, [tasks, weeklyTaskStatuses, monthlyTaskStatuses, weeklyEntries, dailyAggregates, monthlyEntries, monthlyDailyAggregates, selectedWeekStart, selectedMonthStart, activeTab]);
+
+  // Define hierarchy order for sorting (matches actual database pillar-category combinations)
+  const hierarchyOrder: { [key: string]: number } = {
+    // Hard Work
+    'Hard Work|Office-Tasks': 1,
+    'Hard Work|Learning': 2,
+    'Hard Work|Confidence': 3,
+    // Calmness
+    'Calmness|Yoga': 4,
+    'Calmness|Sleep': 5,
+    // Family
+    'Family|My Tasks': 6,
+    'Family|Home Tasks': 7,
+    'Family|Time Waste': 8,
+  }
+
+  // Define custom task name order
+  const taskNameOrder: { [key: string]: number } = {
+    'cd-Mails-Tickets': 1,
+    'Code Coverage': 2,
+    'Code - Scripts': 3,
+    'Cloud': 4,
+    'LLM GenAI': 5,
+    'Git Jenkin Tools': 6,
+    'Interview Q/A': 7,
+    'Interview Talk': 8,
+    'Life Coach & NLP': 9,
+    'Toastmaster Task': 10,
+    'Yoga - Dhyan': 11,
+    'Sleep': 12,
+    'Planning': 13,
+    'Stocks': 14,
+    'Task (Bank/ mail)': 15,
+    'Commute': 16,
+    'Nature Needs': 17,
+    'Eating': 18,
+    'My Games': 19,
+    'Parent Talk': 20,
+    'Home Task': 21,
+    'Task Trishna': 22,
+    'Task Divyanshi': 23,
+    'Daughter Sports': 24,
+    'Shopping': 25,
+    'Family Friends': 26,
+    'Youtube': 27,
+    'TV': 28,
+    'Facebook': 29,
+    'Nextdoor': 30,
+    'News': 31,
+    'Dark Future': 32,
+  }
+
+  // Filter tasks by active tab
+  // Also filter out completed/NA tasks that are older than today
+  const filteredTasks = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return tasks
+    .filter(task => {
+      // Exclude one-time tasks from other tabs (they only appear in onetime tab)
+      if (activeTab !== 'onetime' && task.follow_up_frequency === 'one_time') {
+        return false;
+      }
+      
+      // For weekly tab: ONLY show tasks that have data or status for this specific week
+      if (activeTab === 'weekly') {
+        // Check if this task has daily aggregates for the current week
+        const hasDailyDataThisWeek = weekDays.some(day => {
+          const key = `${task.id}-${day.index}`;
+          return (dailyAggregates[key] || 0) > 0;
+        });
+        
+        // Check if this task has weekly time entries for the current week
+        const hasWeeklyDataThisWeek = weekDays.some(day => {
+          const key = `${task.id}-${day.index}`;
+          return (weeklyEntries[key] || 0) > 0;
+        });
+        
+        // Check if task has been explicitly added to this week
+        const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if it has been explicitly added to weekly tracking
+        // (Same behavior as monthly tab - user adds tasks manually)
+        if (!hasBeenAddedToWeekly) {
+          return false; // Not explicitly added to weekly - don't show
+        }
+        
+      } else if (activeTab === 'monthly') {
+        // For monthly tab: ONLY show tasks that have been explicitly added to monthly tracking
+        // Check if task has been explicitly added to this month
+        const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if it has been explicitly added to monthly tracking
+        // Note: We show daily aggregates in the cells for daily tasks, but any task type can be tracked monthly
+        if (!hasBeenAddedToMonthly) {
+          return false; // Not explicitly added to monthly - don't show
+        }
+        
+      } else if (activeTab === 'yearly') {
+        // For yearly tab: ONLY show tasks that have been explicitly added to yearly tracking
+        // Check if task has been explicitly added to this year
+        const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if it has been explicitly added to yearly tracking
+        // Note: We show monthly aggregates in the cells for monthly/weekly/daily tasks, but any task type can be tracked yearly
+        if (!hasBeenAddedToYearly) {
+          return false; // Not explicitly added to yearly - don't show
+        }
+        
+      } else {
+        // For non-weekly tabs, normal frequency filter
+        if (task.follow_up_frequency !== activeTab) return false;
+      }
+      
+      // For weekly tab: Handle weekly-specific completion status
+      if (activeTab === 'weekly') {
+        const taskStatus = weeklyTaskStatuses[task.id];
+        
+        // If task is marked completed/NA for THIS week:
+        // SHOW all tasks (both daily and weekly) with green/gray background
+        // They will disappear automatically next week when weeklyTaskStatuses changes
+        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          return true; // Show all tasks with their week-specific completion status
+        }
+        
+        // Don't filter out based on "ever completed" since weekly status is independent
+        // This allows the same task to be tracked in multiple weeks
+        
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Weekly tab has its own week-specific completion tracking via weeklyTaskStatuses
+        // A task can be completed in Daily tab but still active in Weekly tab
+        
+        return true;
+      }
+      
+      // For monthly tab: Handle monthly-specific completion status
+      if (activeTab === 'monthly') {
+        const taskStatus = monthlyTaskStatuses[task.id];
+        
+        // If task is marked completed/NA for THIS month, show it
+        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          return true;
+        }
+        
+        // Don't filter out based on "ever completed" since monthly status is independent
+        // This allows the same task to be tracked in multiple months
+        
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Monthly tab has its own month-specific completion tracking via monthlyTaskStatuses
+        // A task can be completed in Daily tab but still active in Monthly tab
+        
+        return true;
+      }
+      
+      // For yearly tab: Handle yearly-specific completion status
+      if (activeTab === 'yearly') {
+        const taskStatus = yearlyTaskStatuses[task.id];
+        
+        // If task is marked completed/NA for THIS year, show it
+        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          return true;
+        }
+        
+        // Don't filter out based on "ever completed" since yearly status is independent
+        // This allows the same task to be tracked in multiple years
+        
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Yearly tab has its own year-specific completion tracking via yearlyTaskStatuses
+        // A task can be completed in Daily tab but still active in Yearly tab
+        
+        return true;
+      }
+      
+      // For TODAY tab: Only show active tasks OR tasks completed/NA today
+      if (activeTab === 'today') {
+        // If task is completed, only show if completed today (in local timezone)
+        if (task.is_completed && task.completed_at) {
+          const completedDate = new Date(task.completed_at);
+          // Get local date components (not UTC)
+          const completedLocalDate = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate());
+          const todayLocalDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          
+          return completedLocalDate.getTime() === todayLocalDate.getTime();
+        }
+        
+        // If task is marked as NA (inactive), only show if marked today (in local timezone)
+        if (!task.is_active && task.na_marked_at) {
+          const naMarkedDate = new Date(task.na_marked_at);
+          // Get local date components (not UTC)
+          const naMarkedLocalDate = new Date(naMarkedDate.getFullYear(), naMarkedDate.getMonth(), naMarkedDate.getDate());
+          const todayLocalDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          return naMarkedLocalDate.getTime() === todayLocalDate.getTime();
+        }
+        
+        // Show all other active tasks
+        return task.is_active && !task.is_completed;
+      }
+      
+      // For DAILY tab: Check daily task status for the selected date
+      if (activeTab === 'daily') {
+        const status = dailyStatuses.get(task.id);
+        
+        // If task has status for this date, check it
+        if (status) {
+          // If task is not being tracked on this date, hide it
+          if (status.is_tracked === false) {
+            return false;
+          }
+          
+          // Show completed/NA tasks on their specific date
+          if (status.is_completed || status.is_na) {
+            return true;
+          }
+        }
+        
+        // If no status record exists, task is visible by default
+        // (until user explicitly marks it completed/NA or removes from tracking)
+        return true;
+      }
+      
+      // For other tabs (quarterly, etc.): Don't filter by completion status
+      // Let them show all tasks (weekly/monthly have their own status tracking)
+      return true;
+    })
+    .sort((a, b) => {
+      // Get hierarchy order for each task
+      const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+      const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+      const orderA = hierarchyOrder[keyA] || 999;
+      const orderB = hierarchyOrder[keyB] || 999;
+      
+      // Sort by hierarchy order first
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      
+      // Within same category, sort by custom task name order
+      const taskOrderA = taskNameOrder[a.name || ''] || 999;
+      const taskOrderB = taskNameOrder[b.name || ''] || 999;
+      
+      if (taskOrderA !== taskOrderB) {
+        return taskOrderA - taskOrderB;
+      }
+      
+      // If not in custom order, sort alphabetically
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [tasks, activeTab, weekDays, dailyAggregates, weeklyEntries, weeklyTaskStatuses, monthlyTaskStatuses, yearlyTaskStatuses, dailyStatuses, selectedDate, hierarchyOrder, taskNameOrder]);
+
+  // Separate tasks by type for daily and weekly tabs
+  // Note: Always call useMemo (not conditionally) to avoid React Hooks order violation
+  const timeBasedTasks = useMemo(() => {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly') {
+      return filteredTasks.filter(task => task.task_type === TaskType.TIME);
+    }
+    return [];
+  }, [activeTab, filteredTasks]);
+  
+  const countBasedTasks = useMemo(() => {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
+      return filteredTasks.filter(task => task.task_type === TaskType.COUNT);
+    }
+    return [];
+  }, [activeTab, filteredTasks]);
+  
+  const booleanTasks = useMemo(() => {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
+      return filteredTasks.filter(task => task.task_type === TaskType.BOOLEAN);
+    }
+    return [];
+  }, [activeTab, filteredTasks]);
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -4247,7 +4335,7 @@ export default function Tasks() {
         )}
       </div>
     );
-  };
+  }
 
   // Route to extracted page components for specific tabs
   if (activeTab === 'weekly') {
@@ -4325,142 +4413,9 @@ export default function Tasks() {
             setIsTaskFormOpen(false);
           }}
         />
-        
-        {/* Add Weekly Task Modal */}
-        {showAddWeeklyTaskModal && (
-          <div className="modal-overlay" onClick={() => setShowAddWeeklyTaskModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>Add Weekly Task</h2>
-                <button className="btn-close" onClick={() => setShowAddWeeklyTaskModal(false)}>×</button>
-              </div>
-              <div className="modal-body">
-                <p style={{ marginBottom: '15px', color: '#666' }}>
-                  Select an existing task to track for this week:
-                </p>
-                
-                <div className="form-group">
-                  <label htmlFor="dailyTaskSelect">Select from Daily Tasks:</label>
-                  <select 
-                    id="dailyTaskSelect"
-                    className="form-control"
-                    value={selectedDailyTask || ''}
-                    onChange={(e) => setSelectedDailyTask(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a daily task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'daily') return false;
-                        if (weeklyTaskStatuses[task.id]) return false;
-                        
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        
-                        if (task.is_completed && task.completed_at) {
-                          const completedDate = new Date(task.completed_at);
-                          completedDate.setHours(0, 0, 0, 0);
-                          if (completedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        if (!task.is_active && task.na_marked_at) {
-                          const naMarkedDate = new Date(task.na_marked_at);
-                          naMarkedDate.setHours(0, 0, 0, 0);
-                          if (naMarkedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        
-                        if (orderA !== orderB) {
-                          return orderA - orderB;
-                        }
-                        
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        
-                        if (taskOrderA !== taskOrderB) {
-                          return taskOrderA - taskOrderB;
-                        }
-                        
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        let displayValue = '';
-                        if (task.task_type === 'time') {
-                          displayValue = `(${task.allocated_minutes} min)`;
-                        } else if (task.task_type === 'count') {
-                          displayValue = `(${task.target_value} ${task.unit || 'count'})`;
-                        } else if (task.task_type === 'boolean') {
-                          displayValue = '(Yes/No)';
-                        }
-                        
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name} {displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
-                  OR
-                </div>
-
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setSelectedDailyTask(null);
-                    handleAddWeeklyTask();
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  Create New Task
-                </button>
-              </div>
-              <div className="modal-footer">
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => {
-                    setShowAddWeeklyTaskModal(false);
-                    setSelectedDailyTask(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleAddWeeklyTask}
-                  disabled={!selectedDailyTask}
-                  style={{ 
-                    opacity: selectedDailyTask ? 1 : 0.5,
-                    cursor: selectedDailyTask ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Add to Weekly
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
-  };
+  }
 
   if (activeTab === 'monthly') {
     return (
@@ -4508,7 +4463,7 @@ export default function Tasks() {
           </button>
           <button 
             className="btn-nav btn-add-monthly"
-            onClick={() => setShowAddMonthlyTaskModal(true)}
+            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
           >
             ➕ Add Monthly Task
           </button>
@@ -4532,197 +4487,9 @@ export default function Tasks() {
             setIsTaskFormOpen(false);
           }}
         />
-        
-        {/* Add Monthly Task Modal */}
-        {showAddMonthlyTaskModal && (
-          <div className="modal-overlay" onClick={() => setShowAddMonthlyTaskModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>Add Monthly Task</h2>
-                <button className="btn-close" onClick={() => setShowAddMonthlyTaskModal(false)}>×</button>
-              </div>
-              <div className="modal-body">
-                <p style={{ marginBottom: '15px', color: '#666' }}>
-                  Select an existing task to track for this month:
-                </p>
-                
-                <div className="form-group">
-                  <label htmlFor="dailyTaskSelectMonthly">Select from Daily Tasks:</label>
-                  <select 
-                    id="dailyTaskSelectMonthly"
-                    className="form-control"
-                    value={selectedDailyTaskForMonthly || ''}
-                    onChange={(e) => setSelectedDailyTaskForMonthly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a daily task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'daily') return false;
-                        if (monthlyTaskStatuses[task.id]) return false;
-                        
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        
-                        if (task.is_completed && task.completed_at) {
-                          const completedDate = new Date(task.completed_at);
-                          completedDate.setHours(0, 0, 0, 0);
-                          if (completedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        if (!task.is_active && task.na_marked_at) {
-                          const naMarkedDate = new Date(task.na_marked_at);
-                          naMarkedDate.setHours(0, 0, 0, 0);
-                          if (naMarkedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        
-                        if (orderA !== orderB) {
-                          return orderA - orderB;
-                        }
-                        
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        
-                        if (taskOrderA !== taskOrderB) {
-                          return taskOrderA - taskOrderB;
-                        }
-                        
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        let displayValue = '';
-                        if (task.task_type === 'time') {
-                          displayValue = `(${task.allocated_minutes} min)`;
-                        } else if (task.task_type === 'count') {
-                          displayValue = `(${task.target_value} ${task.unit || 'count'})`;
-                        } else if (task.task_type === 'boolean') {
-                          displayValue = '(Yes/No)';
-                        }
-                        
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name} {displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ marginTop: '20px' }}>
-                  <label htmlFor="weeklyTaskSelectMonthly">Select from Weekly Tasks:</label>
-                  <select 
-                    id="weeklyTaskSelectMonthly"
-                    className="form-control"
-                    value={selectedDailyTaskForMonthly || ''}
-                    onChange={(e) => setSelectedDailyTaskForMonthly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a weekly task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'weekly') return false;
-                        if (monthlyTaskStatuses[task.id]) return false;
-                        if (task.is_completed) return false;
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        
-                        if (orderA !== orderB) {
-                          return orderA - orderB;
-                        }
-                        
-                        return a.name.localeCompare(b.name);
-                      })
-                      .map(task => {
-                        let displayValue = '';
-                        if (task.task_type === 'time') {
-                          displayValue = `(${task.allocated_minutes} min)`;
-                        } else if (task.task_type === 'count') {
-                          displayValue = `(${task.target_value} ${task.unit || 'count'})`;
-                        } else if (task.task_type === 'boolean') {
-                          displayValue = '(Yes/No)';
-                        }
-                        
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name} {displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
-                  OR
-                </div>
-
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setSelectedDailyTaskForMonthly(null);
-                    handleAddMonthlyTask();
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  Create New Task
-                </button>
-              </div>
-              <div className="modal-footer">
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => {
-                    setShowAddMonthlyTaskModal(false);
-                    setSelectedDailyTaskForMonthly(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleAddMonthlyTask}
-                  disabled={!selectedDailyTaskForMonthly}
-                  style={{ 
-                    opacity: selectedDailyTaskForMonthly ? 1 : 0.5,
-                    cursor: selectedDailyTaskForMonthly ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Add to Monthly
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
-  };
+  }
 
   if (activeTab === 'yearly') {
     return (
@@ -4793,7 +4560,7 @@ export default function Tasks() {
         />
       </div>
     );
-  };
+  }
 
   if (activeTab === 'onetime') {
     return (
@@ -4834,7 +4601,7 @@ export default function Tasks() {
         />
       </div>
     );
-  };
+  }
 
   return (
     <div className="tasks-page">
@@ -9651,7 +9418,7 @@ export default function Tasks() {
       )}
 
       {/* Incomplete Days Alert */}
-      {activeTab === 'daily' && incompleteDaysLoaded && incompleteDays.length > 0 && (
+      {activeTab === 'daily' && incompleteDays.length > 0 && (
         <div className="incomplete-days-section">
           <div className="incomplete-days-alert">
             <h3>⚠️ Incomplete Days ({incompleteDays.length})</h3>
@@ -11891,17 +11658,6 @@ export default function Tasks() {
           </div>
         </div>
       )}
-      
-      {/* Task Form Modal - for Daily and Today tabs */}
-      <TaskForm
-        isOpen={isTaskFormOpen}
-        taskId={selectedTaskId || undefined}
-        onClose={() => setIsTaskFormOpen(false)}
-        onSuccess={async () => {
-          await loadTasks();
-          setIsTaskFormOpen(false);
-        }}
-      />
     </div>
   );
 }

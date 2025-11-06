@@ -107,6 +107,9 @@ interface TimeEntriesContextValue {
   // Yearly task statuses (which tasks are tracked in yearly view)
   yearlyTaskStatuses: Record<number, TaskStatus>;
   
+  // Monthly aggregates for yearly view (monthly tasks shown in yearly)
+  yearlyMonthlyAggregates: Record<string, number>; // key: "taskId-month", value: minutes/count
+  
   // One-time entries state
   oneTimeEntries: OneTimeEntry[];
   loadingOneTime: boolean;
@@ -141,6 +144,7 @@ interface TimeEntriesContextValue {
   updateYearlyEntry: (entryId: number, updates: Partial<YearlyEntry>) => Promise<YearlyEntry>;
   loadYearlyTaskStatuses: (year: number) => Promise<void>;
   updateYearlyTaskStatus: (taskId: number, year: number, status: Partial<TaskStatus>) => Promise<void>;
+  loadMonthlyAggregatesForYear: (year: number) => Promise<void>;
   
   // One-time operations
   loadOneTimeEntries: () => Promise<void>;
@@ -169,6 +173,9 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
   // Daily aggregates for weekly/monthly views
   const [dailyAggregatesWeekly, setDailyAggregatesWeekly] = useState<Record<string, number>>({});
   const [dailyAggregatesMonthly, setDailyAggregatesMonthly] = useState<Record<string, number>>({});
+  
+  // Monthly aggregates for yearly view
+  const [yearlyMonthlyAggregates, setYearlyMonthlyAggregates] = useState<Record<string, number>>({});
   
   const [loadingDaily, setLoadingDaily] = useState(false);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
@@ -528,6 +535,34 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     }
   }, [loadYearlyTaskStatuses]);
 
+  const loadMonthlyAggregatesForYear = useCallback(async (year: number) => {
+    try {
+      setError(null);
+      const response: any = await api.get(`/api/yearly-time/aggregates/${year}`);
+      const aggregatesData = response.data || response;
+      
+      // Convert aggregates to same format: "taskId-month"
+      const aggregatesMap: Record<string, number> = {};
+      if (aggregatesData && typeof aggregatesData === 'object') {
+        Object.entries(aggregatesData).forEach(([taskId, monthData]: [string, any]) => {
+          if (monthData && typeof monthData === 'object') {
+            Object.entries(monthData).forEach(([month, minutes]: [string, any]) => {
+              const key = `${taskId}-${month}`;
+              aggregatesMap[key] = minutes;
+            });
+          }
+        });
+      }
+      
+      setYearlyMonthlyAggregates(aggregatesMap);
+    } catch (err: any) {
+      console.error('Error loading monthly aggregates for year:', err);
+      setError('Failed to load monthly aggregates');
+      setYearlyMonthlyAggregates({});
+      throw err;
+    }
+  }, []);
+
   // ==================== ONE-TIME ENTRIES ====================
 
   const loadOneTimeEntries = useCallback(async () => {
@@ -585,6 +620,7 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     yearlyEntries,
     loadingYearly,
     yearlyTaskStatuses,
+    yearlyMonthlyAggregates,
     oneTimeEntries,
     loadingOneTime,
     error,
@@ -609,6 +645,7 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     updateYearlyEntry,
     loadYearlyTaskStatuses,
     updateYearlyTaskStatus,
+    loadMonthlyAggregatesForYear,
     loadOneTimeEntries,
     saveOneTimeEntry,
     updateOneTimeEntry,

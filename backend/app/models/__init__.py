@@ -11,7 +11,8 @@ from app.models.models import (
     TimeEntry,
     MotivationalQuote,
     FollowUpFrequency,
-    GoalTimePeriod
+    GoalTimePeriod,
+    DailyTaskStatus
 )
 
 __all__ = [
@@ -23,5 +24,6 @@ __all__ = [
     "TimeEntry",
     "MotivationalQuote",
     "FollowUpFrequency",
-    "GoalTimePeriod"
+    "GoalTimePeriod",
+    "DailyTaskStatus"
 ]

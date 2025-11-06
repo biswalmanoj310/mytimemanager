@@ -1,159 +1,77 @@
 /**
- * One-Time Tasks Page
+ * ============================================================================
+ * ONE-TIME TASKS PAGE - Complete Implementation
+ * ============================================================================
  * 
- * Displays and manages one-time tasks with completion tracking.
- * Unlike time-based tracking pages, one-time tasks are simpler:
- * - No date navigation required
- * - Only completion status tracking (no time/count entries)
- * - Filter by pillar/category
- * - Show/hide completed/NA/inactive tasks
+ * Displays and manages one-time tasks with completion tracking
+ * Self-contained architecture for clarity
+ * 
+ * ============================================================================
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useTaskContext, useTimeEntriesContext, useUserPreferencesContext } from '../contexts';
-import { TaskFilters, TaskHierarchyGroup, TimeEntryGrid, TimeEntryData } from '../components';
-import {
-  filterByPillarAndCategory,
-  groupTasksByHierarchy,
-  isTaskActive,
-  sortTasksByHierarchy,
-} from '../utils/taskHelpers';
+import { Task, TaskType, FollowUpFrequency } from '../types';
+import { sortTasksByHierarchy } from '../utils/taskHelpers';
 
 const OneTimeTasks: React.FC = () => {
-  // Context hooks
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
   const { oneTimeEntries, loadOneTimeEntries, saveOneTimeEntry, updateOneTimeEntry } = useTimeEntriesContext();
   const {
     selectedPillar,
-    setSelectedPillar,
     selectedCategory,
-    setSelectedCategory,
     showCompleted,
-    setShowCompleted,
     showNA,
-    setShowNA,
     showInactive,
-    setShowInactive,
     hierarchyOrder,
     taskNameOrder,
-    expandedGroups,
-    toggleGroup,
   } = useUserPreferencesContext();
 
-  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  /**
-   * Load initial data on mount
-   */
   useEffect(() => {
-    const loadData = async () => {
+    const loadInitialData = async () => {
       try {
-        await Promise.all([
-          loadTasks(),
-          loadPillars(),
-          loadCategories(),
-          loadOneTimeEntries(),
-        ]);
+        setLoading(true);
+        await Promise.all([loadTasks(), loadPillars(), loadCategories(), loadOneTimeEntries()]);
       } catch (err) {
-        console.error('Error loading data:', err);
-        setError('Failed to load data');
+        console.error('Error loading initial data:', err);
+      } finally {
+        setLoading(false);
       }
     };
+    loadInitialData();
+  }, []);
 
-    loadData();
-  }, []); // Only load on mount
-
-  /**
-   * Filter tasks based on current criteria
-   */
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // Filter by one-time frequency
-      if (task.follow_up_frequency !== 'one_time') {
-        return false;
-      }
-
-      // Filter by status
-      if (!showInactive && !isTaskActive(task)) return false;
-      if (!showCompleted && task.is_completed) return false;
-      if (!showNA && task.na_marked_at) return false;
-
+      if (task.follow_up_frequency !== FollowUpFrequency.ONE_TIME) return false;
+      if (selectedPillar && task.pillar_name !== selectedPillar) return false;
+      if (selectedCategory && task.category_name !== selectedCategory) return false;
+      
+      const entry = oneTimeEntries.find(e => e.task_id === task.id);
+      const isCompleted = entry?.is_completed || task.is_completed || false;
+      const isNA = !task.is_active;
+      
+      if (!showCompleted && isCompleted) return false;
+      if (!showNA && isNA) return false;
+      if (!showInactive && !task.is_active) return false;
+      
       return true;
     });
+    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
+  }, [tasks, oneTimeEntries, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder]);
 
-    // Apply pillar/category filters
-    filtered = filterByPillarAndCategory(filtered, selectedPillar, selectedCategory);
-
-    // Sort tasks
-    filtered = sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-
-    return filtered;
-  }, [
-    tasks,
-    selectedPillar,
-    selectedCategory,
-    showCompleted,
-    showNA,
-    showInactive,
-    hierarchyOrder,
-    taskNameOrder,
-  ]);
-
-  /**
-   * Group filtered tasks by hierarchy
-   */
-  const groupedTasks = useMemo(() => {
-    return groupTasksByHierarchy(filteredTasks);
+  const tasksByType = useMemo(() => {
+    const groups: { time: Task[]; count: Task[]; boolean: Task[]; } = { time: [], count: [], boolean: [] };
+    filteredTasks.forEach(task => {
+      if (task.task_type === TaskType.TIME) groups.time.push(task);
+      else if (task.task_type === TaskType.COUNT) groups.count.push(task);
+      else if (task.task_type === TaskType.BOOLEAN) groups.boolean.push(task);
+    });
+    return groups;
   }, [filteredTasks]);
 
-  /**
-   * Convert one-time entries to map for TimeEntryGrid
-   */
-  const entriesMap = useMemo(() => {
-    const map = new Map<number, TimeEntryData>();
-    oneTimeEntries.forEach(entry => {
-      map.set(entry.task_id, {
-        taskId: entry.task_id,
-        timeSpent: entry.time_spent,
-        count: entry.count,
-        notes: entry.notes,
-        isCompleted: entry.is_completed || false,
-        isNA: false, // NA is tracked at task level
-      });
-    });
-    return map;
-  }, [oneTimeEntries]);
-
-  /**
-   * Handle time entry change
-   */
-  const handleEntryChange = async (taskId: number, updates: Partial<TimeEntryData>) => {
-    try {
-      const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
-      
-      if (existingEntry) {
-        await updateOneTimeEntry(existingEntry.id, {
-          time_spent: updates.timeSpent,
-          count: updates.count,
-          notes: updates.notes,
-        });
-      } else {
-        await saveOneTimeEntry({
-          task_id: taskId,
-          time_spent: updates.timeSpent,
-          count: updates.count,
-          notes: updates.notes,
-        });
-      }
-    } catch (err) {
-      console.error('Error saving one-time entry:', err);
-      setError('Failed to save entry');
-    }
-  };
-
-  /**
-   * Handle task completion
-   */
   const handleComplete = async (taskId: number) => {
     try {
       const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
@@ -168,94 +86,192 @@ const OneTimeTasks: React.FC = () => {
           is_completed: true,
         });
       }
-    } catch (err) {
+      await loadOneTimeEntries();
+    } catch (err: any) {
       console.error('Error updating completion:', err);
-      setError('Failed to update completion');
     }
   };
 
-  /**
-   * Handle mark NA (not applicable for one-time tasks)
-   */
-  const handleMarkNA = async (_taskId: number) => {
-    console.log('N/A marking handled at task level for one-time tasks');
+  const handleTimeChange = async (taskId: number, timeSpent: number) => {
+    try {
+      const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
+      
+      if (existingEntry) {
+        await updateOneTimeEntry(existingEntry.id, { time_spent: timeSpent });
+      } else {
+        await saveOneTimeEntry({ task_id: taskId, time_spent: timeSpent });
+      }
+      await loadOneTimeEntries();
+    } catch (err: any) {
+      console.error('Error saving time:', err);
+    }
   };
 
-  return (
-    <div className="one-time-tasks-container">
-      <div className="container-fluid">
-        <div className="row mb-4">
-          <div className="col">
-            <h2>
-              <i className="fas fa-check-circle me-2"></i>
-              One-Time Tasks
-            </h2>
-            <p className="text-muted">
-              Track completion of one-time tasks
-            </p>
-          </div>
-        </div>
+  const handleCountChange = async (taskId: number, count: number) => {
+    try {
+      const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
+      
+      if (existingEntry) {
+        await updateOneTimeEntry(existingEntry.id, { count });
+      } else {
+        await saveOneTimeEntry({ task_id: taskId, count });
+      }
+      await loadOneTimeEntries();
+    } catch (err: any) {
+      console.error('Error saving count:', err);
+    }
+  };
 
-        {error && (
-          <div className="alert alert-danger" role="alert">
-            <i className="fas fa-exclamation-triangle me-2"></i>
-            {error}
-          </div>
-        )}
+  const handleNotesChange = async (taskId: number, notes: string) => {
+    try {
+      const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
+      
+      if (existingEntry) {
+        await updateOneTimeEntry(existingEntry.id, { notes });
+      } else {
+        await saveOneTimeEntry({ task_id: taskId, notes });
+      }
+      await loadOneTimeEntries();
+    } catch (err: any) {
+      console.error('Error saving notes:', err);
+    }
+  };
 
-        {/* Filters */}
-        <div className="row mb-3">
-          <div className="col">
-            <TaskFilters
-              selectedPillar={selectedPillar}
-              selectedCategory={selectedCategory}
-              showCompleted={showCompleted}
-              showNA={showNA}
-              showInactive={showInactive}
-              onPillarChange={setSelectedPillar}
-              onCategoryChange={setSelectedCategory}
-              onShowCompletedChange={setShowCompleted}
-              onShowNAChange={setShowNA}
-              onShowInactiveChange={setShowInactive}
+  const renderTaskRow = (task: Task) => {
+    const entry = oneTimeEntries.find(e => e.task_id === task.id);
+    const isCompleted = entry?.is_completed || task.is_completed || false;
+    const isNA = !task.is_active;
+    const timeSpent = entry?.time_spent || 0;
+    const count = entry?.count || 0;
+    const notes = entry?.notes || '';
+    
+    const rowClassName = isCompleted ? 'completed-row' : isNA ? 'na-row' : '';
+    const bgColor = isCompleted ? '#c6f6d5' : isNA ? '#e2e8f0' : undefined;
+    
+    return (
+      <tr key={task.id} className={rowClassName} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+        <td style={bgColor ? { backgroundColor: bgColor } : undefined}>
+          <div className="task-name">{task.name}</div>
+        </td>
+        <td style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {task.task_type === TaskType.TIME ? (
+            <input
+              type="number"
+              min="0"
+              className="hour-input"
+              value={timeSpent || ''}
+              onChange={(e) => handleTimeChange(task.id, parseInt(e.target.value) || 0)}
+              placeholder="0"
+              style={{ width: '80px', textAlign: 'center' }}
             />
-          </div>
-        </div>
+          ) : task.task_type === TaskType.COUNT ? (
+            <input
+              type="number"
+              min="0"
+              className="hour-input"
+              value={count || ''}
+              onChange={(e) => handleCountChange(task.id, parseInt(e.target.value) || 0)}
+              placeholder="0"
+              style={{ width: '80px', textAlign: 'center' }}
+            />
+          ) : (
+            <input
+              type="checkbox"
+              checked={isCompleted}
+              onChange={() => handleComplete(task.id)}
+              style={{ cursor: 'pointer', transform: 'scale(1.3)' }}
+            />
+          )}
+        </td>
+        <td style={bgColor ? { backgroundColor: bgColor } : undefined}>
+          <input
+            type="text"
+            className="form-control form-control-sm"
+            value={notes}
+            onChange={(e) => handleNotesChange(task.id, e.target.value)}
+            placeholder="Add notes..."
+            style={{ fontSize: '13px' }}
+          />
+        </td>
+        <td style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          <button
+            className={`btn btn-sm ${isCompleted ? 'btn-success' : 'btn-outline-success'}`}
+            onClick={() => handleComplete(task.id)}
+            style={{ minWidth: '100px' }}
+          >
+            {isCompleted ? '✓ Completed' : 'Mark Complete'}
+          </button>
+        </td>
+      </tr>
+    );
+  };
 
-        {/* Task Groups */}
-        <div className="row">
-          <div className="col">
-            {Object.keys(groupedTasks).length === 0 ? (
-              <div className="alert alert-warning">
-                <i className="fas fa-exclamation-triangle me-2"></i>
-                No one-time tasks found. Adjust your filters or add new one-time tasks.
-              </div>
-            ) : (
-              Object.entries(groupedTasks).map(([groupKey, groupTasks]) => (
-                <TaskHierarchyGroup
-                  key={groupKey}
-                  groupKey={groupKey}
-                  groupName={groupKey}
-                  tasks={groupTasks}
-                  isExpanded={!expandedGroups.has(groupKey)}
-                  onToggle={toggleGroup}
-                  renderTask={(tasks) => (
-                    <TimeEntryGrid
-                      tasks={Array.isArray(tasks) ? tasks : [tasks]}
-                      entries={entriesMap}
-                      onEntryChange={handleEntryChange}
-                      onComplete={handleComplete}
-                      onMarkNA={handleMarkNA}
-                      showNotes={true}
-                    />
-                  )}
-                  showTaskCount={true}
-                />
-              ))
-            )}
+  const renderTaskSection = (sectionTitle: string, emoji: string, sectionClass: string, tasks: Task[]) => {
+    if (tasks.length === 0) return null;
+    return (
+      <div style={{ marginBottom: '32px' }}>
+        <h3 className={`task-section-header ${sectionClass}`}>
+          <span className="emoji">{emoji}</span>
+          <span>{sectionTitle}</span>
+        </h3>
+        <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+          <table className="tasks-table daily-table">
+            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
+              <tr>
+                <th style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left' }}>Task</th>
+                <th style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Value</th>
+                <th style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left' }}>Notes</th>
+                <th style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map(task => renderTaskRow(task))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  if (loading && tasks.length === 0) {
+    return (
+      <div className="container-fluid mt-4">
+        <div className="text-center">
+          <div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div>
+          <p className="mt-2">Loading one-time tasks...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="row mb-3">
+        <div className="col">
+          <div className="alert alert-info">
+            <i className="fas fa-info-circle me-2"></i>
+            <strong>{filteredTasks.length}</strong> one-time tasks
+            {selectedPillar && <span> in <strong>{selectedPillar}</strong></span>}
+            {selectedCategory && <span> / <strong>{selectedCategory}</strong></span>}
           </div>
         </div>
       </div>
-    </div>
+      <div className="row">
+        <div className="col">
+          {filteredTasks.length === 0 ? (
+            <div className="alert alert-warning">
+              <i className="fas fa-exclamation-triangle me-2"></i>No one-time tasks found. Adjust your filters or add new one-time tasks.
+            </div>
+          ) : (
+            <>
+              {renderTaskSection('Time-Based Tasks', '⏱️', 'time-based', tasksByType.time)}
+              {renderTaskSection('Count-Based Tasks', '🔢', 'count-based', tasksByType.count)}
+              {renderTaskSection('Yes/No Tasks', '✅', 'boolean-based', tasksByType.boolean)}
+            </>
+          )}
+        </div>
+      </div>
+    </>
   );
 };
 

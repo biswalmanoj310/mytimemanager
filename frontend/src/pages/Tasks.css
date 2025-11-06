@@ -1028,15 +1028,17 @@ td.section-header-cell.boolean-based {
 
 /* Date Navigator for Daily Tab */
 .date-navigator {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 20px;
-  background: white;
-  border: 2px solid #cbd5e0;
-  border-top: none;
-  border-bottom: 2px solid #cbd5e0;
-  margin-bottom: -2px;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  flex-wrap: nowrap !important;
+  gap: 10px;
+  padding: 12px 20px;
+  background: linear-gradient(to right, #f8f9fa, #ffffff);
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .date-navigator .btn-nav {
@@ -1044,45 +1046,62 @@ td.section-header-cell.boolean-based {
   border: 1px solid #cbd5e0;
   background: white;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
   color: #2d3748;
+  white-space: nowrap;
 }
 
 .date-navigator .btn-nav:hover {
   background: #f7fafc;
   border-color: #4299e1;
   color: #4299e1;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(66, 153, 225, 0.2);
 }
 
-.date-navigator .btn-today {
-  background: #4299e1;
-  color: white;
-  border-color: #4299e1;
+.date-navigator .btn-nav.btn-today {
+  font-weight: 600;
 }
 
-.date-navigator .btn-today.active {
-  background: #4299e1;
-  color: white;
-  border-color: #4299e1;
+.date-navigator .btn-nav.btn-today.active {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+  color: white !important;
+  border: 2px solid #10b981 !important;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3) !important;
 }
 
-.date-navigator .btn-today.inactive {
-  background: #a0aec0;
-  color: white;
-  border-color: #a0aec0;
+.date-navigator .btn-nav.btn-today.active:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+  border-color: #059669 !important;
+  color: white !important;
 }
 
-.date-navigator .btn-today:hover {
-  background: #3182ce;
-  border-color: #3182ce;
+.date-navigator .btn-nav.btn-today.inactive {
+  background: #e2e8f0 !important;
+  color: #64748b !important;
+  border: 1px solid #cbd5e0 !important;
+}
+
+.date-navigator .btn-nav.btn-today.inactive:hover {
+  background: #cbd5e0 !important;
+  color: #475569 !important;
+  border-color: #94a3b8 !important;
+}
+
+.date-navigator .btn-today.active:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(16, 185, 129, 0.4);
 }
 
 .date-navigator .btn-today.inactive:hover {
-  background: #718096;
-  border-color: #718096;
+  background: #cbd5e0;
+  border-color: #94a3b8;
+  color: #475569;
 }
 
 .date-navigator .date-input {
@@ -1102,16 +1121,42 @@ td.section-header-cell.boolean-based {
 }
 
 .date-navigator .date-display {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  color: #2d3748;
+  color: #475569;
   margin-left: auto;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.date-navigator .btn-add-weekly,
+.date-navigator .btn-add-monthly,
+.date-navigator .btn-add-yearly,
+.date-navigator .btn-add-onetime {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border: 1px solid #10b981;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);
+}
+
+.date-navigator .btn-add-weekly:hover,
+.date-navigator .btn-add-monthly:hover,
+.date-navigator .btn-add-yearly:hover,
+.date-navigator .btn-add-onetime:hover {
+  background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  border-color: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(16, 185, 129, 0.4);
 }
 
 /* Incomplete Days Section */
 .incomplete-days-section {
   margin-top: 32px;
   padding: 0 20px 20px;
+  min-height: 100px; /* Prevent layout shift when loading */
 }
 
 .incomplete-days-alert {
@@ -1119,6 +1164,16 @@ td.section-header-cell.boolean-based {
   border: 2px solid #f39c12;
   border-radius: 8px;
   padding: 20px;
+  animation: fadeIn 0.3s ease-in; /* Smooth fade in */
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .incomplete-days-alert h3 {
@@ -1162,10 +1217,17 @@ td.section-header-cell.boolean-based {
   text-decoration: none;
   color: #2d3748;
   gap: 16px;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.2s;
 }
 
 .incomplete-day-link:hover {
   text-decoration: none;
+  background-color: #f7fafc;
 }
 
 .day-date {
@@ -3229,5 +3291,48 @@ td.section-header-cell.boolean-based {
 }
   min-width: 45px;
   text-align: right;
+}
+
+/* ============================================================================
+ * DATE NAVIGATOR COMPONENT STYLES
+ * ============================================================================ */
+
+.date-navigator {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  background: white;
+  border: 2px solid #cbd5e0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.date-nav-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.date-navigator .date-display {
+  flex: 1;
+  text-align: center;
+  font-weight: 600;
+  font-size: 16px;
+  color: #2d3748;
+}
+
+.date-navigator .current-period {
+  font-weight: 600;
+}
+
+.date-picker-container {
+  display: flex;
+  justify-content: center;
+}
+
+.date-picker-container input {
+  max-width: 200px;
 }
 

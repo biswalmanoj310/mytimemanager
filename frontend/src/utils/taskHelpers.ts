@@ -348,3 +348,264 @@ export const isValidCountEntry = (value: number, max?: number): boolean => {
   if (max !== undefined && value > max) return false;
   return true;
 };
+
+/**
+ * Get row-level color class for weekly tab
+ * Returns color class based on whether task is on track for weekly target
+ * @param task - Task object
+ * @param totalSpent - Total time/count spent in week
+ * @param weekStartDate - Start date of the week
+ * @returns CSS class name ('weekly-on-track' | 'weekly-below-target' | '')
+ */
+export const getWeeklyRowColorClass = (
+  task: Task,
+  totalSpent: number,
+  weekStartDate: Date
+): string => {
+  // Calculate days elapsed in week (including today)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weekStart = new Date(weekStartDate);
+  weekStart.setHours(0, 0, 0, 0);
+  
+  let daysElapsed = 7; // Default to full week
+  if (today >= weekStart) {
+    const diffTime = today.getTime() - weekStart.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    daysElapsed = Math.min(diffDays + 1, 7); // +1 to include today
+  }
+  
+  // Calculate expected target based on task type and frequency
+  let expectedTarget = 0;
+  if (task.task_type === 'count') {
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = (task.target_value || 0) * daysElapsed;
+    } else {
+      expectedTarget = (task.target_value || 0) * (daysElapsed / 7);
+    }
+  } else if (task.task_type === 'boolean') {
+    expectedTarget = daysElapsed;
+  } else {
+    // TIME tasks
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = task.allocated_minutes * daysElapsed;
+    } else {
+      expectedTarget = task.allocated_minutes * (daysElapsed / 7);
+    }
+  }
+  
+  // Return color based on progress
+  if (totalSpent >= expectedTarget) {
+    return 'weekly-on-track'; // Green
+  } else if (totalSpent > 0) {
+    return 'weekly-below-target'; // Light red
+  }
+  return '';
+};
+
+/**
+ * Get row-level color class for monthly tab
+ * @param task - Task object
+ * @param totalSpent - Total time/count spent in month
+ * @param monthStartDate - Start date of the month
+ * @returns CSS class name ('weekly-on-track' | 'weekly-below-target' | '')
+ */
+export const getMonthlyRowColorClass = (
+  task: Task,
+  totalSpent: number,
+  monthStartDate: Date
+): string => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const monthStart = new Date(monthStartDate);
+  monthStart.setHours(0, 0, 0, 0);
+  
+  const daysInMonth = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0).getDate();
+  
+  let daysElapsed = daysInMonth;
+  if (today >= monthStart) {
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    monthEnd.setHours(0, 0, 0, 0);
+    
+    if (today <= monthEnd) {
+      const diffTime = today.getTime() - monthStart.getTime();
+      daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+  }
+  
+  let expectedTarget = 0;
+  if (task.task_type === 'count') {
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = (task.target_value || 0) * daysElapsed;
+    } else {
+      expectedTarget = (task.target_value || 0) * (daysElapsed / daysInMonth);
+    }
+  } else if (task.task_type === 'boolean') {
+    expectedTarget = daysElapsed;
+  } else {
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = task.allocated_minutes * daysElapsed;
+    } else {
+      expectedTarget = task.allocated_minutes * (daysElapsed / daysInMonth);
+    }
+  }
+  
+  if (totalSpent >= expectedTarget) {
+    return 'weekly-on-track';
+  } else if (totalSpent > 0) {
+    return 'weekly-below-target';
+  }
+  return '';
+};
+
+/**
+ * Get row-level color class for yearly tab
+ * @param task - Task object
+ * @param totalSpent - Total time/count spent in year
+ * @param yearStartDate - Start date of the year
+ * @returns CSS class name ('weekly-on-track' | 'weekly-below-target' | '')
+ */
+export const getYearlyRowColorClass = (
+  task: Task,
+  totalSpent: number,
+  yearStartDate: Date
+): string => {
+  const today = new Date();
+  const yearStart = new Date(yearStartDate);
+  
+  let monthsElapsed = 12;
+  if (today.getFullYear() === yearStart.getFullYear()) {
+    monthsElapsed = today.getMonth() + 1;
+  } else if (today.getFullYear() < yearStart.getFullYear()) {
+    monthsElapsed = 0;
+  }
+  
+  let expectedTarget = 0;
+  if (task.task_type === 'count') {
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = (task.target_value || 0) * monthsElapsed * 30;
+    } else if (task.follow_up_frequency === 'weekly') {
+      expectedTarget = (task.target_value || 0) * monthsElapsed * 4;
+    } else if (task.follow_up_frequency === 'monthly') {
+      expectedTarget = (task.target_value || 0) * monthsElapsed;
+    } else {
+      expectedTarget = (task.target_value || 0) * (monthsElapsed / 12);
+    }
+  } else if (task.task_type === 'boolean') {
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = monthsElapsed * 30;
+    } else if (task.follow_up_frequency === 'weekly') {
+      expectedTarget = monthsElapsed * 4;
+    } else if (task.follow_up_frequency === 'monthly') {
+      expectedTarget = monthsElapsed;
+    } else {
+      expectedTarget = monthsElapsed / 12;
+    }
+  } else {
+    if (task.follow_up_frequency === 'daily') {
+      expectedTarget = task.allocated_minutes * monthsElapsed * 30;
+    } else if (task.follow_up_frequency === 'weekly') {
+      expectedTarget = task.allocated_minutes * monthsElapsed * 4;
+    } else if (task.follow_up_frequency === 'monthly') {
+      expectedTarget = task.allocated_minutes * monthsElapsed;
+    } else {
+      expectedTarget = task.allocated_minutes * (monthsElapsed / 12);
+    }
+  }
+  
+  if (totalSpent >= expectedTarget) {
+    return 'weekly-on-track';
+  } else if (totalSpent > 0) {
+    return 'weekly-below-target';
+  }
+  return '';
+};
+
+/**
+ * Get cell-level color class for weekly tab
+ * Determines if specific day meets target
+ * @param task - Task object
+ * @param actualValue - Actual time/count for the day
+ * @param dayDate - Date of the specific day
+ * @returns CSS class name ('cell-achieved' | 'cell-below-target' | '')
+ */
+export const getWeeklyCellColorClass = (
+  task: Task,
+  actualValue: number,
+  dayDate: Date
+): string => {
+  // Calculate expected value for this day
+  let expectedValue = 0;
+  if (task.task_type === 'count') {
+    expectedValue = task.follow_up_frequency === 'daily' 
+      ? (task.target_value || 0) 
+      : (task.target_value || 0) / 7;
+  } else if (task.task_type === 'boolean') {
+    expectedValue = task.follow_up_frequency === 'daily' ? 1 : 1 / 7;
+  } else {
+    expectedValue = task.follow_up_frequency === 'daily' 
+      ? task.allocated_minutes 
+      : task.allocated_minutes / 7;
+  }
+  
+  // Check if day is in the future
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
+  if (dayDate > today) {
+    return '';
+  }
+  
+  // Return color based on achievement
+  if (actualValue >= expectedValue) {
+    return 'cell-achieved'; // Green
+  } else if (expectedValue > 0) {
+    return 'cell-below-target'; // Red
+  }
+  return '';
+};
+
+/**
+ * Get cell-level color class for monthly tab
+ * @param task - Task object
+ * @param actualValue - Actual time/count for the day
+ * @param dayDate - Date of the specific day
+ * @returns CSS class name ('cell-achieved' | 'cell-below-target' | '')
+ */
+export const getMonthlyCellColorClass = (
+  task: Task,
+  actualValue: number,
+  dayDate: Date
+): string => {
+  // Calculate expected value for this day
+  let expectedValue = 0;
+  const daysInMonth = new Date(dayDate.getFullYear(), dayDate.getMonth() + 1, 0).getDate();
+  
+  if (task.task_type === 'count') {
+    expectedValue = task.follow_up_frequency === 'daily' 
+      ? (task.target_value || 0) 
+      : (task.target_value || 0) / daysInMonth;
+  } else if (task.task_type === 'boolean') {
+    expectedValue = task.follow_up_frequency === 'daily' ? 1 : 1 / daysInMonth;
+  } else {
+    expectedValue = task.follow_up_frequency === 'daily' 
+      ? task.allocated_minutes 
+      : task.allocated_minutes / daysInMonth;
+  }
+  
+  // Check if day is in the future
+  const today = new Date();
+  today.setHours(23, 59, 59, 999);
+  
+  if (dayDate > today) {
+    return '';
+  }
+  
+  // Return color based on achievement
+  if (actualValue >= expectedValue) {
+    return 'cell-achieved';
+  } else if (expectedValue > 0) {
+    return 'cell-below-target';
+  }
+  return '';
+};

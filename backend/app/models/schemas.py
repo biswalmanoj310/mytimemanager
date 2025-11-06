@@ -548,3 +548,45 @@ class WeeklyTaskStatusResponse(WeeklyTaskStatusBase):
 
     class Config:
         from_attributes = True
+
+
+# ============= DAILY TASK STATUS SCHEMAS =============
+
+class DailyTaskStatusBase(BaseModel):
+    """Base schema for DailyTaskStatus"""
+    task_id: int = Field(..., gt=0)
+    date: datetime  # Will be converted to date in backend
+    is_completed: bool = False
+    is_na: bool = False
+    is_tracked: bool = True
+
+
+class DailyTaskStatusCreate(BaseModel):
+    """Schema for creating/updating a daily task status"""
+    task_id: int = Field(..., gt=0)
+    date: datetime
+    is_completed: Optional[bool] = None
+    is_na: Optional[bool] = None
+    is_tracked: Optional[bool] = None
+
+
+class DailyTaskStatusUpdate(BaseModel):
+    """Schema for updating daily task status"""
+    is_completed: Optional[bool] = None
+    is_na: Optional[bool] = None
+    is_tracked: Optional[bool] = None
+
+
+class DailyTaskStatusResponse(BaseModel):
+    """Schema for DailyTaskStatus response"""
+    id: int
+    task_id: int
+    date: datetime
+    is_completed: bool
+    is_na: bool
+    is_tracked: bool
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True

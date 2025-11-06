@@ -1,39 +1,28 @@
 /**
- * Monthly Tasks Page
+ * ============================================================================
+ * MONTHLY TASKS PAGE - Complete Implementation with Full Styling
+ * ============================================================================
  * 
- * Displays and manages monthly task entries with time/count tracking.
- * Uses shared components for consistent UX across all time tracking pages.
+ * Production-ready monthly task tracking with full styling and color logic
+ * Self-contained architecture with inline helpers for clarity
  * 
- * Features:
- * - Month navigation with date picker
- * - Pillar/Category filtering
- * - Task hierarchy grouping
- * - Monthly time entry grid
- * - Weekly/daily task aggregation display
+ * ============================================================================
  */
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useTaskContext, useTimeEntriesContext, useUserPreferencesContext } from '../contexts';
-import { DateNavigator, TaskFilters, TaskHierarchyGroup, TimeEntryGrid, TimeEntryData } from '../components';
+import { Task, TaskType } from '../types';
 import { 
   getMonthStart, 
-  formatDateForInput
+  formatDateForInput,
 } from '../utils/dateHelpers';
 import {
-  filterByPillarAndCategory,
-  groupTasksByHierarchy,
-  isTaskActive,
   sortTasksByHierarchy,
 } from '../utils/taskHelpers';
 
 const MonthlyTasks: React.FC = () => {
-  // Context hooks
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
   const { 
-    monthlyEntries, 
-    loadMonthlyEntries, 
-    saveMonthlyEntry, 
-    updateMonthlyEntry,
     monthlyTaskStatuses,
     loadMonthlyTaskStatuses,
     updateMonthlyTaskStatus,
@@ -42,214 +31,287 @@ const MonthlyTasks: React.FC = () => {
   } = useTimeEntriesContext();
   const {
     selectedDate,
-    setSelectedDate,
     selectedPillar,
-    setSelectedPillar,
     selectedCategory,
-    setSelectedCategory,
     showCompleted,
-    setShowCompleted,
     showNA,
-    setShowNA,
     showInactive,
-    setShowInactive,
     hierarchyOrder,
     taskNameOrder,
-    expandedGroups,
-    toggleGroup,
   } = useUserPreferencesContext();
 
-  // Local state
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Calculate month start from selected date
   const monthStartDate = useMemo(() => getMonthStart(selectedDate), [selectedDate]);
   const monthStartString = formatDateForInput(monthStartDate);
 
-  // Get month display info
-  const monthInfo = useMemo(() => {
-    const month = monthStartDate.getMonth();
-    const year = monthStartDate.getFullYear();
-    return {
-      month,
-      year,
-      monthName: monthStartDate.toLocaleDateString('en-US', { month: 'long' }),
-      monthYear: `${monthStartDate.toLocaleDateString('en-US', { month: 'long' })} ${year}`,
-    };
+  const daysInMonth = useMemo(() => {
+    return new Date(monthStartDate.getFullYear(), monthStartDate.getMonth() + 1, 0).getDate();
   }, [monthStartDate]);
 
-  /**
-   * Load initial data on mount
-   */
+  const monthDays = useMemo(() => {
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const day = i + 1;
+      const date = new Date(monthStartDate.getFullYear(), monthStartDate.getMonth(), day);
+      return { day, date, dateString: formatDateForInput(date) };
+    });
+  }, [monthStartDate, daysInMonth]);
+
   useEffect(() => {
     const loadInitialData = async () => {
       try {
         setLoading(true);
-        await Promise.all([
-          loadTasks(),
-          loadPillars(),
-          loadCategories(),
-        ]);
+        await Promise.all([loadTasks(), loadPillars(), loadCategories()]);
       } catch (err) {
         console.error('Error loading initial data:', err);
-        setError('Failed to load data');
       } finally {
         setLoading(false);
       }
     };
-
     loadInitialData();
   }, []);
 
-  /**
-   * Load monthly entries, task statuses, and daily aggregates when month changes
-   */
   useEffect(() => {
-    const loadData = async () => {
+    const loadMonthData = async () => {
       try {
-        setLoading(true);
-        await Promise.all([
-          loadMonthlyEntries(monthStartString),
-          loadMonthlyTaskStatuses(monthStartString),
-          loadDailyAggregatesForMonth(monthStartString),
-        ]);
+        await loadMonthlyTaskStatuses(monthStartString);
+        await loadDailyAggregatesForMonth(monthStartString);
       } catch (err) {
-        console.error('Error loading monthly data:', err);
-        setError('Failed to load monthly data');
-      } finally {
-        setLoading(false);
+        console.error('Error loading month data:', err);
       }
     };
+    loadMonthData();
+  }, [monthStartString, loadMonthlyTaskStatuses, loadDailyAggregatesForMonth]);
 
-    loadData();
-  }, [monthStartString, loadMonthlyEntries, loadMonthlyTaskStatuses, loadDailyAggregatesForMonth]);
-
-  /**
-   * Filter tasks based on current criteria
-   * IMPORTANT: Monthly tab shows tasks that have been explicitly added to monthly tracking
-   * (tracked via monthlyTaskStatuses), NOT filtered by frequency
-   */
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // CRITICAL: Only show tasks that have been explicitly added to monthly tracking
-      // This is determined by presence in monthlyTaskStatuses, not by frequency
       const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToMonthly) {
-        return false;
-      }
-
-      // Check monthly-specific completion status
-      const taskStatus = monthlyTaskStatuses[task.id];
-      if (taskStatus) {
-        // If completed/NA for THIS month, show with proper status
-        if (taskStatus.is_completed || taskStatus.is_na) {
-          return true;
-        }
-      }
-
-      // Filter by status preferences
-      if (!showInactive && !isTaskActive(task)) return false;
-      if (!showCompleted && task.is_completed) return false;
-      if (!showNA && task.na_marked_at) return false;
-
+      if (!hasBeenAddedToMonthly) return false;
+      if (selectedPillar && task.pillar_name !== selectedPillar) return false;
+      if (selectedCategory && task.category_name !== selectedCategory) return false;
+      const monthlyStatus = monthlyTaskStatuses[task.id];
+      const isCompleted = monthlyStatus?.is_completed || false;
+      const isNA = monthlyStatus?.is_na || false;
+      if (!showCompleted && isCompleted) return false;
+      if (!showNA && isNA) return false;
+      if (!showInactive && !task.is_active) return false;
       return true;
     });
+    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
+  }, [tasks, monthlyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder]);
 
-    // Apply pillar/category filters
-    filtered = filterByPillarAndCategory(filtered, selectedPillar, selectedCategory);
-
-    return filtered;
-  }, [tasks, monthlyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive]);
-
-  /**
-   * Group tasks by hierarchy
-   */
-  const groupedTasks = useMemo(() => {
-    // First sort tasks by hierarchy
-    const sorted = sortTasksByHierarchy(filteredTasks, hierarchyOrder, taskNameOrder);
-    // Then group them
-    return groupTasksByHierarchy(sorted);
-  }, [filteredTasks, hierarchyOrder, taskNameOrder]);
-
-  /**
-   * Convert monthly entries to map for TimeEntryGrid
-   */
-  const entriesMap = useMemo(() => {
-    const map = new Map<number, TimeEntryData>();
-    monthlyEntries.forEach(entry => {
-      map.set(entry.task_id, {
-        taskId: entry.task_id,
-        timeSpent: entry.time_spent,
-        count: entry.count,
-        notes: entry.notes,
-        isCompleted: false, // Monthly entries don't have completion status
-        isNA: false,
-      });
+  const tasksByType = useMemo(() => {
+    const groups: { time: Task[]; count: Task[]; boolean: Task[]; } = { time: [], count: [], boolean: [] };
+    filteredTasks.forEach(task => {
+      if (task.task_type === TaskType.TIME) groups.time.push(task);
+      else if (task.task_type === TaskType.COUNT) groups.count.push(task);
+      else if (task.task_type === TaskType.BOOLEAN) groups.boolean.push(task);
     });
-    return map;
-  }, [monthlyEntries]);
+    return groups;
+  }, [filteredTasks]);
 
-  /**
-   * Handle time entry change
-   */
-  const handleEntryChange = async (taskId: number, updates: Partial<TimeEntryData>) => {
-    try {
-      const existingEntry = monthlyEntries.find(e => e.task_id === taskId);
-      
-      if (existingEntry) {
-        await updateMonthlyEntry(existingEntry.id, {
-          time_spent: updates.timeSpent,
-          count: updates.count,
-          notes: updates.notes,
-        });
-      } else {
-        await saveMonthlyEntry({
-          task_id: taskId,
-          month_start_date: monthStartString,
-          time_spent: updates.timeSpent,
-          count: updates.count,
-          notes: updates.notes,
-        });
+  const getMonthlyTime = (taskId: number, dayOfMonth: number): number => {
+    const key = `${taskId}-${dayOfMonth}`;
+    return dailyAggregatesMonthly[key] || 0;
+  };
+
+  const getMonthlyRowColorClass = (task: Task, totalSpent: number): string => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const monthStart = new Date(monthStartDate);
+    monthStart.setHours(0, 0, 0, 0);
+    let daysElapsed = daysInMonth;
+    if (today >= monthStart) {
+      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+      monthEnd.setHours(0, 0, 0, 0);
+      if (today <= monthEnd) {
+        const diffTime = today.getTime() - monthStart.getTime();
+        daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
-    } catch (err) {
-      console.error('Error saving monthly entry:', err);
-      setError('Failed to save entry');
+    }
+    let expectedTarget = 0;
+    if (task.task_type === TaskType.COUNT) {
+      expectedTarget = task.follow_up_frequency === 'daily' 
+        ? (task.target_value || 0) * daysElapsed 
+        : (task.target_value || 0) * (daysElapsed / daysInMonth);
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      expectedTarget = task.follow_up_frequency === 'daily' ? daysElapsed : (daysElapsed / daysInMonth);
+    } else {
+      expectedTarget = task.follow_up_frequency === 'daily' 
+        ? task.allocated_minutes * daysElapsed 
+        : task.allocated_minutes * (daysElapsed / daysInMonth);
+    }
+    if (totalSpent >= expectedTarget) return 'weekly-on-track';
+    else if (totalSpent > 0) return 'weekly-below-target';
+    return '';
+  };
+
+  const getMonthlyCellColorClass = (task: Task, actualValue: number, dayDate: Date): string => {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    if (dayDate > today) return '';
+    let expectedValue = 0;
+    if (task.task_type === TaskType.COUNT) {
+      expectedValue = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / daysInMonth;
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      expectedValue = task.follow_up_frequency === 'daily' ? 1 : 1 / daysInMonth;
+    } else {
+      expectedValue = task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / daysInMonth;
+    }
+    if (actualValue >= expectedValue) return 'cell-achieved';
+    else if (expectedValue > 0) return 'cell-below-target';
+    return '';
+  };
+
+  const handleMonthlyTaskComplete = async (taskId: number) => {
+    try {
+      await updateMonthlyTaskStatus(taskId, monthStartString, { is_completed: true, is_na: false });
+      await loadMonthlyTaskStatuses(monthStartString);
+    } catch (err: any) {
+      console.error('Error marking task complete:', err);
     }
   };
 
-  /**
-   * Handle task completion (not applicable for monthly)
-   */
-  const handleComplete = async (_taskId: number) => {
-    console.log('Completion not applicable for monthly view');
+  const handleMonthlyTaskNA = async (taskId: number) => {
+    try {
+      await updateMonthlyTaskStatus(taskId, monthStartString, { is_completed: false, is_na: true });
+      await loadMonthlyTaskStatuses(monthStartString);
+    } catch (err: any) {
+      console.error('Error marking task NA:', err);
+    }
   };
 
-  /**
-   * Handle mark NA (not applicable for monthly)
-   */
-  const handleMarkNA = async (_taskId: number) => {
-    console.log('N/A not applicable for monthly view');
+
+
+  const formatValue = (task: Task, value: number): string => {
+    if (task.task_type === TaskType.TIME) return `${value} min`;
+    else if (task.task_type === TaskType.COUNT) return `${value} ${task.unit}`;
+    else return value > 0 ? 'Yes' : 'No';
   };
 
-  /**
-   * Clear filters
-   */
-  const handleClearFilters = () => {
-    setSelectedPillar('');
-    setSelectedCategory('');
-    setShowCompleted(true);
-    setShowNA(true);
-    setShowInactive(false);
+  const renderTaskRow = (task: Task) => {
+    const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
+    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysInMonth : task.allocated_minutes * daysInMonth;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const monthStart = new Date(monthStartDate);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    monthEnd.setHours(0, 0, 0, 0);
+    let daysElapsed = 1;
+    if (today >= monthStart) {
+      if (today <= monthEnd) {
+        const diffTime = today.getTime() - monthStart.getTime();
+        daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      } else {
+        daysElapsed = daysInMonth;
+      }
+    }
+    let daysRemaining = 0;
+    if (today >= monthStart && today <= monthEnd) {
+      const diffTime = monthEnd.getTime() - today.getTime();
+      daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+    const remaining = monthlyTarget - totalSpent;
+    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+    const rowColorClass = getMonthlyRowColorClass(task, totalSpent);
+    const monthlyStatus = monthlyTaskStatuses[task.id];
+    const isMonthlyCompleted = monthlyStatus?.is_completed || false;
+    const isMonthlyNA = monthlyStatus?.is_na || false;
+    const rowClassName = isMonthlyCompleted ? 'completed-row' : isMonthlyNA ? 'na-row' : '';
+    const bgColor = isMonthlyCompleted ? '#c6f6d5' : isMonthlyNA ? '#e2e8f0' : undefined;
+    
+    return (
+      <tr key={task.id} className={rowClassName} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+        <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+          <div className="task-name">
+            {task.name}
+            {task.follow_up_frequency === 'daily' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>}
+            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#4299e1', fontWeight: '600' }}>(Monthly)</span>}
+          </div>
+        </td>
+        <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {formatValue(task, task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes)}
+        </td>
+        <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {formatValue(task, avgSpentPerDay)}
+        </td>
+        <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {formatValue(task, avgRemainingPerDay)}
+        </td>
+        {monthDays.map(day => {
+          const dayValue = getMonthlyTime(task.id, day.day);
+          const cellColorClass = getMonthlyCellColorClass(task, dayValue, day.date);
+          return (
+            <td key={day.day} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: bgColor || (dayValue > 0 && !cellColorClass ? '#e6ffed' : undefined), textAlign: 'center', fontSize: '12px' }}>
+              {dayValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : dayValue) : '-'}
+            </td>
+          );
+        })}
+        <td className="col-status" style={bgColor ? { backgroundColor: bgColor } : undefined}>
+          {task.is_completed && task.follow_up_frequency === 'daily' ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
+              <span style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, boxShadow: '0 2px 4px rgba(16, 185, 129, 0.3)' }}>
+                ✓ Completed via Daily
+              </span>
+            </div>
+          ) : !task.is_active && task.follow_up_frequency === 'daily' ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
+              <span style={{ background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)' }}>
+                ⊘ NA via Daily
+              </span>
+            </div>
+          ) : (
+            <div className="action-buttons">
+              <button className={`btn-complete ${isMonthlyCompleted ? 'active' : ''}`} onClick={() => handleMonthlyTaskComplete(task.id)} title="Mark as completed for this month only">
+                COMPLETED
+              </button>
+              <button className={`btn-na ${isMonthlyNA ? 'active' : ''}`} onClick={() => handleMonthlyTaskNA(task.id)} title="Mark as NA for this month only">
+                NA
+              </button>
+            </div>
+          )}
+        </td>
+      </tr>
+    );
+  };
+
+  const renderTaskSection = (sectionTitle: string, emoji: string, sectionClass: string, tasks: Task[]) => {
+    if (tasks.length === 0) return null;
+    return (
+      <div style={{ marginBottom: '32px' }}>
+        <h3 className={`task-section-header ${sectionClass}`}>
+          <span className="emoji">{emoji}</span>
+          <span>{sectionTitle}</span>
+          <span className="subtitle">(Auto-calculated from Daily)</span>
+        </h3>
+        <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+          <table className="tasks-table daily-table">
+            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
+              <tr>
+                <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Day</th>
+                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual<br/>Average/Day</th>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Day</th>
+                {monthDays.map(day => <th key={day.day} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.day}</th>)}
+                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map(task => renderTaskRow(task))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
   };
 
   if (loading && tasks.length === 0) {
     return (
       <div className="container-fluid mt-4">
         <div className="text-center">
-          <div className="spinner-border" role="status">
-            <span className="visually-hidden">Loading...</span>
-          </div>
+          <div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div>
           <p className="mt-2">Loading monthly tasks...</p>
         </div>
       </div>
@@ -257,122 +319,34 @@ const MonthlyTasks: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid mt-4">
-      <div className="row mb-4">
-        <div className="col">
-          <h2>
-            <i className="fas fa-calendar-alt me-2"></i>
-            Monthly Tasks
-          </h2>
-          <p className="text-muted">
-            View daily tasks aggregated to monthly view - Monitor your daily habits across the month
-            <br />
-            <small><em>Tasks shown here have been explicitly added to monthly tracking</em></small>
-          </p>
-        </div>
-      </div>
-
-      {error && (
-        <div className="alert alert-danger alert-dismissible fade show" role="alert">
-          <i className="fas fa-exclamation-circle me-2"></i>
-          {error}
-          <button
-            type="button"
-            className="btn-close"
-            onClick={() => setError(null)}
-            aria-label="Close"
-          ></button>
-        </div>
-      )}
-
-      {/* Date Navigation */}
-      <div className="row mb-4">
-        <div className="col">
-          <DateNavigator
-            selectedDate={selectedDate}
-            onDateChange={setSelectedDate}
-            navigationType="monthly"
-            showDatePicker={true}
-          />
-        </div>
-      </div>
-
-      {/* Month Info Display */}
-      <div className="row mb-3">
-        <div className="col">
-          <div className="month-info-display alert alert-light">
-            <i className="fas fa-calendar-alt me-2"></i>
-            <strong>{monthInfo.monthYear}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* Task Filters */}
-      <div className="row mb-4">
-        <div className="col">
-          <TaskFilters
-            selectedPillar={selectedPillar}
-            selectedCategory={selectedCategory}
-            showCompleted={showCompleted}
-            showNA={showNA}
-            showInactive={showInactive}
-            onPillarChange={setSelectedPillar}
-            onCategoryChange={setSelectedCategory}
-            onShowCompletedChange={setShowCompleted}
-            onShowNAChange={setShowNA}
-            onShowInactiveChange={setShowInactive}
-            onClearFilters={handleClearFilters}
-            showInactiveToggle={true}
-          />
-        </div>
-      </div>
-
-      {/* Tasks Summary */}
+    <>
       <div className="row mb-3">
         <div className="col">
           <div className="alert alert-info">
             <i className="fas fa-info-circle me-2"></i>
-            <strong>{filteredTasks.length}</strong> tasks shown
+            <strong>{filteredTasks.length}</strong> tasks tracked this month
             {selectedPillar && <span> in <strong>{selectedPillar}</strong></span>}
             {selectedCategory && <span> / <strong>{selectedCategory}</strong></span>}
+            <div className="mt-2 small"><em>Note: Tasks shown here have been explicitly added to monthly tracking. Daily tasks display aggregated data from daily entries.</em></div>
           </div>
         </div>
       </div>
-
-      {/* Task Groups */}
       <div className="row">
         <div className="col">
-          {Object.keys(groupedTasks).length === 0 ? (
+          {filteredTasks.length === 0 ? (
             <div className="alert alert-warning">
-              <i className="fas fa-exclamation-triangle me-2"></i>
-              No monthly tasks found. Adjust your filters or add new monthly tasks.
+              <i className="fas fa-exclamation-triangle me-2"></i>No monthly tasks found. Adjust your filters or add new monthly tasks.
             </div>
           ) : (
-            Object.entries(groupedTasks).map(([groupKey, groupTasks]) => (
-              <TaskHierarchyGroup
-                key={groupKey}
-                groupKey={groupKey}
-                groupName={groupKey}
-                tasks={groupTasks}
-                isExpanded={!expandedGroups.has(groupKey)}
-                onToggle={toggleGroup}
-                renderTask={(tasks) => (
-                  <TimeEntryGrid
-                    tasks={Array.isArray(tasks) ? tasks : [tasks]}
-                    entries={entriesMap}
-                    onEntryChange={handleEntryChange}
-                    onComplete={handleComplete}
-                    onMarkNA={handleMarkNA}
-                    showNotes={true}
-                  />
-                )}
-                showTaskCount={true}
-              />
-            ))
+            <>
+              {renderTaskSection('Time-Based Tasks', '⏱️', 'time-based', tasksByType.time)}
+              {renderTaskSection('Count-Based Tasks', '🔢', 'count-based', tasksByType.count)}
+              {renderTaskSection('Yes/No Tasks', '✅', 'boolean-based', tasksByType.boolean)}
+            </>
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 };
 

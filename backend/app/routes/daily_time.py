@@ -87,6 +87,31 @@ def recalculate_summary(
     return summary
 
 
+@router.post("/summaries/recalculate-all")
+def recalculate_all_summaries(
+    limit: int = Query(default=365, ge=1, le=1000),
+    db: Session = Depends(get_db)
+):
+    """Recalculate all daily summaries (useful after schema changes)"""
+    from app.models.models import DailySummary
+    from sqlalchemy import func
+    
+    # Get all summary dates
+    summaries = db.query(DailySummary).order_by(DailySummary.entry_date).limit(limit).all()
+    
+    recalculated = 0
+    for summary in summaries:
+        entry_date = summary.entry_date.date() if hasattr(summary.entry_date, 'date') else summary.entry_date
+        daily_time_service.update_daily_summary(db, entry_date)
+        recalculated += 1
+    
+    return {
+        "success": True,
+        "recalculated": recalculated,
+        "message": f"Successfully recalculated {recalculated} daily summaries"
+    }
+
+
 @router.get("/entries/week/{week_start_date}")
 def get_week_daily_entries(
     week_start_date: date,

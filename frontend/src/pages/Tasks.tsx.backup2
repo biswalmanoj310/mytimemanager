@@ -118,7 +118,6 @@ export default function Tasks() {
   });
   // Incomplete days list
   const [incompleteDays, setIncompleteDays] = useState<any[]>([]);
-  const [incompleteDaysLoaded, setIncompleteDaysLoaded] = useState(false);
   // Save timeout for debouncing
   const [saveTimeout, setSaveTimeout] = useState<number | null>(null);
   // Weekly tab state - key format: "taskId-dayIndex" (0=Sunday, 6=Saturday)
@@ -723,59 +722,6 @@ export default function Tasks() {
     }
   }, [tasks, oneTimeTasks, activeTab]);
 
-  // Define hierarchy order for sorting (matches actual database pillar-category combinations)
-  const hierarchyOrder: { [key: string]: number } = {
-    // Hard Work
-    'Hard Work|Office-Tasks': 1,
-    'Hard Work|Learning': 2,
-    'Hard Work|Confidence': 3,
-    // Calmness
-    'Calmness|Yoga': 4,
-    'Calmness|Sleep': 5,
-    // Family
-    'Family|My Tasks': 6,
-    'Family|Home Tasks': 7,
-    'Family|Time Waste': 8,
-  };
-
-  // Define custom task name order
-  const taskNameOrder: { [key: string]: number } = {
-    'cd-Mails-Tickets': 1,
-    'Code Coverage': 2,
-    'Code - Scripts': 3,
-    'Cloud': 4,
-    'LLM GenAI': 5,
-    'Git Jenkin Tools': 6,
-    'Interview Q/A': 7,
-    'Interview Talk': 8,
-    'Life Coach & NLP': 9,
-    'Toastmaster Task': 10,
-    'Yoga - Dhyan': 11,
-    'Sleep': 12,
-    'Planning': 13,
-    'Stocks': 14,
-    'Task (Bank/ mail)': 15,
-    'Commute': 16,
-    'Nature Needs': 17,
-    'Eating': 18,
-    'My Games': 19,
-    'Parent Talk': 20,
-    'Home Task': 21,
-    'Task Trishna': 22,
-    'Task Divyanshi': 23,
-    'Daughter Sports': 24,
-    'Shopping': 25,
-    'Family Friends': 26,
-    'Youtube': 27,
-    'TV': 28,
-    'Facebook': 29,
-    'Nextdoor': 30,
-    'News': 31,
-    'Dark Future': 32,
-  };
-
-  const weekDays = generateWeekDays(selectedWeekStart);
-
   // Memoized version that will recompute when dependencies change
   const tasksNeedingAttention = useMemo(() => {
     return getTasksNeedingAttention();
@@ -1209,10 +1155,8 @@ export default function Tasks() {
     try {
       const days = await api.get<any[]>('/api/daily-time/incomplete-days/');
       setIncompleteDays(days);
-      setIncompleteDaysLoaded(true);
     } catch (err) {
       console.error('Error loading incomplete days:', err);
-      setIncompleteDaysLoaded(true); // Still mark as loaded even on error
     }
   };
 
@@ -1293,7 +1237,7 @@ export default function Tasks() {
   // ========== WEEKLY TAB FUNCTIONS ==========
   
   // Generate week days with dates
-  function generateWeekDays(weekStart: Date) {
+  const generateWeekDays = (weekStart: Date) => {
     const days = [];
     const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     
@@ -1313,7 +1257,9 @@ export default function Tasks() {
       });
     }
     return days;
-  }
+  };
+
+  const weekDays = generateWeekDays(selectedWeekStart);
 
   // Get week number
   const getWeekNumber = (date: Date): number => {
@@ -1536,14 +1482,14 @@ export default function Tasks() {
 
   // Get weekly time entry for a task and day
   // If no weekly entry exists, return the daily aggregate (sum from Daily tab)
-  function getWeeklyTime(taskId: number, dayIndex: number): number {
+  const getWeeklyTime = (taskId: number, dayIndex: number): number => {
     const key = `${taskId}-${dayIndex}`;
     // If there's a weekly entry, use it; otherwise use daily aggregate
     if (weeklyEntries[key] !== undefined) {
       return weeklyEntries[key];
     }
     return dailyAggregates[key] || 0;
-  }
+  };
 
   // Check if the displayed value is from daily aggregate
   const isFromDailyAggregate = (taskId: number, dayIndex: number): boolean => {
@@ -1790,14 +1736,14 @@ export default function Tasks() {
   };
 
   // Get monthly time entry for a task and day
-  function getMonthlyTime(taskId: number, dayOfMonth: number): number {
+  const getMonthlyTime = (taskId: number, dayOfMonth: number): number => {
     const key = `${taskId}-${dayOfMonth}`;
     // If there's a monthly entry, use it; otherwise use daily aggregate
     if (monthlyEntries[key] !== undefined) {
       return monthlyEntries[key];
     }
     return monthlyDailyAggregates[key] || 0;
-  }
+  };
 
   // Handle monthly task complete
   const handleMonthlyTaskComplete = async (taskId: number) => {
@@ -3548,9 +3494,9 @@ export default function Tasks() {
       return 'weekly-below-target'; // Light red - below target but has some progress
     }
     return ''; // No color if no progress yet
-  }
+  };
 
-  function getMonthlyRowColorClass(task: Task): string {
+  const getMonthlyRowColorClass = (task: Task): string => {
     // Allow checking from today tab for "Needs Attention" feature
     if (activeTab !== 'monthly' && activeTab !== 'today') return '';
     
@@ -3613,9 +3559,9 @@ export default function Tasks() {
       return 'weekly-below-target'; // Light red - below target but has some progress (reuse weekly class)
     }
     return ''; // No color if no progress yet
-  }
+  };
 
-  function getYearlyRowColorClass(task: Task): string {
+  const getYearlyRowColorClass = (task: Task): string => {
     if (activeTab !== 'yearly') return '';
     
     // Calculate total spent/count in the year so far
@@ -3693,7 +3639,7 @@ export default function Tasks() {
   };
 
   // Get cell-level color for weekly tab - determines if specific day meets target
-  function getWeeklyCellColorClass(task: Task, dayIndex: number): string {
+  const getWeeklyCellColorClass = (task: Task, dayIndex: number): string => {
     // Allow checking from today tab for "Needs Attention" feature
     if (activeTab !== 'weekly' && activeTab !== 'today') return '';
     
@@ -3742,7 +3688,7 @@ export default function Tasks() {
       return 'cell-below-target'; // Red - below target
     }
     return ''; // No expected value (shouldn't happen)
-  }
+  };
 
   // Get cell-level color for monthly tab
   const getMonthlyCellColorClass = (task: Task, dayOfMonth: number): string => {
@@ -3823,7 +3769,7 @@ export default function Tasks() {
   };
 
   // Get tasks that need attention (showing red in current week or month)
-  function getTasksNeedingAttention() {
+  const getTasksNeedingAttention = () => {
     // Wait for data to load before checking
     // Check if we have ANY weekly or monthly data (statuses, entries, or aggregates)
     const hasWeeklyData = Object.keys(weeklyTaskStatuses).length > 0 || 
@@ -4007,7 +3953,277 @@ export default function Tasks() {
       const severityB = b.weeklyIssue?.redDays || b.monthlyIssue?.percentBehind || 0;
       return severityB - severityA;
     });
-  }
+  };
+
+  // Define hierarchy order for sorting (matches actual database pillar-category combinations)
+  const hierarchyOrder: { [key: string]: number } = {
+    // Hard Work
+    'Hard Work|Office-Tasks': 1,
+    'Hard Work|Learning': 2,
+    'Hard Work|Confidence': 3,
+    // Calmness
+    'Calmness|Yoga': 4,
+    'Calmness|Sleep': 5,
+    // Family
+    'Family|My Tasks': 6,
+    'Family|Home Tasks': 7,
+    'Family|Time Waste': 8,
+  };
+
+  // Define custom task name order
+  const taskNameOrder: { [key: string]: number } = {
+    'cd-Mails-Tickets': 1,
+    'Code Coverage': 2,
+    'Code - Scripts': 3,
+    'Cloud': 4,
+    'LLM GenAI': 5,
+    'Git Jenkin Tools': 6,
+    'Interview Q/A': 7,
+    'Interview Talk': 8,
+    'Life Coach & NLP': 9,
+    'Toastmaster Task': 10,
+    'Yoga - Dhyan': 11,
+    'Sleep': 12,
+    'Planning': 13,
+    'Stocks': 14,
+    'Task (Bank/ mail)': 15,
+    'Commute': 16,
+    'Nature Needs': 17,
+    'Eating': 18,
+    'My Games': 19,
+    'Parent Talk': 20,
+    'Home Task': 21,
+    'Task Trishna': 22,
+    'Task Divyanshi': 23,
+    'Daughter Sports': 24,
+    'Shopping': 25,
+    'Family Friends': 26,
+    'Youtube': 27,
+    'TV': 28,
+    'Facebook': 29,
+    'Nextdoor': 30,
+    'News': 31,
+    'Dark Future': 32,
+  };
+
+  const tabs: { key: TabType; label: string }[] = [
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    return tasks
+    .filter(task => {
+      // Exclude one-time tasks from other tabs (they only appear in onetime tab)
+      if (activeTab !== 'onetime' && task.follow_up_frequency === 'one_time') {
+        return false;
+      }
+      
+      // For weekly tab: ONLY show tasks that have data or status for this specific week
+      if (activeTab === 'weekly') {
+        // Check if this task has daily aggregates for the current week
+        const hasDailyDataThisWeek = weekDays.some(day => {
+          const key = `${task.id}-${day.index}`;
+          return (dailyAggregates[key] || 0) > 0;
+        });
+        
+        // Check if this task has weekly time entries for the current week
+        const hasWeeklyDataThisWeek = weekDays.some(day => {
+          const key = `${task.id}-${day.index}`;
+          return (weeklyEntries[key] || 0) > 0;
+        });
+        
+        // Check if task has been explicitly added to this week
+        const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if it has been explicitly added to weekly tracking
+        // (Same behavior as monthly tab - user adds tasks manually)
+        if (!hasBeenAddedToWeekly) {
+          return false; // Not explicitly added to weekly - don't show
+        }
+        
+      } else if (activeTab === 'monthly') {
+        // For monthly tab: ONLY show tasks that have been explicitly added to monthly tracking
+        // Check if task has been explicitly added to this month
+        const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if it has been explicitly added to monthly tracking
+        // Note: We show daily aggregates in the cells for daily tasks, but any task type can be tracked monthly
+        if (!hasBeenAddedToMonthly) {
+          return false; // Not explicitly added to monthly - don't show
+        }
+        
+      } else if (activeTab === 'yearly') {
+        // For yearly tab: ONLY show tasks that have been explicitly added to yearly tracking
+        // Check if task has been explicitly added to this year
+        const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
+        
+        // Show task ONLY if it has been explicitly added to yearly tracking
+        // Note: We show monthly aggregates in the cells for monthly/weekly/daily tasks, but any task type can be tracked yearly
+        if (!hasBeenAddedToYearly) {
+          return false; // Not explicitly added to yearly - don't show
+        }
+        
+      } else {
+        // For non-weekly tabs, normal frequency filter
+        if (task.follow_up_frequency !== activeTab) return false;
+      }
+      
+      // For weekly tab: Handle weekly-specific completion status
+      if (activeTab === 'weekly') {
+        const taskStatus = weeklyTaskStatuses[task.id];
+        
+        // If task is marked completed/NA for THIS week:
+        // SHOW all tasks (both daily and weekly) with green/gray background
+        // They will disappear automatically next week when weeklyTaskStatuses changes
+        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          return true; // Show all tasks with their week-specific completion status
+        }
+        
+        // Don't filter out based on "ever completed" since weekly status is independent
+        // This allows the same task to be tracked in multiple weeks
+        
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Weekly tab has its own week-specific completion tracking via weeklyTaskStatuses
+        // A task can be completed in Daily tab but still active in Weekly tab
+        
+        return true;
+      }
+      
+      // For monthly tab: Handle monthly-specific completion status
+      if (activeTab === 'monthly') {
+        const taskStatus = monthlyTaskStatuses[task.id];
+        
+        // If task is marked completed/NA for THIS month, show it
+        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          return true;
+        }
+        
+        // Don't filter out based on "ever completed" since monthly status is independent
+        // This allows the same task to be tracked in multiple months
+        
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Monthly tab has its own month-specific completion tracking via monthlyTaskStatuses
+        // A task can be completed in Daily tab but still active in Monthly tab
+        
+        return true;
+      }
+      
+      // For yearly tab: Handle yearly-specific completion status
+      if (activeTab === 'yearly') {
+        const taskStatus = yearlyTaskStatuses[task.id];
+        
+        // If task is marked completed/NA for THIS year, show it
+        if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          return true;
+        }
+        
+        // Don't filter out based on "ever completed" since yearly status is independent
+        // This allows the same task to be tracked in multiple years
+        
+        // IMPORTANT: Don't filter by global is_completed/is_active status
+        // Yearly tab has its own year-specific completion tracking via yearlyTaskStatuses
+        // A task can be completed in Daily tab but still active in Yearly tab
+        
+        return true;
+      }
+      
+      // For TODAY tab: Only show active tasks OR tasks completed/NA today
+      if (activeTab === 'today') {
+        // If task is completed, only show if completed today (in local timezone)
+        if (task.is_completed && task.completed_at) {
+          const completedDate = new Date(task.completed_at);
+          // Get local date components (not UTC)
+          const completedLocalDate = new Date(completedDate.getFullYear(), completedDate.getMonth(), completedDate.getDate());
+          const todayLocalDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          
+          return completedLocalDate.getTime() === todayLocalDate.getTime();
+        }
+        
+        // If task is marked as NA (inactive), only show if marked today (in local timezone)
+        if (!task.is_active && task.na_marked_at) {
+          const naMarkedDate = new Date(task.na_marked_at);
+          // Get local date components (not UTC)
+          const naMarkedLocalDate = new Date(naMarkedDate.getFullYear(), naMarkedDate.getMonth(), naMarkedDate.getDate());
+          const todayLocalDate = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+          return naMarkedLocalDate.getTime() === todayLocalDate.getTime();
+        }
+        
+        // Show all other active tasks
+        return task.is_active && !task.is_completed;
+      }
+      
+      // For DAILY tab: Check daily task status for the selected date
+      if (activeTab === 'daily') {
+        const status = dailyStatuses.get(task.id);
+        
+        // If task has status for this date, check it
+        if (status) {
+          // If task is not being tracked on this date, hide it
+          if (status.is_tracked === false) {
+            return false;
+          }
+          
+          // Show completed/NA tasks on their specific date
+          if (status.is_completed || status.is_na) {
+            return true;
+          }
+        }
+        
+        // If no status record exists, task is visible by default
+        // (until user explicitly marks it completed/NA or removes from tracking)
+        return true;
+      }
+      
+      // For other tabs (quarterly, etc.): Don't filter by completion status
+      // Let them show all tasks (weekly/monthly have their own status tracking)
+      return true;
+    })
+    .sort((a, b) => {
+      // Get hierarchy order for each task
+      const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+      const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+      const orderA = hierarchyOrder[keyA] || 999;
+      const orderB = hierarchyOrder[keyB] || 999;
+      
+      // Sort by hierarchy order first
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      
+      // Within same category, sort by custom task name order
+      const taskOrderA = taskNameOrder[a.name || ''] || 999;
+      const taskOrderB = taskNameOrder[b.name || ''] || 999;
+      
+      if (taskOrderA !== taskOrderB) {
+        return taskOrderA - taskOrderB;
+      }
+      
+      // If not in custom order, sort alphabetically
+      return (a.name || '').localeCompare(b.name || '');
+    });
+  }, [tasks, activeTab, weekDays, dailyAggregates, weeklyEntries, weeklyTaskStatuses, monthlyTaskStatuses, yearlyTaskStatuses, dailyStatuses, selectedDate, hierarchyOrder, taskNameOrder]);
+
+  // Separate tasks by type for daily and weekly tabs
+  // Note: Always call useMemo (not conditionally) to avoid React Hooks order violation
+  const timeBasedTasks = useMemo(() => {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly') {
+      return filteredTasks.filter(task => task.task_type === TaskType.TIME);
+    }
+    return [];
+  }, [activeTab, filteredTasks]);
+  
+  const countBasedTasks = useMemo(() => {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
+      return filteredTasks.filter(task => task.task_type === TaskType.COUNT);
+    }
+    return [];
+  }, [activeTab, filteredTasks]);
+  
+  const booleanTasks = useMemo(() => {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
+      return filteredTasks.filter(task => task.task_type === TaskType.BOOLEAN);
+    }
+    return [];
+  }, [activeTab, filteredTasks]);
 
   const tabs: { key: TabType; label: string }[] = [
     { key: 'today', label: 'Today' },
@@ -4325,139 +4541,6 @@ export default function Tasks() {
             setIsTaskFormOpen(false);
           }}
         />
-        
-        {/* Add Weekly Task Modal */}
-        {showAddWeeklyTaskModal && (
-          <div className="modal-overlay" onClick={() => setShowAddWeeklyTaskModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>Add Weekly Task</h2>
-                <button className="btn-close" onClick={() => setShowAddWeeklyTaskModal(false)}>×</button>
-              </div>
-              <div className="modal-body">
-                <p style={{ marginBottom: '15px', color: '#666' }}>
-                  Select an existing task to track for this week:
-                </p>
-                
-                <div className="form-group">
-                  <label htmlFor="dailyTaskSelect">Select from Daily Tasks:</label>
-                  <select 
-                    id="dailyTaskSelect"
-                    className="form-control"
-                    value={selectedDailyTask || ''}
-                    onChange={(e) => setSelectedDailyTask(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a daily task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'daily') return false;
-                        if (weeklyTaskStatuses[task.id]) return false;
-                        
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        
-                        if (task.is_completed && task.completed_at) {
-                          const completedDate = new Date(task.completed_at);
-                          completedDate.setHours(0, 0, 0, 0);
-                          if (completedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        if (!task.is_active && task.na_marked_at) {
-                          const naMarkedDate = new Date(task.na_marked_at);
-                          naMarkedDate.setHours(0, 0, 0, 0);
-                          if (naMarkedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        
-                        if (orderA !== orderB) {
-                          return orderA - orderB;
-                        }
-                        
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        
-                        if (taskOrderA !== taskOrderB) {
-                          return taskOrderA - taskOrderB;
-                        }
-                        
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        let displayValue = '';
-                        if (task.task_type === 'time') {
-                          displayValue = `(${task.allocated_minutes} min)`;
-                        } else if (task.task_type === 'count') {
-                          displayValue = `(${task.target_value} ${task.unit || 'count'})`;
-                        } else if (task.task_type === 'boolean') {
-                          displayValue = '(Yes/No)';
-                        }
-                        
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name} {displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
-                  OR
-                </div>
-
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setSelectedDailyTask(null);
-                    handleAddWeeklyTask();
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  Create New Task
-                </button>
-              </div>
-              <div className="modal-footer">
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => {
-                    setShowAddWeeklyTaskModal(false);
-                    setSelectedDailyTask(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleAddWeeklyTask}
-                  disabled={!selectedDailyTask}
-                  style={{ 
-                    opacity: selectedDailyTask ? 1 : 0.5,
-                    cursor: selectedDailyTask ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Add to Weekly
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   };
@@ -4508,7 +4591,7 @@ export default function Tasks() {
           </button>
           <button 
             className="btn-nav btn-add-monthly"
-            onClick={() => setShowAddMonthlyTaskModal(true)}
+            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
           >
             ➕ Add Monthly Task
           </button>
@@ -4532,194 +4615,6 @@ export default function Tasks() {
             setIsTaskFormOpen(false);
           }}
         />
-        
-        {/* Add Monthly Task Modal */}
-        {showAddMonthlyTaskModal && (
-          <div className="modal-overlay" onClick={() => setShowAddMonthlyTaskModal(false)}>
-            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>Add Monthly Task</h2>
-                <button className="btn-close" onClick={() => setShowAddMonthlyTaskModal(false)}>×</button>
-              </div>
-              <div className="modal-body">
-                <p style={{ marginBottom: '15px', color: '#666' }}>
-                  Select an existing task to track for this month:
-                </p>
-                
-                <div className="form-group">
-                  <label htmlFor="dailyTaskSelectMonthly">Select from Daily Tasks:</label>
-                  <select 
-                    id="dailyTaskSelectMonthly"
-                    className="form-control"
-                    value={selectedDailyTaskForMonthly || ''}
-                    onChange={(e) => setSelectedDailyTaskForMonthly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a daily task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'daily') return false;
-                        if (monthlyTaskStatuses[task.id]) return false;
-                        
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0);
-                        
-                        if (task.is_completed && task.completed_at) {
-                          const completedDate = new Date(task.completed_at);
-                          completedDate.setHours(0, 0, 0, 0);
-                          if (completedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        if (!task.is_active && task.na_marked_at) {
-                          const naMarkedDate = new Date(task.na_marked_at);
-                          naMarkedDate.setHours(0, 0, 0, 0);
-                          if (naMarkedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
-                        
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        
-                        if (orderA !== orderB) {
-                          return orderA - orderB;
-                        }
-                        
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        
-                        if (taskOrderA !== taskOrderB) {
-                          return taskOrderA - taskOrderB;
-                        }
-                        
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        let displayValue = '';
-                        if (task.task_type === 'time') {
-                          displayValue = `(${task.allocated_minutes} min)`;
-                        } else if (task.task_type === 'count') {
-                          displayValue = `(${task.target_value} ${task.unit || 'count'})`;
-                        } else if (task.task_type === 'boolean') {
-                          displayValue = '(Yes/No)';
-                        }
-                        
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name} {displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ marginTop: '20px' }}>
-                  <label htmlFor="weeklyTaskSelectMonthly">Select from Weekly Tasks:</label>
-                  <select 
-                    id="weeklyTaskSelectMonthly"
-                    className="form-control"
-                    value={selectedDailyTaskForMonthly || ''}
-                    onChange={(e) => setSelectedDailyTaskForMonthly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a weekly task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'weekly') return false;
-                        if (monthlyTaskStatuses[task.id]) return false;
-                        if (task.is_completed) return false;
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        
-                        if (orderA !== orderB) {
-                          return orderA - orderB;
-                        }
-                        
-                        return a.name.localeCompare(b.name);
-                      })
-                      .map(task => {
-                        let displayValue = '';
-                        if (task.task_type === 'time') {
-                          displayValue = `(${task.allocated_minutes} min)`;
-                        } else if (task.task_type === 'count') {
-                          displayValue = `(${task.target_value} ${task.unit || 'count'})`;
-                        } else if (task.task_type === 'boolean') {
-                          displayValue = '(Yes/No)';
-                        }
-                        
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name} {displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
-                  OR
-                </div>
-
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setSelectedDailyTaskForMonthly(null);
-                    handleAddMonthlyTask();
-                  }}
-                  style={{ width: '100%' }}
-                >
-                  Create New Task
-                </button>
-              </div>
-              <div className="modal-footer">
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={() => {
-                    setShowAddMonthlyTaskModal(false);
-                    setSelectedDailyTaskForMonthly(null);
-                  }}
-                >
-                  Cancel
-                </button>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={handleAddMonthlyTask}
-                  disabled={!selectedDailyTaskForMonthly}
-                  style={{ 
-                    opacity: selectedDailyTaskForMonthly ? 1 : 0.5,
-                    cursor: selectedDailyTaskForMonthly ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Add to Monthly
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   };
@@ -9651,7 +9546,7 @@ export default function Tasks() {
       )}
 
       {/* Incomplete Days Alert */}
-      {activeTab === 'daily' && incompleteDaysLoaded && incompleteDays.length > 0 && (
+      {activeTab === 'daily' && incompleteDays.length > 0 && (
         <div className="incomplete-days-section">
           <div className="incomplete-days-alert">
             <h3>⚠️ Incomplete Days ({incompleteDays.length})</h3>
@@ -11891,17 +11786,6 @@ export default function Tasks() {
           </div>
         </div>
       )}
-      
-      {/* Task Form Modal - for Daily and Today tabs */}
-      <TaskForm
-        isOpen={isTaskFormOpen}
-        taskId={selectedTaskId || undefined}
-        onClose={() => setIsTaskFormOpen(false)}
-        onSuccess={async () => {
-          await loadTasks();
-          setIsTaskFormOpen(false);
-        }}
-      />
     </div>
   );
 }

@@ -10,6 +10,3 @@ export type { NavigationType } from './DateNavigator';
 export { default as TaskFilters } from './TaskFilters';
 
 export { default as TaskHierarchyGroup } from './TaskHierarchyGroup';
-
-export { default as TimeEntryGrid } from './TimeEntryGrid';
-export type { TimeEntryData } from './TimeEntryGrid';

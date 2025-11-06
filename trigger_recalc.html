@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Recalculate Daily Summaries</title>
+</head>
+<body>
+    <h1>Recalculate Daily Summaries</h1>
+    <button onclick="recalculate()">Click to Recalculate All</button>
+    <div id="result"></div>
+
+    <script>
+        async function recalculate() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = 'Recalculating...';
+            
+            try {
+                const response = await fetch('http://localhost:8000/api/daily-time/summaries/recalculate-all', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                btn.textContent = '✅ Done!';
+            } catch (error) {
+                document.getElementById('result').innerHTML = '<p style="color:red">Error: ' + error.message + '</p>';
+                btn.disabled = false;
+                btn.textContent = 'Retry Recalculation';
+            }
+        }
+    </script>
+</body>
+</html>
