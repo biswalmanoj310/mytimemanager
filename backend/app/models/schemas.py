@@ -439,6 +439,9 @@ class DailySummaryBase(BaseModel):
     total_allocated: int = 0
     total_spent: int = 0
     is_complete: bool = False
+    is_ignored: bool = False
+    ignore_reason: Optional[str] = None
+    ignored_at: Optional[datetime] = None
 
 
 class DailySummaryResponse(DailySummaryBase):
@@ -457,6 +460,23 @@ class IncompleteDayResponse(BaseModel):
     total_allocated: int
     total_spent: int
     difference: int
+
+    class Config:
+        from_attributes = True
+
+
+class IgnoreDayRequest(BaseModel):
+    """Schema for ignoring a day"""
+    reason: Optional[str] = None
+
+
+class IgnoredDayResponse(BaseModel):
+    """Schema for ignored day listing"""
+    entry_date: datetime
+    total_allocated: int
+    total_spent: int
+    ignore_reason: Optional[str] = None
+    ignored_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

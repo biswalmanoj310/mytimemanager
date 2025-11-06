@@ -181,6 +181,7 @@ def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayRespo
     Shows incomplete days from Nov 1, 2025 onwards (active usage period)
     - Days with 0 spent = forgot to track (shown as incomplete)
     - Days before Nov 1, 2025 with 0 spent = test days (excluded)
+    - Ignored days are excluded from this list
     Excludes today since the day is not yet over
     """
     today = date.today()
@@ -189,6 +190,7 @@ def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayRespo
     summaries = db.query(DailySummary).filter(
         and_(
             DailySummary.is_complete == False,
+            DailySummary.is_ignored == False,  # Exclude ignored days
             func.date(DailySummary.entry_date) >= active_start_date,  # Only from Nov 1, 2025
             func.date(DailySummary.entry_date) < today  # Exclude today
         )
@@ -276,5 +278,58 @@ def get_month_daily_aggregates(db: Session, month_start_date: date) -> Dict:
                 result[task_id][day_of_month] = 0
             
             result[task_id][day_of_month] += entry.minutes
+    
+    return result
+
+
+def ignore_day(db: Session, entry_date: date, reason: Optional[str] = None) -> Optional[DailySummary]:
+    """Mark a day as ignored (travel, sick days, etc.)"""
+    summary = db.query(DailySummary).filter(
+        func.date(DailySummary.entry_date) == entry_date
+    ).first()
+    
+    if summary:
+        summary.is_ignored = True
+        summary.ignore_reason = reason
+        summary.ignored_at = datetime.now()
+        db.commit()
+        db.refresh(summary)
+    
+    return summary
+
+
+def unignore_day(db: Session, entry_date: date) -> Optional[DailySummary]:
+    """Remove ignore flag from a day"""
+    summary = db.query(DailySummary).filter(
+        func.date(DailySummary.entry_date) == entry_date
+    ).first()
+    
+    if summary:
+        summary.is_ignored = False
+        summary.ignore_reason = None
+        summary.ignored_at = None
+        db.commit()
+        db.refresh(summary)
+    
+    return summary
+
+
+def get_ignored_days(db: Session, limit: int = 30):
+    """Get list of ignored days"""
+    from app.models.schemas import IgnoredDayResponse
+    
+    summaries = db.query(DailySummary).filter(
+        DailySummary.is_ignored == True
+    ).order_by(DailySummary.entry_date.desc()).limit(limit).all()
+    
+    result = []
+    for summary in summaries:
+        result.append(IgnoredDayResponse(
+            entry_date=summary.entry_date,
+            total_allocated=summary.total_allocated,
+            total_spent=summary.total_spent,
+            ignore_reason=summary.ignore_reason,
+            ignored_at=summary.ignored_at
+        ))
     
     return result

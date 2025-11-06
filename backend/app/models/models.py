@@ -276,11 +276,14 @@ class DailySummary(Base):
     total_allocated = Column(Integer, nullable=False, default=0)
     total_spent = Column(Integer, nullable=False, default=0)
     is_complete = Column(Boolean, nullable=False, default=False)
+    is_ignored = Column(Boolean, nullable=False, default=False)
+    ignore_reason = Column(Text, nullable=True)
+    ignored_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     def __repr__(self):
-        return f"<DailySummary(date={self.entry_date}, allocated={self.total_allocated}, spent={self.total_spent}, complete={self.is_complete})>"
+        return f"<DailySummary(date={self.entry_date}, allocated={self.total_allocated}, spent={self.total_spent}, complete={self.is_complete}, ignored={self.is_ignored})>"
 
 
 class WeeklyTimeEntry(Base):

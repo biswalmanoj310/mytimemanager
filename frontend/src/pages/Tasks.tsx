@@ -119,6 +119,8 @@ export default function Tasks() {
   // Incomplete days list
   const [incompleteDays, setIncompleteDays] = useState<any[]>([]);
   const [incompleteDaysLoaded, setIncompleteDaysLoaded] = useState(false);
+  const [ignoredDays, setIgnoredDays] = useState<any[]>([]);
+  const [showIgnoredDays, setShowIgnoredDays] = useState(false);
   // Save timeout for debouncing
   const [saveTimeout, setSaveTimeout] = useState<number | null>(null);
   // Weekly tab state - key format: "taskId-dayIndex" (0=Sunday, 6=Saturday)
@@ -684,6 +686,7 @@ export default function Tasks() {
   useEffect(() => {
     loadTasks();
     loadIncompleteDays();
+    loadIgnoredDays();
     loadLifeGoals(); // Load goals for project linking
     // Don't load daily entries here - let the URL params or tab change handle it
   }, []);
@@ -1213,6 +1216,44 @@ export default function Tasks() {
     } catch (err) {
       console.error('Error loading incomplete days:', err);
       setIncompleteDaysLoaded(true); // Still mark as loaded even on error
+    }
+  };
+
+  // Load list of ignored days
+  async function loadIgnoredDays() {
+    try {
+      const days = await api.get<any[]>('/api/daily-time/ignored-days/');
+      setIgnoredDays(days);
+    } catch (err) {
+      console.error('Error loading ignored days:', err);
+    }
+  };
+
+  // Ignore a day (mark as travel, sick day, etc.)
+  async function handleIgnoreDay(entryDate: string, reason?: string) {
+    try {
+      const dateOnly = entryDate.split('T')[0];
+      await api.post(`/api/daily-time/ignore/${dateOnly}`, { reason: reason || null });
+      // Reload both lists
+      await loadIncompleteDays();
+      await loadIgnoredDays();
+    } catch (err) {
+      console.error('Error ignoring day:', err);
+      alert('Failed to ignore day. Please try again.');
+    }
+  };
+
+  // Unignore a day (restore to incomplete list)
+  async function handleUnignoreDay(entryDate: string) {
+    try {
+      const dateOnly = entryDate.split('T')[0];
+      await api.post(`/api/daily-time/unignore/${dateOnly}`, {});
+      // Reload both lists
+      await loadIncompleteDays();
+      await loadIgnoredDays();
+    } catch (err) {
+      console.error('Error unignoring day:', err);
+      alert('Failed to unignore day. Please try again.');
     }
   };
 
@@ -9654,13 +9695,23 @@ export default function Tasks() {
       {activeTab === 'daily' && incompleteDaysLoaded && incompleteDays.length > 0 && (
         <div className="incomplete-days-section">
           <div className="incomplete-days-alert">
-            <h3>⚠️ Incomplete Days ({incompleteDays.length})</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3>⚠️ Incomplete Days ({incompleteDays.length})</h3>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowIgnoredDays(!showIgnoredDays)}
+                style={{ fontSize: '14px', padding: '6px 12px' }}
+              >
+                {showIgnoredDays ? 'Hide' : 'View'} Ignored Days ({ignoredDays.length})
+              </button>
+            </div>
             <p>These days need attention - Allocated time doesn't match Spent time:</p>
             <div className="incomplete-days-list">
               {incompleteDays.slice(0, 10).map((day: any) => (
-                <div key={day.entry_date} className="incomplete-day-item">
+                <div key={day.entry_date} className="incomplete-day-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <button
                     className="incomplete-day-link"
+                    style={{ flex: 1 }}
                     onClick={(e) => {
                       e.preventDefault();
                       const dateStr = day.entry_date.split('T')[0];
@@ -9683,6 +9734,27 @@ export default function Tasks() {
                       <strong className="missing"> Missing: {day.difference} min</strong>
                     </span>
                   </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      const reason = prompt('Reason for ignoring this day (optional):\n(e.g., "Travel", "Sick day", "Holiday")');
+                      if (reason !== null) { // null means cancelled, empty string is ok
+                        handleIgnoreDay(day.entry_date, reason || undefined);
+                      }
+                    }}
+                    style={{ 
+                      marginLeft: '10px', 
+                      padding: '4px 12px', 
+                      fontSize: '13px',
+                      backgroundColor: '#6c757d',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Ignore
+                  </button>
                 </div>
               ))}
             </div>
@@ -9691,6 +9763,72 @@ export default function Tasks() {
                 ...and {incompleteDays.length - 10} more incomplete days
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Ignored Days Section */}
+      {activeTab === 'daily' && showIgnoredDays && ignoredDays.length > 0 && (
+        <div className="ignored-days-section" style={{ marginTop: '20px' }}>
+          <div className="ignored-days-alert" style={{ 
+            backgroundColor: '#f8f9fa', 
+            border: '1px solid #dee2e6',
+            borderRadius: '8px',
+            padding: '20px'
+          }}>
+            <h3 style={{ color: '#495057', marginBottom: '10px' }}>🏖️ Ignored Days ({ignoredDays.length})</h3>
+            <p style={{ color: '#6c757d', marginBottom: '15px' }}>Days marked as travel, sick leave, holidays, etc.</p>
+            <div className="ignored-days-list">
+              {ignoredDays.map((day: any) => (
+                <div key={day.entry_date} className="ignored-day-item" style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center',
+                  padding: '12px',
+                  backgroundColor: 'white',
+                  border: '1px solid #e9ecef',
+                  borderRadius: '6px',
+                  marginBottom: '10px'
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: '600', color: '#212529', marginBottom: '4px' }}>
+                      {formatDate(day.entry_date)}
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#6c757d' }}>
+                      {day.ignore_reason ? (
+                        <span>Reason: <em>{day.ignore_reason}</em></span>
+                      ) : (
+                        <span style={{ fontStyle: 'italic' }}>No reason specified</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#adb5bd', marginTop: '4px' }}>
+                      Allocated: {day.total_allocated} min | Spent: {day.total_spent} min
+                      {day.ignored_at && ` | Ignored: ${new Date(day.ignored_at).toLocaleDateString()}`}
+                    </div>
+                  </div>
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => {
+                      if (confirm('Restore this day to incomplete list?')) {
+                        handleUnignoreDay(day.entry_date);
+                      }
+                    }}
+                    style={{ 
+                      marginLeft: '10px', 
+                      padding: '6px 14px', 
+                      fontSize: '13px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Unignore
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

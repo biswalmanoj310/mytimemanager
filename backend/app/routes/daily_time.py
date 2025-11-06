@@ -14,7 +14,9 @@ from app.models.schemas import (
     DailyTimeEntryBulkCreate,
     DailyTimeEntryResponse,
     DailySummaryResponse,
-    IncompleteDayResponse
+    IncompleteDayResponse,
+    IgnoreDayRequest,
+    IgnoredDayResponse
 )
 
 router = APIRouter(prefix="/api/daily-time", tags=["daily-time"])
@@ -137,3 +139,37 @@ def get_today_date():
         "date": get_local_date().isoformat(),
         "datetime": datetime.now().isoformat()
     }
+
+
+@router.post("/ignore/{entry_date}")
+def ignore_day(
+    entry_date: date,
+    request: IgnoreDayRequest,
+    db: Session = Depends(get_db)
+):
+    """Mark a day as ignored (travel, sick days, etc.)"""
+    summary = daily_time_service.ignore_day(db, entry_date, request.reason)
+    if not summary:
+        raise HTTPException(status_code=404, detail="Day summary not found")
+    return {"success": True, "message": "Day marked as ignored", "entry_date": entry_date}
+
+
+@router.post("/unignore/{entry_date}")
+def unignore_day(
+    entry_date: date,
+    db: Session = Depends(get_db)
+):
+    """Remove ignore flag from a day"""
+    summary = daily_time_service.unignore_day(db, entry_date)
+    if not summary:
+        raise HTTPException(status_code=404, detail="Day summary not found")
+    return {"success": True, "message": "Day unignored", "entry_date": entry_date}
+
+
+@router.get("/ignored-days/", response_model=List[IgnoredDayResponse])
+def get_ignored_days(
+    limit: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db)
+):
+    """Get list of ignored days"""
+    return daily_time_service.get_ignored_days(db, limit)
