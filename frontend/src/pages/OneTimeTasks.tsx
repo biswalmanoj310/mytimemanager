@@ -1,0 +1,262 @@
+/**
+ * One-Time Tasks Page
+ * 
+ * Displays and manages one-time tasks with completion tracking.
+ * Unlike time-based tracking pages, one-time tasks are simpler:
+ * - No date navigation required
+ * - Only completion status tracking (no time/count entries)
+ * - Filter by pillar/category
+ * - Show/hide completed/NA/inactive tasks
+ */
+
+import React, { useEffect, useState, useMemo } from 'react';
+import { useTaskContext, useTimeEntriesContext, useUserPreferencesContext } from '../contexts';
+import { TaskFilters, TaskHierarchyGroup, TimeEntryGrid, TimeEntryData } from '../components';
+import {
+  filterByPillarAndCategory,
+  groupTasksByHierarchy,
+  isTaskActive,
+  sortTasksByHierarchy,
+} from '../utils/taskHelpers';
+
+const OneTimeTasks: React.FC = () => {
+  // Context hooks
+  const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
+  const { oneTimeEntries, loadOneTimeEntries, saveOneTimeEntry, updateOneTimeEntry } = useTimeEntriesContext();
+  const {
+    selectedPillar,
+    setSelectedPillar,
+    selectedCategory,
+    setSelectedCategory,
+    showCompleted,
+    setShowCompleted,
+    showNA,
+    setShowNA,
+    showInactive,
+    setShowInactive,
+    hierarchyOrder,
+    taskNameOrder,
+    expandedGroups,
+    toggleGroup,
+  } = useUserPreferencesContext();
+
+  const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Load initial data on mount
+   */
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          loadTasks(),
+          loadPillars(),
+          loadCategories(),
+          loadOneTimeEntries(),
+        ]);
+      } catch (err) {
+        console.error('Error loading data:', err);
+        setError('Failed to load data');
+      }
+    };
+
+    loadData();
+  }, []); // Only load on mount
+
+  /**
+   * Filter tasks based on current criteria
+   */
+  const filteredTasks = useMemo(() => {
+    let filtered = tasks.filter(task => {
+      // Filter by one-time frequency
+      if (task.follow_up_frequency !== 'one_time') {
+        return false;
+      }
+
+      // Filter by status
+      if (!showInactive && !isTaskActive(task)) return false;
+      if (!showCompleted && task.is_completed) return false;
+      if (!showNA && task.na_marked_at) return false;
+
+      return true;
+    });
+
+    // Apply pillar/category filters
+    filtered = filterByPillarAndCategory(filtered, selectedPillar, selectedCategory);
+
+    // Sort tasks
+    filtered = sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
+
+    return filtered;
+  }, [
+    tasks,
+    selectedPillar,
+    selectedCategory,
+    showCompleted,
+    showNA,
+    showInactive,
+    hierarchyOrder,
+    taskNameOrder,
+  ]);
+
+  /**
+   * Group filtered tasks by hierarchy
+   */
+  const groupedTasks = useMemo(() => {
+    return groupTasksByHierarchy(filteredTasks);
+  }, [filteredTasks]);
+
+  /**
+   * Convert one-time entries to map for TimeEntryGrid
+   */
+  const entriesMap = useMemo(() => {
+    const map = new Map<number, TimeEntryData>();
+    oneTimeEntries.forEach(entry => {
+      map.set(entry.task_id, {
+        taskId: entry.task_id,
+        timeSpent: entry.time_spent,
+        count: entry.count,
+        notes: entry.notes,
+        isCompleted: entry.is_completed || false,
+        isNA: false, // NA is tracked at task level
+      });
+    });
+    return map;
+  }, [oneTimeEntries]);
+
+  /**
+   * Handle time entry change
+   */
+  const handleEntryChange = async (taskId: number, updates: Partial<TimeEntryData>) => {
+    try {
+      const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
+      
+      if (existingEntry) {
+        await updateOneTimeEntry(existingEntry.id, {
+          time_spent: updates.timeSpent,
+          count: updates.count,
+          notes: updates.notes,
+        });
+      } else {
+        await saveOneTimeEntry({
+          task_id: taskId,
+          time_spent: updates.timeSpent,
+          count: updates.count,
+          notes: updates.notes,
+        });
+      }
+    } catch (err) {
+      console.error('Error saving one-time entry:', err);
+      setError('Failed to save entry');
+    }
+  };
+
+  /**
+   * Handle task completion
+   */
+  const handleComplete = async (taskId: number) => {
+    try {
+      const existingEntry = oneTimeEntries.find(e => e.task_id === taskId);
+      
+      if (existingEntry) {
+        await updateOneTimeEntry(existingEntry.id, {
+          is_completed: !existingEntry.is_completed,
+        });
+      } else {
+        await saveOneTimeEntry({
+          task_id: taskId,
+          is_completed: true,
+        });
+      }
+    } catch (err) {
+      console.error('Error updating completion:', err);
+      setError('Failed to update completion');
+    }
+  };
+
+  /**
+   * Handle mark NA (not applicable for one-time tasks)
+   */
+  const handleMarkNA = async (_taskId: number) => {
+    console.log('N/A marking handled at task level for one-time tasks');
+  };
+
+  return (
+    <div className="one-time-tasks-container">
+      <div className="container-fluid">
+        <div className="row mb-4">
+          <div className="col">
+            <h2>
+              <i className="fas fa-check-circle me-2"></i>
+              One-Time Tasks
+            </h2>
+            <p className="text-muted">
+              Track completion of one-time tasks
+            </p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            <i className="fas fa-exclamation-triangle me-2"></i>
+            {error}
+          </div>
+        )}
+
+        {/* Filters */}
+        <div className="row mb-3">
+          <div className="col">
+            <TaskFilters
+              selectedPillar={selectedPillar}
+              selectedCategory={selectedCategory}
+              showCompleted={showCompleted}
+              showNA={showNA}
+              showInactive={showInactive}
+              onPillarChange={setSelectedPillar}
+              onCategoryChange={setSelectedCategory}
+              onShowCompletedChange={setShowCompleted}
+              onShowNAChange={setShowNA}
+              onShowInactiveChange={setShowInactive}
+            />
+          </div>
+        </div>
+
+        {/* Task Groups */}
+        <div className="row">
+          <div className="col">
+            {Object.keys(groupedTasks).length === 0 ? (
+              <div className="alert alert-warning">
+                <i className="fas fa-exclamation-triangle me-2"></i>
+                No one-time tasks found. Adjust your filters or add new one-time tasks.
+              </div>
+            ) : (
+              Object.entries(groupedTasks).map(([groupKey, groupTasks]) => (
+                <TaskHierarchyGroup
+                  key={groupKey}
+                  groupKey={groupKey}
+                  groupName={groupKey}
+                  tasks={groupTasks}
+                  isExpanded={!expandedGroups.has(groupKey)}
+                  onToggle={toggleGroup}
+                  renderTask={(tasks) => (
+                    <TimeEntryGrid
+                      tasks={Array.isArray(tasks) ? tasks : [tasks]}
+                      entries={entriesMap}
+                      onEntryChange={handleEntryChange}
+                      onComplete={handleComplete}
+                      onMarkNA={handleMarkNA}
+                      showNotes={true}
+                    />
+                  )}
+                  showTaskCount={true}
+                />
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default OneTimeTasks;
