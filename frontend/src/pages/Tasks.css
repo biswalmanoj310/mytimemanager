@@ -313,9 +313,12 @@ td.section-header-cell.boolean-based {
   overflow-y: auto;
   max-height: calc(100vh - 250px); /* Allow vertical scrolling */
   position: relative;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 10px; /* Ensure Total row is fully visible */
+}
+
+/* Only for daily time-based table - needs more height */
+.daily-table-container {
+  max-height: calc(100vh - 280px);
+  min-height: 400px;
 }
 
 .tasks-table {
@@ -584,23 +587,24 @@ td.section-header-cell.boolean-based {
   font-style: italic;
 }
 
-/* Total Row - Sticky at bottom */
-.tasks-table tfoot {
+/* Total Row - Sticky at bottom (only for time-based daily table) */
+.daily-table tfoot {
   position: sticky;
   bottom: 0;
-  z-index: 19;
+  z-index: 30;
   border-top: 3px solid #2d3748;
   background: #f7fafc;
   box-shadow: 0 -2px 4px rgba(0, 0, 0, 0.1);
 }
 
+/* Default total row styling for all tables */
 .total-row {
   height: auto;
-  min-height: 60px; /* Ensure enough space for two-line content */
+  min-height: 50px;
 }
 
 .total-row td {
-  padding: 12px 8px;
+  padding: 10px 8px;
   font-weight: 700;
   color: #2d3748;
   font-size: 14px;
@@ -608,7 +612,24 @@ td.section-header-cell.boolean-based {
   vertical-align: middle;
   background: #f7fafc;
   border-top: 1px solid #cbd5e0;
-  white-space: normal; /* Allow text wrapping */
+  white-space: normal;
+}
+
+/* Specific styling for daily table total row (needs more space for 2 lines) */
+.daily-table .total-row {
+  min-height: 70px;
+}
+
+.daily-table .total-row td {
+  padding: 14px 8px;
+  line-height: 1.4;
+}
+
+/* For other tables (count-based, etc) - no sticky */
+.tasks-table:not(.daily-table) tfoot {
+  position: relative;
+  border-top: 3px solid #2d3748;
+  background: #f7fafc;
 }
 
 .total-row .col-task {
@@ -947,7 +968,8 @@ td.section-header-cell.boolean-based {
 .daily-table .total-row .sticky-col-3,
 .daily-table .total-row .sticky-col-4 {
   background: #f7fafc !important;
-  z-index: 21; /* Higher than tfoot but lower than thead sticky cols */
+  z-index: 31; /* Higher than tfoot to stay on top */
+  pointer-events: auto;
 }
 
 .daily-table tbody tr:hover .sticky-col-1,
@@ -3162,22 +3184,34 @@ td.section-header-cell.boolean-based {
 
 .habits-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: var(--spacing-xl);
-  margin-top: var(--spacing-xl);
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 20px;
+}
+
+@media (max-width: 1400px) {
+  .habits-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .habits-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .habit-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-xl);
+  border-radius: var(--radius-lg);
+  padding: 16px;
   box-shadow: var(--shadow-card);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
   overflow: hidden;
-  min-height: 280px;
+  min-height: 220px;
   display: flex;
   flex-direction: column;
 }

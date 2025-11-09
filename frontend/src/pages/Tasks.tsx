@@ -12,6 +12,7 @@ import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
 import { WeeklyTasks, MonthlyTasks, YearlyTasks, OneTimeTasks } from './index';
 import { getWeekStart } from '../utils/dateHelpers';
+import { AddHabitModal } from '../components/AddHabitModal';
 
 type TabType = 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -358,6 +359,11 @@ export default function Tasks() {
   const [miscTasks, setMiscTasks] = useState<ProjectTaskData[]>([]);
   const [showAddMiscGroupModal, setShowAddMiscGroupModal] = useState(false);
   const [showAddMiscTaskModal, setShowAddMiscTaskModal] = useState(false);
+  const [miscGroupName, setMiscGroupName] = useState('');
+  const [miscGroupDescription, setMiscGroupDescription] = useState('');
+  const [miscTaskName, setMiscTaskName] = useState('');
+  const [miscTaskDescription, setMiscTaskDescription] = useState('');
+  const [miscTaskParentId, setMiscTaskParentId] = useState<number | null>(null);
   const [editingMiscGroup, setEditingMiscGroup] = useState<ProjectData | null>(null);
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
   const [showEditMiscTaskModal, setShowEditMiscTaskModal] = useState(false);
@@ -377,6 +383,11 @@ export default function Tasks() {
     habit_type: 'boolean' | 'time_based' | 'count_based';
     linked_task_id?: number;
     linked_task_name?: string;
+    pillar_id?: number;
+    pillar_name?: string;
+    pillar_color?: string;
+    category_id?: number;
+    category_name?: string;
     target_frequency: 'daily' | 'weekly' | 'monthly';
     target_value?: number;
     target_comparison: 'at_least' | 'at_most' | 'exactly';
@@ -399,6 +410,7 @@ export default function Tasks() {
       success_rate: number;
       current_streak: number;
       longest_streak: number;
+      top_3_streaks?: HabitStreak[];
     }
   };
 
@@ -472,6 +484,76 @@ export default function Tasks() {
   const [showAddHabitModal, setShowAddHabitModal] = useState(false);
   const [showHabitDetailsModal, setShowHabitDetailsModal] = useState(false);
   const [editingHabit, setEditingHabit] = useState<HabitData | null>(null);
+  const [habitMarkDate, setHabitMarkDate] = useState<Record<number, string>>({});
+  const [habitMonthDays, setHabitMonthDays] = useState<Record<number, any[]>>({});
+
+  // Today's habits and challenges
+  interface TodaysHabit {
+    id: number;
+    name: string;
+    description?: string;
+    habit_type: string;
+    target_frequency: string;
+    target_value?: number;
+    target_comparison: string;
+    pillar_id?: number;
+    pillar_name?: string;
+    pillar_color?: string;
+    category_id?: number;
+    category_name?: string;
+    is_positive: boolean;
+    current_streak: number;
+    longest_streak: number;
+    completed_today: boolean;
+    today_value?: number;
+    period_type?: string;
+    tracking_mode?: string;
+    target_count_per_period?: number;
+    session_target_value?: number;
+    session_target_unit?: string;
+    aggregate_target?: number;
+    // Monthly completion data
+    monthly_completion?: (boolean | null)[];
+    completed_days_this_month?: number;
+    total_days_this_month?: number;
+    completion_rate?: number;
+  }
+
+  interface TodaysChallenge {
+    id: number;
+    name: string;
+    description?: string;
+    challenge_type: string;
+    pillar_id?: number;
+    pillar_name?: string;
+    pillar_color?: string;
+    category_id?: number;
+    category_name?: string;
+    start_date: string;
+    end_date: string;
+    days_total: number;
+    days_elapsed: number;
+    days_remaining: number;
+    target_days?: number;
+    target_count?: number;
+    target_value?: number;
+    unit?: string;
+    current_streak: number;
+    completed_days: number;
+    current_count: number;
+    current_value: number;
+    progress_percentage: number;
+    status_indicator: string;
+    completed_today: boolean;
+    today_value?: number;
+    difficulty?: string;
+    reward?: string;
+    // Daily average for accumulation challenges
+    daily_average?: number;
+  }
+
+  const [todaysHabits, setTodaysHabits] = useState<TodaysHabit[]>([]);
+  const [todaysChallenges, setTodaysChallenges] = useState<TodaysChallenge[]>([]);
   const [currentPeriodStats, setCurrentPeriodStats] = useState<Record<number, PeriodStats>>({});
 
   // Life Goals state
@@ -545,6 +627,9 @@ export default function Tasks() {
   const [showAddWishModal, setShowAddWishModal] = useState(false);
   const [showWishDetailsModal, setShowWishDetailsModal] = useState(false);
 
+  // Ref to track if tasks have been initially loaded
+  const tasksLoadedRef = useRef(false);
+
   // Get location for URL parameters
   const location = useLocation();
   const navigate = useNavigate();
@@ -612,6 +697,128 @@ export default function Tasks() {
       setLoading(false);
     }
   };
+
+  // Handle row hover/focus with automatic scroll adjustment to avoid sticky footer overlap
+  const handleRowVisibility = (element: HTMLElement) => {
+    const container = element.closest('.tasks-table-container') as HTMLElement;
+    
+    if (!container) return;
+    
+    const elementRect = element.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    
+    // Height of the sticky footer (Total Time row) - approximate
+    const footerHeight = 100;
+    
+    // Calculate the bottom boundary where content should not overlap
+    const safeBottomBoundary = containerRect.bottom - footerHeight;
+    
+    // If the element is overlapping with the footer area
+    if (elementRect.bottom > safeBottomBoundary && elementRect.top < containerRect.bottom) {
+      // Calculate how much we need to scroll up
+      const scrollAdjustment = elementRect.bottom - safeBottomBoundary + 20; // +20 for extra padding
+      
+      // Smoothly scroll the container
+      container.scrollBy({
+        top: scrollAdjustment,
+        behavior: 'smooth'
+      });
+    }
+  };
+
+  // Load habits function
+  const loadHabits = async () => {
+    try {
+      const response: any = await api.get('/api/habits/');
+      const data = response.data || response;
+      const habitsList = Array.isArray(data) ? data : [];
+      setHabits(habitsList);
+      
+      // Load month days for each habit
+      habitsList.forEach((habit: any) => {
+        loadHabitMonthDays(habit.id);
+      });
+    } catch (err: any) {
+      console.error('Error loading habits:', err);
+      setHabits([]);
+    }
+  };
+
+  // Load last 7 days of habit entries
+  const loadHabitMonthDays = async (habitId: number) => {
+    try {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = today.getMonth();
+      
+      // First day of current month
+      const startDate = new Date(year, month, 1);
+      // Last day of current month
+      const endDate = new Date(year, month + 1, 0);
+      
+      const start = formatDateForInput(startDate);
+      const end = formatDateForInput(endDate);
+      
+      const entries: any = await api.get(`/api/habits/${habitId}/entries?start_date=${start}&end_date=${end}`);
+      const entriesData = entries.data || entries;
+      
+      // Create map of date -> entry for all days in current month
+      const monthDays: Array<{
+        date: string;
+        dayName: string;
+        dayNum: number;
+        isSuccessful?: boolean;
+        exists: boolean;
+      }> = [];
+      const daysInMonth = endDate.getDate();
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(year, month, day);
+        const dateStr = formatDateForInput(date);
+        const entry = entriesData.find((e: any) => e.entry_date === dateStr);
+        
+        monthDays.push({
+          date: dateStr,
+          dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
+          dayNum: date.getDate(),
+          isSuccessful: entry?.is_successful,
+          exists: !!entry
+        });
+      }
+      
+      setHabitMonthDays(prev => ({ ...prev, [habitId]: monthDays }));
+    } catch (err) {
+      console.error(`Error loading month days for habit ${habitId}:`, err);
+    }
+  };
+
+  // Load daily time entries from backend for selected date
+  async function loadDailyEntries(date: Date) {
+    try {
+      const dateStr = formatDateForInput(date);
+      const entries = await api.get<any[]>(`/api/daily-time/entries/${dateStr}`);
+      
+      // Convert entries array to hourlyEntries map format
+      const entriesMap: Record<string, number> = {}
+      entries.forEach((entry: any) => {
+        const key = `${entry.task_id}-${entry.hour}`;
+        entriesMap[key] = entry.minutes;
+      });
+      
+      // Update both state and ref in sync
+      hourlyEntriesRef.current = entriesMap;
+      setHourlyEntries(entriesMap);
+      
+      // Load daily task statuses for this date
+      await loadDailyStatuses(date);
+    } catch (err) {
+      console.error('Error loading daily entries:', err);
+      // On error, reset to empty
+      const emptyMap: Record<string, number> = {}
+      hourlyEntriesRef.current = emptyMap;
+      setHourlyEntries(emptyMap);
+    }
+  }
 
   // Handle URL parameters on mount and when location changes
   useEffect(() => {
@@ -691,7 +898,48 @@ export default function Tasks() {
     // Don't load daily entries here - let the URL params or tab change handle it
   }, []);
 
+  // Separate effect to load data once tasks are ready
   useEffect(() => {
+    // Only load data if tasks have been loaded first
+    if (tasks.length === 0) return;
+    
+    // Mark that tasks have been loaded (only once)
+    if (!tasksLoadedRef.current) {
+      tasksLoadedRef.current = true;
+      
+      // Trigger initial data load for the active tab
+      if (activeTab === 'daily') {
+        loadDailyEntries(selectedDate);
+      } else if (activeTab === 'weekly') {
+        loadWeeklyEntries(selectedWeekStart);
+      } else if (activeTab === 'monthly') {
+        loadMonthlyEntries(selectedMonthStart);
+      } else if (activeTab === 'yearly') {
+        loadYearlyEntries(selectedYearStart);
+      } else if (activeTab === 'onetime') {
+        loadOneTimeTasks();
+      } else if (activeTab === 'projects') {
+        loadProjects();
+      } else if (activeTab === 'misc') {
+        loadMiscTaskGroups();
+      } else if (activeTab === 'habits') {
+        loadHabits();
+      } else if (activeTab === 'today') {
+        loadTodaysHabits();
+        loadTodaysChallenges();
+        loadProjectTasksDueToday();
+        loadGoalTasksDueToday();
+        loadOneTimeTasks();
+        loadWeeklyEntries(selectedWeekStart);
+        loadMonthlyEntries(selectedMonthStart);
+      }
+    }
+  }, [tasks.length]);
+
+  // Load data when tab or date changes (but only after tasks are loaded)
+  useEffect(() => {
+    if (!tasksLoadedRef.current) return;
+    
     if (activeTab === 'daily') {
       loadDailyEntries(selectedDate);
     } else if (activeTab === 'weekly') {
@@ -709,6 +957,8 @@ export default function Tasks() {
     } else if (activeTab === 'habits') {
       loadHabits();
     } else if (activeTab === 'today') {
+      loadTodaysHabits();
+      loadTodaysChallenges();
       loadProjectTasksDueToday();
       loadGoalTasksDueToday();
       // Load one-time tasks so we can check for overdue ones
@@ -820,6 +1070,7 @@ export default function Tasks() {
         
       } else if (activeTab === 'monthly') {
         const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
+        
         if (!hasBeenAddedToMonthly) {
           return false;
         }
@@ -1163,47 +1414,32 @@ export default function Tasks() {
       // Create a weekly status entry to mark this task for tracking this week
       // This keeps the task as 'daily' but makes it appear in the weekly view
       const weekStart = formatDateForInput(selectedWeekStart);
-      await api.post(`/api/weekly-time/status/${selectedDailyTask}/${weekStart}`, {
+      
+      console.log('Adding task to weekly tracking:', {
+        taskId: selectedDailyTask,
+        taskName: task.name,
+        weekStart,
+        url: `/api/weekly-time/status/${selectedDailyTask}/${weekStart}`
+      });
+      
+      const response = await api.post(`/api/weekly-time/status/${selectedDailyTask}/${weekStart}`, {
         is_completed: false,
         is_na: false
       });
+      
+      console.log('Weekly status created successfully:', response);
 
       // Reload tasks and weekly entries to show the task in weekly view
       await loadTasks();
       await loadWeeklyEntries(selectedWeekStart);
       setShowAddWeeklyTaskModal(false);
       setSelectedDailyTask(null);
+      
+      alert(`✓ "${task.name}" added to weekly tracking!`);
     } catch (err: any) {
       console.error('Error adding weekly task:', err);
+      console.error('Error details:', err.response?.data);
       alert('Failed to add weekly task: ' + (err.response?.data?.detail || err.message));
-    }
-  };
-
-  // Load daily time entries from backend for selected date
-  async function loadDailyEntries(date: Date) {
-    try {
-      const dateStr = formatDateForInput(date);
-      const entries = await api.get<any[]>(`/api/daily-time/entries/${dateStr}`);
-      
-      // Convert entries array to hourlyEntries map format
-      const entriesMap: Record<string, number> = {}
-      entries.forEach((entry: any) => {
-        const key = `${entry.task_id}-${entry.hour}`;
-        entriesMap[key] = entry.minutes;
-      });
-      
-      // Update both state and ref in sync
-      hourlyEntriesRef.current = entriesMap;
-      setHourlyEntries(entriesMap);
-      
-      // Load daily task statuses for this date
-      await loadDailyStatuses(date);
-    } catch (err) {
-      console.error('Error loading daily entries:', err);
-      // On error, reset to empty
-      const emptyMap: Record<string, number> = {}
-      hourlyEntriesRef.current = emptyMap;
-      setHourlyEntries(emptyMap);
     }
   };
 
@@ -1509,7 +1745,7 @@ export default function Tasks() {
       setWeeklyTaskStatuses({});
       setEverCompletedTaskIds(new Set());
     }
-  };
+  }
 
   // Save weekly entries to backend (debounced)
   const saveWeeklyEntries = async () => {
@@ -2196,7 +2432,7 @@ export default function Tasks() {
   };
 
   // Projects Functions
-  const loadProjects = async () => {
+  async function loadProjects() {
     try {
       const response: any = await api.get('/api/projects/');
       const data = response.data || response;
@@ -2273,7 +2509,7 @@ export default function Tasks() {
     }
   };
 
-  const loadOverdueOneTimeTasks = () => {
+  async function loadOverdueOneTimeTasks() {
     try {
       // Filter one-time tasks that are overdue (red)
       const overdue = oneTimeTasks.filter(oneTimeTask => {
@@ -2294,6 +2530,28 @@ export default function Tasks() {
       setOverdueOneTimeTasks([]);
     }
   };
+
+  async function loadTodaysHabits() {
+    try {
+      const response: any = await api.get('/api/habits/today/active');
+      const data = Array.isArray(response.data || response) ? (response.data || response) : [];
+      setTodaysHabits(data);
+    } catch (err: any) {
+      console.error('Error loading today\'s habits:', err);
+      setTodaysHabits([]);
+    }
+  }
+
+  async function loadTodaysChallenges() {
+    try {
+      const response: any = await api.get('/api/challenges/today/active');
+      const data = Array.isArray(response.data || response) ? (response.data || response) : [];
+      setTodaysChallenges(data);
+    } catch (err: any) {
+      console.error('Error loading today\'s challenges:', err);
+      setTodaysChallenges([]);
+    }
+  }
 
   const loadProjectTasks = async (projectId: number) => {
     try {
@@ -2790,7 +3048,7 @@ export default function Tasks() {
   };
 
   // Misc Tasks Functions (similar to Projects)
-  const loadMiscTaskGroups = async () => {
+  async function loadMiscTaskGroups() {
     try {
       const response: any = await api.get('/api/misc-tasks/');
       const data = response.data || response;
@@ -2857,19 +3115,38 @@ export default function Tasks() {
     }
   };
 
-  // Habits Functions
-  const loadHabits = async () => {
+  const handleAddMiscGroup = async (name: string, description: string) => {
     try {
-      const response: any = await api.get('/api/habits/');
-      const data = response.data || response;
-      const habitsList = Array.isArray(data) ? data : [];
-      setHabits(habitsList);
+      await api.post('/api/misc-tasks/', {
+        name,
+        description
+      });
+      await loadMiscTaskGroups();
+      setShowAddMiscGroupModal(false);
     } catch (err: any) {
-      console.error('Error loading habits:', err);
-      setHabits([]);
+      console.error('Error creating misc group:', err);
+      alert('Failed to create misc group: ' + (err.response?.data?.detail || err.message));
     }
   };
 
+  const handleAddMiscTask = async (taskName: string, description: string, parentTaskId: number | null) => {
+    if (!selectedMiscGroup) return;
+
+    try {
+      await api.post(`/api/misc-tasks/${selectedMiscGroup.id}/tasks`, {
+        name: taskName,
+        description,
+        parent_task_id: parentTaskId
+      });
+      await loadMiscTasks(selectedMiscGroup.id);
+      setShowAddMiscTaskModal(false);
+    } catch (err: any) {
+      console.error('Error creating misc task:', err);
+      alert('Failed to create misc task: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // Habits Functions
   const loadHabitEntries = async (habitId: number, startDate?: string, endDate?: string) => {
     try {
       let url = `/api/habits/${habitId}/entries`;
@@ -2914,6 +3191,9 @@ export default function Tasks() {
       
       // Reload habits to get updated stats
       await loadHabits();
+      
+      // Reload month days to show updated visual tracker
+      await loadHabitMonthDays(habitId);
       
       // If viewing this habit's details, reload entries
       if (selectedHabit?.id === habitId) {
@@ -3477,6 +3757,11 @@ export default function Tasks() {
     const col = parseInt(input.dataset.col || '0');
     setFocusedCell({ row, col });
     
+    // Check if cell is behind sticky footer and scroll if needed
+    setTimeout(() => {
+      handleRowVisibility(input);
+    }, 50);
+    
     // Prevent mouse wheel from changing value
     const wheelHandler = (wheelEvent: WheelEvent) => {
       wheelEvent.preventDefault();
@@ -3899,11 +4184,12 @@ export default function Tasks() {
       // Check weekly tab (current week only)
       const weeklyStatus = weeklyTaskStatuses[task.id];
       if (weeklyStatus && !weeklyStatus.is_completed && !weeklyStatus.is_na) {
-        let redDaysCount = 0;
+        // Calculate total spent and check if behind schedule
+        let totalSpent = 0;
         let totalDaysElapsed = 0;
-
-        // Check each day in current week
         weekDays.forEach(day => {
+          totalSpent += getWeeklyTime(task.id, day.index);
+          
           const dayDate = new Date(selectedWeekStart);
           dayDate.setDate(dayDate.getDate() + day.index);
           const today = new Date();
@@ -3911,45 +4197,54 @@ export default function Tasks() {
 
           if (dayDate <= today) {
             totalDaysElapsed++;
-            const cellColor = getWeeklyCellColorClass(task, day.index);
-            if (cellColor === 'cell-below-target') {
-              redDaysCount++;
-            }
           }
         });
 
-        if (redDaysCount > 0) {
-          // Calculate recommendation
-          let weeklyTarget = 0;
-          let totalSpent = 0;
+        // Calculate targets and deficit
+        let weeklyTarget = 0;
+        if (task.task_type === TaskType.COUNT) {
+          weeklyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) * 7 : (task.target_value || 0);
+        } else if (task.task_type === TaskType.BOOLEAN) {
+          weeklyTarget = task.follow_up_frequency === 'daily' ? 7 : 1;
+        } else {
+          weeklyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes * 7 : task.allocated_minutes;
+        }
+
+        const remaining = weeklyTarget - totalSpent;
+        const daysLeft = 7 - totalDaysElapsed;
+        
+        // Calculate daily target
+        let dailyTarget = 0;
+        if (task.task_type === TaskType.COUNT) {
+          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 7;
+        } else if (task.task_type === TaskType.BOOLEAN) {
+          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/7;
+        } else {
+          dailyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7;
+        }
+        
+        // Calculate expected vs actual
+        const expectedByNow = dailyTarget * totalDaysElapsed;
+        const deficit = expectedByNow - totalSpent;
+        
+        // Only show in attention if CURRENTLY behind schedule (deficit > 0)
+        // Don't trigger just because past days were red - user may have caught up!
+        if (deficit > 0) {
+          // Count red days for display purposes only
+          let redDaysCount = 0;
           weekDays.forEach(day => {
-            totalSpent += getWeeklyTime(task.id, day.index);
+            const dayDate = new Date(selectedWeekStart);
+            dayDate.setDate(dayDate.getDate() + day.index);
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+
+            if (dayDate <= today) {
+              const cellColor = getWeeklyCellColorClass(task, day.index);
+              if (cellColor === 'cell-below-target') {
+                redDaysCount++;
+              }
+            }
           });
-
-          if (task.task_type === TaskType.COUNT) {
-            weeklyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) * 7 : (task.target_value || 0);
-          } else if (task.task_type === TaskType.BOOLEAN) {
-            weeklyTarget = task.follow_up_frequency === 'daily' ? 7 : 1;
-          } else {
-            weeklyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes * 7 : task.allocated_minutes;
-          }
-
-          const remaining = weeklyTarget - totalSpent;
-          const daysLeft = 7 - totalDaysElapsed;
-          
-          // Calculate daily target
-          let dailyTarget = 0;
-          if (task.task_type === TaskType.COUNT) {
-            dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 7;
-          } else if (task.task_type === TaskType.BOOLEAN) {
-            dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/7;
-          } else {
-            dailyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7;
-          }
-          
-          // Calculate expected vs actual
-          const expectedByNow = dailyTarget * totalDaysElapsed;
-          const deficit = expectedByNow - totalSpent;
           
           // TODAY = daily target + ALL catch-up (front-loaded)
           const neededToday = dailyTarget + deficit;
@@ -6740,7 +7035,7 @@ export default function Tasks() {
           ) : (
             <div className="habits-grid" style={{ 
               display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
               gap: '20px',
               marginTop: '20px'
             }}>
@@ -6749,22 +7044,57 @@ export default function Tasks() {
                 const trackingMode = habit.tracking_mode || 'daily_streak';
                 const showPeriodTracking = ['occurrence', 'occurrence_with_value', 'aggregate'].includes(trackingMode);
                 
+                // Get pillar color for gradient - use varied defaults if no pillar assigned
+                const defaultColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6'];
+                const pillarColor = habit.pillar_color || defaultColors[habit.id % defaultColors.length];
+                const gradientEnd = habit.pillar_color ? `${pillarColor}CC` : '#764ba2';
+                
                 return (
                 <div key={habit.id} className="habit-card" style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '8px',
+                  border: `2px solid ${pillarColor}`,
+                  borderRadius: '12px',
                   padding: '20px',
-                  backgroundColor: 'white',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                  transition: 'box-shadow 0.2s'
+                  background: `linear-gradient(135deg, ${pillarColor}15 0%, ${pillarColor}05 100%)`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  transition: 'all 0.2s'
                 }}
-                onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'}
-                onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = '0 6px 16px rgba(0,0,0,0.15)';
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
                 >
                   <div style={{ marginBottom: '15px' }}>
-                    <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600' }}>
-                      {habit.name}
-                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', flex: 1 }}>
+                        {habit.name}
+                      </h3>
+                      {habit.pillar_name && (
+                        <span style={{
+                          padding: '4px 10px',
+                          backgroundColor: pillarColor,
+                          color: 'white',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          flexShrink: 0
+                        }}>
+                          {habit.pillar_name}
+                          {habit.category_name && `: ${habit.category_name}`}
+                          {' • '}
+                          {habit.target_comparison === 'at_least' ? `${habit.target_value}+ ` : 
+                           habit.target_comparison === 'at_most' ? `≤${habit.target_value} ` :
+                           habit.target_comparison === 'exactly' ? `${habit.target_value} ` : 
+                           `${habit.target_value} `}
+                          {habit.unit || 'times'}
+                          {habit.period_type === 'weekly' ? '/week' : 
+                           habit.period_type === 'monthly' ? '/month' : '/day'}
+                        </span>
+                      )}
+                    </div>
                     {habit.description && (
                       <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>
                         {habit.description}
@@ -6800,11 +7130,27 @@ export default function Tasks() {
                         </div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#3182ce' }}>
-                          🏆 {habit.stats?.longest_streak || 0}
+                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#3182ce', marginBottom: '6px' }}>
+                          🏆 Top 3 Streaks
                         </div>
-                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                          Best Streak
+                        <div style={{ fontSize: '12px', color: '#666' }}>
+                          {habit.stats?.top_3_streaks && habit.stats.top_3_streaks.length > 0 ? (
+                            habit.stats.top_3_streaks.map((streak: any, index: number) => (
+                              <div key={index} style={{ 
+                                marginBottom: index < habit.stats.top_3_streaks.length - 1 ? '4px' : '0',
+                                padding: '2px 0'
+                              }}>
+                                <span style={{ fontWeight: 'bold', color: '#3182ce' }}>
+                                  {index + 1}. {streak.streak_length} days
+                                </span>
+                                {streak.is_active && (
+                                  <span style={{ marginLeft: '4px', color: '#e53e3e' }}>🔥</span>
+                                )}
+                              </div>
+                            ))
+                          ) : (
+                            <div>{habit.stats?.longest_streak || 0} days</div>
+                          )}
                         </div>
                       </div>
                       <div style={{ textAlign: 'center' }}>
@@ -7018,46 +7364,188 @@ export default function Tasks() {
 
                   {/* Quick action buttons for daily habits */}
                   {!showPeriodTracking && (
-                    <div style={{ display: 'flex', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
-                      <button 
-                        className="btn btn-sm"
-                        style={{ 
-                          flex: 1,
+                    <>
+                      {/* Date selector for marking past habits */}
+                      <div style={{ marginBottom: '10px' }} onClick={(e) => e.stopPropagation()}>
+                        <label style={{ display: 'block', fontSize: '12px', color: '#666', marginBottom: '4px' }}>
+                          Mark for date:
+                        </label>
+                        <input 
+                          type="date"
+                          value={habitMarkDate[habit.id] || formatDateForInput(new Date())}
+                          onChange={(e) => setHabitMarkDate({ ...habitMarkDate, [habit.id]: e.target.value })}
+                          max={formatDateForInput(new Date())}
+                          style={{
+                            width: '100%',
+                            padding: '6px',
+                            border: '1px solid #cbd5e0',
+                            borderRadius: '4px',
+                            fontSize: '13px'
+                          }}
+                        />
+                      </div>
+
+                      {/* Current month visual tracker - organized by weeks starting Monday */}
+                      {habitMonthDays[habit.id] && (
+                        <div style={{ 
+                          marginBottom: '10px',
                           padding: '10px',
-                          backgroundColor: '#48bb78',
-                          color: 'white',
-                          border: 'none',
+                          backgroundColor: '#f7fafc',
                           borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: '500'
-                        }}
-                        onClick={() => handleMarkHabitEntry(habit.id, formatDateForInput(new Date()), true)}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#38a169'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#48bb78'}
-                      >
-                        ✅ Done Today
-                      </button>
-                      <button 
-                        className="btn btn-sm"
-                        style={{ 
-                          flex: 1,
-                          padding: '10px',
-                          backgroundColor: '#fc8181',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: '500'
-                        }}
-                        onClick={() => handleMarkHabitEntry(habit.id, formatDateForInput(new Date()), false)}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fc8181'}
-                      >
-                        ❌ Missed
-                      </button>
-                    </div>
+                          border: '1px solid #e2e8f0'
+                        }}>
+                          <div style={{ fontSize: '12px', color: '#718096', marginBottom: '8px', fontWeight: '600' }}>
+                            {new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}:
+                          </div>
+                          
+                          {/* Week day headers */}
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(7, 1fr)',
+                            gap: '6px',
+                            marginBottom: '4px'
+                          }}>
+                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                              <div key={day} style={{ 
+                                fontSize: '9px', 
+                                color: '#9ca3af',
+                                fontWeight: '600',
+                                textAlign: 'center'
+                              }}>
+                                {day}
+                              </div>
+                            ))}
+                          </div>
+                          
+                          {/* Calendar grid starting from Monday */}
+                          <div style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: 'repeat(7, 1fr)',
+                            gap: '6px'
+                          }}>
+                            {(() => {
+                              const today = new Date();
+                              const year = today.getFullYear();
+                              const month = today.getMonth();
+                              const firstDay = new Date(year, month, 1);
+                              
+                              // Get day of week (0=Sun, 1=Mon, ..., 6=Sat)
+                              // Convert to Monday-based (0=Mon, 1=Tue, ..., 6=Sun)
+                              let firstDayOfWeek = firstDay.getDay() - 1;
+                              if (firstDayOfWeek === -1) firstDayOfWeek = 6; // Sunday becomes 6
+                              
+                              const daysInMonth = new Date(year, month + 1, 0).getDate();
+                              const cells = [];
+                              
+                              // Add empty cells for days before month starts
+                              for (let i = 0; i < firstDayOfWeek; i++) {
+                                cells.push(
+                                  <div key={`empty-${i}`} style={{ width: '38px', height: '38px' }} />
+                                );
+                              }
+                              
+                              // Add cells for each day of the month
+                              for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+                                const dayData = habitMonthDays[habit.id].find((d: any) => d.dayNum === dayNum);
+                                
+                                let bgColor = '#e2e8f0'; // Gray - not entered
+                                if (dayData?.exists) {
+                                  bgColor = dayData.isSuccessful ? '#48bb78' : '#fc8181'; // Green or Red
+                                }
+                                
+                                const isToday = dayNum === today.getDate();
+                                
+                                cells.push(
+                                  <div 
+                                    key={dayNum}
+                                    style={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      alignItems: 'center',
+                                      gap: '2px'
+                                    }}
+                                    title={dayData ? `${dayData.dayName}, ${new Date().toLocaleString('en-US', { month: 'short' })} ${dayNum}: ${dayData.exists ? (dayData.isSuccessful ? 'Done ✓' : 'Missed ✗') : 'Not entered'}` : `Day ${dayNum}`}
+                                  >
+                                    <div style={{ 
+                                      fontSize: '9px', 
+                                      color: '#718096',
+                                      fontWeight: isToday ? '700' : '500'
+                                    }}>
+                                      {dayNum}
+                                    </div>
+                                    <div style={{
+                                      width: '38px',
+                                      height: '38px',
+                                      backgroundColor: bgColor,
+                                      borderRadius: '6px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      color: dayData?.exists ? 'white' : '#718096',
+                                      fontSize: '18px',
+                                      fontWeight: 'bold',
+                                      boxShadow: isToday ? '0 0 0 2px #4299e1' : '0 1px 3px rgba(0,0,0,0.1)',
+                                      border: isToday ? '2px solid white' : 'none'
+                                    }}>
+                                      {dayData?.exists ? (dayData.isSuccessful ? '✓' : '✗') : ''}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              
+                              return cells;
+                            })()}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div style={{ display: 'flex', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
+                        <button 
+                          className="btn btn-sm"
+                          style={{ 
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: '#48bb78',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}
+                          onClick={() => {
+                            const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                            handleMarkHabitEntry(habit.id, dateToMark, true);
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#38a169'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#48bb78'}
+                        >
+                          ✅ Done
+                        </button>
+                        <button 
+                          className="btn btn-sm"
+                          style={{ 
+                            flex: 1,
+                            padding: '10px',
+                            backgroundColor: '#fc8181',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}
+                          onClick={() => {
+                            const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                            handleMarkHabitEntry(habit.id, dateToMark, false);
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fc8181'}
+                        >
+                          ❌ Missed
+                        </button>
+                      </div>
+                    </>
                   )}
 
                   {habit.linked_task_name && (
@@ -7072,6 +7560,67 @@ export default function Tasks() {
                       🔗 Linked to: <strong>{habit.linked_task_name}</strong>
                     </div>
                   )}
+
+                  {/* Edit and Delete buttons */}
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '8px', 
+                    marginTop: '12px', 
+                    paddingTop: '12px',
+                    borderTop: '1px solid #e2e8f0'
+                  }} onClick={(e) => e.stopPropagation()}>
+                    <button 
+                      className="btn btn-sm"
+                      style={{ 
+                        flex: 1,
+                        padding: '8px',
+                        backgroundColor: '#3182ce',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}
+                      onClick={() => {
+                        setEditingHabit(habit);
+                        setShowAddHabitModal(true);
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2c5282'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3182ce'}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button 
+                      className="btn btn-sm"
+                      style={{ 
+                        flex: 1,
+                        padding: '8px',
+                        backgroundColor: '#e53e3e',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}
+                      onClick={async () => {
+                        if (window.confirm(`Delete habit "${habit.name}"? This action cannot be undone.`)) {
+                          try {
+                            await api.delete(`/api/habits/${habit.id}`);
+                            loadHabits();
+                          } catch (err) {
+                            console.error('Error deleting habit:', err);
+                            alert('Failed to delete habit');
+                          }
+                        }
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c53030'}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
+                    >
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </div>
                 );
               })}
@@ -7105,7 +7654,7 @@ export default function Tasks() {
                   </span>
                 )}
               </h3>
-              <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+              <div className="tasks-table-container daily-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
                 <table className="tasks-table daily-table">
                   <thead>
                     <tr>
@@ -8643,10 +9192,250 @@ export default function Tasks() {
         </>
       ) : (
         /* OTHER TABS: Keep existing single table */
-        <div className="tasks-table-container">
-          <table className={`tasks-table ${activeTab === 'yearly' ? 'daily-table' : ''}`}>
+        <>
+          {/* Habits & Challenges Section moved to bottom of Today tab - see after Needs Attention section */}
+          {activeTab === 'never-show-here' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
+            <div style={{ marginBottom: '30px' }}>
+              {/* Active Habits Section */}
+              {todaysHabits.length > 0 && (
+                <div style={{ marginBottom: '25px' }}>
+                  <h3 style={{ marginBottom: '15px', color: '#2d3748', fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span>🔥</span>
+                    <span>Active Habits Today</span>
+                    <span style={{ fontSize: '14px', fontWeight: '400', color: '#718096' }}>({todaysHabits.length})</span>
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '15px' }}>
+                    {todaysHabits.map(habit => (
+                      <div
+                        key={habit.id}
+                        style={{
+                          background: 'linear-gradient(135deg, #ffffff 0%, #f7fafc 100%)',
+                          border: `2px solid ${habit.pillar_color || '#e2e8f0'}`,
+                          borderRadius: '12px',
+                          padding: '16px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                          transition: 'all 0.2s ease',
+                          cursor: 'pointer'
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                        }}
+                      >
+                        {/* Header with checkbox */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                          <div style={{ flex: 1 }}>
+                            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2d3748', marginBottom: '4px' }}>
+                              {habit.name}
+                            </h4>
+                            {habit.pillar_name && (
+                              <div style={{ fontSize: '12px', color: '#718096', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: habit.pillar_color || '#cbd5e0', display: 'inline-block' }}></span>
+                                {habit.pillar_name}
+                                {habit.category_name && ` • ${habit.category_name}`}
+                              </div>
+                            )}
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={habit.completed_today}
+                            onChange={async (e) => {
+                              const isChecked = e.target.checked;
+                              try {
+                                await api.post(`/api/habits/${habit.id}/mark-today?is_successful=${isChecked}`);
+                                // Reload habits
+                                loadTodaysHabits();
+                              } catch (err) {
+                                console.error('Error marking habit:', err);
+                              }
+                            }}
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              cursor: 'pointer',
+                              accentColor: habit.pillar_color || '#4299e1'
+                            }}
+                          />
+                        </div>
+
+                        {/* Streak Info */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '14px', fontWeight: '600', color: habit.current_streak > 0 ? '#f56565' : '#a0aec0' }}>
+                            <span style={{ fontSize: '18px' }}>🔥</span>
+                            <span>{habit.current_streak} days</span>
+                          </div>
+                          {habit.longest_streak > 0 && (
+                            <div style={{ fontSize: '12px', color: '#718096' }}>
+                              Best: {habit.longest_streak}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Target Info */}
+                        {habit.target_value && (
+                          <div style={{ fontSize: '13px', color: '#4a5568', marginTop: '6px' }}>
+                            Target: {habit.target_value} {habit.session_target_unit || 'min'} {habit.target_comparison === 'at_least' ? '(minimum)' : habit.target_comparison === 'at_most' ? '(maximum)' : ''}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Active Challenges Section */}
+              {todaysChallenges.length > 0 && (
+                <div>
+                  <h3 style={{ marginBottom: '15px', color: '#2d3748', fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span>🎯</span>
+                    <span>Active Challenges</span>
+                    <span style={{ fontSize: '14px', fontWeight: '400', color: '#718096' }}>({todaysChallenges.length})</span>
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '15px' }}>
+                    {todaysChallenges.map(challenge => {
+                      const statusColors = {
+                        on_track: '#48bb78',
+                        at_risk: '#ed8936',
+                        behind: '#f56565'
+                      };
+                      const statusLabels = {
+                        on_track: '🟢 On Track',
+                        at_risk: '🟡 At Risk',
+                        behind: '🔴 Behind'
+                      };
+                      
+                      return (
+                        <div
+                          key={challenge.id}
+                          style={{
+                            background: 'linear-gradient(135deg, #ffffff 0%, #f7fafc 100%)',
+                            border: `2px solid ${challenge.pillar_color || '#e2e8f0'}`,
+                            borderRadius: '12px',
+                            padding: '16px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                            transition: 'all 0.2s ease'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.12)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                          }}
+                        >
+                          {/* Header */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                              <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2d3748' }}>
+                                {challenge.name}
+                              </h4>
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: statusColors[challenge.status_indicator as keyof typeof statusColors] || '#718096', whiteSpace: 'nowrap', marginLeft: '8px' }}>
+                                {statusLabels[challenge.status_indicator as keyof typeof statusLabels] || challenge.status_indicator}
+                              </span>
+                            </div>
+                            {challenge.pillar_name && (
+                              <div style={{ fontSize: '12px', color: '#718096', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: challenge.pillar_color || '#cbd5e0', display: 'inline-block' }}></span>
+                                {challenge.pillar_name}
+                                {challenge.category_name && ` • ${challenge.category_name}`}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4a5568', marginBottom: '4px' }}>
+                              <span>Progress</span>
+                              <span style={{ fontWeight: '600' }}>{challenge.progress_percentage.toFixed(0)}%</span>
+                            </div>
+                            <div style={{ height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                              <div style={{ 
+                                height: '100%', 
+                                width: `${Math.min(challenge.progress_percentage, 100)}%`,
+                                background: `linear-gradient(90deg, ${challenge.pillar_color || '#4299e1'} 0%, ${challenge.pillar_color ? challenge.pillar_color + 'dd' : '#3182ce'} 100%)`,
+                                transition: 'width 0.3s ease'
+                              }}></div>
+                            </div>
+                          </div>
+
+                          {/* Challenge Stats */}
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px', fontSize: '13px' }}>
+                            <div>
+                              <span style={{ color: '#718096' }}>Days Remaining:</span>
+                              <span style={{ fontWeight: '600', color: '#2d3748', marginLeft: '4px' }}>{challenge.days_remaining}</span>
+                            </div>
+                            <div>
+                              <span style={{ color: '#718096' }}>Current Streak:</span>
+                              <span style={{ fontWeight: '600', color: '#2d3748', marginLeft: '4px' }}>{challenge.current_streak}</span>
+                            </div>
+                          </div>
+
+                          {/* Target Progress */}
+                          <div style={{ fontSize: '13px', color: '#4a5568', marginBottom: '12px' }}>
+                            {challenge.challenge_type === 'daily_streak' && (
+                              <span>{challenge.completed_days} / {challenge.target_days} days completed</span>
+                            )}
+                            {challenge.challenge_type === 'count_based' && (
+                              <span>{challenge.current_count} / {challenge.target_count} {challenge.unit}</span>
+                            )}
+                            {challenge.challenge_type === 'accumulation' && (
+                              <span>{challenge.current_value.toFixed(1)} / {challenge.target_value} {challenge.unit}</span>
+                            )}
+                          </div>
+
+                          {/* Log Today Button */}
+                          <button
+                            onClick={async () => {
+                              try {
+                                await api.post(`/api/challenges/${challenge.id}/log-today?is_completed=true`);
+                                loadTodaysChallenges();
+                              } catch (err) {
+                                console.error('Error logging challenge:', err);
+                              }
+                            }}
+                            disabled={challenge.completed_today}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              backgroundColor: challenge.completed_today ? '#e2e8f0' : (challenge.pillar_color || '#4299e1'),
+                              color: challenge.completed_today ? '#718096' : '#ffffff',
+                              border: 'none',
+                              borderRadius: '6px',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: challenge.completed_today ? 'not-allowed' : 'pointer',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={e => {
+                              if (!challenge.completed_today) {
+                                e.currentTarget.style.opacity = '0.9';
+                              }
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.opacity = '1';
+                            }}
+                          >
+                            {challenge.completed_today ? '✓ Logged Today' : '+ Log Today'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="tasks-table-container" style={activeTab === 'today' ? { marginTop: '20px' } : {}}>
+            <table className={`tasks-table ${activeTab === 'yearly' ? 'daily-table' : ''}`}>
             <thead>
               <tr>
+                {activeTab === 'today' && <th style={{ width: '40px', textAlign: 'center' }}>☐</th>}
                 <th className="col-task sticky-col sticky-col-1">Task</th>
                 {activeTab === 'yearly' ? (
                   <>
@@ -8770,6 +9559,20 @@ export default function Tasks() {
                         : undefined
                   }
                 >
+                  {activeTab === 'today' && (
+                    <td style={{ textAlign: 'center', width: '40px' }}>
+                      <input 
+                        type="checkbox" 
+                        style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                        onChange={(e) => {
+                          // Handle checkbox change - you can add completion logic here
+                          if (e.target.checked) {
+                            handleComplete(task.id);
+                          }
+                        }}
+                      />
+                    </td>
+                  )}
                   <td 
                     className={`col-task sticky-col sticky-col-1 ${colorClass} ${
                       focusedCell && focusedCell.row === taskIndex && focusedCell.col === -1 ? 'focused-cell' :
@@ -8796,6 +9599,11 @@ export default function Tasks() {
                       }
                     >
                       {task.name}
+                      {activeTab === 'today' && (
+                        <span style={{ marginLeft: '8px', fontSize: '12px', color: '#4299e1', fontWeight: '600' }}>
+                          ({task.allocated_minutes} min)
+                        </span>
+                      )}
                       {activeTab === 'daily' && (
                         <span style={{ marginLeft: '8px', fontSize: '12px', color: '#718096' }}>
                           ({formatTaskTarget(task, false, false)})
@@ -9618,22 +10426,6 @@ export default function Tasks() {
               })}
             </tbody>
             <tfoot>
-              {activeTab === 'today' && (
-                <tr className="total-row">
-                  <td className="col-task">
-                    <strong>Total Time</strong><br/>
-                    <strong>Required</strong>
-                  </td>
-                  <td className="col-time">
-                    <strong>
-                      {filteredTasks
-                        .filter(task => !task.is_completed && task.is_active)
-                        .reduce((sum, task) => sum + task.allocated_minutes, 0)} min
-                    </strong>
-                  </td>
-                  <td className="col-status"></td>
-                </tr>
-              )}
               {activeTab === 'daily' && (() => {
                 // Only count tasks that are being tracked on this date
                 const totalAllocated = filteredTasks
@@ -9689,6 +10481,7 @@ export default function Tasks() {
             </tfoot>
           </table>
         </div>
+        </>
       )}
 
       {/* Incomplete Days Alert */}
@@ -9839,7 +10632,7 @@ export default function Tasks() {
           <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
             📋 Project Tasks Due Today & Overdue
           </h3>
-          <div className="tasks-table-container">
+          <div className="tasks-table-container" style={{ marginTop: '20px' }}>
             <table className="tasks-table">
               <thead>
                 <tr>
@@ -9931,7 +10724,7 @@ export default function Tasks() {
           <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
             🎯 Goal Tasks Due Today & Overdue
           </h3>
-          <div className="tasks-table-container">
+          <div className="tasks-table-container" style={{ marginTop: '20px' }}>
             <table className="tasks-table">
               <thead>
                 <tr>
@@ -10009,10 +10802,11 @@ export default function Tasks() {
           <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
             🔴 One-Time Tasks Due Today or Overdue
           </h3>
-          <div className="tasks-table-container">
+          <div className="tasks-table-container" style={{ marginTop: '20px' }}>
             <table className="tasks-table">
               <thead>
                 <tr>
+                  <th className="col-checkbox"></th>
                   <th className="col-task">Task Name</th>
                   <th className="col-date">Start Date</th>
                   <th className="col-number">Target Gap (days)</th>
@@ -10026,6 +10820,15 @@ export default function Tasks() {
                   const daysOver = calculateDaysOver(oneTimeTask.updated_date);
                   return (
                     <tr key={oneTimeTask.id} className="row-overdue">
+                      <td className="col-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={false}
+                          disabled
+                          style={{ width: '18px', height: '18px', cursor: 'not-allowed', opacity: 0.5 }}
+                          title="Use 'Done' button to complete"
+                        />
+                      </td>
                       <td className="col-task">
                         <div className="task-name">
                           {oneTimeTask.task_name}
@@ -10348,6 +11151,532 @@ export default function Tasks() {
           </>
         );
       })()}
+
+      {/* Compact Habits & Challenges - Bottom of Today Tab */}
+      {activeTab === 'today' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
+        <div style={{ marginTop: '30px', marginBottom: '20px' }}>
+          {/* Compact Active Habits */}
+          {todaysHabits.length > 0 && (
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ 
+                marginBottom: '12px', 
+                color: '#2d3748', 
+                fontSize: '18px', 
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span>🔥</span>
+                <span>Today's Habits</span>
+                <span style={{ fontSize: '13px', fontWeight: '400', color: '#718096' }}>({todaysHabits.length})</span>
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {todaysHabits.map(habit => (
+                  <div
+                    key={habit.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                      padding: '14px 16px',
+                      background: 'linear-gradient(135deg, #ffffff 0%, #f7fafc 100%)',
+                      border: `2px solid ${habit.pillar_color || '#e2e8f0'}`,
+                      borderRadius: '8px',
+                      minHeight: '80px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                      transition: 'all 0.2s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.transform = 'translateX(4px)';
+                      e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.12)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.transform = 'translateX(0)';
+                      e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                    }}
+                  >
+                    {/* Checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={habit.completed_today}
+                      onChange={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await api.post(`/api/habits/${habit.id}/mark-today?is_completed=${!habit.completed_today}`);
+                          loadTodaysHabits();
+                        } catch (err) {
+                          console.error('Error toggling habit:', err);
+                        }
+                      }}
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        accentColor: habit.pillar_color,
+                        marginTop: '2px'
+                      }}
+                    />
+
+                    {/* Name and progress info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ 
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        marginBottom: '6px'
+                      }}>
+                        <span style={{
+                          fontSize: '15px', 
+                          fontWeight: '600',
+                          color: '#2d3748',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {habit.name}
+                        </span>
+                        {/* Target Info Badge */}
+                        <span style={{
+                          fontSize: '12px',
+                          color: '#2563eb',
+                          backgroundColor: '#eff6ff',
+                          padding: '3px 10px',
+                          borderRadius: '10px',
+                          border: '1px solid #bfdbfe',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                          fontWeight: '600'
+                        }}>
+                          {(() => {
+                            // Show target with unit
+                            if (habit.target_value) {
+                              const unit = habit.session_target_unit || 
+                                          (habit.habit_type === 'time_based' ? 'min' : 
+                                           habit.habit_type === 'count_based' ? 'times' : 'units');
+                              return `${habit.target_value} ${unit}/day`;
+                            }
+                            // Fallback to frequency info
+                            if (habit.target_frequency === 'daily') return 'Daily';
+                            if (habit.target_frequency === 'weekly') return `${habit.target_count_per_period || 1}x/week`;
+                            if (habit.target_frequency === 'monthly') return `${habit.target_count_per_period || 1}x/month`;
+                            return habit.target_frequency;
+                          })()}
+                        </span>
+                      </div>
+                      
+                      {/* Monthly progress boxes - Shows entire month in one scrollable line */}
+                      <div style={{ 
+                        display: 'flex',
+                        gap: '3px',
+                        alignItems: 'center',
+                        overflowX: 'auto',
+                        overflowY: 'hidden',
+                        marginBottom: '4px',
+                        paddingBottom: '2px',
+                        scrollbarWidth: 'thin'
+                      }}>
+                        {habit.monthly_completion && habit.monthly_completion.map((completed, index) => {
+                          let bgColor = '#e2e8f0'; // Default gray (not applicable or not done)
+                          let borderColor = '#cbd5e0';
+                          let tooltip = 'Not completed';
+                          
+                          if (completed === null) {
+                            bgColor = '#f3f4f6'; // Light gray for not applicable
+                            borderColor = '#d1d5db';
+                            tooltip = 'Before habit started';
+                          } else if (completed === true) {
+                            bgColor = '#10b981'; // Green for completed
+                            borderColor = '#059669';
+                            tooltip = 'Completed ✓';
+                          } else if (completed === false) {
+                            bgColor = '#ef4444'; // Red for missed
+                            borderColor = '#dc2626';
+                            tooltip = 'Missed ✗';
+                          }
+                          
+                          const today = new Date();
+                          const isToday = (index + 1) === today.getDate();
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                minWidth: '22px',
+                                width: '22px',
+                                height: '22px',
+                                backgroundColor: bgColor,
+                                border: `1px solid ${borderColor}`,
+                                borderRadius: '3px',
+                                transition: 'all 0.2s ease',
+                                flexShrink: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '8px',
+                                fontWeight: '600',
+                                color: completed !== null ? 'white' : '#9ca3af',
+                                boxShadow: isToday ? '0 0 0 2px #4299e1' : 'none',
+                                position: 'relative'
+                              }}
+                              title={`Day ${index + 1}: ${tooltip}`}
+                            >
+                              {index + 1}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Summary stats */}
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#718096',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px'
+                      }}>
+                        {habit.completed_days_this_month !== undefined && habit.total_days_this_month !== undefined && (
+                          <span>
+                            <strong style={{ color: '#10b981' }}>{habit.completed_days_this_month}/{habit.total_days_this_month}</strong> days this month
+                          </span>
+                        )}
+                        {habit.completion_rate !== undefined && (
+                          <span>
+                            • <strong style={{ color: habit.completion_rate >= 80 ? '#10b981' : habit.completion_rate >= 50 ? '#f59e0b' : '#ef4444' }}>
+                              {habit.completion_rate}%
+                            </strong> completion
+                          </span>
+                        )}
+                        {habit.current_streak > 0 && (
+                          <span>
+                            • 🔥 <strong style={{ color: '#f59e0b' }}>{habit.current_streak}</strong> day streak
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Warning indicator for missed days */}
+                    {(() => {
+                      const missedDays = habit.total_days_this_month && habit.completed_days_this_month 
+                        ? habit.total_days_this_month - habit.completed_days_this_month 
+                        : 0;
+                      
+                      if (missedDays > 0) {
+                        return (
+                          <div style={{
+                            padding: '6px 12px',
+                            backgroundColor: '#dc2626',
+                            color: '#fef08a',
+                            borderRadius: '8px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)'
+                          }}>
+                            <span>⚠️</span>
+                            <span>{missedDays} MISSED</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* Pillar and Category badge at the end */}
+                    {habit.pillar_name && (
+                      <div style={{
+                        padding: '4px 10px',
+                        backgroundColor: habit.pillar_color,
+                        color: '#ffffff',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {habit.pillar_name}{habit.category_name ? `: ${habit.category_name}` : ''}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Compact Active Challenges */}
+          {todaysChallenges.length > 0 && (
+            <div>
+              <h3 style={{ 
+                marginBottom: '12px', 
+                color: '#2d3748', 
+                fontSize: '18px', 
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span>🚀</span>
+                <span>Today's Challenges</span>
+                <span style={{ fontSize: '13px', fontWeight: '400', color: '#718096' }}>({todaysChallenges.length})</span>
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {todaysChallenges.map(challenge => {
+                  const statusColors: Record<string, string> = {
+                    'on_track': '#10b981',
+                    'at_risk': '#f59e0b', 
+                    'behind': '#ef4444'
+                  };
+                  const statusColor = statusColors[challenge.status_indicator] || '#6b7280';
+                  const statusEmoji = challenge.status_indicator === 'on_track' ? '🟢' : 
+                                     challenge.status_indicator === 'at_risk' ? '🟡' : '🔴';
+
+                  return (
+                    <div
+                      key={challenge.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '12px',
+                        padding: '14px 16px',
+                        background: 'linear-gradient(135deg, #ffffff 0%, #f7fafc 100%)',
+                        border: `2px solid ${challenge.pillar_color || '#e2e8f0'}`,
+                        borderRadius: '8px',
+                        minHeight: '80px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                        transition: 'all 0.2s ease',
+                        cursor: 'pointer'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.12)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'translateX(0)';
+                        e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                      }}
+                    >
+                      {/* Status emoji */}
+                      <div style={{ fontSize: '20px', flexShrink: 0, marginTop: '2px' }}>
+                        {statusEmoji}
+                      </div>
+
+                      {/* Name and progress */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ 
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          marginBottom: '6px'
+                        }}>
+                          <span style={{
+                            fontSize: '15px', 
+                            fontWeight: '600',
+                            color: '#2d3748',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {challenge.name}
+                          </span>
+                          {/* Target/Criteria Badge */}
+                          <span style={{
+                            padding: '3px 10px',
+                            backgroundColor: '#eff6ff',
+                            color: '#2563eb',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: '10px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}>
+                            {challenge.challenge_type === 'accumulation' && challenge.target_value && challenge.unit ? 
+                              `${(challenge.target_value / challenge.days_total).toFixed(1)} ${challenge.unit}/day` :
+                            challenge.challenge_type === 'daily_streak' && challenge.target_days ?
+                              `Daily ${challenge.target_days}d` :
+                            challenge.challenge_type === 'count_based' && challenge.target_count ?
+                              `${challenge.target_count}x in ${challenge.days_total}d` :
+                              `${challenge.days_total} days`}
+                          </span>
+                        </div>
+                        
+                        {/* Progress bar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                          <div style={{
+                            flex: 1,
+                            height: '8px',
+                            backgroundColor: '#e2e8f0',
+                            borderRadius: '4px',
+                            overflow: 'hidden',
+                            position: 'relative'
+                          }}>
+                            <div style={{
+                              width: `${Math.min(challenge.progress_percentage, 100)}%`,
+                              height: '100%',
+                              backgroundColor: statusColor,
+                              transition: 'width 0.3s ease',
+                              borderRadius: '4px'
+                            }} />
+                          </div>
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: statusColor, flexShrink: 0 }}>
+                            {Math.round(challenge.progress_percentage)}%
+                          </span>
+                        </div>
+                        
+                        {/* Stats summary */}
+                        <div style={{
+                          fontSize: '11px',
+                          color: '#718096',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px'
+                        }}>
+                          {/* Show different stats based on challenge type */}
+                          {challenge.challenge_type === 'accumulation' && challenge.unit && (
+                            <>
+                              <span>
+                                <strong style={{ color: '#4a5568' }}>{challenge.current_value.toFixed(1)}</strong>
+                                /{challenge.target_value} {challenge.unit}
+                              </span>
+                              {challenge.daily_average && challenge.daily_average > 0 && (
+                                <span>
+                                  • <strong style={{ color: '#10b981' }}>{challenge.daily_average.toFixed(1)}</strong> {challenge.unit}/day avg
+                                </span>
+                              )}
+                            </>
+                          )}
+                          {challenge.challenge_type === 'daily_streak' && (
+                            <span>
+                              <strong style={{ color: '#4a5568' }}>{challenge.completed_days}</strong>
+                              /{challenge.target_days} days completed
+                            </span>
+                          )}
+                          {challenge.challenge_type === 'count_based' && (
+                            <span>
+                              <strong style={{ color: '#4a5568' }}>{challenge.current_count}</strong>
+                              /{challenge.target_count} times
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right side badges container - stacked vertically */}
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        alignItems: 'flex-end',
+                        flexShrink: 0
+                      }}>
+                        {/* Pillar and Category badge on top */}
+                        {challenge.pillar_name && (
+                          <div style={{
+                            padding: '4px 10px',
+                            backgroundColor: challenge.pillar_color || '#718096',
+                            color: '#ffffff',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            whiteSpace: 'nowrap'
+                          }}>
+                            {challenge.pillar_name}{challenge.category_name ? `: ${challenge.category_name}` : ''}
+                          </div>
+                        )}
+
+                        {/* Status badges row */}
+                        <div style={{
+                          display: 'flex',
+                          gap: '6px',
+                          alignItems: 'center'
+                        }}>
+                          {/* Warning indicator - if behind or at risk */}
+                          {(challenge.status_indicator === 'behind' || challenge.status_indicator === 'at_risk') && (
+                            <div style={{
+                              padding: '4px 10px',
+                              backgroundColor: challenge.status_indicator === 'behind' ? '#dc2626' : '#f59e0b',
+                              color: '#fef08a',
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              whiteSpace: 'nowrap',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              boxShadow: challenge.status_indicator === 'behind' ? 
+                                '0 2px 4px rgba(220, 38, 38, 0.3)' : '0 2px 4px rgba(245, 158, 11, 0.3)'
+                            }}>
+                              <span>⚠️</span>
+                              <span>{challenge.status_indicator === 'behind' ? 'BEHIND!' : 'AT RISK'}</span>
+                            </div>
+                          )}
+
+                          {/* Status badge - only show if on track (others have warning) */}
+                          {challenge.status_indicator === 'on_track' && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              backgroundColor: `${statusColor}15`,
+                              border: `1px solid ${statusColor}`,
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: statusColor
+                            }}>
+                              On Track
+                            </div>
+                          )}
+
+                          {/* Days remaining badge */}
+                          <div style={{
+                            padding: '4px 10px',
+                            backgroundColor: '#f3f4f6',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            color: '#4b5563',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <span>⏱</span>
+                            <span>{challenge.days_remaining}d left</span>
+                          </div>
+
+                          {/* Today's completion status indicator */}
+                          {challenge.completed_today && (
+                            <div style={{
+                              padding: '4px 10px',
+                              backgroundColor: '#d1fae5',
+                              border: '1px solid #10b981',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: '#065f46',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <span>✓</span>
+                              <span>Done Today</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ===== MODALS TEMPORARILY DISABLED FOR FILE SIZE =====
        * Will be extracted to separate TaskModals.tsx component
@@ -10731,15 +12060,24 @@ export default function Tasks() {
           zIndex: 1000
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
-            backgroundColor: 'white',
+            backgroundColor: '#fff8f0',
             padding: '24px',
-            borderRadius: '8px',
+            borderRadius: '12px',
             width: '90%',
             maxWidth: '600px',
             maxHeight: '90vh',
-            overflow: 'auto'
+            overflow: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
           }}>
-            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Add New Project</h2>
+            <div style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              padding: '16px 20px',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+            }}>
+              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>🚀 Add New Project</h2>
+            </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
@@ -10756,6 +12094,16 @@ export default function Tasks() {
                 alert('Failed to create project: ' + (err.response?.data?.detail || err.message));
               }
             }}>
+              <div style={{
+                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
+              }}>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>📝 Project Details</span>
+              </div>
+              
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
                   Project Name *
@@ -10790,6 +12138,17 @@ export default function Tasks() {
                     resize: 'vertical'
                   }}
                 />
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                marginTop: '20px',
+                boxShadow: '0 2px 6px rgba(67, 233, 123, 0.2)'
+              }}>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>⚡ Status</span>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -10991,17 +12350,26 @@ export default function Tasks() {
           zIndex: 1000
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
-            backgroundColor: 'white',
+            backgroundColor: '#f0f9ff',
             padding: '24px',
-            borderRadius: '8px',
+            borderRadius: '12px',
             width: '90%',
             maxWidth: '600px',
             maxHeight: '90vh',
-            overflow: 'auto'
+            overflow: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
           }}>
-            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>
-              {editingTask?.id ? `Add Subtask to "${editingTask.name}"` : 'Add New Project Task'}
-            </h2>
+            <div style={{
+              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              padding: '16px 20px',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              boxShadow: '0 2px 8px rgba(79, 172, 254, 0.3)'
+            }}>
+              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>
+                ✅ {editingTask?.id ? `Add Subtask to "${editingTask.name}"` : 'Add New Project Task'}
+              </h2>
+            </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
@@ -11033,6 +12401,16 @@ export default function Tasks() {
                   <strong>Parent Task:</strong> {editingTask.name}
                 </div>
               )}
+
+              <div style={{
+                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
+              }}>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>📋 Task Information</span>
+              </div>
 
               <div style={{ marginBottom: '16px' }}>
                 <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
@@ -11068,6 +12446,17 @@ export default function Tasks() {
                     resize: 'vertical'
                   }}
                 />
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                marginTop: '20px',
+                boxShadow: '0 2px 6px rgba(67, 233, 123, 0.2)'
+              }}>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>🎯 Planning & Priority</span>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -12030,6 +13419,195 @@ export default function Tasks() {
         </div>
       )}
       
+      {/* Add Misc Group Modal */}
+      {showAddMiscGroupModal && (
+        <div className="modal-overlay" onClick={() => setShowAddMiscGroupModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Misc Task Group</h2>
+              <button className="btn-close" onClick={() => setShowAddMiscGroupModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label htmlFor="miscGroupName">Group Name:</label>
+                <input
+                  type="text"
+                  id="miscGroupName"
+                  className="form-control"
+                  value={miscGroupName}
+                  onChange={(e) => setMiscGroupName(e.target.value)}
+                  placeholder="Enter group name"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    marginTop: '5px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e0'
+                  }}
+                />
+              </div>
+              
+              <div className="form-group" style={{ marginTop: '15px' }}>
+                <label htmlFor="miscGroupDescription">Description (Optional):</label>
+                <textarea
+                  id="miscGroupDescription"
+                  className="form-control"
+                  value={miscGroupDescription}
+                  onChange={(e) => setMiscGroupDescription(e.target.value)}
+                  placeholder="Enter description"
+                  rows={3}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    marginTop: '5px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e0'
+                  }}
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setShowAddMiscGroupModal(false);
+                  setMiscGroupName('');
+                  setMiscGroupDescription('');
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  if (miscGroupName.trim()) {
+                    handleAddMiscGroup(miscGroupName, miscGroupDescription);
+                    setMiscGroupName('');
+                    setMiscGroupDescription('');
+                  }
+                }}
+                disabled={!miscGroupName.trim()}
+                style={{ 
+                  opacity: miscGroupName.trim() ? 1 : 0.5,
+                  cursor: miscGroupName.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Create Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Misc Task Modal */}
+      {showAddMiscTaskModal && (
+        <div className="modal-overlay" onClick={() => setShowAddMiscTaskModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Add Task to {selectedMiscGroup?.name}</h2>
+              <button className="btn-close" onClick={() => setShowAddMiscTaskModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label htmlFor="miscTaskName">Task Name:</label>
+                <input
+                  type="text"
+                  id="miscTaskName"
+                  className="form-control"
+                  value={miscTaskName}
+                  onChange={(e) => setMiscTaskName(e.target.value)}
+                  placeholder="Enter task name"
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    marginTop: '5px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e0'
+                  }}
+                />
+              </div>
+              
+              <div className="form-group" style={{ marginTop: '15px' }}>
+                <label htmlFor="miscTaskDescription">Description (Optional):</label>
+                <textarea
+                  id="miscTaskDescription"
+                  className="form-control"
+                  value={miscTaskDescription}
+                  onChange={(e) => setMiscTaskDescription(e.target.value)}
+                  placeholder="Enter description"
+                  rows={3}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    marginTop: '5px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e0'
+                  }}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginTop: '15px' }}>
+                <label htmlFor="miscTaskParent">Parent Task (Optional):</label>
+                <select
+                  id="miscTaskParent"
+                  className="form-control"
+                  value={miscTaskParentId || ''}
+                  onChange={(e) => setMiscTaskParentId(e.target.value ? Number(e.target.value) : null)}
+                  style={{ 
+                    width: '100%', 
+                    padding: '8px', 
+                    marginTop: '5px',
+                    borderRadius: '4px',
+                    border: '1px solid #cbd5e0'
+                  }}
+                >
+                  <option value="">-- No parent (top-level task) --</option>
+                  {miscTasks
+                    .filter(t => !t.parent_task_id) // Only show top-level tasks as potential parents
+                    .map(task => (
+                      <option key={task.id} value={task.id}>
+                        {task.name}
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => {
+                  setShowAddMiscTaskModal(false);
+                  setMiscTaskName('');
+                  setMiscTaskDescription('');
+                  setMiscTaskParentId(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => {
+                  if (miscTaskName.trim()) {
+                    handleAddMiscTask(miscTaskName, miscTaskDescription, miscTaskParentId);
+                    setMiscTaskName('');
+                    setMiscTaskDescription('');
+                    setMiscTaskParentId(null);
+                  }
+                }}
+                disabled={!miscTaskName.trim()}
+                style={{ 
+                  opacity: miscTaskName.trim() ? 1 : 0.5,
+                  cursor: miscTaskName.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Add Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Task Form Modal - for Daily and Today tabs */}
       <TaskForm
         isOpen={isTaskFormOpen}
@@ -12039,6 +13617,17 @@ export default function Tasks() {
           await loadTasks();
           setIsTaskFormOpen(false);
         }}
+      />
+
+      {/* Add Habit Modal */}
+      <AddHabitModal 
+        show={showAddHabitModal}
+        onClose={() => {
+          setShowAddHabitModal(false);
+          setEditingHabit(null);
+        }}
+        onSuccess={loadHabits}
+        editingHabit={editingHabit}
       />
     </div>
   );
