@@ -3185,27 +3185,27 @@ td.section-header-cell.boolean-based {
 .habits-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  gap: 20px;
   margin-top: 20px;
+  width: 100%;
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 900px) {
   .habits-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 600px) {
   .habits-grid {
     grid-template-columns: 1fr;
   }
 }
 
 .habit-card {
-  background: var(--bg-primary);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 20px;
   box-shadow: var(--shadow-card);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
@@ -3238,29 +3238,35 @@ td.section-header-cell.boolean-based {
   opacity: 1;
 }
 
-/* Colorful Habit Cards - Cycle through colors */
+/* Colorful Habit Cards - Cycle through vibrant colors */
 .habit-card:nth-child(6n+1) {
-  background: linear-gradient(135deg, var(--card-blue-light) 0%, var(--bg-primary) 100%);
+  background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 50%, #90CAF9 100%);
+  border-left: 4px solid #2196F3;
 }
 
 .habit-card:nth-child(6n+2) {
-  background: linear-gradient(135deg, var(--card-green-light) 0%, var(--bg-primary) 100%);
+  background: linear-gradient(135deg, #E0F7F4 0%, #B2DFDB 50%, #80CBC4 100%);
+  border-left: 4px solid #00B294;
 }
 
 .habit-card:nth-child(6n+3) {
-  background: linear-gradient(135deg, var(--card-orange-light) 0%, var(--bg-primary) 100%);
+  background: linear-gradient(135deg, #FFF4E5 0%, #FFECB3 50%, #FFE082 100%);
+  border-left: 4px solid #FF9800;
 }
 
 .habit-card:nth-child(6n+4) {
-  background: linear-gradient(135deg, var(--card-purple-light) 0%, var(--bg-primary) 100%);
+  background: linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 50%, #CE93D8 100%);
+  border-left: 4px solid #9C27B0;
 }
 
 .habit-card:nth-child(6n+5) {
-  background: linear-gradient(135deg, var(--card-pink-light) 0%, var(--bg-primary) 100%);
+  background: linear-gradient(135deg, #FCE4EC 0%, #F8BBD0 50%, #F48FB1 100%);
+  border-left: 4px solid #E91E63;
 }
 
 .habit-card:nth-child(6n+6) {
-  background: linear-gradient(135deg, var(--card-yellow-light) 0%, var(--bg-primary) 100%);
+  background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 50%, #A5D6A7 100%);
+  border-left: 4px solid #4CAF50;
 }
 
 .habit-card h3 {
