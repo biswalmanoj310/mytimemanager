@@ -7070,12 +7070,16 @@ export default function Tasks() {
               </p>
             </div>
           ) : (
-            <div className="habits-grid" style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
-              gap: '20px',
-              marginTop: '20px'
-            }}>
+            <div 
+              className="habits-grid" 
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
+                gap: '20px',
+                width: '100%',
+                marginTop: '20px'
+              }}
+            >
               {habits.map((habit) => {
                 const periodStats = currentPeriodStats[habit.id];
                 const trackingMode = habit.tracking_mode || 'daily_streak';
