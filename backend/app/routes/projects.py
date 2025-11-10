@@ -564,3 +564,73 @@ def get_upcoming_tasks(
         }
         for task in tasks
     ]
+
+@router.get("/{project_id}/challenges")
+def get_project_challenges(
+    project_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all challenges related to a project:
+    - Challenges directly linked to this project
+    - If project has a parent goal, also show challenges from that goal
+    """
+    from app.models.models import Challenge, Project, Goal
+    
+    # Get the project and its parent goal
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    # Get direct challenges for this project
+    direct_challenges = db.query(Challenge).filter(
+        Challenge.project_id == project_id
+    ).all()
+    
+    # Get parent goal challenges if project has a goal
+    goal_challenges = []
+    if project.goal_id:
+        goal = db.query(Goal).filter(Goal.id == project.goal_id).first()
+        challenges = db.query(Challenge).filter(
+            Challenge.goal_id == project.goal_id
+        ).all()
+        for challenge in challenges:
+            goal_challenges.append({
+                "challenge": challenge,
+                "goal_id": goal.id if goal else None,
+                "goal_name": goal.name if goal else "Unknown Goal"
+            })
+    
+    return {
+        "project_id": project_id,
+        "project_name": project.name,
+        "goal_id": project.goal_id,
+        "direct_challenges": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "description": c.description,
+                "challenge_type": c.challenge_type,
+                "start_date": c.start_date,
+                "end_date": c.end_date,
+                "status": c.status,
+                "linked_to": "project"
+            }
+            for c in direct_challenges
+        ],
+        "goal_challenges": [
+            {
+                "id": gc["challenge"].id,
+                "name": gc["challenge"].name,
+                "description": gc["challenge"].description,
+                "challenge_type": gc["challenge"].challenge_type,
+                "start_date": gc["challenge"].start_date,
+                "end_date": gc["challenge"].end_date,
+                "status": gc["challenge"].status,
+                "linked_to": "goal",
+                "goal_id": gc["goal_id"],
+                "goal_name": gc["goal_name"]
+            }
+            for gc in goal_challenges
+        ]
+    }

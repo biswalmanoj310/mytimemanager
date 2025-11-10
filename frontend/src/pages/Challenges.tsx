@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import './Challenges.css';
+import { AddChallengeModal } from '../components/AddChallengeModal';
 
 interface Challenge {
   id: number;
@@ -31,6 +32,17 @@ interface Challenge {
   reward: string | null;
   why_reason: string | null;
   pillar_id: number | null;
+  pillar_name: string | null;
+  pillar_color: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  sub_category_name: string | null;
+  linked_task_id: number | null;
+  linked_task_name: string | null;
+  goal_id: number | null;
+  goal_name: string | null;
+  project_id: number | null;
+  project_name: string | null;
   can_graduate_to_habit: boolean;
   graduated_habit_id: number | null;
   created_at: string;
@@ -77,14 +89,21 @@ export default function Challenges() {
   const [selectedChallenge, setSelectedChallenge] = useState<Challenge | null>(null);
   const [challengeStats, setChallengeStats] = useState<ChallengeStats | null>(null);
   const [challengeEntries, setChallengeEntries] = useState<ChallengeEntry[]>([]);
+  const [allChallengeEntries, setAllChallengeEntries] = useState<Map<number, ChallengeEntry[]>>(new Map());
   const [showLogModal, setShowLogModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
   const [logDate, setLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [logCompleted, setLogCompleted] = useState(false);
   const [logCountValue, setLogCountValue] = useState<number>(0);
   const [logNumericValue, setLogNumericValue] = useState<number>(0);
   const [logNote, setLogNote] = useState<string>('');
   const [logMood, setLogMood] = useState<string>('good');
+  
+  // Daily tracking grid states
+  const [showQuickLogModal, setShowQuickLogModal] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [quickLogMinutes, setQuickLogMinutes] = useState<number>(0);
 
   useEffect(() => {
     fetchChallenges();
@@ -96,6 +115,27 @@ export default function Challenges() {
       setError(null);
       const data = await api.get('/api/challenges/');
       setChallenges(Array.isArray(data) ? data : []);
+      
+      // Fetch entries for all challenges
+      if (Array.isArray(data)) {
+        const entriesMap = new Map<number, ChallengeEntry[]>();
+        await Promise.all(
+          data.map(async (challenge: Challenge) => {
+            try {
+              const today = new Date();
+              const startDate = new Date(challenge.start_date);
+              const entries = await api.get<ChallengeEntry[]>(
+                `/api/challenges/${challenge.id}/entries?start_date=${startDate.toISOString().split('T')[0]}&end_date=${today.toISOString().split('T')[0]}`
+              );
+              entriesMap.set(challenge.id, Array.isArray(entries) ? entries : []);
+            } catch (err) {
+              console.error(`Error fetching entries for challenge ${challenge.id}:`, err);
+              entriesMap.set(challenge.id, []);
+            }
+          })
+        );
+        setAllChallengeEntries(entriesMap);
+      }
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to load challenges');
       console.error('Error fetching challenges:', err);
@@ -114,9 +154,15 @@ export default function Challenges() {
     }
   };
 
-  const fetchChallengeEntries = async (challengeId: number) => {
+  const fetchChallengeEntries = async (challengeId: number, startDate?: string, endDate?: string) => {
     try {
-      const data = await api.get<ChallengeEntry[]>(`/api/challenges/${challengeId}/entries`);
+      let url = `/api/challenges/${challengeId}/entries`;
+      const params = new URLSearchParams();
+      if (startDate) params.append('start_date', startDate);
+      if (endDate) params.append('end_date', endDate);
+      if (params.toString()) url += `?${params.toString()}`;
+      
+      const data = await api.get<ChallengeEntry[]>(url);
       setChallengeEntries(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Error fetching challenge entries:', err);
@@ -126,7 +172,81 @@ export default function Challenges() {
   const handleChallengeClick = async (challenge: Challenge) => {
     setSelectedChallenge(challenge);
     await fetchChallengeStats(challenge.id);
-    await fetchChallengeEntries(challenge.id);
+    
+    // Fetch entries from challenge start date to today
+    const today = new Date();
+    const startDate = new Date(challenge.start_date);
+    
+    await fetchChallengeEntries(
+      challenge.id,
+      startDate.toISOString().split('T')[0],
+      today.toISOString().split('T')[0]
+    );
+  };
+
+  // Generate array of days from challenge start to today (up to 21 days)
+  const getLast14Days = (): string[] => {
+    if (!selectedChallenge) return [];
+    
+    const days: string[] = [];
+    const today = new Date();
+    const startDate = new Date(selectedChallenge.start_date);
+    
+    // Calculate days from start to today
+    let currentDate = new Date(startDate);
+    while (currentDate <= today && days.length < 21) {
+      days.push(currentDate.toISOString().split('T')[0]);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return days;
+  };
+
+  // Get entry for a specific date
+  const getEntryForDate = (date: string): ChallengeEntry | undefined => {
+    return challengeEntries.find(entry => entry.entry_date === date);
+  };
+
+  // Handle clicking on a date square
+  const handleDateSquareClick = (date: string) => {
+    const entry = getEntryForDate(date);
+    setSelectedDate(date);
+    setQuickLogMinutes(entry?.numeric_value || 0);
+    setShowQuickLogModal(true);
+  };
+
+  // Handle quick log submit
+  const handleQuickLogSubmit = async () => {
+    if (!selectedChallenge || !selectedDate) return;
+
+    try {
+      await api.post(`/api/challenges/${selectedChallenge.id}/log`, {
+        entry_date: selectedDate,
+        is_completed: quickLogMinutes > 0,
+        count_value: 0,
+        numeric_value: quickLogMinutes,
+        note: null,
+        mood: null
+      });
+
+      // Refresh data
+      await fetchChallenges();
+      await fetchChallengeStats(selectedChallenge.id);
+      
+      // Refresh entries from challenge start date
+      const today = new Date();
+      const startDate = new Date(selectedChallenge.start_date);
+      await fetchChallengeEntries(
+        selectedChallenge.id,
+        startDate.toISOString().split('T')[0],
+        today.toISOString().split('T')[0]
+      );
+
+      setShowQuickLogModal(false);
+    } catch (err: any) {
+      console.error('Error logging entry:', err);
+      alert(err.response?.data?.detail || 'Failed to log entry');
+    }
   };
 
   const openLogModal = (challenge: Challenge) => {
@@ -187,6 +307,20 @@ export default function Challenges() {
     }
   };
 
+  const handleDeleteChallenge = async (challengeId: number) => {
+    try {
+      await api.delete(`/api/challenges/${challengeId}`);
+      await fetchChallenges();
+      if (selectedChallenge?.id === challengeId) {
+        setSelectedChallenge(null);
+        setChallengeStats(null);
+      }
+      alert('Challenge deleted successfully!');
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to delete challenge');
+    }
+  };
+
   const handleRepeatChallenge = async (challengeId: number) => {
     if (!confirm('Create a new challenge with the same settings? This will start a fresh challenge today.')) return;
 
@@ -231,6 +365,20 @@ export default function Challenges() {
       case 'hard': return '#D13438';
       default: return '#605E5C';
     }
+  };
+
+  const getGradientColors = (index: number): { start: string; end: string } => {
+    const gradients = [
+      { start: '#667eea', end: '#764ba2' }, // Purple-Blue
+      { start: '#f093fb', end: '#f5576c' }, // Pink-Red
+      { start: '#4facfe', end: '#00f2fe' }, // Light Blue-Cyan
+      { start: '#43e97b', end: '#38f9d7' }, // Green-Turquoise
+      { start: '#fa709a', end: '#fee140' }, // Pink-Yellow
+      { start: '#30cfd0', end: '#330867' }, // Cyan-Purple
+      { start: '#a8edea', end: '#fed6e3' }, // Mint-Pink
+      { start: '#ff9a56', end: '#ff6a88' }, // Orange-Pink
+    ];
+    return gradients[index % gradients.length];
   };
 
   const getStatusColor = (status: string): string => {
@@ -305,12 +453,22 @@ export default function Challenges() {
 
   return (
     <div className="challenges-container">
-      <div className="challenges-hero">
-        <h1>🎯 Challenges</h1>
-        <p className="challenges-subtitle">Time-bound experiments to build new behaviors</p>
-        <div className="inspirational-quote">
-          <p className="quote-text">"{inspirationalQuotes[currentQuoteIndex].text}"</p>
-          <p className="quote-author">— {inspirationalQuotes[currentQuoteIndex].author}</p>
+      {/* Compact Header */}
+      <div className="challenges-hero" style={{ padding: '1.5rem 2rem', marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', marginBottom: '0.75rem' }}>
+          <h1 style={{ fontSize: '2.5rem', margin: 0 }}>🎯 Challenges</h1>
+          <p style={{ fontSize: '1rem', opacity: 0.9, margin: 0 }}>Time-bound experiments to build new behaviors</p>
+        </div>
+        <div style={{ 
+          fontSize: '0.95rem',
+          fontStyle: 'italic',
+          opacity: 0.85,
+          maxWidth: '100%',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}>
+          "{inspirationalQuotes[currentQuoteIndex].text}" — {inspirationalQuotes[currentQuoteIndex].author}
         </div>
       </div>
 
@@ -351,7 +509,7 @@ export default function Challenges() {
           {activeChallenges.length === 0 ? (
             <p className="empty-message">No active challenges. Start a new challenge!</p>
           ) : (
-            activeChallenges.map((challenge) => {
+            activeChallenges.map((challenge, index) => {
               const daysElapsed = Math.floor(
                 (new Date().getTime() - new Date(challenge.start_date).getTime()) / (1000 * 60 * 60 * 24)
               );
@@ -359,15 +517,65 @@ export default function Challenges() {
                 (new Date(challenge.end_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
               );
 
+              // Calculate "Today's Target" - what's needed today to achieve ideal average from tomorrow
+              let todaysTarget = 0;
+              let idealDailyAverage = 0;
+              const totalDays = daysElapsed + daysRemaining + 1;
+              
+              if (challenge.challenge_type === 'accumulation' && challenge.target_value) {
+                // Ideal average per day over entire period
+                idealDailyAverage = challenge.target_value / totalDays;
+                // What we should have achieved by end of today
+                const shouldHaveByToday = idealDailyAverage * (daysElapsed + 1);
+                // Deficit (what we're behind)
+                const deficit = shouldHaveByToday - challenge.current_value;
+                // Today's target = ideal + deficit (so tomorrow we're back on ideal average)
+                todaysTarget = idealDailyAverage + Math.max(0, deficit);
+              } else if (challenge.challenge_type === 'count_based' && challenge.target_count) {
+                idealDailyAverage = challenge.target_count / totalDays;
+                const shouldHaveByToday = idealDailyAverage * (daysElapsed + 1);
+                const deficit = shouldHaveByToday - challenge.current_count;
+                todaysTarget = idealDailyAverage + Math.max(0, deficit);
+              }
+
+              // Get gradient colors - use pillar color if set, otherwise cycle through predefined gradients
+              let gradientStart: string;
+              let gradientEnd: string;
+              
+              if (challenge.pillar_color) {
+                gradientStart = challenge.pillar_color;
+                gradientEnd = `${challenge.pillar_color}CC`; // Add slight transparency to end
+              } else {
+                const colors = getGradientColors(index);
+                gradientStart = colors.start;
+                gradientEnd = colors.end;
+              }
+
               return (
                 <div 
                   key={challenge.id} 
                   className={`challenge-card challenge-${challenge.difficulty || 'medium'}`}
                   onClick={() => handleChallengeClick(challenge)}
+                  style={{
+                    background: `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`,
+                  }}
                 >
                   <div className="challenge-card-header">
                     <div className="challenge-icon">{getChallengeTypeIcon(challenge.challenge_type)}</div>
-                    <h3>{challenge.name}</h3>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ margin: 0 }}>{challenge.name}</h3>
+                      {/* Pillar:Category - directly under challenge name, aligned with it */}
+                      {(challenge.pillar_name || challenge.category_name) && (
+                        <div style={{ 
+                          fontSize: '11px',
+                          color: 'rgba(255, 255, 255, 0.85)',
+                          marginTop: '4px',
+                          fontWeight: '500'
+                        }}>
+                          📍 {challenge.pillar_name || 'No Pillar'}: {challenge.category_name || 'No Category'}
+                        </div>
+                      )}
+                    </div>
                     {challenge.difficulty && (
                       <span 
                         className="challenge-difficulty"
@@ -382,33 +590,348 @@ export default function Challenges() {
                     <p className="challenge-description">{challenge.description}</p>
                   )}
 
-                  {/* Streak visualization for daily_streak */}
+                  {/* Progress bars moved to top */}
                   {challenge.challenge_type === 'daily_streak' && (
                     renderStreakVisualization(challenge.current_streak, challenge.longest_streak)
                   )}
-
-                  {/* Progress bar for count_based */}
                   {challenge.challenge_type === 'count_based' && challenge.target_count && (
                     renderProgressBar(challenge.current_count, challenge.target_count, challenge.unit || '')
                   )}
-
-                  {/* Progress bar for accumulation */}
                   {challenge.challenge_type === 'accumulation' && challenge.target_value && (
                     renderProgressBar(challenge.current_value, challenge.target_value, challenge.unit || '')
                   )}
 
-                  <div className="challenge-meta">
-                    <div className="challenge-days">
-                      📅 Day {daysElapsed + 1} of {daysElapsed + daysRemaining + 1} ({daysRemaining} days left)
+                  {/* Today's Target - Prominent Display */}
+                  {(challenge.challenge_type === 'accumulation' || challenge.challenge_type === 'count_based') && todaysTarget > 0 && (
+                    <div>
+                      <div style={{
+                        marginTop: '10px',
+                        marginBottom: '4px',
+                        padding: '10px 14px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                        borderRadius: '8px',
+                        border: '2px solid rgba(255, 255, 255, 0.4)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '16px' }}>🎯</span>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#ffffff', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                            Today's Target:
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '15px', fontWeight: '700', color: '#ffffff', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                          {challenge.challenge_type === 'accumulation' 
+                            ? todaysTarget.toFixed(1)
+                            : Math.ceil(todaysTarget)
+                          } {challenge.unit}
+                        </div>
+                      </div>
+                      <div style={{ 
+                        fontSize: '10px', 
+                        color: 'rgba(255, 255, 255, 0.75)', 
+                        fontStyle: 'italic',
+                        marginBottom: '8px',
+                        paddingLeft: '4px',
+                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+                      }}>
+                        💡 Complete this today to achieve ideal average from tomorrow
+                      </div>
                     </div>
-                    <div className="challenge-completion">
-                      ✅ {challenge.completed_days} days completed
+                  )}
+
+                  {/* Day info in one line below progress bar */}
+                  <div style={{ 
+                    fontSize: '12px', 
+                    color: '#ffffff',
+                    fontWeight: '500',
+                    marginTop: '8px',
+                    marginBottom: '12px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    backgroundColor: 'rgba(0, 0, 0, 0.25)',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+                  }}>
+                    <span>📅 Day {daysElapsed + 1} of {daysElapsed + daysRemaining + 1} ({daysRemaining} days left)</span>
+                    <span>✅ {challenge.completed_days} days completed</span>
+                  </div>
+
+                  {/* Layout with two square boxes side by side, centered */}
+                  <div style={{ display: 'flex', gap: '12px', marginBottom: '12px', justifyContent: 'center' }}>
+                    {/* Progress Stats box on left */}
+                    <div style={{
+                      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                      borderRadius: '8px',
+                      padding: '0',
+                      minWidth: '145px',
+                      flex: '0 0 auto',
+                      border: '2px solid rgba(255, 255, 255, 0.4)',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        fontWeight: '700', 
+                        color: '#ffffff', 
+                        padding: '10px 12px',
+                        textAlign: 'center', 
+                        letterSpacing: '0.5px',
+                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.2)'
+                      }}>
+                        Progress Stats
+                      </div>
+                      <div style={{ padding: '12px' }}>
+                        {challenge.challenge_type === 'daily_streak' && challenge.target_days && (
+                          <div style={{ fontSize: '12px', color: '#ffffff', lineHeight: '1.8', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                            <div style={{ marginBottom: '3px' }}><strong>Target:</strong> {challenge.target_days} days</div>
+                            <div style={{ marginBottom: '3px' }}><strong>Done:</strong> {challenge.completed_days} days</div>
+                            <div><strong>Freq:</strong> Daily</div>
+                          </div>
+                        )}
+                        {challenge.challenge_type === 'count_based' && challenge.target_count && (
+                          <div style={{ fontSize: '12px', color: '#ffffff', lineHeight: '1.8', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                            <div style={{ marginBottom: '3px' }}><strong>Target:</strong> {challenge.target_count} {challenge.unit}</div>
+                            <div style={{ marginBottom: '3px' }}><strong>Done:</strong> {challenge.current_count} {challenge.unit}</div>
+                            <div><strong>Need:</strong> {Math.ceil((challenge.target_count - challenge.current_count) / Math.max(1, daysRemaining))}/day</div>
+                          </div>
+                        )}
+                        {challenge.challenge_type === 'accumulation' && challenge.target_value && (
+                          <div style={{ fontSize: '12px', color: '#ffffff', lineHeight: '1.8', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                            <div style={{ marginBottom: '3px' }}><strong>Target:</strong> {challenge.target_value} {challenge.unit}</div>
+                            <div style={{ marginBottom: '3px' }}><strong>Done:</strong> {challenge.current_value.toFixed(1)} {challenge.unit}</div>
+                            <div><strong>Need:</strong> {((challenge.target_value - challenge.current_value) / Math.max(1, daysRemaining)).toFixed(1)}/day</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Date Info box on right */}
+                    <div style={{
+                      backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                      borderRadius: '8px',
+                      padding: '0',
+                      minWidth: '145px',
+                      flex: '0 0 auto',
+                      border: '2px solid rgba(255, 255, 255, 0.4)',
+                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{ 
+                        fontSize: '11px', 
+                        fontWeight: '700', 
+                        color: '#ffffff', 
+                        padding: '10px 12px',
+                        textAlign: 'center', 
+                        letterSpacing: '0.5px',
+                        textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
+                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                        borderBottom: '1px solid rgba(255, 255, 255, 0.2)'
+                      }}>
+                        Date Info
+                      </div>
+                      <div style={{ padding: '12px' }}>
+                        <div style={{ fontSize: '12px', color: '#ffffff', lineHeight: '1.8', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                          <div style={{ marginBottom: '3px' }}>
+                            <strong>Start:</strong> {new Date(challenge.start_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).replace(/ /g, '-')}
+                          </div>
+                          <div style={{ marginBottom: '3px' }}>
+                            <strong>End:</strong> {new Date(challenge.end_date).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).replace(/ /g, '-')}
+                          </div>
+                          <div>
+                            <strong>Days:</strong> {daysElapsed + 1} of {daysElapsed + daysRemaining + 1}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
+                  {/* Why reason section below the boxes */}
                   {challenge.why_reason && (
-                    <div className="challenge-why">
-                      💡 <em>{challenge.why_reason}</em>
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#ffffff',
+                      fontStyle: 'italic',
+                      backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                      padding: '8px 10px',
+                      borderRadius: '6px',
+                      borderLeft: '3px solid rgba(255, 255, 255, 0.4)',
+                      marginBottom: '12px'
+                    }}>
+                      💡 {challenge.why_reason}
+                    </div>
+                  )}
+
+                  {/* Daily Tracking Grid - always visible in card */}
+                  {(() => {
+                    // Generate dates from challenge start to today (up to 21 days)
+                    const days: string[] = [];
+                    const today = new Date();
+                    const startDate = new Date(challenge.start_date);
+                    let currentDate = new Date(startDate);
+                    
+                    while (currentDate <= today && days.length < 21) {
+                      days.push(currentDate.toISOString().split('T')[0]);
+                      currentDate.setDate(currentDate.getDate() + 1);
+                    }
+                    
+                    return days.length > 0 ? (
+                      <div style={{
+                        marginBottom: '12px',
+                        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        borderRadius: '8px',
+                        padding: '12px',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                      }}>
+                        <div style={{
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          color: '#ffffff',
+                          marginBottom: '10px',
+                          textAlign: 'center',
+                          letterSpacing: '0.5px',
+                          textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)'
+                        }}>
+                          📊 Daily Activity Tracker
+                        </div>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(7, 1fr)',
+                          gap: '8px',
+                          justifyContent: 'center',
+                          maxWidth: '420px',
+                          margin: '0 auto'
+                        }}>
+                          {days.map(date => {
+                            const entries = allChallengeEntries.get(challenge.id) || [];
+                            const entry = entries.find(e => e.entry_date === date);
+                            const minutes = entry?.numeric_value || 0;
+                            const dateObj = new Date(date + 'T00:00:00');
+                            const dayNum = dateObj.getDate();
+                            const monthShort = dateObj.toLocaleDateString('en-US', { month: 'short' });
+                            
+                            // Color intensity based on minutes (0-120 scale)
+                            const intensity = Math.min(minutes / 120, 1);
+                            const hasEntry = minutes > 0;
+                            
+                            return (
+                              <div
+                                key={date}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                              >
+                                <div
+                                  onClick={() => {
+                                    setSelectedChallenge(challenge);
+                                    setSelectedDate(date);
+                                    setQuickLogMinutes(minutes);
+                                    setShowQuickLogModal(true);
+                                  }}
+                                  title={`${monthShort} ${dayNum}: ${minutes} min`}
+                                  style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    backgroundColor: hasEntry 
+                                      ? `rgba(76, 175, 80, ${0.3 + intensity * 0.7})` 
+                                      : 'rgba(0, 0, 0, 0.4)',
+                                    border: hasEntry 
+                                      ? '2px solid rgba(76, 175, 80, 0.8)' 
+                                      : '2px solid rgba(255, 255, 255, 0.2)',
+                                    borderRadius: '6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                    boxShadow: hasEntry 
+                                      ? '0 2px 6px rgba(76, 175, 80, 0.4)' 
+                                      : '0 1px 3px rgba(0, 0, 0, 0.3)'
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1.05)';
+                                    e.currentTarget.style.boxShadow = hasEntry
+                                      ? '0 3px 10px rgba(76, 175, 80, 0.6)'
+                                      : '0 2px 6px rgba(255, 255, 255, 0.3)';
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                    e.currentTarget.style.boxShadow = hasEntry
+                                      ? '0 2px 6px rgba(76, 175, 80, 0.4)'
+                                      : '0 1px 3px rgba(0, 0, 0, 0.3)';
+                                  }}
+                                >
+                                  <div style={{
+                                    fontSize: hasEntry ? '20px' : '16px',
+                                    color: hasEntry ? '#ffffff' : 'rgba(255, 255, 255, 0.4)',
+                                    fontWeight: '700',
+                                    lineHeight: '1',
+                                    textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)'
+                                  }}>
+                                    {hasEntry ? `${Math.round(minutes)}` : '-'}
+                                  </div>
+                                </div>
+                                
+                                <div style={{
+                                  fontSize: '9px',
+                                  color: 'rgba(255, 255, 255, 0.7)',
+                                  fontWeight: '600',
+                                  textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
+                                  textAlign: 'center',
+                                  lineHeight: '1.2'
+                                }}>
+                                  {monthShort} {dayNum}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {/* Linked Items Section with better visibility */}
+                  {(challenge.goal_name || challenge.project_name || challenge.linked_task_name) && (
+                    <div style={{
+                      marginBottom: '12px',
+                      padding: '10px 12px',
+                      backgroundColor: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      lineHeight: '1.7',
+                      borderLeft: '3px solid rgba(255, 255, 255, 0.4)',
+                      border: '1px solid rgba(255, 255, 255, 0.25)'
+                    }}>
+                      <div style={{ fontWeight: '700', marginBottom: '6px', color: '#ffffff', letterSpacing: '0.3px', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                        🔗 Linked Items:
+                      </div>
+                      {challenge.goal_name && (
+                        <div style={{ marginBottom: '4px', color: '#ffffff', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                          <span style={{ opacity: 0.85, fontWeight: '500' }}>Goal:</span>{' '}
+                          <strong>{challenge.goal_name}</strong>
+                        </div>
+                      )}
+                      {challenge.project_name && (
+                        <div style={{ marginBottom: '4px', color: '#ffffff', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                          <span style={{ opacity: 0.85, fontWeight: '500' }}>Project:</span>{' '}
+                          <strong>{challenge.project_name}</strong>
+                        </div>
+                      )}
+                      {challenge.linked_task_name && (
+                        <div style={{ color: '#ffffff', textShadow: '0 1px 2px rgba(0, 0, 0, 0.3)' }}>
+                          <span style={{ opacity: 0.85, fontWeight: '500' }}>Task:</span>{' '}
+                          <strong>{challenge.linked_task_name}</strong>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -421,6 +944,29 @@ export default function Challenges() {
                       }}
                     >
                       📝 Log Today
+                    </button>
+                    <button 
+                      className="btn-edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingChallenge(challenge);
+                        setShowCreateModal(true);
+                      }}
+                      style={{ marginLeft: '8px', padding: '6px 12px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <button 
+                      className="btn-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Delete challenge "${challenge.name}"?`)) {
+                          handleDeleteChallenge(challenge.id);
+                        }
+                      }}
+                      style={{ marginLeft: '8px', padding: '6px 12px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                    >
+                      🗑️ Delete
                     </button>
                     {challenge.can_graduate_to_habit && challenge.is_completed && (
                       <button
@@ -446,48 +992,142 @@ export default function Challenges() {
         <section className="challenges-section">
           <h2>Completed Challenges ({completedChallenges.length})</h2>
           <div className="challenges-grid">
-            {completedChallenges.map((challenge) => (
-              <div 
-                key={challenge.id} 
-                className="challenge-card challenge-completed"
-                onClick={() => handleChallengeClick(challenge)}
-              >
-                <div className="challenge-card-header">
-                  <div className="challenge-icon">{getChallengeTypeIcon(challenge.challenge_type)}</div>
-                  <h3>{challenge.name}</h3>
-                  <span className="challenge-status-completed">✅ Completed</span>
-                </div>
-
-                {challenge.challenge_type === 'daily_streak' && (
-                  <div className="challenge-completion-info">
-                    🔥 Longest streak: {challenge.longest_streak} days
+            {completedChallenges.map((challenge, index) => {
+              // Get gradient colors - use pillar color if set, otherwise cycle through predefined gradients
+              let gradientStart: string;
+              let gradientEnd: string;
+              
+              if (challenge.pillar_color) {
+                gradientStart = challenge.pillar_color;
+                gradientEnd = `${challenge.pillar_color}CC`;
+              } else {
+                const colors = getGradientColors(activeChallenges.length + index);
+                gradientStart = colors.start;
+                gradientEnd = colors.end;
+              }
+              
+              return (
+                <div 
+                  key={challenge.id} 
+                  className="challenge-card challenge-completed"
+                  onClick={() => handleChallengeClick(challenge)}
+                  style={{
+                    background: `linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%)`,
+                    opacity: 0.75
+                  }}
+                >
+                  <div className="challenge-card-header">
+                    <div className="challenge-icon">{getChallengeTypeIcon(challenge.challenge_type)}</div>
+                    <h3>{challenge.name}</h3>
+                    <span className="challenge-status-completed">✅ Completed</span>
                   </div>
-                )}
 
-                {challenge.graduated_habit_id && (
-                  <div className="challenge-graduated">
-                    ⬆️ Graduated to Habit #{challenge.graduated_habit_id}
+                  {/* Pillar Badge */}
+                  {challenge.pillar_name && (
+                    <div style={{ 
+                      display: 'inline-block',
+                      padding: '4px 12px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.25)',
+                      color: '#ffffff',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      marginBottom: '12px',
+                      border: '1px solid rgba(255, 255, 255, 0.3)'
+                    }}>
+                      📍 {challenge.pillar_name}
+                    </div>
+                  )}
+
+                  {challenge.challenge_type === 'daily_streak' && (
+                    <div className="challenge-completion-info">
+                      🔥 Longest streak: {challenge.longest_streak} days
+                    </div>
+                  )}
+
+                  {challenge.graduated_habit_id && (
+                    <div className="challenge-graduated">
+                      ⬆️ Graduated to Habit #{challenge.graduated_habit_id}
+                    </div>
+                  )}
+
+                  <div className="challenge-card-actions">
+                    <button
+                      className="btn-repeat"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRepeatChallenge(challenge.id);
+                      }}
+                    >
+                      🔄 Repeat Challenge
+                    </button>
                   </div>
-                )}
-
-                <div className="challenge-card-actions">
-                  <button
-                    className="btn-repeat"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleRepeatChallenge(challenge.id);
-                    }}
-                  >
-                    🔄 Repeat Challenge
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
 
       {/* Log Entry Modal */}
+      {/* Quick Log Modal for Daily Tracking Grid */}
+      {showQuickLogModal && selectedChallenge && selectedDate && (
+        <div className="modal-overlay" onClick={() => setShowQuickLogModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="modal-header">
+              <h2>Log Time: {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+              })}</h2>
+              <button className="modal-close" onClick={() => setShowQuickLogModal(false)}>×</button>
+            </div>
+
+            <div className="modal-body">
+              <div style={{ marginBottom: '15px', fontSize: '14px', color: '#666' }}>
+                {selectedChallenge.name}
+              </div>
+
+              <div className="form-group">
+                <label>Minutes Spent</label>
+                <input
+                  type="number"
+                  value={quickLogMinutes}
+                  onChange={(e) => setQuickLogMinutes(parseInt(e.target.value) || 0)}
+                  min="0"
+                  max="1440"
+                  placeholder="Enter minutes"
+                  autoFocus
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleQuickLogSubmit();
+                    }
+                  }}
+                />
+              </div>
+
+              <div style={{ 
+                fontSize: '12px', 
+                color: '#888', 
+                marginTop: '8px',
+                fontStyle: 'italic'
+              }}>
+                💡 Tip: Press Enter to quickly log
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn-secondary" onClick={() => setShowQuickLogModal(false)}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={handleQuickLogSubmit}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLogModal && selectedChallenge && (
         <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -617,6 +1257,106 @@ export default function Challenges() {
                 </div>
               )}
 
+              {/* Daily Tracking Grid */}
+              <div style={{
+                marginBottom: '20px',
+                backgroundColor: '#f8f9fa',
+                borderRadius: '8px',
+                padding: '16px',
+                border: '1px solid #dee2e6'
+              }}>
+                <h3 style={{ marginBottom: '12px', fontSize: '16px' }}>📊 Daily Activity</h3>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(7, 1fr)',
+                  gap: '8px',
+                  maxWidth: '500px',
+                  margin: '0 auto'
+                }}>
+                  {getLast14Days().map(date => {
+                    const entry = getEntryForDate(date);
+                    const minutes = entry?.numeric_value || 0;
+                    const dateObj = new Date(date + 'T00:00:00');
+                    const dayNum = dateObj.getDate();
+                    const monthShort = dateObj.toLocaleDateString('en-US', { month: 'short' });
+                    
+                    // Color intensity based on minutes (0-120 scale)
+                    const intensity = Math.min(minutes / 120, 1);
+                    const hasEntry = minutes > 0;
+                    
+                    return (
+                      <div
+                        key={date}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        {/* Square with time */}
+                        <div
+                          onClick={() => handleDateSquareClick(date)}
+                          title={`${monthShort} ${dayNum}: ${minutes} min`}
+                          style={{
+                            width: '55px',
+                            height: '55px',
+                            backgroundColor: hasEntry 
+                              ? `rgba(76, 175, 80, ${0.3 + intensity * 0.7})` 
+                              : '#e9ecef',
+                            border: hasEntry 
+                              ? '2px solid rgba(76, 175, 80, 0.8)' 
+                              : '2px solid #dee2e6',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            boxShadow: hasEntry 
+                              ? '0 2px 6px rgba(76, 175, 80, 0.3)' 
+                              : '0 1px 3px rgba(0, 0, 0, 0.1)'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.transform = 'scale(1.08)';
+                            e.currentTarget.style.boxShadow = hasEntry
+                              ? '0 3px 10px rgba(76, 175, 80, 0.5)'
+                              : '0 2px 6px rgba(0, 0, 0, 0.2)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.transform = 'scale(1)';
+                            e.currentTarget.style.boxShadow = hasEntry
+                              ? '0 2px 6px rgba(76, 175, 80, 0.3)'
+                              : '0 1px 3px rgba(0, 0, 0, 0.1)';
+                          }}
+                        >
+                          {/* Time spent - large in center */}
+                          <div style={{
+                            fontSize: hasEntry ? '22px' : '18px',
+                            color: hasEntry ? '#ffffff' : '#adb5bd',
+                            fontWeight: '700',
+                            lineHeight: '1'
+                          }}>
+                            {hasEntry ? `${minutes}` : '-'}
+                          </div>
+                        </div>
+                        
+                        {/* Date label below square */}
+                        <div style={{
+                          fontSize: '10px',
+                          color: '#6c757d',
+                          fontWeight: '600',
+                          textAlign: 'center',
+                          lineHeight: '1.2'
+                        }}>
+                          {monthShort} {dayNum}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
               <h3>Recent Entries</h3>
               {challengeEntries.length === 0 ? (
                 <p>No entries yet. Start logging!</p>
@@ -664,212 +1404,20 @@ export default function Challenges() {
         </div>
       )}
 
-      {/* Create Challenge Modal */}
-      {showCreateModal && (
-        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Create New Challenge</h2>
-              <button className="modal-close" onClick={() => setShowCreateModal(false)}>×</button>
-            </div>
-
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              
-              const challengeType = formData.get('challenge_type') as string;
-              const startDate = formData.get('start_date') as string;
-              const durationDays = parseInt(formData.get('duration_days') as string);
-              
-              // Calculate end date
-              const endDate = new Date(startDate);
-              endDate.setDate(endDate.getDate() + durationDays);
-              
-              const challengeData: any = {
-                name: formData.get('name') as string,
-                description: formData.get('description') as string || null,
-                challenge_type: challengeType,
-                start_date: startDate,
-                end_date: endDate.toISOString().split('T')[0],
-                difficulty: formData.get('difficulty') as string || 'medium',
-                why_reason: formData.get('why_reason') as string || null,
-              };
-
-              // Add type-specific fields
-              if (challengeType === 'daily_streak') {
-                challengeData.target_days = durationDays;
-              } else if (challengeType === 'count_based') {
-                challengeData.target_count = parseInt(formData.get('target_count') as string);
-                challengeData.unit = formData.get('unit') as string;
-              } else if (challengeType === 'accumulation') {
-                challengeData.target_value = parseFloat(formData.get('target_value') as string);
-                challengeData.unit = formData.get('unit') as string;
-              }
-
-              try {
-                await api.post('/api/challenges/', challengeData);
-                await fetchChallenges();
-                setShowCreateModal(false);
-                // Reset form would happen automatically on modal close
-              } catch (err: any) {
-                alert(err.response?.data?.detail || 'Failed to create challenge');
-              }
-            }}>
-              <div className="modal-body">
-                {/* Challenge Name */}
-                <div className="form-group">
-                  <label htmlFor="name">Challenge Name *</label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    required
-                    placeholder="e.g., Morning Meditation, 10K Steps Daily"
-                  />
-                </div>
-
-                {/* Description */}
-                <div className="form-group">
-                  <label htmlFor="description">Description</label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    rows={2}
-                    placeholder="What will you do?"
-                  />
-                </div>
-
-                {/* Challenge Type */}
-                <div className="form-group">
-                  <label htmlFor="challenge_type">Challenge Type *</label>
-                  <select
-                    id="challenge_type"
-                    name="challenge_type"
-                    required
-                    onChange={(e) => {
-                      const type = e.target.value;
-                      const targetFields = document.getElementById('target-fields');
-                      if (targetFields) {
-                        targetFields.style.display = type === 'daily_streak' ? 'none' : 'block';
-                      }
-                    }}
-                  >
-                    <option value="daily_streak">Daily Streak (Yes/No)</option>
-                    <option value="count_based">Count-Based (Number of times)</option>
-                    <option value="accumulation">Time/Value-Based (Total minutes/hours)</option>
-                  </select>
-                  <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
-                    • Daily Streak: Track if you did it each day<br/>
-                    • Count-Based: Track how many times (pushups, pages, etc.)<br/>
-                    • Time/Value-Based: Track total time or values
-                  </small>
-                </div>
-
-                {/* Target Fields (hidden for daily_streak) */}
-                <div id="target-fields" style={{ display: 'none' }}>
-                  <div className="form-group">
-                    <label htmlFor="target_count">Daily Target *</label>
-                    <input
-                      type="number"
-                      id="target_count"
-                      name="target_count"
-                      min="1"
-                      placeholder="e.g., 20, 10000"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="target_value">Total Target (for accumulation type)</label>
-                    <input
-                      type="number"
-                      id="target_value"
-                      name="target_value"
-                      min="1"
-                      step="0.1"
-                      placeholder="e.g., 600 (for 600 minutes total)"
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="unit">Unit</label>
-                    <input
-                      type="text"
-                      id="unit"
-                      name="unit"
-                      placeholder="e.g., pushups, pages, minutes, steps"
-                    />
-                  </div>
-                </div>
-
-                {/* Start Date and Duration */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <div className="form-group">
-                    <label htmlFor="start_date">Start Date *</label>
-                    <input
-                      type="date"
-                      id="start_date"
-                      name="start_date"
-                      required
-                      defaultValue={new Date().toISOString().split('T')[0]}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label htmlFor="duration_days">Duration (days) *</label>
-                    <input
-                      type="number"
-                      id="duration_days"
-                      name="duration_days"
-                      required
-                      min="1"
-                      max="365"
-                      defaultValue="21"
-                      placeholder="e.g., 21, 30, 66"
-                    />
-                    <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
-                      21 days = habit formation, 66 days = deeply ingrained
-                    </small>
-                  </div>
-                </div>
-
-                {/* Difficulty */}
-                <div className="form-group">
-                  <label htmlFor="difficulty">Difficulty</label>
-                  <select id="difficulty" name="difficulty">
-                    <option value="easy">Easy - Gentle start</option>
-                    <option value="medium" selected>Medium - Moderate effort</option>
-                    <option value="hard">Hard - Real challenge</option>
-                  </select>
-                </div>
-
-                {/* Why Reason */}
-                <div className="form-group">
-                  <label htmlFor="why_reason">Why is this important to you?</label>
-                  <textarea
-                    id="why_reason"
-                    name="why_reason"
-                    rows={2}
-                    placeholder="Your motivation will keep you going..."
-                  />
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button 
-                  type="button"
-                  className="btn-cancel" 
-                  onClick={() => setShowCreateModal(false)}
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary">
-                  Create Challenge
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* Create/Edit Challenge Modal */}
+      <AddChallengeModal
+        show={showCreateModal}
+        onClose={() => {
+          setShowCreateModal(false);
+          setEditingChallenge(null);
+        }}
+        onSuccess={async () => {
+          setShowCreateModal(false);
+          setEditingChallenge(null);
+          await fetchChallenges();
+        }}
+        editingChallenge={editingChallenge as any}
+      />
     </div>
   );
 }

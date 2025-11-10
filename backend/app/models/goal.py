@@ -23,12 +23,24 @@ class LifeGoal(Base):
     created_at = Column(Date, default=datetime.date.today)
     updated_at = Column(Date, nullable=True)
     
+    # NEW: Organization fields (pillar/category structure)
+    pillar_id = Column(Integer, ForeignKey("pillars.id"), nullable=True, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True, index=True)
+    linked_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
+    
     # Relationships
     parent_goal = relationship("LifeGoal", remote_side=[id], backref="sub_goals")
     milestones = relationship("LifeGoalMilestone", back_populates="goal", cascade="all, delete-orphan")
     task_links = relationship("LifeGoalTaskLink", back_populates="goal", cascade="all, delete-orphan")
     goal_tasks = relationship("LifeGoalTask", back_populates="goal", cascade="all, delete-orphan")
     goal_projects = relationship("GoalProject", back_populates="goal", cascade="all, delete-orphan")
+    
+    # NEW: Organization relationships
+    pillar = relationship("Pillar", foreign_keys=[pillar_id])
+    category = relationship("Category", foreign_keys=[category_id])
+    sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
+    linked_task = relationship("Task", foreign_keys=[linked_task_id])
 
 
 class LifeGoalMilestone(Base):

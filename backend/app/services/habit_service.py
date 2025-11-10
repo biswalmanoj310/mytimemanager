@@ -337,16 +337,28 @@ class HabitService:
         # Get current streak
         current_streak = HabitService.calculate_current_streak(db, habit_id)
         
-        # Get longest streak
-        top_streaks = HabitService.get_top_streaks(db, habit_id, limit=1)
+        # Get longest streak and top 3 streaks
+        top_streaks = HabitService.get_top_streaks(db, habit_id, limit=3)
         longest_streak = top_streaks[0].streak_length if top_streaks else 0
+        
+        # Format top 3 streaks for frontend
+        top_3_streaks = [
+            {
+                'streak_length': streak.streak_length,
+                'start_date': streak.start_date.date() if streak.start_date else None,
+                'end_date': streak.end_date.date() if streak.end_date else None,
+                'is_active': streak.is_active
+            }
+            for streak in top_streaks
+        ]
         
         return {
             'total_entries': total,
             'successful_entries': successful,
             'success_rate': round((successful / total) * 100, 1) if total > 0 else 0,
             'current_streak': current_streak,
-            'longest_streak': longest_streak
+            'longest_streak': longest_streak,
+            'top_3_streaks': top_3_streaks
         }
     
     # ============================================

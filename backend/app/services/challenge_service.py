@@ -54,8 +54,13 @@ def create_challenge(db: Session, challenge_data: dict) -> Challenge:
         reward=challenge_data.get('reward'),
         why_reason=challenge_data.get('why_reason'),
         pillar_id=challenge_data.get('pillar_id'),
+        category_id=challenge_data.get('category_id'),
+        sub_category_id=challenge_data.get('sub_category_id'),
+        linked_task_id=challenge_data.get('linked_task_id'),
+        auto_sync=challenge_data.get('auto_sync', False),
         can_graduate_to_habit=challenge_data.get('can_graduate_to_habit', False),
-        status='active'
+        status='active',
+        is_active=True
     )
     
     db.add(challenge)
@@ -68,14 +73,14 @@ def create_challenge(db: Session, challenge_data: dict) -> Challenge:
 def update_challenge(
     db: Session,
     challenge_id: int,
-    **kwargs
+    update_data: dict
 ) -> Optional[Challenge]:
     """Update challenge fields"""
     challenge = get_challenge_by_id(db, challenge_id)
     if not challenge:
         return None
     
-    for key, value in kwargs.items():
+    for key, value in update_data.items():
         if hasattr(challenge, key) and value is not None:
             setattr(challenge, key, value)
     
@@ -99,11 +104,67 @@ def delete_challenge(db: Session, challenge_id: int) -> bool:
 
 # ============ Challenge Entry Operations ============
 
-def get_challenge_entries(db: Session, challenge_id: int) -> List[ChallengeEntry]:
-    """Get all entries for a challenge"""
-    return db.query(ChallengeEntry).filter(
+def get_challenge_entries(db: Session, challenge_id: int, start_date: Optional[date] = None, end_date: Optional[date] = None) -> List[ChallengeEntry]:
+    """
+    Get all entries for a challenge
+    For auto-synced challenges, dynamically fetches from daily_time_entries
+    """
+    from app.models.models import DailyTimeEntry
+    
+    # Get the challenge
+    challenge = db.query(Challenge).filter(Challenge.id == challenge_id).first()
+    if not challenge:
+        return []
+    
+    # If auto_sync is enabled and has linked_task_id, fetch from daily_time_entries
+    if challenge.auto_sync and challenge.linked_task_id:
+        # Build query for daily time entries
+        query = db.query(
+            func.date(DailyTimeEntry.entry_date).label('entry_date'),
+            func.sum(DailyTimeEntry.minutes).label('total_minutes')
+        ).filter(
+            DailyTimeEntry.task_id == challenge.linked_task_id
+        ).group_by(func.date(DailyTimeEntry.entry_date))
+        
+        # Apply date filters
+        if start_date:
+            query = query.filter(func.date(DailyTimeEntry.entry_date) >= start_date)
+        if end_date:
+            query = query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
+        
+        # Execute query
+        results = query.all()
+        
+        # Convert to ChallengeEntry-like objects
+        entries = []
+        for row in results:
+            # Create a mock ChallengeEntry object
+            entry = ChallengeEntry(
+                id=0,  # Mock ID
+                challenge_id=challenge_id,
+                entry_date=row.entry_date,
+                is_completed=row.total_minutes > 0,
+                count_value=0,
+                numeric_value=float(row.total_minutes),
+                note=None,
+                mood=None,
+                created_at=datetime.now()  # Add timestamp
+            )
+            entries.append(entry)
+        
+        return sorted(entries, key=lambda e: e.entry_date)
+    
+    # For non-auto-synced challenges, fetch from challenge_entries table
+    query = db.query(ChallengeEntry).filter(
         ChallengeEntry.challenge_id == challenge_id
-    ).order_by(ChallengeEntry.entry_date).all()
+    )
+    
+    if start_date:
+        query = query.filter(ChallengeEntry.entry_date >= start_date)
+    if end_date:
+        query = query.filter(ChallengeEntry.entry_date <= end_date)
+    
+    return query.order_by(ChallengeEntry.entry_date).all()
 
 
 def get_entry_by_date(db: Session, challenge_id: int, entry_date: date) -> Optional[ChallengeEntry]:
@@ -425,3 +486,120 @@ def repeat_challenge(db: Session, challenge_id: int, new_start_date: Optional[da
     db.refresh(repeated_challenge)
     
     return repeated_challenge
+
+
+# ============ Auto-Sync Functions ============
+
+def sync_challenge_from_task(db: Session, task_id: int, entry_date: date) -> List[Challenge]:
+    """
+    Sync all auto-sync enabled challenges linked to this task
+    Called when a task entry is created/updated
+    """
+    from app.models.models import DailyTimeEntry
+    
+    # Find all challenges with auto_sync enabled for this task
+    challenges = db.query(Challenge).filter(
+        Challenge.linked_task_id == task_id,
+        Challenge.auto_sync == True,
+        Challenge.status == 'active',
+        Challenge.start_date <= entry_date,
+        Challenge.end_date >= entry_date
+    ).all()
+    
+    synced_challenges = []
+    
+    for challenge in challenges:
+        # Recalculate challenge progress from task logs
+        total_value = calculate_task_progress_for_challenge(db, challenge)
+        
+        if challenge.challenge_type == 'accumulation':
+            challenge.current_value = total_value
+        elif challenge.challenge_type == 'count_based':
+            # Count distinct days with task entries
+            days_with_entries = count_days_with_task_entries(db, challenge)
+            challenge.current_count = days_with_entries
+        elif challenge.challenge_type == 'daily_streak':
+            # Mark day as completed if task was logged
+            mark_day_completed_from_task(db, challenge, entry_date)
+        
+        challenge.updated_at = datetime.now()
+        synced_challenges.append(challenge)
+    
+    if synced_challenges:
+        db.commit()
+        for challenge in synced_challenges:
+            db.refresh(challenge)
+    
+    return synced_challenges
+
+
+def calculate_task_progress_for_challenge(db: Session, challenge: Challenge) -> float:
+    """
+    Calculate total progress from linked task entries within challenge date range
+    """
+    from app.models.models import DailyTimeEntry
+    
+    if not challenge.linked_task_id:
+        return 0.0
+    
+    # Sum all task entries within challenge period
+    total_minutes = db.query(func.sum(DailyTimeEntry.minutes)).filter(
+        DailyTimeEntry.task_id == challenge.linked_task_id,
+        func.date(DailyTimeEntry.entry_date) >= challenge.start_date,
+        func.date(DailyTimeEntry.entry_date) <= challenge.end_date
+    ).scalar() or 0.0
+    
+    return float(total_minutes)
+
+
+def count_days_with_task_entries(db: Session, challenge: Challenge) -> int:
+    """
+    Count distinct days with task entries within challenge period
+    """
+    from app.models.models import DailyTimeEntry
+    
+    if not challenge.linked_task_id:
+        return 0
+    
+    # Count distinct days with entries
+    days_count = db.query(func.count(func.distinct(func.date(DailyTimeEntry.entry_date)))).filter(
+        DailyTimeEntry.task_id == challenge.linked_task_id,
+        func.date(DailyTimeEntry.entry_date) >= challenge.start_date,
+        func.date(DailyTimeEntry.entry_date) <= challenge.end_date,
+        DailyTimeEntry.minutes > 0
+    ).scalar() or 0
+    
+    return int(days_count)
+
+
+def mark_day_completed_from_task(db: Session, challenge: Challenge, entry_date: date):
+    """
+    Mark a day as completed in challenge based on task entry
+    """
+    # Check if there's any time logged for this task on this date
+    from app.models.models import DailyTimeEntry
+    
+    has_entry = db.query(DailyTimeEntry).filter(
+        DailyTimeEntry.task_id == challenge.linked_task_id,
+        func.date(DailyTimeEntry.entry_date) == entry_date,
+        DailyTimeEntry.minutes > 0
+    ).first()
+    
+    if has_entry:
+        # Create or update challenge entry for this date
+        existing_entry = db.query(ChallengeEntry).filter(
+            ChallengeEntry.challenge_id == challenge.id,
+            ChallengeEntry.entry_date == entry_date
+        ).first()
+        
+        if not existing_entry:
+            new_entry = ChallengeEntry(
+                challenge_id=challenge.id,
+                entry_date=entry_date,
+                is_completed=True,
+                note=f"Auto-synced from task"
+            )
+            db.add(new_entry)
+            
+            # Recalculate progress/streaks
+            update_challenge_progress(db, challenge.id)

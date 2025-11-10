@@ -114,7 +114,11 @@ def create_life_goal(
     parent_goal_id: Optional[int] = None,
     category: Optional[str] = None,
     priority: str = "medium",
-    description: Optional[str] = None
+    description: Optional[str] = None,
+    pillar_id: Optional[int] = None,
+    category_id: Optional[int] = None,
+    sub_category_id: Optional[int] = None,
+    linked_task_id: Optional[int] = None
 ) -> LifeGoal:
     """Create a new life goal"""
     goal = LifeGoal(
@@ -128,7 +132,11 @@ def create_life_goal(
         description=description,
         status='not_started',
         progress_percentage=0.0,
-        created_at=date.today()
+        created_at=date.today(),
+        pillar_id=pillar_id,
+        category_id=category_id,
+        sub_category_id=sub_category_id,
+        linked_task_id=linked_task_id
     )
     db.add(goal)
     db.commit()
@@ -423,17 +431,30 @@ def delete_goal_task(db: Session, task_id: int) -> bool:
 
 # Progress calculation
 def _recalculate_goal_progress(db: Session, goal_id: int):
-    """Recalculate goal progress based on milestones and tasks"""
+    """Recalculate goal progress based on milestones, tasks, and project milestones"""
     goal = db.query(LifeGoal).filter(LifeGoal.id == goal_id).first()
     if not goal:
         return
     
-    # Get milestones
-    milestones = db.query(LifeGoalMilestone).filter(LifeGoalMilestone.goal_id == goal_id).all()
-    milestone_progress = 0.0
-    if milestones:
-        completed_milestones = sum(1 for m in milestones if m.is_completed)
-        milestone_progress = (completed_milestones / len(milestones)) * 100
+    # Get goal milestones
+    goal_milestones = db.query(LifeGoalMilestone).filter(LifeGoalMilestone.goal_id == goal_id).all()
+    goal_milestone_progress = 0.0
+    if goal_milestones:
+        completed_milestones = sum(1 for m in goal_milestones if m.is_completed)
+        goal_milestone_progress = (completed_milestones / len(goal_milestones)) * 100
+    
+    # Get project milestones from linked projects
+    from app.models.models import Project, ProjectMilestone
+    linked_projects = db.query(Project).filter(Project.goal_id == goal_id).all()
+    project_milestones = []
+    for project in linked_projects:
+        milestones = db.query(ProjectMilestone).filter(ProjectMilestone.project_id == project.id).all()
+        project_milestones.extend(milestones)
+    
+    project_milestone_progress = 0.0
+    if project_milestones:
+        completed_project_milestones = sum(1 for m in project_milestones if m.is_completed)
+        project_milestone_progress = (completed_project_milestones / len(project_milestones)) * 100
     
     # Get goal-specific tasks
     goal_tasks = db.query(LifeGoalTask).filter(LifeGoalTask.goal_id == goal_id).all()
@@ -442,15 +463,25 @@ def _recalculate_goal_progress(db: Session, goal_id: int):
         completed_tasks = sum(1 for t in goal_tasks if t.is_completed)
         task_progress = (completed_tasks / len(goal_tasks)) * 100
     
-    # Calculate weighted average (milestones = 60%, tasks = 40%)
-    if milestones and goal_tasks:
-        total_progress = (milestone_progress * 0.6) + (task_progress * 0.4)
-    elif milestones:
-        total_progress = milestone_progress
-    elif goal_tasks:
-        total_progress = task_progress
-    else:
-        total_progress = 0.0
+    # Calculate weighted average (goal milestones = 40%, project milestones = 30%, tasks = 30%)
+    total_progress = 0.0
+    weight_sum = 0.0
+    
+    if goal_milestones:
+        total_progress += goal_milestone_progress * 0.4
+        weight_sum += 0.4
+    
+    if project_milestones:
+        total_progress += project_milestone_progress * 0.3
+        weight_sum += 0.3
+    
+    if goal_tasks:
+        total_progress += task_progress * 0.3
+        weight_sum += 0.3
+    
+    # Normalize to actual weights present
+    if weight_sum > 0:
+        total_progress = total_progress / weight_sum
     
     # Update goal progress
     goal.progress_percentage = round(total_progress, 2)
@@ -484,9 +515,37 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
     if not goal:
         return {}
     
-    milestones = db.query(LifeGoalMilestone).filter(LifeGoalMilestone.goal_id == goal_id).all()
+    # Get goal milestones
+    goal_milestones = db.query(LifeGoalMilestone).filter(LifeGoalMilestone.goal_id == goal_id).all()
+    
+    # Get project milestones from linked projects
+    from app.models.models import Project, ProjectMilestone
+    linked_projects = db.query(Project).filter(Project.goal_id == goal_id).all()
+    project_milestones = []
+    for project in linked_projects:
+        milestones = db.query(ProjectMilestone).filter(ProjectMilestone.project_id == project.id).all()
+        project_milestones.extend(milestones)
+    
     goal_tasks = db.query(LifeGoalTask).filter(LifeGoalTask.goal_id == goal_id).all()
     linked_tasks = db.query(LifeGoalTaskLink).filter(LifeGoalTaskLink.goal_id == goal_id).all()
+    
+    # Get all project tasks (including subtasks) from linked projects
+    from app.models.models import Project, ProjectTask
+    linked_projects = db.query(Project).filter(Project.goal_id == goal_id).all()
+    
+    def count_project_tasks_recursive(project_id):
+        """Count all tasks and subtasks in a project"""
+        all_tasks = db.query(ProjectTask).filter(ProjectTask.project_id == project_id).all()
+        total = len(all_tasks)
+        completed = sum(1 for t in all_tasks if t.is_completed)
+        return total, completed
+    
+    total_project_tasks = 0
+    completed_project_tasks = 0
+    for project in linked_projects:
+        total, completed = count_project_tasks_recursive(project.id)
+        total_project_tasks += total
+        completed_project_tasks += completed
     
     today = date.today()
     days_remaining = (goal.target_date - today).days if goal.target_date >= today else 0
@@ -501,14 +560,34 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
         "days_elapsed": days_elapsed,
         "days_total": days_total,
         "milestones": {
-            "total": len(milestones),
-            "completed": sum(1 for m in milestones if m.is_completed),
-            "remaining": sum(1 for m in milestones if not m.is_completed)
+            "goal_milestones": {
+                "total": len(goal_milestones),
+                "completed": sum(1 for m in goal_milestones if m.is_completed),
+                "remaining": sum(1 for m in goal_milestones if not m.is_completed)
+            },
+            "project_milestones": {
+                "total": len(project_milestones),
+                "completed": sum(1 for m in project_milestones if m.is_completed),
+                "remaining": sum(1 for m in project_milestones if not m.is_completed)
+            },
+            "total": len(goal_milestones) + len(project_milestones),
+            "completed": sum(1 for m in goal_milestones if m.is_completed) + sum(1 for m in project_milestones if m.is_completed),
+            "remaining": sum(1 for m in goal_milestones if not m.is_completed) + sum(1 for m in project_milestones if not m.is_completed)
         },
         "goal_tasks": {
             "total": len(goal_tasks),
             "completed": sum(1 for t in goal_tasks if t.is_completed),
             "remaining": sum(1 for t in goal_tasks if not t.is_completed)
+        },
+        "project_tasks": {
+            "total": total_project_tasks,
+            "completed": completed_project_tasks,
+            "remaining": total_project_tasks - completed_project_tasks
+        },
+        "all_tasks": {
+            "total": len(goal_tasks) + total_project_tasks,
+            "completed": sum(1 for t in goal_tasks if t.is_completed) + completed_project_tasks,
+            "remaining": len(goal_tasks) - sum(1 for t in goal_tasks if t.is_completed) + (total_project_tasks - completed_project_tasks)
         },
         "linked_tasks": {
             "total": len(linked_tasks)

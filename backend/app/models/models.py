@@ -486,6 +486,7 @@ class Project(Base):
     pillar_id = Column(Integer, ForeignKey("pillars.id", ondelete="SET NULL"), nullable=True)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="SET NULL"), nullable=True)
     goal_id = Column(Integer, ForeignKey("life_goals.id", ondelete="SET NULL"), nullable=True)  # Link to Life Goal
+    goal_milestone_id = Column(Integer, ForeignKey("life_goal_milestones.id", ondelete="SET NULL"), nullable=True, index=True)  # Link to Goal Milestone
     related_wish_id = Column(Integer, ForeignKey("wishes.id", ondelete="SET NULL"), nullable=True)  # Link to Dream/Wish
     start_date = Column(DateTime(timezone=True), nullable=True)
     target_completion_date = Column(DateTime(timezone=True), nullable=True)
@@ -516,6 +517,7 @@ class ProjectTask(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     parent_task_id = Column(Integer, ForeignKey("project_tasks.id", ondelete="CASCADE"), nullable=True, index=True)
     milestone_id = Column(Integer, ForeignKey("project_milestones.id", ondelete="SET NULL"), nullable=True, index=True)
+    goal_milestone_id = Column(Integer, ForeignKey("life_goal_milestones.id", ondelete="SET NULL"), nullable=True, index=True)  # Link to Goal Milestone
     name = Column(String(300), nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True, index=True)
@@ -607,11 +609,20 @@ class Habit(Base):
     name = Column(String(200), nullable=False, index=True)
     description = Column(Text, nullable=True)
     
+    # Organization within three-pillar framework
+    pillar_id = Column(Integer, ForeignKey("pillars.id"), nullable=True, index=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True, index=True)
+    
     # Type of habit
     habit_type = Column(String(20), nullable=False)  # 'boolean', 'time_based', 'count_based'
     
     # Link to existing task (optional - for auto-sync)
     linked_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    
+    # Link to life goals and wishes (optional - for purpose alignment)
+    life_goal_id = Column(Integer, ForeignKey("life_goals.id"), nullable=True, index=True)
+    wish_id = Column(Integer, ForeignKey("wishes.id"), nullable=True, index=True)
     
     # Tracking criteria
     target_frequency = Column(String(20), nullable=False)  # 'daily', 'weekly', 'monthly'
@@ -642,7 +653,12 @@ class Habit(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
+    pillar = relationship("Pillar", foreign_keys=[pillar_id])
+    category = relationship("Category", foreign_keys=[category_id])
+    sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
     linked_task = relationship("Task", foreign_keys=[linked_task_id])
+    life_goal = relationship("LifeGoal", foreign_keys=[life_goal_id])
+    wish = relationship("Wish", foreign_keys=[wish_id])
     entries = relationship("HabitEntry", back_populates="habit", cascade="all, delete-orphan")
     streaks = relationship("HabitStreak", back_populates="habit", cascade="all, delete-orphan")
     sessions = relationship("HabitSession", foreign_keys="[HabitSession.habit_id]", cascade="all, delete-orphan")
@@ -995,14 +1011,29 @@ class Challenge(Base):
     
     # Links
     pillar_id = Column(Integer, ForeignKey('pillars.id', ondelete='SET NULL'), nullable=True, index=True)
+    category_id = Column(Integer, ForeignKey('categories.id'), nullable=True, index=True)
+    sub_category_id = Column(Integer, ForeignKey('sub_categories.id'), nullable=True, index=True)
+    linked_task_id = Column(Integer, ForeignKey('tasks.id'), nullable=True, index=True)
+    goal_id = Column(Integer, ForeignKey('goals.id', ondelete='SET NULL'), nullable=True, index=True)
+    project_id = Column(Integer, ForeignKey('projects.id', ondelete='SET NULL'), nullable=True, index=True)
+    
+    # Auto-sync from linked task
+    auto_sync = Column(Boolean, default=False, index=True)  # Auto-update progress from linked task logs
+    
     can_graduate_to_habit = Column(Boolean, default=False)
     graduated_habit_id = Column(Integer, ForeignKey('habits.id', ondelete='SET NULL'), nullable=True)
     
+    is_active = Column(Boolean, default=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
-    pillar = relationship("Pillar")
+    pillar = relationship("Pillar", foreign_keys=[pillar_id])
+    category = relationship("Category", foreign_keys=[category_id])
+    sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
+    linked_task = relationship("Task", foreign_keys=[linked_task_id])
+    goal = relationship("Goal", foreign_keys=[goal_id])
+    project = relationship("Project", foreign_keys=[project_id])
     entries = relationship("ChallengeEntry", back_populates="challenge", cascade="all, delete-orphan")
 
     def __repr__(self):

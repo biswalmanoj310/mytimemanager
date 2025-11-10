@@ -29,27 +29,29 @@ class AnalyticsService:
         """
         Get time distribution across pillars for pie/donut charts
         Shows allocated vs spent time per pillar
+        Both allocated and spent come from Daily tab (DailyTimeEntry) as source of truth
         """
         pillars = self.db.query(Pillar).all()
         
-        # Build time entry query from DailyTimeEntry table
-        query = self.db.query(
+        # Get ONLY DAILY tasks (matching Daily tab source of truth)
+        daily_tasks = self.db.query(Task).filter(
+            Task.follow_up_frequency == 'daily'
+        ).all()
+        task_pillar_map = {task.id: task.pillar_id for task in daily_tasks}
+        task_allocated_map = {task.id: task.allocated_minutes for task in daily_tasks}
+        
+        # Build time entry query from DailyTimeEntry table for SPENT time
+        spent_query = self.db.query(
             DailyTimeEntry.task_id,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')
         )
         
         if start_date:
-            query = query.filter(func.date(DailyTimeEntry.entry_date) >= start_date)
+            spent_query = spent_query.filter(func.date(DailyTimeEntry.entry_date) >= start_date)
         if end_date:
-            query = query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
+            spent_query = spent_query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
         
-        time_by_task = query.group_by(DailyTimeEntry.task_id).all()
-        
-        # Map to pillars
-        task_pillar_map = {
-            task.id: task.pillar_id 
-            for task in self.db.query(Task).all()
-        }
+        time_by_task = spent_query.group_by(DailyTimeEntry.task_id).all()
         
         pillar_data = []
         total_allocated = 0
@@ -63,7 +65,10 @@ class AnalyticsService:
             )
             spent_hours = spent_minutes / 60 if spent_minutes else 0
             
+            # Use the pillar's allocated_hours (e.g., 8h per day)
+            # This is the ideal daily allocation target, not sum of all tasks
             allocated_hours = pillar.allocated_hours
+            
             total_allocated += allocated_hours
             total_spent += spent_hours
             
@@ -74,7 +79,7 @@ class AnalyticsService:
                 "pillar_name": pillar.name,
                 "icon": pillar.icon,
                 "color_code": pillar.color_code,
-                "allocated_hours": allocated_hours,
+                "allocated_hours": round(allocated_hours, 2),
                 "spent_hours": round(spent_hours, 2),
                 "utilization_percentage": round(utilization, 2),
                 "remaining_hours": round(max(0, allocated_hours - spent_hours), 2)
@@ -96,6 +101,7 @@ class AnalyticsService:
         """
         Get time breakdown by category for bar charts
         Optionally filter by pillar
+        Both allocated and spent come from Daily tab (DailyTimeEntry) as source of truth
         """
         query = self.db.query(Category)
         
@@ -104,7 +110,28 @@ class AnalyticsService:
         
         categories = query.all()
         
-        # Build time entry query from DailyTimeEntry table
+        # Get ONLY DAILY ACTIVE tasks with allocated time (source of truth is Daily tab)
+        active_tasks = self.db.query(Task).filter(
+            Task.is_active == True,
+            Task.is_completed == False,
+            Task.na_marked_at.is_(None),
+            Task.allocated_minutes > 0,
+            Task.follow_up_frequency == 'daily'  # Only daily tasks appear in Daily tab
+        ).order_by(Task.updated_at.desc()).all()  # Most recently updated first
+        
+        # Remove duplicates: keep only the most recent task per (name, category)
+        seen_task_names = {}
+        unique_tasks = []
+        for task in active_tasks:
+            key = (task.name, task.category_id)
+            if key not in seen_task_names:
+                seen_task_names[key] = task
+                unique_tasks.append(task)
+        
+        task_category_map = {task.id: task.category_id for task in unique_tasks}
+        task_allocated_map = {task.id: task.allocated_minutes for task in unique_tasks}
+        
+        # Build time entry query from DailyTimeEntry table for SPENT time
         time_query = self.db.query(
             DailyTimeEntry.task_id,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')
@@ -117,12 +144,6 @@ class AnalyticsService:
         
         time_by_task = time_query.group_by(DailyTimeEntry.task_id).all()
         
-        # Map to categories
-        task_category_map = {
-            task.id: task.category_id
-            for task in self.db.query(Task).all()
-        }
-        
         category_data = []
         
         for category in categories:
@@ -133,14 +154,34 @@ class AnalyticsService:
             )
             spent_hours = spent_minutes / 60 if spent_minutes else 0
             
-            allocated_hours = category.allocated_hours
+            # Calculate allocated time from ACTIVE tasks in this category
+            # Each task has allocated_minutes which is the DAILY allocation
+            # Sum all active tasks in this category to get total daily category allocation
+            category_tasks = [
+                (task_id, task_allocated_map.get(task_id, 0))
+                for task_id, cat_id in task_category_map.items()
+                if cat_id == category.id
+            ]
+            allocated_minutes = sum(alloc for _, alloc in category_tasks)
+            allocated_hours = allocated_minutes / 60
+            
+            # Debug logging for Yoga and Confidence
+            if category.name in ['Yoga', 'Confidence']:
+                print(f"\n=== {category.name} Category Debug ===")
+                print(f"Active tasks in {category.name}: {len(category_tasks)}")
+                for task_id, alloc in category_tasks:
+                    task = next((t for t in active_tasks if t.id == task_id), None)
+                    if task:
+                        print(f"  Task: {task.name}, Allocated: {alloc} min")
+                print(f"Total allocated: {allocated_minutes} min = {allocated_hours} hours")
+            
             utilization = (spent_hours / allocated_hours * 100) if allocated_hours > 0 else 0
             
             category_data.append({
                 "category_id": category.id,
                 "category_name": category.name,
                 "pillar_name": category.pillar.name if category.pillar else None,
-                "allocated_hours": allocated_hours,
+                "allocated_hours": round(allocated_hours, 2),
                 "spent_hours": round(spent_hours, 2),
                 "utilization_percentage": round(utilization, 2),
                 "remaining_hours": round(max(0, allocated_hours - spent_hours), 2)
@@ -148,6 +189,16 @@ class AnalyticsService:
         
         # Sort by spent hours descending
         category_data.sort(key=lambda x: x['spent_hours'], reverse=True)
+        
+        # Debug: Calculate total allocated hours across all categories
+        total_allocated_hours = sum(cat['allocated_hours'] for cat in category_data)
+        print(f"\n=== TOTAL ALLOCATION CHECK ===")
+        print(f"Total allocated hours across all categories: {total_allocated_hours:.2f} hours")
+        print(f"Expected: 24 hours (1440 minutes)")
+        print(f"Difference: {24 - total_allocated_hours:.2f} hours")
+        print(f"\nCategory-wise breakdown:")
+        for cat in sorted(category_data, key=lambda x: x['allocated_hours'], reverse=True):
+            print(f"  {cat['category_name']}: {cat['allocated_hours']:.2f}h")
         
         return {
             "categories": category_data,

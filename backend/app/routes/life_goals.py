@@ -24,6 +24,10 @@ class LifeGoalCreate(BaseModel):
     category: Optional[str] = None
     priority: str = "medium"
     description: Optional[str] = None
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    linked_task_id: Optional[int] = None
 
 
 class LifeGoalUpdate(BaseModel):
@@ -35,6 +39,10 @@ class LifeGoalUpdate(BaseModel):
     priority: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = None
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    linked_task_id: Optional[int] = None
 
 
 class MilestoneCreate(BaseModel):
@@ -99,15 +107,18 @@ class GoalTaskUpdate(BaseModel):
 # Goal endpoints
 @router.get("/")
 def get_all_goals(include_completed: bool = False, db: Session = Depends(get_db)):
-    """Get all life goals"""
+    """Get all life goals with stats"""
     import json
     from datetime import date as date_type
     
     goals = life_goal_service.get_all_life_goals(db, include_completed=include_completed)
     
-    # Transform goals to include parsed why_statements and days_remaining
+    # Transform goals to include parsed why_statements, days_remaining, and milestone stats
     result = []
     for goal in goals:
+        # Get stats for milestone counts
+        stats = life_goal_service.calculate_goal_stats(db, goal.id)
+        
         goal_dict = {
             "id": goal.id,
             "name": goal.name,
@@ -125,6 +136,15 @@ def get_all_goals(include_completed: bool = False, db: Session = Depends(get_db)
             "time_spent_hours": goal.time_spent_hours,
             "created_at": goal.created_at.isoformat() if goal.created_at else None,
             "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
+            "pillar_id": goal.pillar_id,
+            "pillar_name": goal.pillar.name if goal.pillar else None,
+            "category_id": goal.category_id,
+            "category_name": goal.category.name if goal.category else None,
+            "sub_category_id": goal.sub_category_id,
+            "sub_category_name": goal.sub_category.name if goal.sub_category else None,
+            "linked_task_id": goal.linked_task_id,
+            "linked_task_name": goal.linked_task.name if goal.linked_task else None,
+            "stats": stats  # Include full stats with milestone breakdown
         }
         
         # Calculate days_remaining
@@ -175,6 +195,14 @@ def get_goal(goal_id: int, db: Session = Depends(get_db)):
         "time_spent_hours": goal.time_spent_hours,
         "created_at": goal.created_at.isoformat() if goal.created_at else None,
         "updated_at": goal.updated_at.isoformat() if goal.updated_at else None,
+        "pillar_id": goal.pillar_id,
+        "pillar_name": goal.pillar.name if goal.pillar else None,
+        "category_id": goal.category_id,
+        "category_name": goal.category.name if goal.category else None,
+        "sub_category_id": goal.sub_category_id,
+        "sub_category_name": goal.sub_category.name if goal.sub_category else None,
+        "linked_task_id": goal.linked_task_id,
+        "linked_task_name": goal.linked_task.name if goal.linked_task else None,
     }
     
     # Calculate days_remaining
@@ -216,7 +244,11 @@ def create_goal(goal_data: LifeGoalCreate, db: Session = Depends(get_db)):
         parent_goal_id=goal_data.parent_goal_id,
         category=goal_data.category,
         priority=goal_data.priority,
-        description=goal_data.description
+        description=goal_data.description,
+        pillar_id=goal_data.pillar_id,
+        category_id=goal_data.category_id,
+        sub_category_id=goal_data.sub_category_id,
+        linked_task_id=goal_data.linked_task_id
     )
     return goal
 
@@ -636,3 +668,69 @@ def get_goal_tasks_overdue(db: Session = Depends(get_db)):
         result.append(task_dict)
     
     return result
+
+@router.get("/{goal_id}/challenges")
+def get_goal_challenges(
+    goal_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get all challenges related to a goal:
+    - Direct challenges linked to this goal
+    - Challenges linked to projects under this goal
+    """
+    from app.models.models import Challenge, Project
+    
+    # Get direct challenges for this goal
+    direct_challenges = db.query(Challenge).filter(
+        Challenge.goal_id == goal_id
+    ).all()
+    
+    # Get challenges from projects under this goal
+    projects = db.query(Project).filter(
+        Project.goal_id == goal_id
+    ).all()
+    
+    project_challenges = []
+    for project in projects:
+        challenges = db.query(Challenge).filter(
+            Challenge.project_id == project.id
+        ).all()
+        for challenge in challenges:
+            project_challenges.append({
+                "challenge": challenge,
+                "project_id": project.id,
+                "project_name": project.name
+            })
+    
+    return {
+        "goal_id": goal_id,
+        "direct_challenges": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "description": c.description,
+                "challenge_type": c.challenge_type,
+                "start_date": c.start_date,
+                "end_date": c.end_date,
+                "status": c.status,
+                "linked_to": "goal"
+            }
+            for c in direct_challenges
+        ],
+        "project_challenges": [
+            {
+                "id": pc["challenge"].id,
+                "name": pc["challenge"].name,
+                "description": pc["challenge"].description,
+                "challenge_type": pc["challenge"].challenge_type,
+                "start_date": pc["challenge"].start_date,
+                "end_date": pc["challenge"].end_date,
+                "status": pc["challenge"].status,
+                "linked_to": "project",
+                "project_id": pc["project_id"],
+                "project_name": pc["project_name"]
+            }
+            for pc in project_challenges
+        ]
+    }

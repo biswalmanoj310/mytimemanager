@@ -1135,6 +1135,40 @@
   color: #718096;
 }
 
+/* Overview controls for monthly toggle */
+.overview-controls {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding: 0 1rem;
+}
+
+/* Section header (without toggle) */
+.section-header {
+  margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  color: #2d3748;
+}
+
+.section-header .chart-description {
+  margin: 0;
+  color: #718096;
+  font-size: 0.95rem;
+}
+
+/* Unified comparison chart container */
+.unified-comparison-chart {
+  background: white;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
 /* Section header with toggle button */
 .section-header-with-toggle {
   display: flex;
@@ -1212,10 +1246,385 @@
   border: 2px solid #e2e8f0;
 }
 
+/* Detailed View Section */
+.detailed-view-section {
+  background: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin-top: 2rem;
+}
+
+/* Clickable Charts - Add cursor pointer and hover effect */
+.clickable-chart {
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.clickable-chart:hover {
+  transform: scale(1.01);
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.15);
+}
+
+.clickable-chart::after {
+  content: "🔍 Click to enlarge";
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(66, 153, 225, 0.9);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.clickable-chart:hover::after {
+  opacity: 1;
+}
+
+/* Chart Detail Modal */
+.chart-detail-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+  padding: 2rem;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  background: white;
+  border-radius: 1rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 98%;
+  max-width: 98%;
+  max-height: 95%;
+  overflow: auto;
+  animation: slideUp 0.3s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Full-width modal for maximum chart visibility */
+.modal-content.modal-content-fullwidth {
+  width: 98vw;
+  max-width: 98vw;
+  height: 95vh;
+  max-height: 95vh;
+  margin: 0 auto;
+}
+
+/* Task modal should be extra wide for horizontal layout */
+.modal-content.task-modal {
+  width: 99%;
+  max-width: 99%;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  border-bottom: 2px solid #e2e8f0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 1rem 1rem 0 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  color: white;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.close-modal-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 2px solid white;
+  color: white;
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-weight: bold;
+  line-height: 1;
+  padding: 0;
+}
+
+.close-modal-btn:hover {
+  background: white;
+  color: #667eea;
+  transform: rotate(90deg);
+}
+
+.modal-body {
+  padding: 2rem;
+  flex: 1;
+  overflow: auto;
+  min-height: 0; /* Allow flex child to shrink */
+}
+
+.modal-content-fullwidth .modal-body {
+  padding: 1rem 2rem;
+  height: calc(95vh - 200px); /* Full height minus header and controls */
+}
+
+/* Modal Date Selectors */
+.modal-date-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: #f7fafc;
+  border-bottom: 2px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.modal-view-type-selector {
+  display: flex;
+  gap: 0.5rem;
+  background: white;
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  border: 2px solid #e2e8f0;
+}
+
+.modal-view-type-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  color: #4a5568;
+  cursor: pointer;
+  border-radius: 0.375rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.modal-view-type-btn.active {
+  background: #667eea;
+  color: white;
+}
+
+.modal-view-type-btn:hover:not(.active) {
+  background: #edf2f7;
+}
+
+.modal-date-inputs {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.modal-date-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.modal-date-input-group label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #4a5568;
+  text-transform: uppercase;
+}
+
+.modal-date-input-group input {
+  padding: 0.5rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  min-width: 150px;
+}
+
+.modal-date-input-group input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Utilization Legend */
+.utilization-legend {
+  display: flex;
+  gap: 2rem;
+  justify-content: center;
+  padding: 1rem;
+  margin-top: 1rem;
+  background: #f7fafc;
+  border-radius: 0.5rem;
+}
+
+.utilization-legend .legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.utilization-legend .legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Detailed View Section */
+.detailed-view-section {
+  margin-top: 2rem;
+}
+
+.detailed-controls {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.period-type-selector,
+.date-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.period-type-selector label,
+.date-selector label {
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 0.95rem;
+}
+
+.period-type-selector select,
+.date-selector input {
+  padding: 0.625rem 1rem;
+  border: 2px solid #cbd5e0;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.period-type-selector select:hover,
+.date-selector input:hover {
+  border-color: #667eea;
+}
+
+.period-type-selector select:focus,
+.date-selector input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.detailed-info-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 0.75rem;
+  margin-bottom: 2rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.info-icon {
+  font-size: 1.25rem;
+}
+
+/* Pillar Category Breakdown */
+.pillar-category-breakdown {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1.5rem;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.pillar-category-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.pillar-category-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.pillar-total-time {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #4a5568;
+  background: #f7fafc;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+}
+
 /* Responsive for Comparative Charts */
 @media (max-width: 1024px) {
   .comparative-charts-grid {
     grid-template-columns: 1fr;
+  }
+  
+  .detailed-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .detailed-controls button {
+    margin-left: 0 !important;
   }
 }
 
@@ -1223,4 +1632,12 @@
   .comparative-chart-card h3 {
     font-size: 1rem;
   }
+  
+  .period-type-selector,
+  .date-selector {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
 }
+

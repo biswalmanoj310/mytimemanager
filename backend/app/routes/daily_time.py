@@ -4,6 +4,7 @@ API routes for daily time entries and summaries
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from datetime import datetime, date
 from typing import List, Optional
 from app.database.config import get_db
@@ -20,6 +21,56 @@ from app.models.schemas import (
 )
 
 router = APIRouter(prefix="/api/daily-time", tags=["daily-time"])
+
+
+@router.get("/", response_model=List[DailyTimeEntryResponse])
+def get_daily_time_entries(
+    date: Optional[date] = Query(None, description="Specific date for entries"),
+    start_date: Optional[date] = Query(None, description="Start date for date range"),
+    end_date: Optional[date] = Query(None, description="End date for date range"),
+    task_id: Optional[int] = Query(None, description="Filter by specific task"),
+    db: Session = Depends(get_db)
+):
+    """
+    Get daily time entries - supports single date, date range, or all entries
+    
+    - If date is provided: returns entries for that specific date
+    - If start_date and end_date are provided: returns entries in that range
+    - If start_date only: returns entries from that date onwards
+    - If end_date only: returns entries up to that date
+    - If no parameters: returns all entries (use with caution)
+    """
+    from app.models.models import DailyTimeEntry, Task
+    
+    query = db.query(DailyTimeEntry).join(Task, DailyTimeEntry.task_id == Task.id)
+    
+    if date:
+        # Single date query
+        query = query.filter(func.date(DailyTimeEntry.entry_date) == date)
+    else:
+        # Date range query
+        if start_date:
+            query = query.filter(func.date(DailyTimeEntry.entry_date) >= start_date)
+        if end_date:
+            query = query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
+    
+    if task_id:
+        query = query.filter(DailyTimeEntry.task_id == task_id)
+    
+    entries = query.all()
+    
+    return [
+        DailyTimeEntryResponse(
+            id=entry.id,
+            task_id=entry.task_id,
+            entry_date=entry.entry_date,
+            hour=entry.hour,
+            minutes=entry.minutes,
+            created_at=entry.created_at,
+            updated_at=entry.updated_at
+        )
+        for entry in entries
+    ]
 
 
 @router.get("/entries/{entry_date}", response_model=List[DailyTimeEntryResponse])
@@ -96,7 +147,6 @@ def recalculate_all_summaries(
 ):
     """Recalculate all daily summaries (useful after schema changes)"""
     from app.models.models import DailySummary
-    from sqlalchemy import func
     
     # Get all summary dates
     summaries = db.query(DailySummary).order_by(DailySummary.entry_date).limit(limit).all()

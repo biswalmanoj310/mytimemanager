@@ -363,6 +363,19 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         <form onSubmit={handleSubmit} className="task-form">
           {error && <div className="error-message">{error}</div>}
 
+          {/* Basic Information Section */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+            padding: '12px 20px', 
+            borderRadius: '8px',
+            marginBottom: '20px',
+            boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+          }}>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+              🌟 Basic Information
+            </h3>
+          </div>
+
           {/* Task Name */}
           <div className="form-group">
             <label htmlFor="name">Task Name: <span className="required">*</span></label>
@@ -386,6 +399,20 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               placeholder="Optional task description"
               rows={2}
             />
+          </div>
+
+          {/* Classification Section */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
+            padding: '12px 20px', 
+            borderRadius: '8px',
+            marginBottom: '20px',
+            marginTop: '30px',
+            boxShadow: '0 2px 8px rgba(240, 147, 251, 0.3)'
+          }}>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+              🏷️ Classification & Organization
+            </h3>
           </div>
 
           {/* Pillar */}
@@ -444,6 +471,20 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             </select>
           </div>
           */}
+
+          {/* Task Type & Measurement Section */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
+            padding: '12px 20px', 
+            borderRadius: '8px',
+            marginBottom: '20px',
+            marginTop: '30px',
+            boxShadow: '0 2px 8px rgba(79, 172, 254, 0.3)'
+          }}>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+              📊 Task Type & Measurement
+            </h3>
+          </div>
 
           {/* Task Type Selector */}
           <div className="form-group">
@@ -549,6 +590,20 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             </div>
           )}
 
+          {/* Scheduling & Tracking Section */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', 
+            padding: '12px 20px', 
+            borderRadius: '8px',
+            marginBottom: '20px',
+            marginTop: '30px',
+            boxShadow: '0 2px 8px rgba(67, 233, 123, 0.3)'
+          }}>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+              📅 Scheduling & Tracking
+            </h3>
+          </div>
+
           {/* Follow-up Frequency */}
           <div className="form-group">
             <label htmlFor="follow_up">Follow-up Time: <span className="required">*</span></label>
@@ -592,6 +647,20 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             <small className="help-text">
               Check this for tasks that are tracked separately without strict time constraints
             </small>
+          </div>
+
+          {/* Goals & Dreams Section */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', 
+            padding: '12px 20px', 
+            borderRadius: '8px',
+            marginBottom: '20px',
+            marginTop: '30px',
+            boxShadow: '0 2px 8px rgba(250, 112, 154, 0.3)'
+          }}>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+              🎯 Goals & Dreams
+            </h3>
           </div>
 
           {/* Part of a Goal */}
@@ -650,6 +719,20 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '6px' }}>
               💡 Link this task to a dream you're exploring or pursuing
             </small>
+          </div>
+
+          {/* Purpose & Motivation Section */}
+          <div style={{ 
+            background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)', 
+            padding: '12px 20px', 
+            borderRadius: '8px',
+            marginBottom: '20px',
+            marginTop: '30px',
+            boxShadow: '0 2px 8px rgba(252, 182, 159, 0.3)'
+          }}>
+            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+              💭 Purpose & Motivation
+            </h3>
           </div>
 
           {/* Why Reason */}

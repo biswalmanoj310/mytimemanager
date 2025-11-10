@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
 import {
   XAxis,
   YAxis,
@@ -11,7 +12,6 @@ import {
   ReferenceLine,
   Bar,
   BarChart,
-  Cell,
   RadarChart,
   PolarGrid,
   PolarAngleAxis,
@@ -24,6 +24,7 @@ import './Analytics.css';
 interface PillarData {
   pillar_id: number;
   pillar_name: string;
+  icon?: string;
   color_code: string;
   allocated_hours: number;
   spent_hours: number;
@@ -37,6 +38,14 @@ interface CategoryData {
   allocated_hours: number;
   spent_hours: number;
   utilization_percentage: number;
+}
+
+interface TaskData {
+  task_id: number;
+  task_name: string;
+  category_name: string;
+  allocated_minutes: number;
+  spent_minutes: number;
 }
 
 interface TimeDataPoint {
@@ -77,13 +86,17 @@ export default function Analytics() {
   const [weeklyTrend, setWeeklyTrend] = useState<TimeDataPoint[]>([]);
   const [averageHours, setAverageHours] = useState<number>(0);
   const [dateRange, setDateRange] = useState<'today' | 'week' | 'month' | '4weeks' | 'custom'>('today');
-  const [selectedPillar, setSelectedPillar] = useState<number | null>(null);
+  const [selectedPillar] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [viewMode, setViewMode] = useState<'overview' | 'categories' | 'tasks' | 'wheel'>('overview');
+  const [viewMode, setViewMode] = useState<'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed'>('overview');
   const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [badgeData, setBadgeData] = useState<BadgeData | null>(null);
+  
+  // Detailed view state
+  const [detailedPeriodType, setDetailedPeriodType] = useState<'day' | 'week' | 'month'>('week');
+  const [detailedDate, setDetailedDate] = useState<string>(formatDateForInput(new Date()));
   
   // Comparative pillar data for Today/Week/Month
   const [dailyPillarData, setDailyPillarData] = useState<PillarData[]>([]);
@@ -95,35 +108,84 @@ export default function Analytics() {
   const [weekCategoryData, setWeekCategoryData] = useState<CategoryData[]>([]);
   const [monthCategoryData, setMonthCategoryData] = useState<CategoryData[]>([]);
   const [allCategoriesData, setAllCategoriesData] = useState<CategoryData[]>([]); // Base categories with allocations
-  const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column
+  
+  // Comparative task data for Allocated/Today/Week/Month
+  const [todayTaskData, setTodayTaskData] = useState<TaskData[]>([]);
+  const [weekTaskData, setWeekTaskData] = useState<TaskData[]>([]);
+  const [monthTaskData, setMonthTaskData] = useState<TaskData[]>([]);
+  const [allTasksData, setAllTasksData] = useState<TaskData[]>([]); // Base tasks with allocations
+  
+  const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Pillars)
+  const [showCategoryMonth, setShowCategoryMonth] = useState(false); // Toggle for Categories
+  const [showTaskMonth, setShowTaskMonth] = useState(false); // Toggle for Tasks
+  
+  // Modal state for detail view
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [modalChartType, setModalChartType] = useState<'pillar' | 'category' | 'task' | 'utilization' | string>('pillar');
+  
+  // Modal date filtering state
+  const [modalViewType, setModalViewType] = useState<'date' | 'week' | 'month'>('date');
+  const [modalStartDate, setModalStartDate] = useState(formatDateForInput(new Date()));
+  const [modalEndDate, setModalEndDate] = useState(formatDateForInput(new Date()));
+  const [modalWeekDate, setModalWeekDate] = useState(formatDateForInput(new Date()));
+  const [modalMonth, setModalMonth] = useState(formatDateForInput(new Date()).substring(0, 7)); // YYYY-MM format
 
   useEffect(() => {
     loadAnalyticsData();
     loadStreakData();
     loadComparativePillarData();
     loadComparativeCategoryData();
+    loadComparativeTaskData();
   }, [dateRange, selectedPillar, customStartDate, customEndDate]);
+
+  // Update customStartDate and customEndDate when detailed view date changes
+  useEffect(() => {
+    if (viewMode === 'detailed' && detailedDate) {
+      const selectedDate = new Date(detailedDate);
+      
+      if (detailedPeriodType === 'day') {
+        // Single day
+        setCustomStartDate(detailedDate);
+        setCustomEndDate(detailedDate);
+      } else if (detailedPeriodType === 'week') {
+        // Week starting Monday
+        const weekStart = getWeekStart(selectedDate);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+        setCustomStartDate(formatDateForInput(weekStart));
+        setCustomEndDate(formatDateForInput(weekEnd));
+      } else if (detailedPeriodType === 'month') {
+        // Entire month
+        const monthStart = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+        const monthEnd = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0);
+        setCustomStartDate(formatDateForInput(monthStart));
+        setCustomEndDate(formatDateForInput(monthEnd));
+      }
+      
+      // Ensure we're using custom range
+      setDateRange('custom');
+    }
+  }, [viewMode, detailedDate, detailedPeriodType]);
 
   const loadComparativePillarData = async () => {
     try {
       // Load Today's data
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = formatDateForInput(today);
       const dailyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${todayStr}&end_date=${todayStr}`);
       setDailyPillarData(dailyResponse.data.pillars || []);
       
-      // Load This Week's data
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6); // End of week (Saturday)
-      const weeklyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${weekStart.toISOString().split('T')[0]}&end_date=${weekEnd.toISOString().split('T')[0]}`);
+      // Load This Week's data (Monday to today)
+      const weekStart = getWeekStart(today);
+      const weekStartStr = formatDateForInput(weekStart);
+      const todayEndStr = formatDateForInput(today); // Week data up to today, not full week
+      const weeklyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${weekStartStr}&end_date=${todayEndStr}`);
       setWeeklyPillarData(weeklyResponse.data.pillars || []);
       
       // Load This Month's data
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      const monthlyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${monthStart.toISOString().split('T')[0]}&end_date=${monthEnd.toISOString().split('T')[0]}`);
+      const monthlyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${formatDateForInput(monthStart)}&end_date=${formatDateForInput(monthEnd)}`);
       setMonthlyPillarData(monthlyResponse.data.pillars || []);
     } catch (error) {
       console.error('Error loading comparative pillar data:', error);
@@ -145,7 +207,7 @@ export default function Analytics() {
   const loadComparativeCategoryData = async () => {
     try {
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = formatDateForInput(today);
       
       // Load ALL categories with allocated hours (no date filter)
       const allCategoriesResponse = await apiClient.get('/api/analytics/category-breakdown');
@@ -158,25 +220,105 @@ export default function Analytics() {
       console.log('Today category response:', todayResponse.data);
       setTodayCategoryData(todayResponse.data.categories || []);
       
-      // Load This Week's category data
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay()); // Start of week (Sunday)
-      const weekEnd = new Date(weekStart);
-      weekEnd.setDate(weekStart.getDate() + 6); // End of week (Saturday)
-      console.log('Loading week category data from:', weekStart.toISOString().split('T')[0], 'to', weekEnd.toISOString().split('T')[0]);
-      const weekResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${weekStart.toISOString().split('T')[0]}&end_date=${weekEnd.toISOString().split('T')[0]}`);
+      // Load This Week's category data (Monday to today)
+      const weekStart = getWeekStart(today);
+      const weekStartStr = formatDateForInput(weekStart);
+      const todayEndStr = formatDateForInput(today);
+      console.log('Loading week category data from:', weekStartStr, 'to', todayEndStr);
+      const weekResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${weekStartStr}&end_date=${todayEndStr}`);
       console.log('Week category response:', weekResponse.data);
       setWeekCategoryData(weekResponse.data.categories || []);
       
       // Load This Month's category data
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      console.log('Loading month category data from:', monthStart.toISOString().split('T')[0], 'to', monthEnd.toISOString().split('T')[0]);
-      const monthResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${monthStart.toISOString().split('T')[0]}&end_date=${monthEnd.toISOString().split('T')[0]}`);
+      console.log('Loading month category data from:', formatDateForInput(monthStart), 'to', formatDateForInput(monthEnd));
+      const monthResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${formatDateForInput(monthStart)}&end_date=${formatDateForInput(monthEnd)}`);
       console.log('Month category response:', monthResponse.data);
       setMonthCategoryData(monthResponse.data.categories || []);
     } catch (error) {
       console.error('Error loading comparative category data:', error);
+    }
+  };
+
+  const loadComparativeTaskData = async () => {
+    console.log('🔵 loadComparativeTaskData() CALLED');
+    try {
+      const today = new Date();
+      const todayStr = formatDateForInput(today);
+      console.log('📅 Today date:', todayStr);
+      
+      // Load ALL tasks with allocated time
+      const allTasksResponse = await apiClient.get('/api/tasks?limit=1000');
+      console.log('📥 Tasks API response:', allTasksResponse.data?.length, 'tasks received');
+      const tasks = allTasksResponse.data || [];
+      
+      // Create base tasks array with allocated minutes - FILTER FOR DAILY TASKS ONLY
+      const baseTasks: TaskData[] = tasks
+        .filter((task: any) => task.follow_up_frequency === 'daily') // Only daily tasks match Daily tab
+        .map((task: any) => ({
+          task_id: task.id,
+          task_name: task.name,
+          category_name: task.category_name || 'Uncategorized',
+          allocated_minutes: task.allocated_minutes || 0,
+          spent_minutes: 0
+        }));
+      setAllTasksData(baseTasks);
+      console.log('✅ Base tasks (daily only):', baseTasks.length, 'tasks');
+      console.log('📋 Sample base task IDs:', baseTasks.slice(0, 5).map(t => ({ id: t.task_id, name: t.task_name })));
+      
+      // Load Today's task time entries
+      const todayEntries = await apiClient.get(`/api/daily-time?date=${todayStr}`);
+      console.log('Today entries API response:', todayEntries.data);
+      const todayTasks = baseTasks.map(task => {
+        const entry = (todayEntries.data || []).find((e: any) => e.task_id === task.task_id);
+        return {
+          ...task,
+          spent_minutes: entry?.minutes || 0
+        };
+      });
+      setTodayTaskData(todayTasks);
+      console.log('Today tasks with spent time:', todayTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
+      
+      // Load This Week's task time entries (Monday to today)
+      const weekStart = getWeekStart(today);
+      const weekStartStr = formatDateForInput(weekStart);
+      const weekEntries = await apiClient.get(`/api/daily-time?start_date=${weekStartStr}&end_date=${todayStr}`);
+      console.log('Week entries API response (first 5):', (weekEntries.data || []).slice(0, 5));
+      const weekTaskMap = new Map<number, number>();
+      (weekEntries.data || []).forEach((entry: any) => {
+        weekTaskMap.set(entry.task_id, (weekTaskMap.get(entry.task_id) || 0) + entry.minutes);
+      });
+      console.log('Week task map size:', weekTaskMap.size, 'entries');
+      const weekTasks = baseTasks.map(task => ({
+        ...task,
+        spent_minutes: weekTaskMap.get(task.task_id) || 0
+      }));
+      setWeekTaskData(weekTasks);
+      console.log('Week tasks with spent time:', weekTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
+      
+      // Load This Month's task time entries
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      const monthStartStr = formatDateForInput(monthStart);
+      const monthEndStr = formatDateForInput(today);
+      const monthEntries = await apiClient.get(`/api/daily-time?start_date=${monthStartStr}&end_date=${monthEndStr}`);
+      console.log('Month entries API response (first 5):', (monthEntries.data || []).slice(0, 5));
+      const monthTaskMap = new Map<number, number>();
+      (monthEntries.data || []).forEach((entry: any) => {
+        monthTaskMap.set(entry.task_id, (monthTaskMap.get(entry.task_id) || 0) + entry.minutes);
+      });
+      console.log('Month task map size:', monthTaskMap.size, 'entries');
+      const monthTasks = baseTasks.map(task => ({
+        ...task,
+        spent_minutes: monthTaskMap.get(task.task_id) || 0
+      }));
+      setMonthTaskData(monthTasks);
+      console.log('Month tasks with spent time:', monthTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
+      
+      console.log('Tasks data loaded:', { today: todayTasks.length, week: weekTasks.length, month: monthTasks.length });
+    } catch (error) {
+      console.error('❌❌❌ Error loading comparative task data:', error);
+      console.error('Error details:', error);
     }
   };
 
@@ -329,6 +471,12 @@ export default function Analytics() {
             📊 Overview
           </button>
           <button 
+            className={`tab-button ${viewMode === 'detailed' ? 'active' : ''}`}
+            onClick={() => setViewMode('detailed')}
+          >
+            📅 Detailed View
+          </button>
+          <button 
             className={`tab-button ${viewMode === 'categories' ? 'active' : ''}`}
             onClick={() => setViewMode('categories')}
           >
@@ -348,248 +496,177 @@ export default function Analytics() {
           </button>
         </div>
         
-        <div className="analytics-controls">
-          <div className="date-range-selector">
-            <label>Date Range:</label>
-            <select 
-              value={dateRange} 
-              onChange={(e) => setDateRange(e.target.value as any)}
-            >
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="4weeks">Last 4 Weeks</option>
-              <option value="month">This Month</option>
-              <option value="custom">Custom Range</option>
-            </select>
-          </div>
-
-          {dateRange === 'custom' && (
-            <div className="custom-date-inputs">
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                placeholder="Start Date"
-              />
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                placeholder="End Date"
-              />
+        {/* Date Range Selector - Only show for Categories/Tasks/Wheel modes */}
+        {viewMode !== 'overview' && viewMode !== 'detailed' && (
+          <div className="analytics-controls">
+            <div className="date-range-selector">
+              <label>Date Range:</label>
+              <select 
+                value={dateRange} 
+                onChange={(e) => setDateRange(e.target.value as any)}
+              >
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="4weeks">Last 4 Weeks</option>
+                <option value="month">This Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
             </div>
-          )}
-        </div>
+
+            {dateRange === 'custom' && (
+              <div className="custom-date-inputs">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  placeholder="Start Date"
+                />
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  placeholder="End Date"
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* OVERVIEW MODE: Three-Pillar Cards */}
+      {/* OVERVIEW MODE: Unified Comparison Charts */}
       {viewMode === 'overview' && (
         <>
-          {/* Three-Pillar Side-by-Side Cards */}
-          <div className="pillar-cards-container">
-            {pillarData.map((pillar) => {
-              // Calculate actual allocated hours based on date range
-              const getDaysInRange = () => {
-                const { start, end } = getDateRange();
-                if (!start || !end) return 1;
-                
-                const startDate = new Date(start);
-                const endDate = new Date(end);
-                const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 to include both start and end
-                return diffDays;
-              };
-              
-              const daysInRange = getDaysInRange();
-              const adjustedAllocatedHours = pillar.allocated_hours * daysInRange;
-              
-              const utilizationPercent = adjustedAllocatedHours > 0 
-                ? (pillar.spent_hours / adjustedAllocatedHours) * 100 
-                : 0;
-              const status = utilizationPercent >= 80 ? 'excellent' 
-                          : utilizationPercent >= 50 ? 'good' 
-                          : 'needs-attention';
-              
-              return (
-                <div key={pillar.pillar_id} className={`pillar-card pillar-card-${status}`}>
-                  <div className="pillar-card-header">
-                    <h3>{pillar.pillar_name}</h3>
-                    <div className="pillar-icon" style={{ backgroundColor: pillar.color_code }}>
-                      {pillar.pillar_name.charAt(0)}
-                    </div>
-                  </div>
-                  
-                  <div className="pillar-metrics">
-                    <div className="metric-row">
-                      <span className="metric-label">Allocated:</span>
-                      <span className="metric-value">
-                        {adjustedAllocatedHours}h
-                        {daysInRange > 1 && (
-                          <small style={{ color: '#718096', fontSize: '0.75rem', marginLeft: '0.25rem' }}>
-                            ({pillar.allocated_hours}h × {daysInRange} days)
-                          </small>
-                        )}
-                      </span>
-                    </div>
-                    <div className="metric-row">
-                      <span className="metric-label">Spent:</span>
-                      <span className="metric-value">{pillar.spent_hours}h</span>
-                    </div>
-                  </div>
-                  
-                  <div className="progress-bar-container">
-                    <div 
-                      className="progress-bar" 
-                      style={{ 
-                        width: `${Math.min(utilizationPercent, 100)}%`,
-                        backgroundColor: pillar.color_code 
-                      }}
-                    />
-                  </div>
-                  
-                  <div className="pillar-status">
-                    <span className={`status-badge status-${status}`}>
-                      {utilizationPercent.toFixed(0)}%
-                    </span>
-                    <span className="status-text">
-                      {status === 'excellent' ? '✨ On Track' 
-                        : status === 'good' ? '👍 Good' 
-                        : '⚠️ Behind'}
-                    </span>
-                  </div>
-                  
-                  {adjustedAllocatedHours - pillar.spent_hours > 0 && (
-                    <div className="remaining-time">
-                      <small>
-                        {(adjustedAllocatedHours - pillar.spent_hours).toFixed(1)}h remaining
-                        {dateRange === 'today' ? ' today' : ` in this ${dateRange === 'week' ? 'week' : dateRange === 'month' ? 'month' : 'period'}`}
-                      </small>
-                    </div>
-                  )}
-                  {pillar.spent_hours > adjustedAllocatedHours && (
-                    <div className="remaining-time" style={{ color: '#48bb78' }}>
-                      <small>
-                        ✓ {(pillar.spent_hours - adjustedAllocatedHours).toFixed(1)}h over target!
-                      </small>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* COMPARATIVE PILLAR CHARTS: Today vs Week vs Month */}
-          <div className="comparative-charts-section">
-            <h2>📊 Pillar Time Comparison - Today vs Week vs Month</h2>
-            <p className="chart-description">See how your time is distributed across pillars in different time periods</p>
-            
-            <div className="comparative-charts-grid">
-              {/* Chart 1: Today's Pillar Distribution */}
-              <div className="comparative-chart-card">
-                <h3>📅 Today</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={dailyPillarData} barSize={50}>
-                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
-                    <XAxis 
-                      dataKey="pillar_name" 
-                      angle={-15}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                    />
-                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Bar 
-                      dataKey="spent_hours" 
-                      name="Hours Spent"
-                      radius={[8, 8, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, formatter: (value: number) => `${value.toFixed(1)}h` }}
-                    >
-                      {dailyPillarData.map((entry, index) => (
-                        <Cell key={`daily-${index}`} fill={entry.color_code || '#805ad5'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Chart 2: This Week's Pillar Distribution */}
-              <div className="comparative-chart-card">
-                <h3>📆 This Week</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={weeklyPillarData} barSize={50}>
-                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
-                    <XAxis 
-                      dataKey="pillar_name" 
-                      angle={-15}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                    />
-                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Bar 
-                      dataKey="spent_hours" 
-                      name="Hours Spent"
-                      radius={[8, 8, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, formatter: (value: number) => `${value.toFixed(1)}h` }}
-                    >
-                      {weeklyPillarData.map((entry, index) => (
-                        <Cell key={`weekly-${index}`} fill={entry.color_code || '#805ad5'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              {/* Chart 3: This Month's Pillar Distribution */}
-              <div className="comparative-chart-card">
-                <h3>📊 This Month</h3>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={monthlyPillarData} barSize={50}>
-                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
-                    <XAxis 
-                      dataKey="pillar_name" 
-                      angle={-15}
-                      textAnchor="end"
-                      height={60}
-                      interval={0}
-                    />
-                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
-                    <Tooltip />
-                    <Bar 
-                      dataKey="spent_hours" 
-                      name="Hours Spent"
-                      radius={[8, 8, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, formatter: (value: number) => `${value.toFixed(1)}h` }}
-                    >
-                      {monthlyPillarData.map((entry, index) => (
-                        <Cell key={`monthly-${index}`} fill={entry.color_code || '#805ad5'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-
-          {/* CATEGORY TIME COMPARISON: Allocated vs Today vs Week/Month */}
+          {/* UNIFIED PILLAR COMPARISON CHART */}
           <div className="comparative-charts-section">
             <div className="section-header-with-toggle">
               <div>
-                <h2>📂 Category Time Comparison</h2>
-                <p className="chart-description">Daily allocated vs actual time spent (with weekly/monthly averages)</p>
+                <h2>🎯 Pillar Time Comparison</h2>
+                <p className="chart-description">Ideal allocation vs actual time spent across your life pillars</p>
               </div>
               <button 
                 className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
                 onClick={() => setShowMonthColumn(!showMonthColumn)}
               >
-                {showMonthColumn ? '📊 Hide Month Average' : '📊 Show Month Average'}
+                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
               </button>
             </div>
             
-            <div className="category-comparison-chart">
+            <div 
+              className="unified-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('pillar');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
               <ResponsiveContainer width="100%" height={400}>
+                <BarChart 
+                  data={(() => {
+                    // Map all 3 pillars with Allocated, Today, Weekly, Monthly data
+                    return dailyPillarData.map((pillar) => {
+                      const weekData = weeklyPillarData.find(w => w.pillar_id === pillar.pillar_id);
+                      const monthData = monthlyPillarData.find(m => m.pillar_id === pillar.pillar_id);
+                      
+                      // Calculate days for proper averaging
+                      const today = new Date();
+                      const weekStart = getWeekStart(today);
+                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      const daysInMonth = today.getDate();
+                      
+                      return {
+                        name: pillar.pillar_name,
+                        allocated: pillar.allocated_hours, // Daily allocation
+                        today: pillar.spent_hours,
+                        weekly: weekData ? (weekData.spent_hours / daysInWeek) : 0, // Weekly average per day
+                        monthly: monthData ? (monthData.spent_hours / daysInMonth) : 0, // Monthly average per day
+                        color: pillar.color_code
+                      };
+                    });
+                  })()}
+                  barSize={35}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    angle={0}
+                    textAnchor="middle"
+                    height={60}
+                    interval={0}
+                    style={{ fontSize: '14px', fontWeight: 600 }}
+                  />
+                  <YAxis 
+                    label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => `${value.toFixed(2)}h`}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ paddingTop: '20px' }}
+                    iconType="rect"
+                  />
+                  <Bar 
+                    dataKey="allocated" 
+                    name="Ideal (Allocated)" 
+                    fill="#cbd5e0" 
+                    radius={[6, 6, 0, 0]}
+                    label={{ position: 'top', fill: '#666', fontSize: 11, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  <Bar 
+                    dataKey="today" 
+                    name="Today (Actual)" 
+                    fill="#4299e1" 
+                    radius={[6, 6, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  <Bar 
+                    dataKey="weekly" 
+                    name="Weekly Avg (Actual)" 
+                    fill="#48bb78" 
+                    radius={[6, 6, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  {showMonthColumn && (
+                    <Bar 
+                      dataKey="monthly" 
+                      name="Monthly Avg (Actual)" 
+                      fill="#ed8936" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* CATEGORY TIME COMPARISON */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>📂 Category Time Comparison</h2>
+                <p className="chart-description">Ideal allocation vs actual time spent by category</p>
+              </div>
+              <button 
+                className={`toggle-month-btn ${showCategoryMonth ? 'active' : ''}`}
+                onClick={() => setShowCategoryMonth(!showCategoryMonth)}
+              >
+                {showCategoryMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+              </button>
+            </div>
+            
+            <div 
+              className="category-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('category');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
+              <ResponsiveContainer width="100%" height={450}>
                 <BarChart 
                   data={(() => {
                     console.log('=== Category Chart Data Mapping ===');
@@ -598,13 +675,13 @@ export default function Analytics() {
                     console.log('weekCategoryData:', weekCategoryData);
                     console.log('monthCategoryData:', monthCategoryData);
                     
-                    // Calculate days in week and month
+                    // Calculate days in week and month (Monday-based weeks)
                     const today = new Date();
-                    const weekStart = new Date(today);
-                    weekStart.setDate(today.getDate() - today.getDay());
+                    const weekStart = getWeekStart(today);
                     const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
                     const daysInMonth = today.getDate(); // Current day of month
                     
+                    console.log('Week start (Monday):', weekStart);
                     console.log('Days in week so far:', daysInWeek);
                     console.log('Days in month so far:', daysInMonth);
                     
@@ -630,7 +707,7 @@ export default function Analytics() {
                         const result = {
                           category_name: category.category_name,
                           pillar_name: category.pillar_name,
-                          allocated: category.allocated_hours / 7, // Convert weekly allocation to daily
+                          allocated: category.allocated_hours, // Now from daily tab tasks
                           today: todayData?.spent_hours || 0,
                           weekAvg: weekData ? (weekData.spent_hours / daysInWeek) : 0,
                           monthAvg: monthData ? (monthData.spent_hours / daysInMonth) : 0,
@@ -651,6 +728,7 @@ export default function Analytics() {
                     return mappedData;
                   })()}
                   barSize={25}
+                  margin={{ top: 30, right: 30, left: 20, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
@@ -661,7 +739,10 @@ export default function Analytics() {
                     interval={0}
                     fontSize={12}
                   />
-                  <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
+                  <YAxis 
+                    label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} 
+                    domain={[0, 'auto']}
+                  />
                   <Tooltip />
                   <Legend />
                   <Bar 
@@ -685,7 +766,7 @@ export default function Analytics() {
                     radius={[6, 6, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
-                  {showMonthColumn && (
+                  {showCategoryMonth && (
                     <Bar 
                       dataKey="monthAvg" 
                       name="Month Avg/Day" 
@@ -699,32 +780,532 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* Weekly Progress Chart - Only show for non-Today views */}
-          {dateRange !== 'today' && (
-            <div className="chart-section">
-              <h2>Week-over-Week Progress</h2>
-              <p className="chart-description">Time spent per week with trend line and average</p>
-              
-              <ResponsiveContainer width="100%" height={400}>
-                <ComposedChart data={weeklyTrend}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" angle={-45} textAnchor="end" height={80} />
-                  <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="hours" fill="#4299e1" name="Hours Spent" radius={[8, 8, 0, 0]} />
-                  <Line type="monotone" dataKey="hours" stroke="#f56565" strokeWidth={2} name="Trend" dot={false} />
-                  <ReferenceLine 
-                    y={averageHours} 
-                    stroke="#48bb78" 
-                    strokeWidth={2}
-                    strokeDasharray="5 5"
-                    label={{ value: `Avg: ${averageHours}h`, position: 'right' }}
+          {/* TASKS TIME COMPARISON */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>✓ Tasks Time Comparison</h2>
+                <p className="chart-description">Ideal allocation vs actual time spent by task (all tasks)</p>
+              </div>
+              <button 
+                className={`toggle-month-btn ${showTaskMonth ? 'active' : ''}`}
+                onClick={() => setShowTaskMonth(!showTaskMonth)}
+              >
+                {showTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+              </button>
+            </div>
+            
+            <div 
+              className="unified-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('task');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
+              <ResponsiveContainer width="100%" height={800}>
+                <BarChart 
+                  data={(() => {
+                    // Calculate days for proper averaging
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    // Map ALL tasks with all time periods
+                    return allTasksData
+                      .map((task) => {
+                        const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
+                        const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
+                        const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
+                        
+                        return {
+                          name: task.task_name,
+                          category: task.category_name,
+                          allocated: task.allocated_minutes / 60, // Convert to hours (daily)
+                          today: (todayTask?.spent_minutes || 0) / 60,
+                          weekly: (weekTask?.spent_minutes || 0) / 60 / daysInWeek, // Weekly average per day
+                          monthly: (monthTask?.spent_minutes || 0) / 60 / daysInMonth, // Monthly average per day
+                          totalSpent: (todayTask?.spent_minutes || 0) + (weekTask?.spent_minutes || 0) + (monthTask?.spent_minutes || 0)
+                        };
+                      })
+                      .filter(task => task.allocated > 0 || task.totalSpent > 0) // Only tasks with allocation or time spent
+                      .sort((a, b) => (b.allocated + b.totalSpent) - (a.allocated + a.totalSpent)); // Sort by most important - ALL TASKS
+                  })()}
+                  barSize={15}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    angle={-60}
+                    textAnchor="end"
+                    height={150}
+                    interval={0}
+                    style={{ fontSize: '9px' }}
                   />
-                </ComposedChart>
+                  <YAxis 
+                    label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => `${value.toFixed(2)}h`}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ paddingTop: '10px' }}
+                    iconType="rect"
+                  />
+                  <Bar 
+                    dataKey="allocated" 
+                    name="Ideal (Allocated)" 
+                    fill="#cbd5e0" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#666', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  <Bar 
+                    dataKey="today" 
+                    name="Today (Actual)" 
+                    fill="#4299e1" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  <Bar 
+                    dataKey="weekly" 
+                    name="Weekly Avg (Actual)" 
+                    fill="#48bb78" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  {showTaskMonth && (
+                    <Bar 
+                      dataKey="monthly" 
+                      name="Monthly Avg (Actual)" 
+                      fill="#ed8936" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
+                </BarChart>
               </ResponsiveContainer>
             </div>
-          )}
+          </div>
+
+          {/* UTILIZATION PERCENTAGE CHART */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>📊 Time Utilization Percentage</h2>
+                <p className="chart-description">Percentage of allocated time actually used (100% = perfect match, &gt;100% = overtime)</p>
+              </div>
+              <button 
+                onClick={() => {
+                  setModalChartType('utilization' as any);
+                  setShowDetailModal(true);
+                }}
+                className="expand-button"
+              >
+                🔍 View All
+              </button>
+            </div>
+            
+            <div className="unified-comparison-chart">
+              <ResponsiveContainer width="100%" height={500}>
+                <BarChart 
+                  data={(() => {
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    return allTasksData
+                      .map((task) => {
+                        const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
+                        const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
+                        const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
+                        
+                        const allocated = task.allocated_minutes / 60;
+                        const todaySpent = (todayTask?.spent_minutes || 0) / 60;
+                        const weeklyAvg = (weekTask?.spent_minutes || 0) / 60 / daysInWeek;
+                        const monthlyAvg = (monthTask?.spent_minutes || 0) / 60 / daysInMonth;
+                        
+                        // Calculate utilization percentages
+                        const todayUtil = allocated > 0 ? (todaySpent / allocated) * 100 : 0;
+                        const weekUtil = allocated > 0 ? (weeklyAvg / allocated) * 100 : 0;
+                        const monthUtil = allocated > 0 ? (monthlyAvg / allocated) * 100 : 0;
+                        
+                        return {
+                          name: task.task_name,
+                          today: todayUtil,
+                          weekly: weekUtil,
+                          monthly: monthUtil,
+                          hasData: allocated > 0 || todaySpent > 0 || weeklyAvg > 0 || monthlyAvg > 0
+                        };
+                      })
+                      .filter(task => task.hasData)
+                      .sort((a, b) => (b.today + b.weekly + b.monthly) - (a.today + a.weekly + a.monthly))
+                      .slice(0, 20); // Show top 20 tasks by total utilization
+                  })()}
+                  barSize={20}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    angle={-60}
+                    textAnchor="end"
+                    height={150}
+                    interval={0}
+                    style={{ fontSize: '9px' }}
+                  />
+                  <YAxis 
+                    label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => `${value.toFixed(1)}%`}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                  />
+                  <Legend 
+                    wrapperStyle={{ paddingTop: '10px' }}
+                    iconType="rect"
+                  />
+                  {/* Reference line at 100% */}
+                  <line x1="0" y1="100" x2="100%" y2="100" stroke="#48bb78" strokeWidth={2} strokeDasharray="5 5" />
+                  <Bar 
+                    dataKey="today" 
+                    name="Today %" 
+                    fill="#4299e1" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                  />
+                  <Bar 
+                    dataKey="weekly" 
+                    name="Weekly Avg %" 
+                    fill="#48bb78" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                  />
+                  {showTaskMonth && (
+                    <Bar 
+                      dataKey="monthly" 
+                      name="Monthly Avg %" 
+                      fill="#ed8936" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+              
+              {/* Utilization Legend */}
+              <div className="utilization-legend">
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#cbd5e0' }}></span>
+                  <span>&lt; 50%: Under-utilized</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#48bb78' }}></span>
+                  <span>80-120%: Optimal range</span>
+                </div>
+                <div className="legend-item">
+                  <span className="legend-color" style={{ backgroundColor: '#ed8936' }}></span>
+                  <span>&gt; 150%: Significant overtime</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* PER-PILLAR CATEGORY BREAKDOWN CHARTS */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>📊 Category Breakdown by Pillar</h2>
+                <p className="chart-description">Time spent on categories within each pillar</p>
+              </div>
+              <button 
+                className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+                onClick={() => setShowMonthColumn(!showMonthColumn)}
+              >
+                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+              </button>
+            </div>
+            
+            {dailyPillarData
+              .filter(pillar => pillar.spent_hours > 0)
+              .map((pillar) => {
+                // Get categories for this pillar
+                const pillarCategories = allCategoriesData
+                  .filter(cat => cat.pillar_name === pillar.pillar_name)
+                  .map(category => {
+                    const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
+                    const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
+                    const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    return {
+                      category_name: category.category_name,
+                      allocated: category.allocated_hours, // Daily allocation from Category table
+                      today: todayData?.spent_hours || 0,
+                      weekAvg: weekData ? (weekData.spent_hours / daysInWeek) : 0,
+                      monthAvg: monthData ? (monthData.spent_hours / daysInMonth) : 0,
+                      totalSpent: (todayData?.spent_hours || 0) + (weekData?.spent_hours || 0) + (monthData?.spent_hours || 0)
+                    };
+                  })
+                  .filter(cat => cat.totalSpent > 0 || cat.allocated > 0)
+                  .sort((a, b) => b.totalSpent - a.totalSpent);
+
+                if (pillarCategories.length === 0) return null;
+
+                return (
+                  <div key={pillar.pillar_id} className="pillar-category-breakdown">
+                    <div className="pillar-category-header">
+                      <h3 style={{ color: pillar.color_code }}>
+                        {pillar.icon} {pillar.pillar_name}
+                      </h3>
+                      <span className="pillar-total-time">{pillar.spent_hours.toFixed(1)}h total</span>
+                    </div>
+                    <div
+                      className="clickable-chart"
+                      onClick={() => {
+                        setModalChartType(('pillar-categories-' + pillar.pillar_id) as any);
+                        setShowDetailModal(true);
+                      }}
+                      title="Click to view enlarged chart"
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ResponsiveContainer width="100%" height={400}>
+                      <BarChart 
+                        data={pillarCategories}
+                        barSize={35}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                      >
+                        <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                        <XAxis 
+                          dataKey="category_name"
+                          angle={-45}
+                          textAnchor="end"
+                          height={100}
+                          interval={0}
+                          style={{ fontSize: '12px' }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }}
+                          style={{ fontSize: '12px' }}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                        <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                        <Bar 
+                          dataKey="allocated" 
+                          name="Ideal (Allocated)" 
+                          fill="#cbd5e0" 
+                          radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        <Bar 
+                          dataKey="today" 
+                          name="Today" 
+                          fill="#4299e1" 
+                          radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        <Bar 
+                          dataKey="weekAvg" 
+                          name="Weekly Avg" 
+                          fill="#48bb78" 
+                          radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        {showMonthColumn && (
+                          <Bar 
+                            dataKey="monthAvg" 
+                            name="Monthly Avg" 
+                            fill="#ed8936" 
+                            radius={[6, 6, 0, 0]}
+                            label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                          />
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+
+          {/* TASK-LEVEL BREAKDOWN BY PILLAR */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>📋 Task Breakdown by Pillar</h2>
+                <p className="chart-description">Individual task performance within each pillar</p>
+              </div>
+              <button 
+                className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+                onClick={() => setShowMonthColumn(!showMonthColumn)}
+              >
+                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+              </button>
+            </div>
+            
+            {dailyPillarData
+              .filter(pillar => pillar.spent_hours > 0)
+              .map((pillar) => {
+                // Get categories for this pillar to filter tasks
+                const pillarCategoryIds = allCategoriesData
+                  .filter(cat => cat.pillar_name === pillar.pillar_name)
+                  .map(cat => cat.category_id);
+                
+                // Get all tasks for this pillar by matching category
+                let debugCount = 0;
+                const pillarTasks = allTasksData
+                  .filter(task => {
+                    // Find the category for this task
+                    const taskCategory = allCategoriesData.find(cat => cat.category_name === task.category_name);
+                    return taskCategory && pillarCategoryIds.includes(taskCategory.category_id);
+                  })
+                  .map(task => {
+                    const todayData = todayTaskData.find(t => t.task_id === task.task_id);
+                    const weekData = weekTaskData.find(w => w.task_id === task.task_id);
+                    const monthData = monthTaskData.find(m => m.task_id === task.task_id);
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    const taskData = {
+                      task_name: task.task_name,
+                      allocated: task.allocated_minutes / 60, // Convert to hours
+                      today: todayData ? (todayData.spent_minutes / 60) : 0,
+                      weekAvg: weekData ? (weekData.spent_minutes / 60 / daysInWeek) : 0,
+                      monthAvg: monthData ? (monthData.spent_minutes / 60 / daysInMonth) : 0,
+                      totalSpent: (todayData?.spent_minutes || 0) + (weekData?.spent_minutes || 0) + (monthData?.spent_minutes || 0)
+                    };
+                    
+                    // Debug logging for first few tasks
+                    if (debugCount < 3) {
+                      console.log(`Task: ${task.task_name}`);
+                      console.log(`  todayData:`, todayData);
+                      console.log(`  weekData:`, weekData);
+                      console.log(`  monthData:`, monthData);
+                      console.log(`  Calculated: today=${taskData.today}h, weekAvg=${taskData.weekAvg}h, monthAvg=${taskData.monthAvg}h`);
+                      debugCount++;
+                    }
+                    
+                    return taskData;
+                  })
+                  .filter(task => task.totalSpent > 0 || task.allocated > 0)
+                  .sort((a, b) => b.totalSpent - a.totalSpent);
+                
+                // Log summary for this pillar
+                console.log(`${pillar.pillar_name} - All Tasks:`, {
+                  totalTasks: pillarTasks.length,
+                  sampleTasks: pillarTasks.slice(0, 3).map(t => ({
+                    name: t.task_name,
+                    allocated: t.allocated,
+                    today: t.today,
+                    weekAvg: t.weekAvg,
+                    monthAvg: t.monthAvg
+                  }))
+                });
+
+                if (pillarTasks.length === 0) return null;
+
+                return (
+                  <div key={`tasks-${pillar.pillar_id}`} className="pillar-category-breakdown">
+                    <div className="pillar-category-header">
+                      <h3 style={{ color: pillar.color_code }}>
+                        {pillar.icon} {pillar.pillar_name} - All Tasks
+                      </h3>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <span className="pillar-total-time">{pillarTasks.length} tasks</span>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setModalChartType(('pillar-tasks-' + pillar.pillar_id) as any);
+                            setShowDetailModal(true);
+                          }}
+                          className="expand-button"
+                          style={{ padding: '4px 12px', fontSize: '12px' }}
+                        >
+                          🔍 Expand
+                        </button>
+                      </div>
+                    </div>
+                    <div
+                      className="clickable-chart"
+                      onClick={() => {
+                        setModalChartType(('pillar-tasks-' + pillar.pillar_id) as any);
+                        setShowDetailModal(true);
+                      }}
+                      title="Click to view enlarged chart"
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <ResponsiveContainer width="100%" height={Math.max(500, pillarTasks.length * 40)}>
+                      <BarChart 
+                        data={pillarTasks}
+                        barSize={20}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                      >
+                        <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                        <XAxis 
+                          dataKey="task_name"
+                          angle={-45}
+                          textAnchor="end"
+                          height={140}
+                          interval={0}
+                          style={{ fontSize: '11px' }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }}
+                          style={{ fontSize: '11px' }}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                        <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                        <Bar 
+                          dataKey="allocated" 
+                          name="Ideal (Allocated)" 
+                          fill="#cbd5e0" 
+                          radius={[4, 4, 0, 0]}
+                          label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        <Bar 
+                          dataKey="today" 
+                          name="Today (Actual)" 
+                          fill="#4299e1" 
+                          radius={[4, 4, 0, 0]}
+                          label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        <Bar 
+                          dataKey="weekAvg" 
+                          name="Weekly Avg (Actual)" 
+                          fill="#48bb78" 
+                          radius={[4, 4, 0, 0]}
+                          label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        {showMonthColumn && (
+                          <Bar 
+                            dataKey="monthAvg" 
+                            name="Monthly Avg (Actual)" 
+                            fill="#ed8936" 
+                            radius={[4, 4, 0, 0]}
+                            label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                          />
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         </>
       )}
 
@@ -889,6 +1470,308 @@ export default function Analytics() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* DETAILED VIEW: Custom Date Selection with Comparison Charts */}
+      {viewMode === 'detailed' && (
+        <div className="detailed-view-section">
+          <h2>📅 Detailed Analytics - Custom Time Period</h2>
+          <p className="chart-description">Select a specific date, week, or month to view detailed comparisons</p>
+          
+          {/* Period Type and Date Selector */}
+          <div className="detailed-controls">
+            <div className="period-type-selector">
+              <label>View By:</label>
+              <select 
+                value={detailedPeriodType} 
+                onChange={(e) => setDetailedPeriodType(e.target.value as 'day' | 'week' | 'month')}
+              >
+                <option value="day">Single Day</option>
+                <option value="week">Week (Monday-Sunday)</option>
+                <option value="month">Month</option>
+              </select>
+            </div>
+            
+            <div className="date-selector">
+              <label>Select Date:</label>
+              <input
+                type="date"
+                value={detailedDate}
+                onChange={(e) => setDetailedDate(e.target.value)}
+              />
+            </div>
+            
+            <button 
+              className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+              onClick={() => setShowMonthColumn(!showMonthColumn)}
+              style={{ marginLeft: 'auto' }}
+            >
+              {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+            </button>
+          </div>
+
+          <div className="detailed-info-banner">
+            <span className="info-icon">ℹ️</span>
+            <span>
+              {detailedPeriodType === 'day' && `Showing data for ${detailedDate}`}
+              {detailedPeriodType === 'week' && `Showing data for week starting Monday of ${detailedDate}`}
+              {detailedPeriodType === 'month' && `Showing data for entire month of ${detailedDate}`}
+            </span>
+          </div>
+
+          {/* Same comparison charts as Overview */}
+          <div className="comparative-charts-section">
+            <div className="section-header">
+              <h2>🎯 Pillar Time Comparison</h2>
+              <p className="chart-description">Compare allocated vs actual time for selected period</p>
+            </div>
+            
+            <div 
+              className="unified-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('pillar-simple');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart 
+                  data={pillarData.map((pillar) => ({
+                    name: pillar.pillar_name,
+                    allocated: pillar.allocated_hours,
+                    actual: pillar.spent_hours,
+                    color: pillar.color_code
+                  }))}
+                  barSize={40}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    style={{ fontSize: '14px', fontWeight: 600 }}
+                  />
+                  <YAxis 
+                    label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip 
+                    formatter={(value: number) => `${value.toFixed(2)}h`}
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                  />
+                  <Legend iconType="rect" />
+                  <Bar 
+                    dataKey="allocated" 
+                    name="Allocated" 
+                    fill="#cbd5e0" 
+                    radius={[6, 6, 0, 0]}
+                    label={{ position: 'top', fill: '#666', fontSize: 11, fontWeight: 500, formatter: (value: number) => `${value.toFixed(1)}h` }}
+                  />
+                  <Bar 
+                    dataKey="actual" 
+                    name="Actual" 
+                    fill="#4299e1" 
+                    radius={[6, 6, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => `${value.toFixed(1)}h` }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Category Comparison for Detailed View */}
+          <div className="comparative-charts-section">
+            <div className="section-header">
+              <h2>📂 Category Time Comparison</h2>
+              <p className="chart-description">Daily allocated vs actual time by category for selected period</p>
+            </div>
+            
+            <div 
+              className="unified-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('category-simple');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
+              <ResponsiveContainer width="100%" height={400}>
+                <BarChart 
+                  data={categoryData.slice(0, 10).map(cat => ({
+                    category_name: cat.category_name,
+                    allocated_hours: cat.allocated_hours, // Now from daily tab tasks
+                    spent_hours: cat.spent_hours
+                  }))}
+                  barSize={25}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 80 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="category_name" 
+                    angle={-30}
+                    textAnchor="end"
+                    height={80}
+                    interval={0}
+                    style={{ fontSize: '11px' }}
+                  />
+                  <YAxis 
+                    label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} 
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                  <Legend />
+                  <Bar 
+                    dataKey="allocated_hours" 
+                    name="Allocated" 
+                    fill="#cbd5e0" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="spent_hours" 
+                    name="Actual" 
+                    fill="#48bb78" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Tasks Comparison for Detailed View */}
+          <div className="comparative-charts-section">
+            <div className="section-header">
+              <h2>✓ Tasks Time Comparison</h2>
+              <p className="chart-description">Top 10 tasks by time spent</p>
+            </div>
+            
+            <div 
+              className="unified-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('task-simple');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
+              <ResponsiveContainer width="100%" height={450}>
+                <BarChart 
+                  data={todayTaskData
+                    .filter(task => task.allocated_minutes > 0 || task.spent_minutes > 0)
+                    .sort((a, b) => b.spent_minutes - a.spent_minutes)
+                    .slice(0, 10)
+                    .map(task => ({
+                      name: task.task_name,
+                      allocated: task.allocated_minutes / 60,
+                      actual: task.spent_minutes / 60
+                    }))}
+                  barSize={20}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    angle={-45}
+                    textAnchor="end"
+                    height={100}
+                    interval={0}
+                    style={{ fontSize: '10px' }}
+                  />
+                  <YAxis 
+                    label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} 
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                  <Legend />
+                  <Bar 
+                    dataKey="allocated" 
+                    name="Allocated" 
+                    fill="#cbd5e0" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="actual" 
+                    name="Actual" 
+                    fill="#ed8936" 
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* PER-PILLAR CATEGORY BREAKDOWN FOR DETAILED VIEW */}
+          <div className="comparative-charts-section">
+            <div className="section-header">
+              <h2>📊 Category Breakdown by Pillar</h2>
+              <p className="chart-description">Time spent on categories within each pillar for selected period</p>
+            </div>
+            
+            {pillarData
+              .filter(pillar => pillar.spent_hours > 0)
+              .map((pillar) => {
+                // Get categories for this pillar based on selected date range
+                const pillarCategories = categoryData
+                  .filter(cat => cat.pillar_name === pillar.pillar_name)
+                  .map(category => ({
+                    category_name: category.category_name,
+                    spent_hours: category.spent_hours,
+                    allocated_hours: category.allocated_hours
+                  }))
+                  .filter(cat => cat.spent_hours > 0 || cat.allocated_hours > 0)
+                  .sort((a, b) => b.spent_hours - a.spent_hours);
+
+                if (pillarCategories.length === 0) return null;
+
+                return (
+                  <div key={pillar.pillar_id} className="pillar-category-breakdown">
+                    <div className="pillar-category-header">
+                      <h3 style={{ color: pillar.color_code }}>
+                        {pillar.icon || '📌'} {pillar.pillar_name}
+                      </h3>
+                      <span className="pillar-total-time">{pillar.spent_hours.toFixed(1)}h total</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart 
+                        data={pillarCategories}
+                        layout="vertical"
+                        barSize={25}
+                        margin={{ top: 20, right: 30, left: 150, bottom: 80 }}
+                      >
+                        <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" horizontal={false} />
+                        <XAxis 
+                          dataKey="category_name"
+                          angle={-45}
+                          textAnchor="end"
+                          height={120}
+                          interval={0}
+                          style={{ fontSize: '11px' }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Hours', angle: -90, position: 'insideLeft' }}
+                          style={{ fontSize: '11px' }}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                        <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                        <Bar 
+                          dataKey="allocated_hours" 
+                          name="Allocated" 
+                          fill="#cbd5e0" 
+                          radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                        <Bar 
+                          dataKey="spent_hours" 
+                          name="Actual" 
+                          fill="#4299e1" 
+                          radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}
@@ -1058,6 +1941,511 @@ export default function Analytics() {
           </p>
         </div>
       </div>
+
+      {/* DETAIL VIEW MODAL */}
+      {showDetailModal && (
+        <div className="chart-detail-modal" onClick={() => setShowDetailModal(false)}>
+          <div 
+            className={`modal-content modal-content-fullwidth ${modalChartType === 'task' ? 'task-modal' : ''}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h2>
+                {modalChartType === 'pillar' && '🎯 Pillar Time Comparison - Detailed View'}
+                {modalChartType === 'category' && '📂 Category Time Comparison - Detailed View'}
+                {modalChartType === 'task' && '✓ Tasks Time Comparison - Detailed View'}
+                {modalChartType === 'utilization' && '📊 Time Utilization Percentage - All Tasks'}
+                {modalChartType === 'pillar-simple' && '🎯 Pillar Time Comparison'}
+                {modalChartType === 'category-simple' && '📂 Category Time Comparison'}
+                {modalChartType === 'task-simple' && '✓ Tasks Time Comparison'}
+                {String(modalChartType).startsWith('pillar-tasks-') && '📋 Task Breakdown - Detailed View'}
+                {String(modalChartType).startsWith('pillar-categories-') && '📊 Category Breakdown - Detailed View'}
+              </h2>
+              <button className="close-modal-btn" onClick={() => setShowDetailModal(false)}>
+                ✕
+              </button>
+            </div>
+            
+            {/* Date/Week/Month Selector */}
+            <div className="modal-date-controls">
+              <div className="modal-view-type-selector">
+                <button 
+                  className={`modal-view-type-btn ${modalViewType === 'date' ? 'active' : ''}`}
+                  onClick={() => setModalViewType('date')}
+                >
+                  📅 Date Range
+                </button>
+                <button 
+                  className={`modal-view-type-btn ${modalViewType === 'week' ? 'active' : ''}`}
+                  onClick={() => setModalViewType('week')}
+                >
+                  📆 Week
+                </button>
+                <button 
+                  className={`modal-view-type-btn ${modalViewType === 'month' ? 'active' : ''}`}
+                  onClick={() => setModalViewType('month')}
+                >
+                  🗓️ Month
+                </button>
+              </div>
+              
+              <div className="modal-date-inputs">
+                {modalViewType === 'date' && (
+                  <>
+                    <div className="modal-date-input-group">
+                      <label>Start Date</label>
+                      <input 
+                        type="date" 
+                        value={modalStartDate}
+                        onChange={(e) => setModalStartDate(e.target.value)}
+                      />
+                    </div>
+                    <div className="modal-date-input-group">
+                      <label>End Date</label>
+                      <input 
+                        type="date" 
+                        value={modalEndDate}
+                        onChange={(e) => setModalEndDate(e.target.value)}
+                      />
+                    </div>
+                  </>
+                )}
+                
+                {modalViewType === 'week' && (
+                  <div className="modal-date-input-group">
+                    <label>Select Week (Monday)</label>
+                    <input 
+                      type="date" 
+                      value={modalWeekDate}
+                      onChange={(e) => {
+                        const selectedDate = new Date(e.target.value);
+                        const weekStart = getWeekStart(selectedDate);
+                        setModalWeekDate(formatDateForInput(weekStart));
+                      }}
+                    />
+                  </div>
+                )}
+                
+                {modalViewType === 'month' && (
+                  <div className="modal-date-input-group">
+                    <label>Select Month</label>
+                    <input 
+                      type="month" 
+                      value={modalMonth}
+                      onChange={(e) => setModalMonth(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="modal-body">
+              {modalChartType === 'pillar' && (
+                <ResponsiveContainer width="100%" height={800}>
+                  <BarChart 
+                    data={dailyPillarData.map((pillar) => {
+                      const weekData = weeklyPillarData.find(w => w.pillar_id === pillar.pillar_id);
+                      const monthData = monthlyPillarData.find(m => m.pillar_id === pillar.pillar_id);
+                      const today = new Date();
+                      const weekStart = getWeekStart(today);
+                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      const daysInMonth = today.getDate();
+                      return {
+                        name: pillar.pillar_name,
+                        allocated: pillar.allocated_hours,
+                        today: pillar.spent_hours,
+                        weekly: weekData ? (weekData.spent_hours / daysInWeek) : 0,
+                        monthly: monthData ? (monthData.spent_hours / daysInMonth) : 0,
+                      };
+                    })}
+                    barSize={100}
+                    margin={{ top: 40, right: 80, left: 60, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="name" style={{ fontSize: '20px', fontWeight: 600 }} />
+                    <YAxis label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft', style: { fontSize: '18px' } }} domain={[0, 'auto']} style={{ fontSize: '16px' }} />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} contentStyle={{ fontSize: '16px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '16px' }} iconType="rect" iconSize={20} />
+                    <Bar dataKey="allocated" name="Ideal (Allocated)" fill="#cbd5e0" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />
+                    <Bar dataKey="today" name="Today (Actual)" fill="#4299e1" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />
+                    <Bar dataKey="weekly" name="Weekly Avg (Actual)" fill="#48bb78" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />
+                    {showMonthColumn && <Bar dataKey="monthly" name="Monthly Avg (Actual)" fill="#ed8936" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {modalChartType === 'category' && (
+                <ResponsiveContainer width="100%" height={700}>
+                  <BarChart 
+                    data={allCategoriesData.map((category) => {
+                      const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
+                      const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
+                      const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
+                      const today = new Date();
+                      const weekStart = getWeekStart(today);
+                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      const daysInMonth = today.getDate();
+                      return {
+                        category_name: category.category_name,
+                        allocated: category.allocated_hours, // Now from daily tab tasks
+                        today: todayData?.spent_hours || 0,
+                        weekAvg: weekData ? (weekData.spent_hours / daysInWeek) : 0,
+                        monthAvg: monthData ? (monthData.spent_hours / daysInMonth) : 0,
+                      };
+                    })}
+                    barSize={35}
+                    margin={{ top: 30, right: 50, left: 30, bottom: 120 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="category_name" angle={-30} textAnchor="end" height={120} interval={0} style={{ fontSize: '13px' }} />
+                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} domain={[0, 'auto']} />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar dataKey="allocated" name="Allocated (Daily)" fill="#cbd5e0" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />
+                    <Bar dataKey="today" name="Today" fill="#4299e1" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />
+                    <Bar dataKey="weekAvg" name="Week Avg/Day" fill="#48bb78" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />
+                    {showCategoryMonth && <Bar dataKey="monthAvg" name="Month Avg/Day" fill="#ed8936" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {modalChartType === 'task' && (
+                <ResponsiveContainer width="100%" height={800}>
+                  <BarChart 
+                    layout="vertical"
+                    data={allTasksData
+                      .map((task) => {
+                        const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
+                        const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
+                        const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
+                        const today = new Date();
+                        const weekStart = getWeekStart(today);
+                        const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                        const daysInMonth = today.getDate();
+                        return {
+                          name: task.task_name,
+                          allocated: task.allocated_minutes / 60,
+                          today: (todayTask?.spent_minutes || 0) / 60,
+                          weekly: (weekTask?.spent_minutes || 0) / 60 / daysInWeek,
+                          monthly: (monthTask?.spent_minutes || 0) / 60 / daysInMonth,
+                          totalSpent: (todayTask?.spent_minutes || 0) + (weekTask?.spent_minutes || 0) + (monthTask?.spent_minutes || 0)
+                        };
+                      })
+                      .filter(task => task.allocated > 0 || task.totalSpent > 0)
+                      .sort((a, b) => (b.allocated + b.totalSpent) - (a.allocated + a.totalSpent))}
+                    barSize={20}
+                    margin={{ top: 20, right: 80, left: 200, bottom: 30 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" horizontal={false} />
+                    <XAxis 
+                      type="number" 
+                      label={{ value: 'Hours (Daily Average)', position: 'insideBottom', offset: -10 }}
+                      style={{ fontSize: '12px' }}
+                      domain={[0, 'auto']}
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="name" 
+                      width={190}
+                      style={{ fontSize: '11px' }}
+                    />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar dataKey="allocated" name="Ideal (Allocated)" fill="#cbd5e0" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />
+                    <Bar dataKey="today" name="Today (Actual)" fill="#4299e1" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />
+                    <Bar dataKey="weekly" name="Weekly Avg (Actual)" fill="#48bb78" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />
+                    {showTaskMonth && <Bar dataKey="monthly" name="Monthly Avg (Actual)" fill="#ed8936" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />}
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {modalChartType === 'utilization' && (
+                <ResponsiveContainer width="100%" height={Math.max(700, allTasksData.length * 35)}>
+                  <BarChart 
+                    data={(() => {
+                      const today = new Date();
+                      const weekStart = getWeekStart(today);
+                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                      const daysInMonth = today.getDate();
+                      
+                      return allTasksData
+                        .map((task) => {
+                          const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
+                          const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
+                          const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
+                          
+                          const allocated = task.allocated_minutes / 60;
+                          const todaySpent = (todayTask?.spent_minutes || 0) / 60;
+                          const weeklyAvg = (weekTask?.spent_minutes || 0) / 60 / daysInWeek;
+                          const monthlyAvg = (monthTask?.spent_minutes || 0) / 60 / daysInMonth;
+                          
+                          const todayUtil = allocated > 0 ? (todaySpent / allocated) * 100 : 0;
+                          const weekUtil = allocated > 0 ? (weeklyAvg / allocated) * 100 : 0;
+                          const monthUtil = allocated > 0 ? (monthlyAvg / allocated) * 100 : 0;
+                          
+                          return {
+                            name: task.task_name,
+                            today: todayUtil,
+                            weekly: weekUtil,
+                            monthly: monthUtil,
+                            hasData: allocated > 0 || todaySpent > 0 || weeklyAvg > 0 || monthlyAvg > 0
+                          };
+                        })
+                        .filter(task => task.hasData)
+                        .sort((a, b) => (b.today + b.weekly + b.monthly) - (a.today + a.weekly + a.monthly));
+                    })()}
+                    barSize={25}
+                    margin={{ top: 30, right: 50, left: 30, bottom: 180 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      angle={-60}
+                      textAnchor="end"
+                      height={170}
+                      interval={0}
+                      style={{ fontSize: '11px' }}
+                    />
+                    <YAxis 
+                      label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                      style={{ fontSize: '13px' }}
+                      domain={[0, 'auto']}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => `${value.toFixed(1)}%`}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} iconType="rect" />
+                    <Bar dataKey="today" name="Today %" fill="#4299e1" radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontSize: 11, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }} />
+                    <Bar dataKey="weekly" name="Weekly Avg %" fill="#48bb78" radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }} />
+                    <Bar dataKey="monthly" name="Monthly Avg %" fill="#ed8936" radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {String(modalChartType).startsWith('pillar-tasks-') && (() => {
+                const pillarId = parseInt(String(modalChartType).replace('pillar-tasks-', ''));
+                const pillar = dailyPillarData.find(p => p.pillar_id === pillarId);
+                if (!pillar) return null;
+                
+                // Get categories that belong to this pillar by matching pillar_name
+                const pillarCategoryIds = allCategoriesData
+                  .filter(cat => cat.pillar_name === pillar.pillar_name)
+                  .map(cat => cat.category_id);
+                
+                const pillarTasks = allTasksData
+                  .filter(task => {
+                    const taskCategory = allCategoriesData.find(cat => cat.category_name === task.category_name);
+                    return taskCategory && pillarCategoryIds.includes(taskCategory.category_id);
+                  })
+                  .map(task => {
+                    const todayData = todayTaskData.find(t => t.task_id === task.task_id);
+                    const weekData = weekTaskData.find(w => w.task_id === task.task_id);
+                    const monthData = monthTaskData.find(m => m.task_id === task.task_id);
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    return {
+                      task_name: task.task_name,
+                      allocated: task.allocated_minutes / 60,
+                      today: todayData ? (todayData.spent_minutes / 60) : 0,
+                      weekAvg: weekData ? (weekData.spent_minutes / 60 / daysInWeek) : 0,
+                      monthAvg: monthData ? (monthData.spent_minutes / 60 / daysInMonth) : 0,
+                      totalSpent: (todayData?.spent_minutes || 0) + (weekData?.spent_minutes || 0) + (monthData?.spent_minutes || 0)
+                    };
+                  })
+                  .filter(task => task.totalSpent > 0 || task.allocated > 0)
+                  .sort((a, b) => b.totalSpent - a.totalSpent);
+                
+                return (
+                  <div>
+                    <h3 style={{ color: pillar.color_code, marginBottom: '20px' }}>
+                      {pillar.icon} {pillar.pillar_name} - All Tasks ({pillarTasks.length} tasks)
+                    </h3>
+                    <ResponsiveContainer width="100%" height={Math.max(700, pillarTasks.length * 40)}>
+                      <BarChart 
+                        data={pillarTasks}
+                        barSize={30}
+                        margin={{ top: 30, right: 50, left: 30, bottom: 180 }}
+                      >
+                        <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                        <XAxis 
+                          dataKey="task_name"
+                          angle={-60}
+                          textAnchor="end"
+                          height={170}
+                          interval={0}
+                          style={{ fontSize: '12px' }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }}
+                          style={{ fontSize: '13px' }}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Bar dataKey="allocated" name="Ideal (Allocated)" fill="#cbd5e0" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                        <Bar dataKey="today" name="Today (Actual)" fill="#4299e1" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                        <Bar dataKey="weekAvg" name="Weekly Avg (Actual)" fill="#48bb78" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                        <Bar dataKey="monthAvg" name="Monthly Avg (Actual)" fill="#ed8936" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })()}
+              
+              {/* Simple Pillar Comparison Modal */}
+              {modalChartType === 'pillar-simple' && (
+                <ResponsiveContainer width="100%" height={800}>
+                  <BarChart 
+                    data={pillarData.map((pillar) => ({
+                      name: pillar.pillar_name,
+                      allocated: pillar.allocated_hours,
+                      actual: pillar.spent_hours
+                    }))}
+                    barSize={120}
+                    margin={{ top: 40, right: 80, left: 60, bottom: 40 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="name" style={{ fontSize: '20px', fontWeight: 600 }} />
+                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft', style: { fontSize: '18px' } }} style={{ fontSize: '16px' }} domain={[0, 'auto']} />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} contentStyle={{ fontSize: '16px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '16px' }} iconType="rect" iconSize={20} />
+                    <Bar dataKey="allocated" name="Allocated" fill="#cbd5e0" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 18, fontWeight: 700 }} />
+                    <Bar dataKey="actual" name="Actual" fill="#4299e1" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 18, fontWeight: 700 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {/* Simple Category Comparison Modal */}
+              {modalChartType === 'category-simple' && (
+                <ResponsiveContainer width="100%" height={850}>
+                  <BarChart 
+                    data={categoryData.map(cat => ({
+                      category_name: cat.category_name,
+                      allocated_hours: cat.allocated_hours,
+                      spent_hours: cat.spent_hours
+                    }))}
+                    barSize={60}
+                    margin={{ top: 40, right: 80, left: 60, bottom: 180 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="category_name" angle={-60} textAnchor="end" height={170} interval={0} style={{ fontSize: '15px' }} />
+                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft', style: { fontSize: '18px' } }} style={{ fontSize: '16px' }} domain={[0, 'auto']} />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} contentStyle={{ fontSize: '16px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '16px' }} iconSize={20} />
+                    <Bar dataKey="allocated_hours" name="Allocated (Daily)" fill="#cbd5e0" radius={[8, 8, 0, 0]} label={{ position: 'top', fontSize: 14, fontWeight: 700 }} />
+                    <Bar dataKey="spent_hours" name="Actual" fill="#48bb78" radius={[8, 8, 0, 0]} label={{ position: 'top', fontSize: 14, fontWeight: 700 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {/* Simple Task Comparison Modal */}
+              {modalChartType === 'task-simple' && (
+                <ResponsiveContainer width="100%" height={Math.max(850, todayTaskData.filter(t => t.allocated_minutes > 0 || t.spent_minutes > 0).length * 45)}>
+                  <BarChart 
+                    data={todayTaskData
+                      .filter(task => task.allocated_minutes > 0 || task.spent_minutes > 0)
+                      .sort((a, b) => b.spent_minutes - a.spent_minutes)
+                      .map(task => ({
+                        name: task.task_name,
+                        allocated: task.allocated_minutes / 60,
+                        actual: task.spent_minutes / 60
+                      }))}
+                    barSize={35}
+                    margin={{ top: 40, right: 80, left: 60, bottom: 200 }}
+                  >
+                    <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="name" angle={-60} textAnchor="end" height={190} interval={0} style={{ fontSize: '14px' }} />
+                    <YAxis label={{ value: 'Hours', angle: -90, position: 'insideLeft', style: { fontSize: '18px' } }} style={{ fontSize: '16px' }} domain={[0, 'auto']} />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} contentStyle={{ fontSize: '16px' }} />
+                    <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '16px' }} iconSize={20} />
+                    <Bar dataKey="allocated" name="Allocated" fill="#cbd5e0" radius={[8, 8, 0, 0]} label={{ position: 'top', fontSize: 13, fontWeight: 700 }} />
+                    <Bar dataKey="actual" name="Actual" fill="#48bb78" radius={[8, 8, 0, 0]} label={{ position: 'top', fontSize: 13, fontWeight: 700 }} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              
+              {/* Pillar Categories Modal */}
+              {String(modalChartType).startsWith('pillar-categories-') && (() => {
+                const pillarId = parseInt(String(modalChartType).replace('pillar-categories-', ''));
+                const pillar = dailyPillarData.find(p => p.pillar_id === pillarId);
+                if (!pillar) return null;
+                
+                const pillarCategories = allCategoriesData
+                  .filter(cat => cat.pillar_name === pillar.pillar_name)
+                  .map(category => {
+                    const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
+                    const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
+                    const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    return {
+                      category_name: category.category_name,
+                      allocated: category.allocated_hours,
+                      today: todayData?.spent_hours || 0,
+                      weekAvg: weekData ? (weekData.spent_hours / daysInWeek) : 0,
+                      monthAvg: monthData ? (monthData.spent_hours / daysInMonth) : 0
+                    };
+                  })
+                  .filter(cat => cat.allocated > 0 || cat.today > 0 || cat.weekAvg > 0 || cat.monthAvg > 0);
+                
+                return (
+                  <div>
+                    <h3 style={{ color: pillar.color_code, marginBottom: '20px' }}>
+                      {pillar.icon} {pillar.pillar_name} - Categories ({pillarCategories.length} categories)
+                    </h3>
+                    <ResponsiveContainer width="100%" height={600}>
+                      <BarChart 
+                        data={pillarCategories}
+                        barSize={40}
+                        margin={{ top: 30, right: 50, left: 30, bottom: 120 }}
+                      >
+                        <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                        <XAxis 
+                          dataKey="category_name"
+                          angle={-45}
+                          textAnchor="end"
+                          height={110}
+                          interval={0}
+                          style={{ fontSize: '13px' }}
+                        />
+                        <YAxis 
+                          label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }}
+                          style={{ fontSize: '14px' }}
+                          domain={[0, 'auto']}
+                        />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
+                        <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                        <Bar dataKey="allocated" name="Ideal (Allocated)" fill="#cbd5e0" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                        <Bar dataKey="today" name="Today" fill="#4299e1" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                        <Bar dataKey="weekAvg" name="Weekly Avg" fill="#48bb78" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                        <Bar dataKey="monthAvg" name="Monthly Avg" fill="#ed8936" radius={[6, 6, 0, 0]}
+                          label={{ position: 'top', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

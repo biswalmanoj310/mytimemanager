@@ -37,6 +37,11 @@ def save_daily_time_entry(db: Session, entry_data: DailyTimeEntryCreate) -> Dail
         existing.updated_at = datetime.now()
         db.commit()
         db.refresh(existing)
+        
+        # Trigger auto-sync for linked challenges
+        from app.services.challenge_service import sync_challenge_from_task
+        sync_challenge_from_task(db, entry_data.task_id, entry_data.entry_date.date())
+        
         return existing
     else:
         # Create new entry
@@ -49,6 +54,11 @@ def save_daily_time_entry(db: Session, entry_data: DailyTimeEntryCreate) -> Dail
         db.add(new_entry)
         db.commit()
         db.refresh(new_entry)
+        
+        # Trigger auto-sync for linked challenges
+        from app.services.challenge_service import sync_challenge_from_task
+        sync_challenge_from_task(db, entry_data.task_id, entry_data.entry_date.date())
+        
         return new_entry
 
 
@@ -94,6 +104,39 @@ def bulk_save_daily_entries(db: Session, entry_date: date, entries: List[Dict]) 
         
         # Update daily summary
         update_daily_summary(db, entry_date)
+        
+        # AUTO-SYNC: Update linked habits for each task
+        from app.services.habit_service import HabitService
+        
+        # Calculate total time per task for the day
+        task_totals = {}
+        for entry in entries:
+            task_id = entry.get('task_id')
+            minutes = entry.get('minutes', 0)
+            if task_id and minutes > 0:
+                task_totals[task_id] = task_totals.get(task_id, 0) + minutes
+        
+        # Auto-sync habits for each task
+        for task_id, total_minutes in task_totals.items():
+            try:
+                HabitService.auto_sync_from_task(
+                    db=db,
+                    task_id=task_id,
+                    entry_date=entry_date,
+                    actual_minutes=total_minutes
+                )
+            except Exception as e:
+                # Don't fail the whole operation if habit sync fails
+                print(f"Warning: Failed to auto-sync habits for task {task_id}: {e}")
+        
+        # Auto-sync challenges for each task
+        from app.services.challenge_service import sync_challenge_from_task
+        for task_id in task_totals.keys():
+            try:
+                sync_challenge_from_task(db=db, task_id=task_id, entry_date=entry_date)
+            except Exception as e:
+                # Don't fail the whole operation if challenge sync fails
+                print(f"Warning: Failed to auto-sync challenges for task {task_id}: {e}")
         
         return True
     except Exception as e:

@@ -11,6 +11,9 @@ import './Goals.css'; // Goals page styling
 import { Task } from '../types';
 import confetti from 'canvas-confetti';
 import TaskForm from '../components/TaskForm';
+import { AddGoalModal } from '../components/AddGoalModal';
+import { PillarCategorySelector } from '../components/PillarCategorySelector';
+import { RelatedChallengesList } from '../components/RelatedChallengesList';
 
 // Life Goals interfaces
 interface LifeGoalData {
@@ -30,8 +33,15 @@ interface LifeGoalData {
   time_spent_hours: number;
   days_remaining: number | null;
   stats?: {
-    milestones?: { total: number; completed: number };
+    milestones?: {
+      total: number;
+      completed: number;
+      goal_milestones?: { total: number; completed: number };
+      project_milestones?: { total: number; completed: number };
+    };
     goal_tasks?: { total: number; completed: number };
+    project_tasks?: { total: number; completed: number };
+    all_tasks?: { total: number; completed: number };
     linked_tasks?: { total: number };
   };
   created_at: string;
@@ -332,12 +342,19 @@ export default function Goals() {
   const [linkedTasks, setLinkedTasks] = useState<GoalTaskLinkData[]>([]);
   const [goalProjects, setGoalProjects] = useState<any[]>([]); // Standalone projects
   const [goalTrackingProjects, setGoalTrackingProjects] = useState<GoalProjectData[]>([]); // NEW: Tracking dashboards
+  const [goalChallenges, setGoalChallenges] = useState<{direct_challenges: any[], project_challenges: any[]} | null>(null); // Challenges related to goal
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [showAddGoalTaskModal, setShowAddGoalTaskModal] = useState(false);
   const [showLinkTaskModal, setShowLinkTaskModal] = useState(false);
   const [showCreateTrackingProjectModal, setShowCreateTrackingProjectModal] = useState(false); // NEW
+  const [showLinkProjectsModal, setShowLinkProjectsModal] = useState(false); // Link projects to milestone
+  const [selectedMilestone, setSelectedMilestone] = useState<MilestoneData | null>(null); // Selected milestone for linking
   const [createAsProject, setCreateAsProject] = useState(false);
+  const [showAddProjectToGoalModal, setShowAddProjectToGoalModal] = useState(false); // Dedicated Add Project modal
+  const [goalProjectPillarId, setGoalProjectPillarId] = useState<number | null>(null);
+  const [goalProjectCategoryId, setGoalProjectCategoryId] = useState<number | null>(null);
+  const [goalProjectSubCategoryId, setGoalProjectSubCategoryId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [availableTasks, setAvailableTasks] = useState<Task[]>([]);
   
@@ -348,6 +365,11 @@ export default function Goals() {
   const [showWishDetailsModal, setShowWishDetailsModal] = useState(false);
   const [selectedTaskType, setSelectedTaskType] = useState<string>('');
   const [wishStats, setWishStats] = useState<{[key: number]: {projects: number, tasks: number, goals: number}}>({});
+  
+  // Wish form pillar/category state
+  const [wishPillarId, setWishPillarId] = useState<number | null>(null);
+  const [wishCategoryId, setWishCategoryId] = useState<number | null>(null);
+  const [wishSubCategoryId, setWishSubCategoryId] = useState<number | null>(null);
 
   // Project management state
   interface ProjectTaskData {
@@ -650,6 +672,16 @@ export default function Goals() {
       } catch (trackingError) {
         console.warn('Could not load tracking projects (feature may not be ready):', trackingError);
         setGoalTrackingProjects([]); // Set empty array if tracking projects fail
+      }
+      
+      // Load challenges related to this goal
+      try {
+        const challenges = await api.get<{direct_challenges: any[], project_challenges: any[]}>(`/api/life-goals/${goalId}/challenges`);
+        setGoalChallenges(challenges);
+        console.log('Goal challenges loaded:', challenges);
+      } catch (challengesError) {
+        console.warn('Could not load goal challenges:', challengesError);
+        setGoalChallenges(null); // Set null if challenges fail
       }
     } catch (error: any) {
       console.error('Error loading goal details:', error);
@@ -1003,8 +1035,11 @@ export default function Goals() {
   const renderGoalCard = (goal: LifeGoalData, cardIndex: number) => {
     const milestonesTotal = goal.stats?.milestones?.total || 0;
     const milestonesCompleted = goal.stats?.milestones?.completed || 0;
-    const tasksTotal = goal.stats?.goal_tasks?.total || 0;
-    const tasksCompleted = goal.stats?.goal_tasks?.completed || 0;
+    
+    // Use all_tasks which includes goal_tasks + all project tasks (including subtasks)
+    const allTasksTotal = goal.stats?.all_tasks?.total || 0;
+    const allTasksCompleted = goal.stats?.all_tasks?.completed || 0;
+    
     const linkedTasksTotal = goal.stats?.linked_tasks?.total || 0;
     
     // Dynamic background colors for each card
@@ -1076,31 +1111,6 @@ export default function Goals() {
                 title={goal.name}
               >{goal.name}</span>
             </div>
-          </div>
-
-          {/* Status Row */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '12px 14px',
-            background: '#047857',
-            borderRadius: '8px',
-            marginBottom: '12px'
-          }}>
-            <span style={{
-              fontSize: '11px',
-              fontWeight: '700',
-              color: 'rgba(255, 255, 255, 0.8)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.5px'
-            }}>Status</span>
-            <span style={{
-              fontSize: '14px',
-              fontWeight: '800',
-              color: '#ffffff',
-              textTransform: 'uppercase'
-            }}>{goal.status.replace('_', ' ')}</span>
           </div>
 
           {/* Progress Bar */}
@@ -1233,7 +1243,7 @@ export default function Goals() {
                 fontWeight: '900',
                 color: '#ffffff',
                 textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-              }}>{tasksCompleted}/{tasksTotal}</div>
+              }}>{allTasksCompleted}/{allTasksTotal}</div>
             </div>
           </div>
 
@@ -2726,12 +2736,20 @@ return (
                     On Track: {lifeGoals.filter(g => g.status === 'on_track').length}
                   </span>
                   <span style={{ 
-                    background: 'rgba(59, 130, 246, 0.3)', 
+                    background: 'rgba(245, 158, 11, 0.3)', 
                     padding: '4px 12px', 
                     borderRadius: '12px',
                     fontWeight: '600'
                   }}>
-                    In Progress: {lifeGoals.filter(g => g.status === 'in_progress').length}
+                    At Risk: {lifeGoals.filter(g => g.status === 'at_risk').length}
+                  </span>
+                  <span style={{ 
+                    background: 'rgba(239, 68, 68, 0.3)', 
+                    padding: '4px 12px', 
+                    borderRadius: '12px',
+                    fontWeight: '600'
+                  }}>
+                    Behind: {lifeGoals.filter(g => g.status === 'behind').length}
                   </span>
                   <span style={{ 
                     background: 'rgba(168, 85, 247, 0.3)', 
@@ -2739,7 +2757,7 @@ return (
                     borderRadius: '12px',
                     fontWeight: '600'
                   }}>
-                    Dreams: {lifeGoals.filter(g => g.status === 'not_started').length}
+                    Not Started: {lifeGoals.filter(g => g.status === 'not_started').length}
                   </span>
                 </div>
               </div>
@@ -2803,44 +2821,65 @@ return (
               </div>
             ) : (
               <>
-                {/* 💪 In Progress Section - Active Work */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'in_progress').length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      color: '#2563eb',
-                      marginBottom: '16px',
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-                      borderRadius: '8px',
-                      border: '2px solid #3b82f6'
-                    }}>
-                      💪 Goals: In Progress ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'in_progress').length})
-                    </h3>
-                    <div className="goals-grid">
-                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'in_progress').map((goal, index) => renderGoalCard(goal, index))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 🚀 On Track Section - Making Progress */}
+                {/* � Active & On Track Section */}
                 {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
                     <h3 style={{
                       fontSize: '18px',
                       fontWeight: '700',
-                      color: '#0891b2',
+                      color: '#059669',
                       marginBottom: '16px',
                       padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%)',
+                      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
                       borderRadius: '8px',
-                      border: '2px solid #06b6d4'
+                      border: '2px solid #10b981'
                     }}>
-                      🚀 Goals: On Track ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length})
+                      🚀 Goals: Active & On Track ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length})
                     </h3>
                     <div className="goals-grid">
                       {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'on_track').map((goal, index) => renderGoalCard(goal, index))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ⚠️ At Risk Section - Needs Attention */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#d97706',
+                      marginBottom: '16px',
+                      padding: '8px 12px',
+                      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                      borderRadius: '8px',
+                      border: '2px solid #f59e0b'
+                    }}>
+                      ⚠️ Goals: At Risk ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length})
+                    </h3>
+                    <div className="goals-grid">
+                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'at_risk').map((goal, index) => renderGoalCard(goal, index))}
+                    </div>
+                  </div>
+                )}
+
+                {/* � Behind Schedule Section - Urgent */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 style={{
+                      fontSize: '18px',
+                      fontWeight: '700',
+                      color: '#dc2626',
+                      marginBottom: '16px',
+                      padding: '8px 12px',
+                      background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+                      borderRadius: '8px',
+                      border: '2px solid #ef4444'
+                    }}>
+                      � Goals: Behind Schedule ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length})
+                    </h3>
+                    <div className="goals-grid">
+                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'behind').map((goal, index) => renderGoalCard(goal, index))}
                     </div>
                   </div>
                 )}
@@ -3065,38 +3104,115 @@ return (
                     ➕ Add Milestone
                   </button>
                 </div>
+
+                {/* Milestone Breakdown Summary */}
+                {selectedGoal?.stats?.milestones && (
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr 1fr',
+                    gap: '12px',
+                    marginBottom: '16px',
+                    padding: '12px',
+                    background: 'rgba(255, 255, 255, 0.6)',
+                    borderRadius: '8px',
+                    border: '2px solid rgba(16, 185, 129, 0.3)'
+                  }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#047857', marginBottom: '4px' }}>Total Milestones</div>
+                      <div style={{ fontSize: '24px', fontWeight: '900', color: '#065f46' }}>
+                        {selectedGoal.stats.milestones.completed}/{selectedGoal.stats.milestones.total}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', paddingLeft: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#047857', marginBottom: '4px' }}>Goal Milestones</div>
+                      <div style={{ fontSize: '24px', fontWeight: '900', color: '#065f46' }}>
+                        {selectedGoal.stats.milestones.goal_milestones?.completed || 0}/{selectedGoal.stats.milestones.goal_milestones?.total || 0}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'center', borderLeft: '2px solid rgba(16, 185, 129, 0.3)', paddingLeft: '12px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#047857', marginBottom: '4px' }}>Project Milestones</div>
+                      <div style={{ fontSize: '24px', fontWeight: '900', color: '#065f46' }}>
+                        {selectedGoal.stats.milestones.project_milestones?.completed || 0}/{selectedGoal.stats.milestones.project_milestones?.total || 0}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {goalMilestones.length === 0 ? (
                   <div className="empty-section">
                     <p>No milestones yet. Add checkpoints to track your progress!</p>
                   </div>
                 ) : (
                   <div className="milestones-list">
-                    {goalMilestones.map(milestone => (
-                      <div key={milestone.id} className={`milestone-item ${milestone.is_completed ? 'completed' : ''}`}>
+                    {goalMilestones.map(milestone => {
+                      // Count linked projects and tasks for this milestone
+                      const linkedProjectsCount = goalProjects.filter((p: any) => p.goal_milestone_id === milestone.id).length;
+                      
+                      return (
+                      <div key={milestone.id} className={`milestone-item ${milestone.is_completed ? 'completed' : ''}`} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px',
+                        background: 'white',
+                        borderRadius: '8px',
+                        marginBottom: '8px',
+                        border: '2px solid #d1fae5'
+                      }}>
                         <input
                           type="checkbox"
                           checked={milestone.is_completed}
                           onChange={(e) => handleToggleMilestone(milestone.id, e.target.checked)}
+                          style={{ width: '20px', height: '20px' }}
                         />
-                        <div className="milestone-content">
-                          <strong>{milestone.name}</strong>
+                        <div className="milestone-content" style={{ flex: 1 }}>
+                          <strong style={{ color: '#065f46', fontSize: '16px' }}>{milestone.name}</strong>
                           {milestone.target_date && (
-                            <span className="milestone-date">
+                            <span className="milestone-date" style={{ marginLeft: '12px', color: '#047857', fontSize: '14px' }}>
                               📅 {new Date(milestone.target_date).toLocaleDateString()}
                             </span>
                           )}
+                          {linkedProjectsCount > 0 && (
+                            <span style={{ marginLeft: '12px', padding: '2px 8px', background: '#d1fae5', borderRadius: '4px', fontSize: '12px', color: '#065f46', fontWeight: '600' }}>
+                              🔗 {linkedProjectsCount} project{linkedProjectsCount > 1 ? 's' : ''}
+                            </span>
+                          )}
                           {milestone.description && (
-                            <p className="milestone-description">{milestone.description}</p>
+                            <p className="milestone-description" style={{ margin: '4px 0 0 0', color: '#6b7280', fontSize: '14px' }}>{milestone.description}</p>
                           )}
                         </div>
                         <button
+                          className="btn btn-sm"
+                          onClick={() => {
+                            setSelectedMilestone(milestone);
+                            setShowLinkProjectsModal(true);
+                          }}
+                          style={{
+                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                            color: 'white',
+                            border: '2px solid #1e40af',
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontWeight: '600',
+                            fontSize: '13px'
+                          }}
+                        >
+                          🔗 Link
+                        </button>
+                        <button
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDeleteMilestone(milestone.id)}
+                          style={{
+                            padding: '6px 12px',
+                            borderRadius: '6px',
+                            fontWeight: '600',
+                            fontSize: '13px'
+                          }}
                         >
                           Delete
                         </button>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
@@ -3402,9 +3518,9 @@ return (
                   <h3>📁 Projects</h3>
                   <button
                     className="btn btn-primary"
-                    onClick={() => setShowAddGoalTaskModal(true)}
+                    onClick={() => setShowAddProjectToGoalModal(true)}
                   >
-                    ➕ Add Task/Project
+                    ➕ Add Project
                   </button>
                 </div>
                 <p style={{ color: '#718096', fontSize: '14px', marginBottom: '16px' }}>
@@ -3553,272 +3669,281 @@ return (
                 )}
               </div>
             </div>
+            
+            {/* Challenges Section */}
+            <div className="goal-section challenges-section">
+              <div className="section-header">
+                <h3>🏆 Challenges</h3>
+              </div>
+              <div className="section-content">
+                {goalChallenges && (
+                  <RelatedChallengesList
+                    directChallenges={goalChallenges.direct_challenges || []}
+                    relatedChallenges={goalChallenges.project_challenges || []}
+                    title="Related Challenges"
+                    emptyMessage="No challenges linked to this goal or its projects yet."
+                  />
+                )}
+                {!goalChallenges && (
+                  <p style={{ color: '#718096', fontSize: '14px', fontStyle: 'italic' }}>
+                    Loading challenges...
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         )}
         </div>
       )}
 
-      {/* Add/Edit Life Goal Modal */}
-      {showAddGoalModal && (
+      {/* Add Project to Goal Modal */}
+      {showAddProjectToGoalModal && selectedGoal && (
         <div className="modal-overlay" onClick={() => {
-          setShowAddGoalModal(false);
-          setEditingGoal(null);
+          setShowAddProjectToGoalModal(false);
+          setGoalProjectPillarId(null);
+          setGoalProjectCategoryId(null);
+          setGoalProjectSubCategoryId(null);
+        }} style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
         }}>
-          <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{editingGoal ? 'Edit Life Goal' : 'Add New Life Goal'}</h2>
-              <button className="btn-close" onClick={() => {
-                setShowAddGoalModal(false);
-                setEditingGoal(null);
-              }}>×</button>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
+            backgroundColor: '#fff8f0',
+            padding: '24px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              padding: '16px 20px',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+            }}>
+              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>🚀 Add Project to {selectedGoal.name}</h2>
             </div>
-            <div className="modal-body">
-              <form onSubmit={async (e) => {
-                e.preventDefault();
-                const formData = new FormData(e.currentTarget);
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              try {
+                const projectData: any = {
+                  name: formData.get('name'),
+                  description: formData.get('description') || '',
+                  goal_id: selectedGoal.id,  // Pre-filled with current goal
+                  start_date: formData.get('start_date') || new Date().toISOString().split('T')[0],
+                  target_completion_date: formData.get('target_completion_date') || null,
+                  status: 'not_started',
+                  is_active: true
+                };
                 
-                // Collect why statements
-                const whyStatements: string[] = [];
-                let whyIndex = 0;
-                while (true) {
-                  const whyValue = formData.get(`why_${whyIndex}`);
-                  if (whyValue && typeof whyValue === 'string' && whyValue.trim()) {
-                    whyStatements.push(whyValue.trim());
-                    whyIndex++;
-                  } else {
-                    break;
-                  }
-                }
+                // Add pillar/category if selected
+                if (goalProjectPillarId) projectData.pillar_id = goalProjectPillarId;
+                if (goalProjectCategoryId) projectData.category_id = goalProjectCategoryId;
                 
-                try {
-                  const goalData = {
-                    name: formData.get('name'),
-                    parent_goal_id: formData.get('parent_goal_id') ? parseInt(formData.get('parent_goal_id') as string) : null,
-                    start_date: formData.get('start_date') || new Date().toISOString().split('T')[0],
-                    target_date: formData.get('target_date'),
-                    category: formData.get('category') || null,
-                    priority: formData.get('priority') || 'medium',
-                    why_statements: whyStatements,
-                    description: formData.get('description') || null,
-                    time_allocated_hours: parseFloat(formData.get('time_allocated_hours') as string) || 0
-                  };
-                  
-                  if (editingGoal) {
-                    // Update existing goal
-                    await api.put(`/api/life-goals/${editingGoal.id}`, goalData);
-                    alert('Goal updated successfully!');
-                  } else {
-                    // Create new goal
-                    await handleCreateLifeGoal(goalData);
-                  }
-                  setShowAddGoalModal(false);
-                  setEditingGoal(null);
-                  await loadLifeGoals();
-                } catch (err: any) {
-                  console.error('Error saving goal:', err);
-                  alert('Failed to save goal: ' + (err.response?.data?.detail || err.message));
-                }
+                await api.post('/api/projects/', projectData);
+                alert('Project created successfully!');
+                setShowAddProjectToGoalModal(false);
+                // Reset form state
+                setGoalProjectPillarId(null);
+                setGoalProjectCategoryId(null);
+                setGoalProjectSubCategoryId(null);
+                await loadGoalDetails(selectedGoal.id);
+              } catch (err: any) {
+                console.error('Error creating project:', err);
+                alert('Failed to create project: ' + (err.response?.data?.detail || err.message));
+              }
+            }}>
+              <div style={{
+                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
               }}>
-                <div className="form-group">
-                  <label htmlFor="goal-name">Goal Name *</label>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>📝 Project Details</span>
+              </div>
+              
+              {/* Goal Info - Read Only */}
+              <div style={{ 
+                marginBottom: '16px',
+                padding: '12px',
+                background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                borderRadius: '8px',
+                border: '2px solid #3b82f6'
+              }}>
+                <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e40af', marginBottom: '4px' }}>
+                  🎯 Linked to Goal:
+                </div>
+                <div style={{ fontSize: '14px', color: '#2563eb' }}>
+                  {selectedGoal.name}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Project Name *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  placeholder="e.g., Build Personal Website"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  rows={3}
+                  placeholder="Project description and objectives"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {/* Pillar/Category Selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  🏛️ Pillar & Category (Optional)
+                </label>
+                <PillarCategorySelector
+                  selectedPillarId={goalProjectPillarId}
+                  selectedCategoryId={goalProjectCategoryId}
+                  selectedSubCategoryId={goalProjectSubCategoryId}
+                  onPillarChange={setGoalProjectPillarId}
+                  onCategoryChange={setGoalProjectCategoryId}
+                  onSubCategoryChange={setGoalProjectSubCategoryId}
+                />
+              </div>
+
+              {/* Date Fields */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: '1fr 1fr', 
+                gap: '12px',
+                marginBottom: '16px'
+              }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    📅 Start Date
+                  </label>
                   <input
-                    type="text"
-                    id="goal-name"
-                    name="name"
-                    className="form-control"
-                    required
-                    placeholder="e.g., Become Director in 2 years"
-                    defaultValue={editingGoal?.name || ''}
-                  />
-                </div>
-                
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="goal-category">Category</label>
-                    <select
-                      id="goal-category"
-                      name="category"
-                      className="form-control"
-                      defaultValue={editingGoal?.category || ''}
-                    >
-                      <option value="">-- Select Category --</option>
-                      <option value="career">Career</option>
-                      <option value="health">Health</option>
-                      <option value="financial">Financial</option>
-                      <option value="personal">Personal</option>
-                      <option value="learning">Learning</option>
-                      <option value="relationships">Relationships</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label htmlFor="goal-priority">Priority</label>
-                    <select
-                      id="goal-priority"
-                      name="priority"
-                      className="form-control"
-                      defaultValue={editingGoal?.priority || 'medium'}
-                    >
-                      <option value="high">High</option>
-                      <option value="medium">Medium</option>
-                      <option value="low">Low</option>
-                    </select>
-                  </div>
-                </div>
-                
-                <div className="form-row">
-                  <div className="form-group">
-                    <label htmlFor="goal-start-date">Start Date *</label>
-                    <input
-                      type="date"
-                      id="goal-start-date"
-                      name="start_date"
-                      className="form-control"
-                      required
-                      defaultValue={editingGoal?.start_date || new Date().toISOString().split('T')[0]}
-                    />
-                    <small className="form-text">
-                      When did/will you start working on this goal? (Editable - can be in the past)
-                    </small>
-                  </div>
-                  
-                  <div className="form-group">
-                    <label htmlFor="goal-target-date">Target Date *</label>
-                    <input
-                      type="date"
-                      id="goal-target-date"
-                      name="target_date"
-                      className="form-control"
-                      required
-                      defaultValue={editingGoal?.target_date || ''}
-                    />
-                    <small className="form-text">
-                      When do you want to achieve this goal?
-                    </small>
-                  </div>
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="goal-parent">Parent Goal (Optional - for sub-goals)</label>
-                  <select
-                    id="goal-parent"
-                    name="parent_goal_id"
-                    className="form-control"
-                    defaultValue={editingGoal?.parent_goal_id || ''}
-                  >
-                    <option value="">-- None (Root Goal) --</option>
-                    {lifeGoals
-                      .filter(g => !g.parent_goal_id) // Only show root goals as potential parents
-                      .map(goal => (
-                        <option key={goal.id} value={goal.id}>
-                          {goal.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="goal-time-allocated">Estimated Time (hours)</label>
-                  <input
-                    type="number"
-                    id="goal-time-allocated"
-                    name="time_allocated_hours"
-                    className="form-control"
-                    min="0"
-                    step="0.5"
-                    placeholder="e.g., 100"
-                    defaultValue={editingGoal?.time_allocated_hours || ''}
-                  />
-                  <small className="form-text">Total hours you estimate this goal will take</small>
-                </div>
-                
-                <div className="form-group">
-                  <label>Why This Goal Matters (Your Motivation)</label>
-                  <div id="why-statements-container">
-                    <div className="why-statement-input">
-                      <input
-                        type="text"
-                        name="why_0"
-                        className="form-control"
-                        placeholder="Reason 1: e.g., Career growth and better compensation"
-                        defaultValue={editingGoal?.why_statements?.[0] || ''}
-                      />
-                    </div>
-                    <div className="why-statement-input">
-                      <input
-                        type="text"
-                        name="why_1"
-                        className="form-control"
-                        placeholder="Reason 2: e.g., Leadership experience"
-                        defaultValue={editingGoal?.why_statements?.[1] || ''}
-                      />
-                    </div>
-                    <div className="why-statement-input">
-                      <input
-                        type="text"
-                        name="why_2"
-                        className="form-control"
-                        placeholder="Reason 3: e.g., Opportunity to make bigger impact"
-                        defaultValue={editingGoal?.why_statements?.[2] || ''}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-secondary"
-                    style={{ marginTop: '8px' }}
-                    onClick={() => {
-                      const container = document.getElementById('why-statements-container');
-                      if (container) {
-                        const currentCount = container.children.length;
-                        const newInput = document.createElement('div');
-                        newInput.className = 'why-statement-input';
-                        newInput.innerHTML = `
-                          <input
-                            type="text"
-                            name="why_${currentCount}"
-                            class="form-control"
-                            placeholder="Reason ${currentCount + 1}"
-                          />
-                        `;
-                        container.appendChild(newInput);
-                      }
+                    type="date"
+                    name="start_date"
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontSize: '14px'
                     }}
-                  >
-                    ➕ Add Another Reason
-                  </button>
-                </div>
-                
-                <div className="form-group">
-                  <label htmlFor="goal-description">Description / Notes</label>
-                  <textarea
-                    id="goal-description"
-                    name="description"
-                    className="form-control"
-                    rows={4}
-                    placeholder="Additional details, action plan, or notes about this goal..."
-                    defaultValue={editingGoal?.description || ''}
                   />
                 </div>
-                
-                <div className="modal-footer">
-                  <button 
-                    type="button"
-                    className="btn btn-secondary" 
-                    onClick={() => setShowAddGoalModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    {editingGoal ? 'Update Goal' : 'Create Goal'}
-                  </button>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    🎯 Target Completion
+                  </label>
+                  <input
+                    type="date"
+                    name="target_completion_date"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
                 </div>
-              </form>
-            </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddProjectToGoalModal(false);
+                    setGoalProjectPillarId(null);
+                    setGoalProjectCategoryId(null);
+                    setGoalProjectSubCategoryId(null);
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#2d3748',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#48bb78',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Create Project
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
+
+      {/* Add/Edit Life Goal Modal */}
+      <AddGoalModal
+        show={showAddGoalModal}
+        onClose={() => {
+          setShowAddGoalModal(false);
+          setEditingGoal(null);
+        }}
+        onSuccess={async () => {
+          setShowAddGoalModal(false);
+          setEditingGoal(null);
+          await loadLifeGoals();
+        }}
+        editingGoal={editingGoal as any}
+        lifeGoals={lifeGoals as any}
+      />
 
       {/* Add Milestone Modal */}
       {showAddMilestoneModal && selectedGoal && (
@@ -3928,6 +4053,145 @@ return (
         </div>
       )}
 
+      {/* Link Projects to Milestone Modal */}
+      {showLinkProjectsModal && selectedMilestone && selectedGoal && (
+        <div className="modal-overlay" onClick={() => setShowLinkProjectsModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: 'white',
+              padding: '16px 20px',
+              borderRadius: '12px 12px 0 0'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '700' }}>
+                🔗 Link Projects & Tasks to Milestone
+              </h2>
+              <button 
+                className="btn-close" 
+                onClick={() => setShowLinkProjectsModal(false)}
+                style={{ color: 'white', fontSize: '28px' }}
+              >×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '20px' }}>
+              {/* Milestone Info */}
+              <div style={{
+                background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                padding: '12px 16px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                border: '2px solid #3b82f6'
+              }}>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: '#1e40af', marginBottom: '4px' }}>
+                  {selectedMilestone.name}
+                </div>
+                {selectedMilestone.target_date && (
+                  <div style={{ fontSize: '13px', color: '#2563eb' }}>
+                    📅 Target: {new Date(selectedMilestone.target_date).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+
+              {/* Projects Section */}
+              <div style={{
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                padding: '16px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                border: '2px solid #38bdf8'
+              }}>
+                <h4 style={{ color: '#0369a1', marginBottom: '12px', fontSize: '16px', fontWeight: '700' }}>
+                  📊 Link Projects
+                </h4>
+                <p style={{ fontSize: '13px', color: '#0c4a6e', marginBottom: '12px' }}>
+                  Associate entire projects with this milestone to track progress
+                </p>
+                {goalProjects && goalProjects.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {goalProjects.map((project: any) => {
+                      const isLinked = project.goal_milestone_id === selectedMilestone.id;
+                      return (
+                        <div 
+                          key={project.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '10px 12px',
+                            background: isLinked ? '#e0f2fe' : 'white',
+                            borderRadius: '6px',
+                            border: isLinked ? '2px solid #0ea5e9' : '2px solid #e5e7eb',
+                            cursor: 'pointer'
+                          }}
+                          onClick={async () => {
+                            try {
+                              await api.put(`/api/projects/${project.id}`, {
+                                goal_milestone_id: isLinked ? null : selectedMilestone.id
+                              });
+                              // Reload projects
+                              const response: any = await api.get(`/api/life-goals/${selectedGoal.id}/projects`);
+                              setGoalProjects(response.data);
+                            } catch (err) {
+                              console.error('Error linking project:', err);
+                              alert('Failed to link project');
+                            }
+                          }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={isLinked}
+                            readOnly
+                            style={{ marginRight: '10px', width: '18px', height: '18px' }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '600', color: '#0c4a6e' }}>{project.name}</div>
+                            {project.description && (
+                              <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                                {project.description}
+                              </div>
+                            )}
+                          </div>
+                          {isLinked && (
+                            <span style={{ 
+                              padding: '2px 8px', 
+                              background: '#0ea5e9', 
+                              color: 'white', 
+                              borderRadius: '4px', 
+                              fontSize: '11px',
+                              fontWeight: '600'
+                            }}>
+                              Linked
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p style={{ color: '#64748b', fontSize: '14px', fontStyle: 'italic' }}>
+                    No projects available. Create projects in the goal detail view first.
+                  </p>
+                )}
+              </div>
+
+              <div className="modal-footer" style={{ marginTop: '20px', paddingTop: '16px', borderTop: '2px solid #e5e7eb' }}>
+                <button 
+                  type="button"
+                  className="btn btn-primary" 
+                  onClick={() => setShowLinkProjectsModal(false)}
+                  style={{
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                    border: '2px solid #1e40af',
+                    padding: '10px 24px',
+                    fontWeight: '600'
+                  }}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Goal Task Modal */}
       {showAddGoalTaskModal && selectedGoal && (
         <div className="modal-overlay" onClick={() => {
@@ -3952,7 +4216,7 @@ return (
                     // Create as a new Project linked to this goal
                     const startDate = formData.get('start_date') as string;
                     const dueDate = formData.get('due_date') as string;
-                    const projectData = {
+                    const projectData: any = {
                       name: formData.get('name'),
                       description: formData.get('description') || '',
                       goal_id: selectedGoal.id,
@@ -3962,10 +4226,18 @@ return (
                       is_active: true
                     };
                     
+                    // Add pillar/category if selected
+                    if (goalProjectPillarId) projectData.pillar_id = goalProjectPillarId;
+                    if (goalProjectCategoryId) projectData.category_id = goalProjectCategoryId;
+                    
                     await api.post('/api/projects/', projectData);
                     alert('Project created successfully! View it in the Projects section below.');
                     setShowAddGoalTaskModal(false);
                     setCreateAsProject(false);
+                    // Reset pillar/category state
+                    setGoalProjectPillarId(null);
+                    setGoalProjectCategoryId(null);
+                    setGoalProjectSubCategoryId(null);
                     await loadGoalDetails(selectedGoal.id);
                   } else {
                     // Create as a simple goal task
@@ -4037,6 +4309,23 @@ return (
                     placeholder={createAsProject ? 'Project description and objectives' : 'Optional task description'}
                   />
                 </div>
+                
+                {createAsProject && (
+                  <div className="form-group">
+                    <label>🏛️ Pillar & Category (Optional)</label>
+                    <PillarCategorySelector
+                      selectedPillarId={goalProjectPillarId}
+                      selectedCategoryId={goalProjectCategoryId}
+                      selectedSubCategoryId={goalProjectSubCategoryId}
+                      onPillarChange={setGoalProjectPillarId}
+                      onCategoryChange={setGoalProjectCategoryId}
+                      onSubCategoryChange={setGoalProjectSubCategoryId}
+                    />
+                    <small className="form-text">
+                      Organize your project by pillar and category for better tracking
+                    </small>
+                  </div>
+                )}
                 
                 {!createAsProject && (
                   <div className="form-group">
@@ -4793,10 +5082,28 @@ return (
                   inspiration_notes: formData.get('inspiration_notes') as string || undefined,
                   status: 'dreaming',
                   is_active: true,
+                  // Add pillar and category associations
+                  pillar_id: wishPillarId || undefined,
+                  category_id: wishCategoryId || undefined,
+                  sub_category_id: wishSubCategoryId || undefined,
                 };
 
                 await handleCreateWish(wishData);
+                // Reset form state
+                setWishPillarId(null);
+                setWishCategoryId(null);
+                setWishSubCategoryId(null);
               }}>
+                <div style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  padding: '10px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  boxShadow: '0 2px 6px rgba(102, 126, 234, 0.2)'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>✨ Dream Details</span>
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="title">Dream Title *</label>
                   <input 
@@ -4818,6 +5125,53 @@ return (
                     placeholder="Describe your wish in more detail..."
                     style={{ fontSize: '14px' }}
                   ></textarea>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  padding: '10px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  marginTop: '20px',
+                  boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>🏷️ Organization</span>
+                </div>
+
+                {/* Pillar & Category Selector */}
+                <div style={{ 
+                  marginBottom: '20px', 
+                  padding: '15px', 
+                  backgroundColor: '#f8f9fa', 
+                  borderRadius: '6px',
+                  border: '1px solid #e9ecef'
+                }}>
+                  <div style={{ marginBottom: '10px' }}>
+                    <strong style={{ fontSize: '14px', color: '#495057' }}>🎯 Align with Your Life Pillars</strong>
+                    <small style={{ display: 'block', color: '#666', marginTop: '4px', fontSize: '13px' }}>
+                      Connect this dream to your core life areas (Hard Work, Calmness, Family)
+                    </small>
+                  </div>
+                  <PillarCategorySelector
+                    selectedPillarId={wishPillarId}
+                    selectedCategoryId={wishCategoryId}
+                    onPillarChange={setWishPillarId}
+                    onCategoryChange={setWishCategoryId}
+                    onSubCategoryChange={setWishSubCategoryId}
+                    showSubCategory={false}
+                    required={false}
+                  />
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+                  padding: '10px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  marginTop: '20px',
+                  boxShadow: '0 2px 6px rgba(79, 172, 254, 0.2)'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>🎨 Dream Classification</span>
                 </div>
 
                 <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -4846,6 +5200,17 @@ return (
                       <option value="transformation">🦋 Transformation</option>
                     </select>
                   </div>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                  padding: '10px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  marginTop: '20px',
+                  boxShadow: '0 2px 6px rgba(67, 233, 123, 0.2)'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>📅 Planning & Resources</span>
                 </div>
 
                 <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -4883,6 +5248,17 @@ return (
                   />
                 </div>
 
+                <div style={{
+                  background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+                  padding: '10px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  marginTop: '20px',
+                  boxShadow: '0 2px 6px rgba(250, 112, 154, 0.2)'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>💖 Purpose & Motivation</span>
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="why_important">Why does this matter to you?</label>
                   <textarea 
@@ -4906,6 +5282,17 @@ return (
                     placeholder="Proud? Free? Fulfilled? Describe the feeling..."
                     style={{ fontSize: '14px' }}
                   ></textarea>
+                </div>
+
+                <div style={{
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  padding: '10px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  marginTop: '20px',
+                  boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
+                }}>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>✨ Inspiration & Vision</span>
                 </div>
 
                 <div className="form-group">

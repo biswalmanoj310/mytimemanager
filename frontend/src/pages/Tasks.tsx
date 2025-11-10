@@ -13,6 +13,8 @@ import { Task, FollowUpFrequency, TaskType } from '../types';
 import { WeeklyTasks, MonthlyTasks, YearlyTasks, OneTimeTasks } from './index';
 import { getWeekStart } from '../utils/dateHelpers';
 import { AddHabitModal } from '../components/AddHabitModal';
+import { RelatedChallengesList } from '../components/RelatedChallengesList';
+import { PillarCategorySelector } from '../components/PillarCategorySelector';
 
 type TabType = 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -341,7 +343,12 @@ export default function Tasks() {
   const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
   const [projectTasks, setProjectTasks] = useState<ProjectTaskData[]>([]);
   const [projectMilestones, setProjectMilestones] = useState<ProjectMilestoneData[]>([]);
+  const [projectChallenges, setProjectChallenges] = useState<{direct_challenges: any[], goal_challenges: any[]} | null>(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [projectFormGoalId, setProjectFormGoalId] = useState<number | null>(null);
+  const [projectFormPillarId, setProjectFormPillarId] = useState<number | null>(null);
+  const [projectFormCategoryId, setProjectFormCategoryId] = useState<number | null>(null);
+  const [projectFormSubCategoryId, setProjectFormSubCategoryId] = useState<number | null>(null);
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
   const [showAddProjectMilestoneModal, setShowAddProjectMilestoneModal] = useState(false);
   const [showEditProjectMilestoneModal, setShowEditProjectMilestoneModal] = useState(false);
@@ -2573,6 +2580,16 @@ export default function Tasks() {
     setSelectedProject(project);
     await loadProjectTasks(project.id);
     await loadProjectMilestones(project.id);
+    
+    // Load challenges related to this project
+    try {
+      const challenges = await api.get<{direct_challenges: any[], goal_challenges: any[]}>(`/api/projects/${project.id}/challenges`);
+      setProjectChallenges(challenges);
+      console.log('Project challenges loaded:', challenges);
+    } catch (challengesError) {
+      console.warn('Could not load project challenges:', challengesError);
+      setProjectChallenges(null);
+    }
     
     // Update URL to include project ID for refresh persistence
     const searchParams = new URLSearchParams(location.search);
@@ -6830,6 +6847,26 @@ export default function Tasks() {
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+              
+              {/* Challenges Section */}
+              <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h3 style={{ margin: 0 }}>🏆 Challenges</h3>
+                </div>
+                {projectChallenges && (
+                  <RelatedChallengesList
+                    directChallenges={projectChallenges.direct_challenges || []}
+                    relatedChallenges={projectChallenges.goal_challenges || []}
+                    title="Related Challenges"
+                    emptyMessage="No challenges linked to this project or its parent goal yet."
+                  />
+                )}
+                {!projectChallenges && (
+                  <p style={{ color: '#718096', fontSize: '14px', fontStyle: 'italic' }}>
+                    Loading challenges...
+                  </p>
                 )}
               </div>
             </>
@@ -12082,12 +12119,30 @@ export default function Tasks() {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
               try {
-                await api.post('/api/projects/', {
+                const projectData: any = {
                   name: formData.get('name'),
                   description: formData.get('description'),
                   status: formData.get('status')
-                });
+                };
+                
+                // Add optional fields if they have values
+                if (projectFormGoalId) projectData.goal_id = projectFormGoalId;
+                if (projectFormPillarId) projectData.pillar_id = projectFormPillarId;
+                if (projectFormCategoryId) projectData.category_id = projectFormCategoryId;
+                
+                const startDate = formData.get('start_date');
+                if (startDate) projectData.start_date = startDate;
+                
+                const targetDate = formData.get('target_completion_date');
+                if (targetDate) projectData.target_completion_date = targetDate;
+                
+                await api.post('/api/projects/', projectData);
                 setShowAddProjectModal(false);
+                // Reset form state
+                setProjectFormGoalId(null);
+                setProjectFormPillarId(null);
+                setProjectFormCategoryId(null);
+                setProjectFormSubCategoryId(null);
                 await loadProjects();
               } catch (err: any) {
                 console.error('Error creating project:', err);
@@ -12138,6 +12193,91 @@ export default function Tasks() {
                     resize: 'vertical'
                   }}
                 />
+              </div>
+
+              {/* Life Goal Selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  🎯 Link to Life Goal (Optional)
+                </label>
+                <select
+                  name="goal_id"
+                  value={projectFormGoalId || ''}
+                  onChange={(e) => setProjectFormGoalId(e.target.value ? parseInt(e.target.value) : null)}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="">-- No Goal --</option>
+                  {lifeGoals
+                    .filter(g => g.status !== 'completed' && g.status !== 'cancelled')
+                    .map(goal => (
+                      <option key={goal.id} value={goal.id}>
+                        {goal.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Pillar/Category Selection */}
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  🏛️ Pillar & Category (Optional)
+                </label>
+                <PillarCategorySelector
+                  selectedPillarId={projectFormPillarId}
+                  selectedCategoryId={projectFormCategoryId}
+                  selectedSubCategoryId={projectFormSubCategoryId}
+                  onPillarChange={setProjectFormPillarId}
+                  onCategoryChange={setProjectFormCategoryId}
+                  onSubCategoryChange={setProjectFormSubCategoryId}
+                />
+              </div>
+
+              {/* Date Fields */}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: '1fr 1fr', 
+                gap: '12px',
+                marginBottom: '16px'
+              }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    📅 Start Date
+                  </label>
+                  <input
+                    type="date"
+                    name="start_date"
+                    defaultValue={new Date().toISOString().split('T')[0]}
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    🎯 Target Completion
+                  </label>
+                  <input
+                    type="date"
+                    name="target_completion_date"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
               </div>
 
               <div style={{
