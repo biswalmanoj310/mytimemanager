@@ -326,8 +326,17 @@ def log_entry(
     Automatically updates challenge progress and streaks.
     """
     try:
-        entry_data = entry.dict()
-        new_entry = log_challenge_entry(db, challenge_id, entry_data)
+        # Unpack the entry data to match function signature
+        new_entry = log_challenge_entry(
+            db=db,
+            challenge_id=challenge_id,
+            entry_date=entry.entry_date,
+            is_completed=entry.is_completed,
+            count_value=entry.count_value,
+            numeric_value=entry.numeric_value,
+            note=entry.note,
+            mood=entry.mood
+        )
         return new_entry
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

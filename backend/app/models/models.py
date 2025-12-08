@@ -182,11 +182,13 @@ class Task(Base):
     # Follow-up
     follow_up_frequency = Column(String(20), nullable=False)  # Using String instead of Enum for SQLite compatibility
     separately_followed = Column(Boolean, default=False)  # No time bound
+    is_daily_one_time = Column(Boolean, default=False)  # True for simple daily tasks (done once, not hourly tracked)
     
     # Goal linkage
     goal_id = Column(Integer, ForeignKey("goals.id"), nullable=True)
     is_part_of_goal = Column(Boolean, default=False)
     related_wish_id = Column(Integer, ForeignKey("wishes.id", ondelete="SET NULL"), nullable=True)  # Link to Dream/Wish
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)  # Link to Project
     
     # Motivation
     why_reason = Column(Text, nullable=True)  # Why this task is important
@@ -198,6 +200,9 @@ class Task(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
     na_marked_at = Column(DateTime(timezone=True), nullable=True)  # When task was marked as NA
     
+    # Priority (1-10, where 1 is highest priority)
+    priority = Column(Integer, default=10, nullable=True)
+    
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -208,6 +213,7 @@ class Task(Base):
     category = relationship("Category", back_populates="tasks")
     sub_category = relationship("SubCategory", back_populates="tasks")
     goal = relationship("Goal", back_populates="tasks")
+    project = relationship("Project")
     time_entries = relationship("TimeEntry", back_populates="task", cascade="all, delete-orphan")
 
     def __repr__(self):
@@ -521,7 +527,9 @@ class ProjectTask(Base):
     name = Column(String(300), nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True, index=True)
-    priority = Column(String(10), nullable=False, default="medium")  # high, medium, low
+    priority = Column(String(10), nullable=False, default="medium")  # DEPRECATED: high, medium, low (keep for compatibility)
+    priority_new = Column(Integer, nullable=True, default=10)  # NEW: 1-10 integer priority
+    allocated_minutes = Column(Integer, nullable=True, default=60)  # NEW: Time allocation
     is_completed = Column(Boolean, nullable=False, default=False, index=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     order = Column(Integer, nullable=False, default=0)  # For manual sorting
@@ -580,7 +588,9 @@ class MiscTaskItem(Base):
     name = Column(String(300), nullable=False)
     description = Column(Text, nullable=True)
     due_date = Column(DateTime(timezone=True), nullable=True, index=True)
-    priority = Column(String(10), nullable=False, default="medium")  # high, medium, low
+    priority = Column(String(10), nullable=False, default="medium")  # DEPRECATED: high, medium, low
+    priority_new = Column(Integer, nullable=True, default=10)  # NEW: 1-10 integer priority
+    allocated_minutes = Column(Integer, nullable=True, default=60)  # NEW: Time allocation
     is_completed = Column(Boolean, nullable=False, default=False, index=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     order = Column(Integer, nullable=False, default=0)  # For manual sorting
@@ -1108,10 +1118,51 @@ class DailyTaskStatus(Base):
     is_tracked = Column(Boolean, default=True)  # Whether task is being tracked on this date
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
     task = relationship("Task")
 
     def __repr__(self):
         return f"<DailyTaskStatus(task_id={self.task_id}, date={self.date}, completed={self.is_completed}, na={self.is_na}, tracked={self.is_tracked})>"
+
+
+
+class ImportantTask(Base):
+    """
+    Important Tasks - Periodic check tasks with ideal gap
+    Example: Check bank account every 45 days
+    Status: RED (overdue), YELLOW (upcoming 5 days), GREEN (on track)
+    """
+    __tablename__ = "important_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(300), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    
+    # Organization
+    pillar_id = Column(Integer, ForeignKey("pillars.id"), nullable=True)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
+    sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True)
+    
+    # Periodic check parameters
+    ideal_gap_days = Column(Integer, nullable=False)
+    last_check_date = Column(DateTime(timezone=True), nullable=True)
+    check_history = Column(Text, nullable=True)
+    
+    # Priority & Status
+    priority = Column(Integer, default=10)
+    is_active = Column(Boolean, default=True, index=True)
+    
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    pillar = relationship("Pillar", foreign_keys=[pillar_id])
+    category = relationship("Category", foreign_keys=[category_id])
+    sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
+
+    def __repr__(self):
+        return f"<ImportantTask(id={self.id}, name=\"{self.name}\", gap_days={self.ideal_gap_days})>"
+

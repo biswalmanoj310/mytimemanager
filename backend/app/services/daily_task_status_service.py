@@ -104,6 +104,13 @@ def mark_task_na(db: Session, task_id: int, status_date: date) -> DailyTaskStatu
     return create_or_update_daily_task_status(db, task_id, status_date, is_completed=False, is_na=True)
 
 
+def reset_task_status(db: Session, task_id: int, status_date: date) -> DailyTaskStatus:
+    """
+    Reset task status (undo completed/NA) - marks as incomplete and not NA
+    """
+    return create_or_update_daily_task_status(db, task_id, status_date, is_completed=False, is_na=False)
+
+
 def mark_task_tracked(db: Session, task_id: int, status_date: date, is_tracked: bool = True) -> DailyTaskStatus:
     """
     Mark a task as tracked or not tracked on a specific date

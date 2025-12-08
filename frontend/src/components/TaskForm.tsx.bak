@@ -62,9 +62,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     additional_whys: [],
     due_date: '',
     priority: 10
-  });
-
-  const [pillars, setPillars] = useState<Pillar[]>([]);
+  }););  const [pillars, setPillars] = useState<Pillar[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
@@ -682,7 +680,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               <option value={10}>10 - Lowest Priority (Default)</option>
             </select>
             <small className="help-text">
-              Set task priority (1 = highest, 10 = lowest). Default is 10.
+              Set task priority (1 = highest, 10 = lowest). Default is 5.
             </small>
           </div>
 

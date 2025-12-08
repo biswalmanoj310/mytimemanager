@@ -1,0 +1,16 @@
+
+/* Misc Task Group Background Colors */
+.misc-overdue {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-color: #ef4444;
+}
+
+.misc-warning {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #f59e0b;
+}
+
+.misc-due-today {
+  background: linear-gradient(135deg, #fee2e2 0%, #fca5a5 100%);
+  border-color: #dc2626;
+}

@@ -90,6 +90,16 @@ def mark_na(
     return daily_task_status_service.mark_task_na(db, task_id, status_date)
 
 
+@router.post("/{task_id}/reset", response_model=DailyTaskStatusResponse)
+def reset_status(
+    task_id: int,
+    status_date: date = Query(..., description="Date to reset task status (undo completed/NA)"),
+    db: Session = Depends(get_db)
+):
+    """Reset task status - undo completed or NA status"""
+    return daily_task_status_service.reset_task_status(db, task_id, status_date)
+
+
 @router.post("/{task_id}/remove-from-tracking", response_model=DailyTaskStatusResponse)
 def remove_from_tracking(
     task_id: int,

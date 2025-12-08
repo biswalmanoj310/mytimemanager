@@ -56,8 +56,8 @@ class TaskService:
                     f"Sub-category {sub_category.name} does not belong to category {category.name}"
                 )
         
-        # Validate goal if provided
-        if task_data.goal_id:
+        # Validate goal if provided AND is_part_of_goal is True
+        if task_data.goal_id and task_data.is_part_of_goal:
             goal = db.query(Goal).filter(Goal.id == task_data.goal_id).first()
             if not goal:
                 raise ValueError(f"Goal with id {task_data.goal_id} not found")
@@ -86,8 +86,11 @@ class TaskService:
             unit=task_data.unit,
             follow_up_frequency=task_data.follow_up_frequency,
             separately_followed=task_data.separately_followed,
+            is_daily_one_time=task_data.is_daily_one_time,
             goal_id=task_data.goal_id,
             is_part_of_goal=task_data.is_part_of_goal,
+            project_id=task_data.project_id,
+            priority=task_data.priority,
             why_reason=task_data.why_reason,
             additional_whys=additional_whys_json,
             due_date=task_data.due_date

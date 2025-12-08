@@ -4,9 +4,9 @@ API routes for Misc Tasks (One-time tasks with hierarchy)
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.database.config import get_db
 from app.services import misc_task_service
@@ -23,7 +23,19 @@ class MiscTaskGroupCreate(BaseModel):
     pillar_id: Optional[int] = None
     category_id: Optional[int] = None
     goal_id: Optional[int] = None  # Link to Life Goal
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
+    
+    @field_validator('due_date', mode='before')
+    @classmethod
+    def parse_due_date(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            # If date-only string (YYYY-MM-DD), append time
+            if len(v) == 10 and 'T' not in v:
+                return datetime.fromisoformat(f"{v}T00:00:00")
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        return v
 
 
 class MiscTaskGroupUpdate(BaseModel):
@@ -31,28 +43,61 @@ class MiscTaskGroupUpdate(BaseModel):
     description: Optional[str] = None
     pillar_id: Optional[int] = None
     category_id: Optional[int] = None
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
     is_active: Optional[bool] = None
     is_completed: Optional[bool] = None
+    
+    @field_validator('due_date', mode='before')
+    @classmethod
+    def parse_due_date(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            if len(v) == 10 and 'T' not in v:
+                return datetime.fromisoformat(f"{v}T00:00:00")
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        return v
 
 
 class MiscTaskItemCreate(BaseModel):
     name: str
     parent_task_id: Optional[int] = None
     description: Optional[str] = None
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
     priority: str = "medium"
     order: int = 0
+    
+    @field_validator('due_date', mode='before')
+    @classmethod
+    def parse_due_date(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            if len(v) == 10 and 'T' not in v:
+                return datetime.fromisoformat(f"{v}T00:00:00")
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        return v
 
 
 class MiscTaskItemUpdate(BaseModel):
     name: Optional[str] = None
     parent_task_id: Optional[int] = None
     description: Optional[str] = None
-    due_date: Optional[date] = None
+    due_date: Optional[datetime] = None
     priority: Optional[str] = None
     is_completed: Optional[bool] = None
     order: Optional[int] = None
+    
+    @field_validator('due_date', mode='before')
+    @classmethod
+    def parse_due_date(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            if len(v) == 10 and 'T' not in v:
+                return datetime.fromisoformat(f"{v}T00:00:00")
+            return datetime.fromisoformat(v.replace('Z', '+00:00'))
+        return v
 
 
 # ============ Misc Task Group Routes ============

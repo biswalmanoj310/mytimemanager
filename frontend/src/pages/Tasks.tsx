@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import './Tasks.css';
+import './MiscTaskColors.css';
 import './Projects.css';
 import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
@@ -16,7 +17,7 @@ import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 
-type TabType = 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
+type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
 // Helper functions for task type display
 const formatTaskTarget = (task: Task, showPeriod: boolean = false, showAvgPerDay: boolean = false): React.ReactNode => {
@@ -485,6 +486,8 @@ export default function Tasks() {
   };
 
   const [habits, setHabits] = useState<HabitData[]>([]);
+  const [completedHabits, setCompletedHabits] = useState<HabitData[]>([]);
+  const [showCompletedHabits, setShowCompletedHabits] = useState(false);
   const [selectedHabit, setSelectedHabit] = useState<HabitData | null>(null);
   const [habitEntries, setHabitEntries] = useState<HabitEntry[]>([]);
   const [habitStreaks, setHabitStreaks] = useState<HabitStreak[]>([]);
@@ -705,6 +708,116 @@ export default function Tasks() {
     }
   };
 
+  // Calculate current NOW tab task count (tasks with P1-P3)
+  const getNowTaskCount = () => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const nowTasks = tasks.filter(task => 
+      task.priority && task.priority >= 1 && task.priority <= 3 && 
+      task.is_active && !task.is_completed &&
+      task.due_date && new Date(task.due_date) <= today
+    );
+    
+    const nowProjectTasks = projectTasksDueToday.filter(task => 
+      task.priority && task.priority >= 1 && task.priority <= 3 && 
+      !task.is_completed &&
+      task.due_date && new Date(task.due_date) <= today
+    );
+    
+    const nowGoalTasks = goalTasksDueToday.filter(task => 
+      task.priority && task.priority >= 1 && task.priority <= 3 && 
+      !task.is_completed &&
+      task.due_date && new Date(task.due_date) <= today
+    );
+    
+    return nowTasks.length + nowProjectTasks.length + nowGoalTasks.length;
+  };
+
+  // Simplified priority change handler - no automatic NOW queue management
+  const handlePriorityChange = async (taskId: number, newPriority: number, taskType: 'task' | 'project' | 'goal' = 'task') => {
+    try {
+      // Handle empty priority (set to null)
+      if (isNaN(newPriority)) {
+        const endpoint = taskType === 'project' ? `/api/projects/tasks/${taskId}` :
+                        taskType === 'goal' ? `/api/life-goals/tasks/${taskId}` :
+                        `/api/tasks/${taskId}`;
+        await api.put(endpoint, { priority: null });
+        await loadTasks();
+        if (taskType === 'project') await loadProjectTasksDueToday();
+        if (taskType === 'goal') await loadGoalTasksDueToday();
+        return;
+      }
+
+      // For goal tasks, convert integer priority to string
+      if (taskType === 'goal') {
+        let priorityString: string;
+        if (newPriority <= 3) priorityString = 'high';
+        else if (newPriority <= 6) priorityString = 'medium';
+        else priorityString = 'low';
+        
+        await api.put(`/api/life-goals/tasks/${taskId}`, { priority: priorityString });
+        await loadGoalTasksDueToday();
+        return;
+      }
+
+      // For project tasks, update priority_new (integer 1-10), not the old string priority
+      if (taskType === 'project') {
+        console.log(`Updating project task ${taskId}: priority_new = ${newPriority}`);
+        await api.put(`/api/projects/tasks/${taskId}`, { priority_new: newPriority });
+        await loadProjectTasksDueToday();
+        console.log('Project tasks reloaded, checking task:', projectTasksDueToday.find(t => t.id === taskId));
+        return;
+      }
+
+      // For regular tasks, use integer priority
+      await api.put(`/api/tasks/${taskId}`, { priority: newPriority });
+      await loadTasks();
+    } catch (err: any) {
+      console.error('Failed to update priority:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      alert(`Failed to update task priority: ${err.response?.data?.detail || err.message || 'Unknown error'}`);
+    }
+  };
+
+  // Move task to NOW (set priority to 1)
+  const handleMoveToNow = async (taskId: number, taskType: 'task' | 'project' | 'goal' = 'task') => {
+    try {
+      console.log('handleMoveToNow called:', taskId, taskType);
+      const currentNowCount = getNowTaskCount();
+      if (currentNowCount >= 3) {
+        alert('NOW tab is full (max 3 tasks). Please complete or move existing NOW tasks first.');
+        return;
+      }
+      
+      await handlePriorityChange(taskId, 1, taskType);
+      // Force refresh all data to update NOW tab
+      await loadTasks();
+      await loadProjectTasksDueToday();
+      await loadGoalTasksDueToday();
+      console.log('Task moved to NOW successfully');
+    } catch (err: any) {
+      console.error('Failed to move to NOW:', err);
+      alert('Failed to move task to NOW');
+    }
+  };
+
+  // Move task to Today (set priority to 4 or higher)
+  const handleMoveToToday = async (taskId: number, taskType: 'task' | 'project' | 'goal' = 'task') => {
+    try {
+      console.log('handleMoveToToday called:', taskId, taskType);
+      await handlePriorityChange(taskId, 4, taskType);
+      // Force refresh all data to update NOW tab
+      await loadTasks();
+      await loadProjectTasksDueToday();
+      await loadGoalTasksDueToday();
+      console.log('Task moved to Today successfully');
+    } catch (err: any) {
+      console.error('Failed to move to Today:', err);
+      alert('Failed to move task to Today');
+    }
+  };
+
   // Handle row hover/focus with automatic scroll adjustment to avoid sticky footer overlap
   const handleRowVisibility = (element: HTMLElement) => {
     const container = element.closest('.tasks-table-container') as HTMLElement;
@@ -736,18 +849,26 @@ export default function Tasks() {
   // Load habits function
   const loadHabits = async () => {
     try {
+      // Load active habits
       const response: any = await api.get('/api/habits/');
       const data = response.data || response;
       const habitsList = Array.isArray(data) ? data : [];
       setHabits(habitsList);
       
-      // Load month days for each habit
+      // Load completed habits (inactive habits)
+      const completedResponse: any = await api.get('/api/habits/?active_only=false');
+      const completedData = completedResponse.data || completedResponse;
+      const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => !h.is_active) : [];
+      setCompletedHabits(completedList);
+      
+      // Load month days for each active habit
       habitsList.forEach((habit: any) => {
         loadHabitMonthDays(habit.id);
       });
     } catch (err: any) {
       console.error('Error loading habits:', err);
       setHabits([]);
+      setCompletedHabits([]);
     }
   };
 
@@ -836,7 +957,7 @@ export default function Tasks() {
 
     // Set active tab if provided (when URL changes)
     if (tabParam) {
-      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
+      const validTabs: TabType[] = ['now', 'today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
       if (validTabs.includes(tabParam as TabType)) {
         setActiveTab(tabParam as TabType);
       }
@@ -915,7 +1036,11 @@ export default function Tasks() {
       tasksLoadedRef.current = true;
       
       // Trigger initial data load for the active tab
-      if (activeTab === 'daily') {
+      if (activeTab === 'now') {
+        // NOW tab needs project and goal tasks
+        loadProjectTasksDueToday();
+        loadGoalTasksDueToday();
+      } else if (activeTab === 'daily') {
         loadDailyEntries(selectedDate);
       } else if (activeTab === 'weekly') {
         loadWeeklyEntries(selectedWeekStart);
@@ -947,7 +1072,11 @@ export default function Tasks() {
   useEffect(() => {
     if (!tasksLoadedRef.current) return;
     
-    if (activeTab === 'daily') {
+    if (activeTab === 'now') {
+      // NOW tab needs project and goal tasks
+      loadProjectTasksDueToday();
+      loadGoalTasksDueToday();
+    } else if (activeTab === 'daily') {
       loadDailyEntries(selectedDate);
     } else if (activeTab === 'weekly') {
       loadWeeklyEntries(selectedWeekStart);
@@ -1096,6 +1225,20 @@ export default function Tasks() {
       if (activeTab === 'weekly') {
         const taskStatus = weeklyTaskStatuses[task.id];
         if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          // Check if we're viewing a week in the past
+          const viewingWeekStart = new Date(selectedWeekStart);
+          viewingWeekStart.setHours(0, 0, 0, 0);
+          const viewingWeekEnd = new Date(viewingWeekStart);
+          viewingWeekEnd.setDate(viewingWeekEnd.getDate() + 6); // Sunday
+          viewingWeekEnd.setHours(23, 59, 59, 999);
+          
+          const now = new Date();
+          
+          // If the week has ended (past Sunday 11:59 PM), hide completed/NA tasks
+          if (now > viewingWeekEnd) {
+            return false;
+          }
+          // If viewing current week, show them (with green/gray background)
           return true;
         }
         return true;
@@ -1105,6 +1248,19 @@ export default function Tasks() {
       if (activeTab === 'monthly') {
         const taskStatus = monthlyTaskStatuses[task.id];
         if (taskStatus && (taskStatus.is_completed || taskStatus.is_na)) {
+          // Check if we're viewing a month in the past
+          const viewingMonthStart = new Date(selectedMonthStart);
+          viewingMonthStart.setHours(0, 0, 0, 0);
+          const viewingMonthEnd = new Date(viewingMonthStart.getFullYear(), viewingMonthStart.getMonth() + 1, 0);
+          viewingMonthEnd.setHours(23, 59, 59, 999);
+          
+          const now = new Date();
+          
+          // If the month has ended, hide completed/NA tasks
+          if (now > viewingMonthEnd) {
+            return false;
+          }
+          // If viewing current month, show them (with green/gray background)
           return true;
         }
         return true;
@@ -1119,10 +1275,33 @@ export default function Tasks() {
         return true;
       }
       
-      // For today tab: Filter completed/NA tasks
+      // For daily tab: Hide completed/NA tasks if the selected date has passed (after midnight)
+      if (activeTab === 'daily') {
+        const status = dailyStatuses.get(task.id);
+        if (status && (status.is_completed || status.is_na)) {
+          // Check if we're viewing a date in the past (not today)
+          const viewingDate = new Date(selectedDate);
+          viewingDate.setHours(0, 0, 0, 0);
+          const todayDate = new Date();
+          todayDate.setHours(0, 0, 0, 0);
+          
+          // If viewing a past date, hide completed/NA tasks
+          if (viewingDate < todayDate) {
+            return false;
+          }
+          // If viewing today or future, show them (with green/gray background)
+          return true;
+        }
+      }
+      
+      // For today tab: Filter completed/NA tasks and priority 1-3 tasks (they show in NOW tab)
       if (activeTab === 'today') {
         const status = dailyStatuses.get(task.id);
         if (status && (status.is_completed || status.is_na)) {
+          return false;
+        }
+        // Exclude priority 1-3 tasks from Today tab (they appear in NOW tab)
+        if (task.priority && task.priority <= 3) {
           return false;
         }
       }
@@ -1153,7 +1332,7 @@ export default function Tasks() {
   // Separate tasks by type for daily and weekly tabs
   const timeBasedTasks = useMemo(() => {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly') {
-      return filteredTasks.filter(task => task.task_type === TaskType.TIME);
+      return filteredTasks.filter(task => task.task_type === TaskType.TIME && !task.is_daily_one_time);
     }
     return [];
   }, [activeTab, filteredTasks]);
@@ -1237,6 +1416,21 @@ export default function Tasks() {
     }
   };
 
+  const handleUndoComplete = async (taskId: number) => {
+    try {
+      const dateStr = formatDateForInput(selectedDate);
+      await api.post(`/api/daily-task-status/${taskId}/reset`, null, {
+        params: { status_date: dateStr }
+      });
+      // Reload daily statuses and entries
+      await loadDailyStatuses(selectedDate);
+      await loadDailyEntries(selectedDate);
+    } catch (err: any) {
+      console.error('Error resetting task status:', err);
+      alert('Failed to undo task status: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
   // Tracking management functions
   const handleRemoveFromTracking = async (taskId: number) => {
     try {
@@ -1275,8 +1469,9 @@ export default function Tasks() {
         return handleDailyTaskComplete(taskId);
       }
       
-      // Find the task to check its frequency
+      // Find the task to check its frequency and priority
       const task = tasks.find(t => t.id === taskId);
+      const completingHighPriorityTask = task && task.priority && task.priority <= 3;
       
       // Mark task as globally completed
       await api.post(`/api/tasks/${taskId}/complete`, {});
@@ -1303,7 +1498,52 @@ export default function Tasks() {
       }
       
       // Reload tasks to get updated data
-      loadTasks();
+      await loadTasks();
+      
+      // SMART QUEUE PROMOTION: If we just completed a P1-P3 task, check if we need to promote another task
+      if (completingHighPriorityTask) {
+        // Get all today's tasks with priorities (from all sources) after reload
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        const allTasks = [
+          ...tasks.filter(t => t.is_active && !t.is_completed && t.due_date && new Date(t.due_date) <= today).map(t => ({ ...t, type: 'task' })),
+          ...projectTasksDueToday.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) <= today).map(t => ({ ...t, type: 'project' })),
+          ...goalTasksDueToday.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) <= today).map(t => ({ ...t, type: 'goal' }))
+        ];
+        
+        // Count how many P1-P3 tasks remain
+        const highPriorityTasks = allTasks.filter(t => t.priority && t.priority <= 3);
+        
+        // If we have fewer than 3 high-priority tasks, promote the next eligible task
+        if (highPriorityTasks.length < 3) {
+          // Find all eligible tasks (P4+, due today or earlier)
+          const eligibleTasks = allTasks
+            .filter(t => t.priority && t.priority >= 4)
+            .sort((a, b) => {
+              // Sort by priority (lower number = higher priority)
+              if (a.priority !== b.priority) return a.priority - b.priority;
+              // Tie-breaker: oldest due_date first
+              return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+            });
+          
+          if (eligibleTasks.length > 0) {
+            const taskToPromote = eligibleTasks[0];
+            console.log(`Auto-promoting task "${taskToPromote.name}" from P${taskToPromote.priority} to P3`);
+            
+            // Promote to P3
+            const endpoint = taskToPromote.type === 'project' ? `/api/project-tasks/${taskToPromote.id}` :
+                            taskToPromote.type === 'goal' ? `/api/goal-tasks/${taskToPromote.id}` :
+                            `/api/tasks/${taskToPromote.id}`;
+            await api.put(endpoint, { priority: 3 });
+            
+            // Reload again to show promoted task
+            await loadTasks();
+            if (taskToPromote.type === 'project') await loadProjectTasksDueToday();
+            if (taskToPromote.type === 'goal') await loadGoalTasksDueToday();
+          }
+        }
+      }
     } catch (err: any) {
       console.error('Error updating task:', err);
       console.error('Error response:', err.response);
@@ -2507,7 +2747,13 @@ export default function Tasks() {
       const allTasks = [...overdueTasks, ...todayTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
-      );
+      ).map(task => ({
+        ...task,
+        // Convert string priority to integer for display: high=P1, medium=P5, low=P9
+        priority: typeof task.priority === 'string' 
+          ? (task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9)
+          : task.priority
+      }));
       
       setGoalTasksDueToday(uniqueTasks);
     } catch (err: any) {
@@ -4363,6 +4609,7 @@ export default function Tasks() {
   }
 
   const tabs: { key: TabType; label: string }[] = [
+    { key: 'now', label: 'NOW' },
     { key: 'today', label: 'Today' },
     { key: 'daily', label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
@@ -5189,6 +5436,407 @@ export default function Tasks() {
     );
   };
 
+  // NOW tab - First tab showing what needs attention right now
+  if (activeTab === 'now') {
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
+            ➕ Add Task
+          </button>
+        </header>
+
+        {/* Tabs */}
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+                if (tab.key === 'weekly') {
+                  loadWeeklyEntries(selectedWeekStart);
+                } else if (tab.key === 'monthly') {
+                  loadMonthlyEntries(selectedMonthStart);
+                }
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ padding: '20px' }}>
+          <div style={{
+            marginBottom: '20px',
+            padding: '20px',
+            backgroundColor: '#fee2e2',
+            borderRadius: '8px',
+            border: '2px solid #dc2626'
+          }}>
+            <h2 style={{ margin: '0 0 10px 0', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '24px' }}>🔥</span>
+              High Priority Tasks (Priority 1-3)
+            </h2>
+            <p style={{ margin: 0, color: '#7f1d1d' }}>
+              These are your most urgent tasks that need immediate attention. Focus on these first!
+            </p>
+          </div>
+
+          {(() => {
+            // NOW tab logic: Shows top 3 priority tasks (P1-P3 only) due today or earlier
+            // Important: Only tasks explicitly set to P1, P2, or P3 appear here
+            // Setting a task to P3 will move it to NOW if there's space
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Filter tasks: priority 1-3 AND (due_date <= today OR no due_date for weekly/monthly)
+            const nowTasks = tasks.filter(task => {
+              if (!task.priority || task.priority < 1 || task.priority > 3) return false;
+              if (!task.is_active || task.is_completed) return false;
+              
+              // For tasks with due dates, must be today or earlier
+              if (task.due_date) {
+                return new Date(task.due_date) <= today;
+              }
+              
+              // For tasks without due dates (weekly/monthly), allow them in NOW
+              return true;
+            });
+            
+            console.log(`NOW tab filtering: found ${nowTasks.length} regular tasks with P1-3`);
+            if (nowTasks.length > 0) {
+              console.log('NOW tasks:', nowTasks.map(t => `${t.id}: ${t.name} (P${t.priority}, ${t.follow_up_frequency})`));
+            }
+            
+            const nowProjectTasks = projectTasksDueToday.filter(task => 
+              task.priority && task.priority >= 1 && task.priority <= 3 && 
+              !task.is_completed &&
+              task.due_date && new Date(task.due_date) <= today
+            );
+            
+            const nowGoalTasks = goalTasksDueToday.filter(task => 
+              task.priority && task.priority >= 1 && task.priority <= 3 && 
+              !task.is_completed &&
+              task.due_date && new Date(task.due_date) <= today
+            );
+            
+            // Combine and sort by priority (1 first), then by due_date (oldest first)
+            // Take top 3 tasks - if more than 3 have P1-P3, show the most urgent
+            const allNowTasks = [...nowTasks, ...nowProjectTasks, ...nowGoalTasks]
+              .sort((a, b) => {
+                if (a.priority !== b.priority) {
+                  return a.priority - b.priority; // Lower priority number = higher urgency
+                }
+                // Same priority - oldest due_date first
+                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+              })
+              .slice(0, 3); // Show top 3 only
+            
+            if (allNowTasks.length === 0) {
+              return (
+                <div style={{
+                  padding: '40px',
+                  backgroundColor: '#f0fdf4',
+                  borderRadius: '8px',
+                  border: '2px solid #22c55e',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+                  <h3 style={{ color: '#15803d', margin: '0 0 8px 0' }}>No Urgent Tasks Right Now!</h3>
+                  <p style={{ color: '#166534', margin: 0 }}>
+                    Set task priorities to 1-3 with due dates today or earlier to see them here. Max 3 tasks allowed.
+                  </p>
+                </div>
+              );
+            }
+            
+            // Warning if more than 3 tasks qualify
+            const qualifyingCount = [...nowTasks, ...nowProjectTasks, ...nowGoalTasks].length;
+
+            return (
+              <div className="tasks-table-container" style={{ marginTop: '20px' }}>
+                {qualifyingCount > 3 && (
+                  <div style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#fef3c7',
+                    border: '1px solid #f59e0b',
+                    borderRadius: '6px',
+                    marginBottom: '16px',
+                    fontSize: '14px',
+                    color: '#92400e'
+                  }}>
+                    ⚠️ <strong>{qualifyingCount} tasks</strong> qualify for NOW tab. Showing top 3 by priority and due date.
+                  </div>
+                )}
+                <table className="tasks-table">
+                  <thead>
+                    <tr>
+                      <th className="col-checkbox"></th>
+                      <th className="col-task">Task</th>
+                      <th className="col-time">Allocated</th>
+                      <th className="col-time">Source</th>
+                      <th className="col-time">Due Date</th>
+                      <th className="col-action">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allNowTasks.map(task => {
+                      const taskType = (task as any).project_name ? 'project' : 
+                                      (task as any).goal_name ? 'goal' : 'task';
+                      
+                      return (
+                        <tr 
+                          key={`now-${taskType}-${task.id}`}
+                          style={{ 
+                            backgroundColor: task.priority === 1 ? '#fee2e2' : 
+                                           task.priority === 2 ? '#fef2f2' : '#fef2f2'
+                          }}
+                        >
+                          <td className="col-checkbox">
+                            <input 
+                              type="checkbox" 
+                              checked={task.is_completed || false}
+                              onChange={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  if (taskType === 'project') {
+                                    await api.put(`/api/projects/tasks/${task.id}`, { is_completed: e.target.checked });
+                                    await loadProjectTasksDueToday();
+                                  } else if (taskType === 'goal') {
+                                    await api.put(`/api/life-goals/tasks/${task.id}`, { is_completed: e.target.checked });
+                                    await loadGoalTasksDueToday();
+                                  } else {
+                                    if (e.target.checked) {
+                                      await handleComplete(task.id);
+                                    } else {
+                                      await api.put(`/api/tasks/${task.id}`, { is_completed: false });
+                                      await loadTasks();
+                                    }
+                                  }
+                                } catch (err) {
+                                  console.error('Error toggling completion:', err);
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                            />
+                          </td>
+                          <td 
+                            className="col-task"
+                            onClick={(e) => {
+                              console.log('Task name clicked:', task.id, taskType, task.name);
+                              if (taskType === 'project') {
+                                handleEditTask(task);
+                              } else if (taskType === 'goal') {
+                                // Goal tasks don't have edit form yet, just show info
+                                alert(`Goal Task: ${task.name}\nGoal: ${(task as any).goal_name}`);
+                              } else {
+                                handleTaskClick(task.id);
+                              }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            <div style={{ fontWeight: '600', color: '#1f2937' }}>
+                              {task.name}
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                              {task.pillar && (
+                                <span>
+                                  {task.pillar === 'hard_work' ? '💼' : task.pillar === 'calmness' ? '🧘' : '👨‍👩‍👦'}{' '}
+                                  {task.pillar.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                </span>
+                              )}
+                              {task.category && <span> › {task.category}</span>}
+                            </div>
+                          </td>
+                          <td className="col-time" style={{ textAlign: 'center' }}>
+                            {task.allocated_minutes ? `${task.allocated_minutes} min` : '-'}
+                          </td>
+                          <td className="col-time" style={{ textAlign: 'center' }}>
+                            {(task as any).project_name && (
+                              <span style={{ 
+                                fontSize: '12px', 
+                                padding: '4px 10px', 
+                                backgroundColor: '#dbeafe', 
+                                color: '#1e40af', 
+                                borderRadius: '12px',
+                                fontWeight: '600',
+                                display: 'inline-block'
+                              }}>📁 {(task as any).project_name}</span>
+                            )}
+                            {(task as any).goal_name && (
+                              <span style={{ 
+                                fontSize: '12px', 
+                                padding: '4px 10px', 
+                                backgroundColor: '#fef3c7', 
+                                color: '#92400e', 
+                                borderRadius: '12px',
+                                fontWeight: '600',
+                                display: 'inline-block'
+                              }}>🎯 {(task as any).goal_name}</span>
+                            )}
+                            {!((task as any).project_name) && !((task as any).goal_name) && (
+                              <span style={{ 
+                                fontSize: '12px', 
+                                padding: '4px 10px', 
+                                backgroundColor: '#f3f4f6', 
+                                color: '#4b5563', 
+                                borderRadius: '12px',
+                                fontWeight: '600',
+                                display: 'inline-block'
+                              }}>
+                                📋 {task.follow_up_frequency === 'weekly' ? 'Weekly' : 
+                                    task.follow_up_frequency === 'monthly' ? 'Monthly' : 
+                                    task.follow_up_frequency === 'yearly' ? 'Yearly' : 
+                                    task.follow_up_frequency === 'one_time' ? 'One-Time' : 
+                                    'Daily'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="col-time" style={{ textAlign: 'center' }}>
+                            {task.due_date ? (
+                              <input 
+                                type="date"
+                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                onChange={async (e) => {
+                                  e.stopPropagation();
+                                  const newDate = e.target.value;
+                                  try {
+                                    if (taskType === 'project') {
+                                      await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
+                                      await loadProjectTasksDueToday();
+                                    } else if (taskType === 'goal') {
+                                      await api.put(`/api/life-goals/tasks/${task.id}`, { due_date: newDate });
+                                      await loadGoalTasksDueToday();
+                                    } else {
+                                      await api.put(`/api/tasks/${task.id}`, { due_date: newDate });
+                                      await loadTasks();
+                                    }
+                                  } catch (err) {
+                                    console.error('Failed to update due date:', err);
+                                    alert('Failed to update due date');
+                                  }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  border: '1px solid #e2e8f0',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
+                                  color: new Date(task.due_date) < new Date() ? '#dc2626' : '#6b7280',
+                                  fontWeight: new Date(task.due_date) < new Date() ? '600' : '400'
+                                }}
+                              />
+                            ) : (
+                              <input 
+                                type="date"
+                                value=""
+                                onChange={async (e) => {
+                                  e.stopPropagation();
+                                  const newDate = e.target.value;
+                                  try {
+                                    if (taskType === 'project') {
+                                      await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
+                                    } else if (taskType === 'goal') {
+                                      await api.put(`/api/life-goals/tasks/${task.id}`, { due_date: newDate });
+                                    } else {
+                                      await api.put(`/api/tasks/${task.id}`, { due_date: newDate });
+                                    }
+                                    await loadTasks();
+                                  } catch (err) {
+                                    console.error('Failed to update due date:', err);
+                                    alert('Failed to update due date');
+                                  }
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  border: '1px solid #e2e8f0',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '13px'
+                                }}
+                              />
+                            )}
+                          </td>
+                          <td className="col-action">
+                            <button 
+                              className="btn btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                console.log('Move to Today clicked:', task.id, taskType);
+                                handleMoveToToday(task.id, taskType);
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '13px',
+                                backgroundColor: '#f59e0b',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                marginRight: '8px'
+                              }}
+                              title="Move back to Today tab (P4)"
+                            >
+                              ← Today
+                            </button>
+                            <button 
+                              className="btn-complete"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (taskType === 'project') {
+                                  handleToggleTaskCompletion(task.id, false);
+                                } else if (taskType === 'goal') {
+                                  handleToggleGoalTaskCompletion(task.id, false);
+                                } else {
+                                  handleComplete(task.id);
+                                }
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '13px',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                            >
+                              ✓ Done
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+        </div>
+
+        <TaskForm
+          isOpen={isTaskFormOpen}
+          taskId={selectedTaskId || undefined}
+          onClose={() => setIsTaskFormOpen(false)}
+          onSuccess={async () => {
+            await loadTasks();
+            setIsTaskFormOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="tasks-page">
       <header className="tasks-header">
@@ -5440,17 +6088,30 @@ export default function Tasks() {
                         {task.pillar_name} - {task.category_name}
                       </td>
                       <td className="col-action">
-                        <button 
-                          className="btn-delete"
-                          onClick={() => {
-                            if (window.confirm('Are you sure you want to remove this task from one-time tracking?')) {
-                              deleteOneTimeTask(oneTimeTask.task_id);
-                            }
-                          }}
-                          style={{ padding: '4px 8px', fontSize: '12px' }}
-                        >
-                          Remove
-                        </button>
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          <button 
+                            className="btn-complete"
+                            onClick={() => {
+                              const today = new Date().toISOString().split('T')[0];
+                              updateOneTimeTask(oneTimeTask.task_id, { updated_date: today });
+                            }}
+                            style={{ padding: '4px 12px', fontSize: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                            title="Mark as completed/checked today"
+                          >
+                            ✓ Complete
+                          </button>
+                          <button 
+                            className="btn-delete"
+                            onClick={() => {
+                              if (window.confirm('Are you sure you want to remove this task from one-time tracking?')) {
+                                deleteOneTimeTask(oneTimeTask.task_id);
+                              }
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -6901,8 +7562,48 @@ export default function Tasks() {
                   </div>
                 ) : (
                   miscTaskGroups.map((group) => {
+                    // Calculate ETA and status
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const dueDate = group.due_date ? new Date(group.due_date) : null;
+                    let etaText = 'No due date';
+                    let backgroundClass = '';
+                    
+                    if (dueDate) {
+                      dueDate.setHours(0, 0, 0, 0);
+                      const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                      
+                      if (daysUntilDue < 0) {
+                        etaText = `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} overdue`;
+                        backgroundClass = 'misc-overdue';
+                      } else if (daysUntilDue === 0) {
+                        etaText = 'Due today';
+                        backgroundClass = 'misc-due-today';
+                      } else if (daysUntilDue <= 2) {
+                        etaText = `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining`;
+                        backgroundClass = 'misc-warning';
+                      } else {
+                        etaText = `${daysUntilDue} days remaining`;
+                      }
+                    }
+                    
+                    // Check if any sub-task is overdue
+                    const hasOverdueSubtask = (group.tasks || []).some((task: any) => {
+                      if (!task.due_date || task.is_completed) return false;
+                      const taskDueDate = new Date(task.due_date);
+                      taskDueDate.setHours(0, 0, 0, 0);
+                      return taskDueDate < today;
+                    });
+                    
+                    if (hasOverdueSubtask && !backgroundClass.includes('overdue')) {
+                      backgroundClass = 'misc-overdue';
+                    }
+                    
+                    const totalTasks = group.progress?.total_tasks || 0;
+                    const completedTasks = group.progress?.completed_tasks || 0;
+                    
                     return (
-                      <div key={group.id} className={`project-card ${group.is_completed ? 'status-completed' : 'status-not_started'}`}>
+                      <div key={group.id} className={`project-card ${group.is_completed ? 'status-completed' : 'status-not_started'} ${backgroundClass}`}>
                         <div className="project-card-header">
                           <h3>{group.name}</h3>
                           <span className={`project-status status-${group.is_completed ? 'completed' : 'in_progress'}`}>
@@ -6913,6 +7614,24 @@ export default function Tasks() {
                         {group.description && (
                           <p className="project-description">{group.description}</p>
                         )}
+                        
+                        {/* Sub-task count and ETA */}
+                        <div style={{ 
+                          display: 'flex', 
+                          gap: '12px', 
+                          marginBottom: '12px',
+                          fontSize: '13px',
+                          color: '#4a5568'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontWeight: '600' }}>📋</span>
+                            <span>{totalTasks} task{totalTasks !== 1 ? 's' : ''}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontWeight: '600' }}>⏱️</span>
+                            <span>{etaText}</span>
+                          </div>
+                        </div>
                       
                         <div className="project-progress">
                           <div className="progress-bar">
@@ -7154,52 +7873,33 @@ export default function Tasks() {
                   {/* Traditional streak display for daily habits */}
                   {!showPeriodTracking && (
                     <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'space-between', 
-                      alignItems: 'center',
                       padding: '15px',
                       backgroundColor: '#f7fafc',
                       borderRadius: '6px',
                       marginBottom: '15px'
                     }}>
-                      <div style={{ textAlign: 'center' }}>
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>Current Streak:</div>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e53e3e' }}>
-                          🔥 {habit.stats?.current_streak || 0}
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                          Current Streak
+                          🔥 {habit.stats?.current_streak || 0} days
                         </div>
                       </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#3182ce', marginBottom: '6px' }}>
-                          🏆 Top 3 Streaks
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#666' }}>
-                          {habit.stats?.top_3_streaks && habit.stats.top_3_streaks.length > 0 ? (
-                            habit.stats.top_3_streaks.map((streak: any, index: number) => (
-                              <div key={index} style={{ 
-                                marginBottom: index < habit.stats.top_3_streaks.length - 1 ? '4px' : '0',
-                                padding: '2px 0'
-                              }}>
-                                <span style={{ fontWeight: 'bold', color: '#3182ce' }}>
-                                  {index + 1}. {streak.streak_length} days
-                                </span>
-                                {streak.is_active && (
-                                  <span style={{ marginLeft: '4px', color: '#e53e3e' }}>🔥</span>
-                                )}
-                              </div>
-                            ))
-                          ) : (
-                            <div>{habit.stats?.longest_streak || 0} days</div>
-                          )}
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>Best Streak:</div>
+                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3182ce' }}>
+                          🏆 {habit.stats?.top_3_streaks?.[0]?.streak_length || habit.stats?.longest_streak || 0} days
                         </div>
                       </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#38a169' }}>
-                          {habit.stats?.success_rate || 0}%
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>2nd Best Streak:</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#805ad5' }}>
+                          🥈 {habit.stats?.top_3_streaks?.[1]?.streak_length || 0} days
                         </div>
-                        <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                          Success Rate
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>Success Rate:</div>
+                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#38a169' }}>
+                          ✅ {habit.stats?.success_rate || 0}%
                         </div>
                       </div>
                     </div>
@@ -7540,52 +8240,78 @@ export default function Tasks() {
                         </div>
                       )}
                       
-                      <div style={{ display: 'flex', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
-                        <button 
-                          className="btn btn-sm"
-                          style={{ 
-                            flex: 1,
-                            padding: '10px',
-                            backgroundColor: '#48bb78',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: '500'
-                          }}
-                          onClick={() => {
-                            const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
-                            handleMarkHabitEntry(habit.id, dateToMark, true);
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#38a169'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#48bb78'}
-                        >
-                          ✅ Done
-                        </button>
-                        <button 
-                          className="btn btn-sm"
-                          style={{ 
-                            flex: 1,
-                            padding: '10px',
-                            backgroundColor: '#fc8181',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '14px',
-                            fontWeight: '500'
-                          }}
-                          onClick={() => {
-                            const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
-                            handleMarkHabitEntry(habit.id, dateToMark, false);
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fc8181'}
-                        >
-                          ❌ Missed
-                        </button>
-                      </div>
+                      {/* Show auto-track warning if habit is linked to a task */}
+                      {habit.linked_task_id && habit.linked_task_name && (
+                        <div style={{ 
+                          marginBottom: '12px',
+                          padding: '12px', 
+                          backgroundColor: '#e6fffa',
+                          border: '2px solid #81e6d9',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          color: '#234e52'
+                        }}>
+                          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                            🔗 Auto-tracked from Daily Task
+                          </div>
+                          <div>
+                            Task: <strong>{habit.linked_task_name}</strong>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#2c7a7b', marginTop: '6px' }}>
+                            ℹ️ Manual entry disabled - tracked automatically via daily task completion
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Disable manual entry if linked to task */}
+                      {!habit.linked_task_id && (
+                        <div style={{ display: 'flex', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
+                          <button 
+                            className="btn btn-sm"
+                            style={{ 
+                              flex: 1,
+                              padding: '10px',
+                              backgroundColor: '#48bb78',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: '500'
+                            }}
+                            onClick={() => {
+                              const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                              handleMarkHabitEntry(habit.id, dateToMark, true);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#38a169'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#48bb78'}
+                          >
+                            ✅ Done
+                          </button>
+                          <button 
+                            className="btn btn-sm"
+                            style={{ 
+                              flex: 1,
+                              padding: '10px',
+                              backgroundColor: '#fc8181',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: '500'
+                            }}
+                            onClick={() => {
+                              const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                              handleMarkHabitEntry(habit.id, dateToMark, false);
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fc8181'}
+                          >
+                            ❌ Missed
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -7667,6 +8393,141 @@ export default function Tasks() {
               })}
             </div>
           )}
+          
+          {/* Completed Habits Section */}
+          {completedHabits.length > 0 && (
+            <div style={{ marginTop: '40px' }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '20px',
+                paddingBottom: '10px',
+                borderBottom: '2px solid #e2e8f0'
+              }}>
+                <h2 style={{ margin: 0, color: '#718096' }}>✅ Completed Habits</h2>
+                <button
+                  onClick={() => setShowCompletedHabits(!showCompletedHabits)}
+                  style={{
+                    padding: '8px 16px',
+                    backgroundColor: '#f7fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '14px',
+                    fontWeight: '500',
+                    color: '#4a5568'
+                  }}
+                >
+                  {showCompletedHabits ? '▼ Hide' : '▶ Show'} ({completedHabits.length})
+                </button>
+              </div>
+              
+              {showCompletedHabits && (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
+                  gap: '20px'
+                }}>
+                  {completedHabits.map((habit) => (
+                    <div key={habit.id} style={{
+                      border: '2px solid #cbd5e0',
+                      borderRadius: '12px',
+                      padding: '20px',
+                      backgroundColor: '#f7fafc',
+                      opacity: 0.8
+                    }}>
+                      <div style={{ marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', flex: 1, color: '#4a5568' }}>
+                            {habit.name}
+                          </h3>
+                          <span style={{
+                            padding: '4px 10px',
+                            backgroundColor: '#48bb78',
+                            color: 'white',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '600'
+                          }}>
+                            ✓ Completed
+                          </span>
+                        </div>
+                        {habit.description && (
+                          <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#718096' }}>
+                            {habit.description}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Show stats */}
+                      {habit.stats && (
+                        <div style={{ 
+                          padding: '12px',
+                          backgroundColor: 'white',
+                          borderRadius: '6px',
+                          fontSize: '13px',
+                          color: '#4a5568',
+                          marginBottom: '12px'
+                        }}>
+                          <div style={{ marginBottom: '8px' }}>
+                            🔥 Final Streak: <strong>{habit.stats.current_streak} days</strong>
+                          </div>
+                          <div style={{ marginBottom: '8px' }}>
+                            🏆 Best Streak: <strong>{habit.stats.longest_streak} days</strong>
+                          </div>
+                          <div>
+                            ✅ Success Rate: <strong>{habit.stats.success_rate}%</strong>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {habit.end_date && (
+                        <div style={{ 
+                          padding: '8px',
+                          backgroundColor: '#e6fffa',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          color: '#2c7a7b',
+                          marginBottom: '12px'
+                        }}>
+                          📅 Ended: {new Date(habit.end_date).toLocaleDateString()}
+                        </div>
+                      )}
+                      
+                      {/* Action button to reactivate */}
+                      <button
+                        onClick={async () => {
+                          if (window.confirm(`Reactivate habit "${habit.name}"?`)) {
+                            try {
+                              await api.put(`/api/habits/${habit.id}`, { is_active: true, end_date: null });
+                              loadHabits();
+                            } catch (err) {
+                              console.error('Error reactivating habit:', err);
+                              alert('Failed to reactivate habit');
+                            }
+                          }
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          backgroundColor: '#48bb78',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '500'
+                        }}
+                      >
+                        ↩️ Reactivate Habit
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : filteredTasks.length === 0 ? (
         <div className="empty-state">
@@ -7700,6 +8561,7 @@ export default function Tasks() {
                   <thead>
                     <tr>
                       <th className={`col-task sticky-col sticky-col-1 ${focusedCell && focusedCell.col === -1 ? 'focused-column' : hoveredColumn === -1 ? 'column-highlight' : ''}`}>Task</th>
+                      <th className="col-time sticky-col sticky-col-2" style={{ left: 'var(--sticky-col-1-width, 200px)' }}>Spent Time</th>
                       {hourLabels.map(hour => (
                         <th 
                           key={hour.index} 
@@ -7757,6 +8619,13 @@ export default function Tasks() {
                                 ({formatTaskTarget(task, false, false)})
                               </span>
                             </div>
+                          </td>
+                          
+                          {/* Spent Time column - sum of all hours - sticky after Task column */}
+                          <td className="col-time sticky-col sticky-col-2" style={{ left: 'var(--sticky-col-1-width, 200px)' }}>
+                            <strong>
+                              {hourLabels.reduce((sum, hour) => sum + getHourlyTime(task.id, hour.index), 0)} min
+                            </strong>
                           </td>
                           
                           {/* 24 hourly columns */}
@@ -7840,24 +8709,46 @@ export default function Tasks() {
                           {/* Action buttons column */}
                           <td className="col-actions">
                             {dailyStatus?.is_completed ? (
-                              <span className="completed-text">✓ Done</span>
+                              <div className="action-buttons">
+                                <span className="completed-text">✓ Complete (Hidden)</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
                             ) : dailyStatus?.is_na ? (
-                              <span className="na-text">NA</span>
+                              <div className="action-buttons">
+                                <span className="na-text">Inactive</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
                             ) : (
                               <div className="action-buttons">
                                 <button 
                                   className="btn-complete"
                                   onClick={() => handleTaskComplete(task.id)}
                                   disabled={isFutureDate(selectedDate)}
+                                  title="Task Complete - won't appear tomorrow"
                                 >
-                                  Completed
+                                  Done
                                 </button>
                                 <button 
                                   className="btn-na"
                                   onClick={() => handleTaskNA(task.id)}
                                   disabled={isFutureDate(selectedDate)}
+                                  title="Mark as Inactive - won't appear tomorrow"
                                 >
-                                  NA
+                                  Inactive
                                 </button>
                                 {dailyStatus?.is_tracked === false ? (
                                   <button 
@@ -7900,11 +8791,14 @@ export default function Tasks() {
                       
                       return (
                         <tr className={`total-row ${!isExactly24 ? 'total-mismatch' : ''}`}>
-                          <td className={`col-task ${hoveredColumn === -1 ? 'column-highlight' : ''}`}>
+                          <td className={`col-task sticky-col sticky-col-1 ${hoveredColumn === -1 ? 'column-highlight' : ''}`}>
                             <strong>Total Time</strong><br/>
                             <small style={{ fontSize: '11px', color: '#666' }}>
-                              Allocated: {totalAllocated} min ({totalHours.toFixed(2)}h) | Spent: {totalSpent} min
+                              Allocated: {totalAllocated} min ({totalHours.toFixed(2)}h)
                             </small>
+                          </td>
+                          <td className="col-time sticky-col sticky-col-2" style={{ left: '250px' }}>
+                            <strong>{totalSpent} min</strong>
                           </td>
                           {hourLabels.map(hour => {
                             const hourTotal = timeBasedTasks
@@ -7935,6 +8829,134 @@ export default function Tasks() {
             </div>
           )}
 
+          {/* DAILY ONE TIME TASKS SECTION */}
+          <div style={{ marginBottom: '32px' }}>
+            <h3 className="task-section-header time-based">
+              <span className="emoji">⚡</span>
+              <span>Daily: One Time Tasks</span>
+            </h3>
+            <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+              <table className="tasks-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: '250px' }}>Task Name</th>
+                    <th className="col-time" style={{ width: '120px' }}>Planned Time</th>
+                    <th className="col-time" style={{ width: '150px' }}>Spent Time</th>
+                    <th className="col-actions" style={{ width: '180px' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTasks
+                    .filter(task => task.is_daily_one_time === true)
+                    .filter(task => {
+                      // Filter for simple one-time daily tasks
+                      const dailyStatus = dailyStatuses.get(task.id);
+                      return dailyStatus?.is_tracked !== false;
+                    })
+                    .slice(0, 10)
+                    .map((task) => {
+                      const dailyStatus = dailyStatuses.get(task.id);
+                      const isDailyCompleted = dailyStatus?.is_completed;
+                      const isDailyNA = dailyStatus?.is_na;
+                      const spentTime = hourLabels.reduce((sum, hour) => sum + getHourlyTime(task.id, hour.index), 0);
+                      
+                      return (
+                        <tr key={task.id} className={isDailyCompleted ? 'completed-row' : isDailyNA ? 'na-row' : ''}>
+                          <td style={{ padding: '8px', width: '250px' }}>
+                            <div 
+                              className="task-name task-link"
+                              onClick={() => handleTaskClick(task.id)}
+                              style={{ cursor: 'pointer' }}
+                              title="Click to edit"
+                            >
+                              {task.name}
+                            </div>
+                          </td>
+                          <td className="col-time" style={{ width: '120px' }}>
+                            {task.allocated_minutes} min
+                          </td>
+                          <td className="col-time" style={{ width: '120px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              value={spentTime}
+                              onChange={(e) => {
+                                const newValue = parseInt(e.target.value) || 0;
+                                // Store in first hour slot (0) for simplicity
+                                handleTimeChange(task.id, 0, newValue);
+                              }}
+                              disabled={isDailyCompleted || isDailyNA || isFutureDate(selectedDate)}
+                              style={{
+                                width: '70px',
+                                padding: '4px 8px',
+                                border: '1px solid #ddd',
+                                borderRadius: '4px',
+                                textAlign: 'center'
+                              }}
+                            />
+                            <span style={{ marginLeft: '4px' }}>min</span>
+                          </td>
+                          <td className="col-actions" style={{ width: '180px' }}>
+                            {isDailyCompleted ? (
+                              <div className="action-buttons">
+                                <span className="completed-text">✓ Complete (Hidden)</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
+                            ) : isDailyNA ? (
+                              <div className="action-buttons">
+                                <span className="na-text">Inactive</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="action-buttons">
+                                <button 
+                                  className="btn-complete"
+                                  onClick={() => handleTaskComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Task Complete - won't appear tomorrow"
+                                >
+                                  Done
+                                </button>
+                                <button 
+                                  className="btn-na"
+                                  onClick={() => handleTaskNA(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Mark as Inactive - won't appear tomorrow"
+                                >
+                                  Inactive
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {filteredTasks.filter(task => task.task_type === TaskType.TIME && task.follow_up_frequency === 'daily').length === 0 && (
+                    <tr>
+                      <td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                        No one-time daily tasks. Click "Add Task" to create one.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {/* COUNT-BASED TASKS TABLE */}
           {countBasedTasks.length > 0 && (
             <div style={{ marginBottom: '32px' }}>
@@ -7943,13 +8965,13 @@ export default function Tasks() {
                 <span>Count-Based Tasks</span>
               </h3>
               <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
-                <table className="tasks-table">
+                <table className="tasks-table" style={{ tableLayout: 'fixed', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th className="col-task sticky-col sticky-col-1">Task</th>
-                      <th className="col-time">Target</th>
-                      <th className="col-time">Completed</th>
-                      <th className="col-actions">Actions</th>
+                      <th style={{ width: '250px' }}>Task</th>
+                      <th className="col-time" style={{ width: '100px' }}>Target</th>
+                      <th className="col-time" style={{ width: '150px' }}>Completed</th>
+                      <th className="col-actions" style={{ width: '240px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -7966,7 +8988,7 @@ export default function Tasks() {
                       
                       return (
                         <tr key={task.id} className={rowClassName}>
-                          <td className="col-task sticky-col sticky-col-1">
+                          <td style={{ padding: '8px', width: '250px' }}>
                             <div 
                               className="task-name task-link"
                               onClick={() => handleTaskClick(task.id)}
@@ -7992,11 +9014,12 @@ export default function Tasks() {
                               step="1"
                               inputMode="numeric"
                               pattern="[0-9]*"
-                              className="hour-input"
+                              className="hour-input count-based-input"
                               style={{ maxWidth: '80px' }}
                               value={value || ''}
                               data-row={taskIndex}
-                              data-col={0}
+                              data-col="0"
+                              data-task-id={task.id}
                               onChange={(e) => handleHourlyTimeChange(task.id, 0, e.target.value)}
                               onFocus={(e) => e.target.select()}
                               onWheel={(e) => {
@@ -8005,16 +9028,22 @@ export default function Tasks() {
                               }}
                               onKeyDown={(e) => {
                                 const input = e.currentTarget;
-                                const row = parseInt(input.dataset.row || '0');
+                                const row = parseInt(input.getAttribute('data-row') || '0');
                                 
                                 if (e.key === 'ArrowUp') {
                                   e.preventDefault();
-                                  const nextInput = document.querySelector(`input[data-row="${row - 1}"][data-col="0"]`) as HTMLInputElement;
-                                  if (nextInput) nextInput.focus();
+                                  const allInputs = Array.from(document.querySelectorAll('.count-based-input')) as HTMLInputElement[];
+                                  const currentIndex = allInputs.findIndex(inp => inp === input);
+                                  if (currentIndex > 0) {
+                                    allInputs[currentIndex - 1].focus();
+                                  }
                                 } else if (e.key === 'ArrowDown' || e.key === 'Enter') {
                                   e.preventDefault();
-                                  const nextInput = document.querySelector(`input[data-row="${row + 1}"][data-col="0"]`) as HTMLInputElement;
-                                  if (nextInput) nextInput.focus();
+                                  const allInputs = Array.from(document.querySelectorAll('.count-based-input')) as HTMLInputElement[];
+                                  const currentIndex = allInputs.findIndex(inp => inp === input);
+                                  if (currentIndex < allInputs.length - 1) {
+                                    allInputs[currentIndex + 1].focus();
+                                  }
                                 }
                               }}
                               placeholder="0"
@@ -8027,24 +9056,46 @@ export default function Tasks() {
                           
                           <td className="col-actions">
                             {dailyStatus?.is_completed ? (
-                              <span className="completed-text">✓ Done</span>
+                              <div className="action-buttons">
+                                <span className="completed-text">✓ Complete (Hidden)</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
                             ) : dailyStatus?.is_na ? (
-                              <span className="na-text">NA</span>
+                              <div className="action-buttons">
+                                <span className="na-text">Inactive</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
                             ) : (
                               <div className="action-buttons">
                                 <button 
                                   className="btn-complete"
                                   onClick={() => handleTaskComplete(task.id)}
                                   disabled={isFutureDate(selectedDate)}
+                                  title="Task Complete - won't appear tomorrow"
                                 >
-                                  Completed
+                                  Done
                                 </button>
                                 <button 
                                   className="btn-na"
                                   onClick={() => handleTaskNA(task.id)}
                                   disabled={isFutureDate(selectedDate)}
+                                  title="Mark as Inactive - won't appear tomorrow"
                                 >
-                                  NA
+                                  Inactive
                                 </button>
                                 {dailyStatus?.is_tracked === false ? (
                                   <button 
@@ -8083,12 +9134,12 @@ export default function Tasks() {
                 <span>Yes/No Tasks</span>
               </h3>
               <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
-                <table className="tasks-table">
+                <table className="tasks-table" style={{ tableLayout: 'fixed', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th className="col-task sticky-col sticky-col-1">Task</th>
-                      <th className="col-time">Completed</th>
-                      <th className="col-actions">Actions</th>
+                      <th style={{ width: '250px' }}>Task</th>
+                      <th className="col-time" style={{ width: '100px' }}>Completed</th>
+                      <th className="col-actions" style={{ width: '200px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -8115,7 +9166,7 @@ export default function Tasks() {
                                 : undefined
                           }
                         >
-                          <td className="col-task sticky-col sticky-col-1">
+                          <td style={{ padding: '8px', width: '250px' }}>
                             <div 
                               className="task-name task-link"
                               onClick={() => handleTaskClick(task.id)}
@@ -8146,24 +9197,46 @@ export default function Tasks() {
                           
                           <td className="col-actions">
                             {dailyStatus?.is_completed ? (
-                              <span className="completed-text">✓ Done</span>
+                              <div className="action-buttons">
+                                <span className="completed-text">✓ Yes (Hidden)</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
                             ) : dailyStatus?.is_na ? (
-                              <span className="na-text">NA</span>
+                              <div className="action-buttons">
+                                <span className="na-text">No (Hidden)</span>
+                                <button 
+                                  className="btn-undo"
+                                  onClick={() => handleUndoComplete(task.id)}
+                                  disabled={isFutureDate(selectedDate)}
+                                  title="Undo - bring task back"
+                                >
+                                  ↩ Undo
+                                </button>
+                              </div>
                             ) : (
                               <div className="action-buttons">
                                 <button 
                                   className="btn-complete"
                                   onClick={() => handleTaskComplete(task.id)}
                                   disabled={isFutureDate(selectedDate)}
+                                  title="Yes - Task complete, won't appear tomorrow"
                                 >
-                                  Completed
+                                  Yes
                                 </button>
                                 <button 
                                   className="btn-na"
                                   onClick={() => handleTaskNA(task.id)}
                                   disabled={isFutureDate(selectedDate)}
+                                  title="No - Mark inactive, won't appear tomorrow"
                                 >
-                                  NA
+                                  No
                                 </button>
                                 {dailyStatus?.is_tracked === false ? (
                                   <button 
@@ -9472,12 +10545,283 @@ export default function Tasks() {
             </div>
           )}
 
+          {/* Overdue Tasks Section - Grouped by Project/Goal */}
+          {activeTab === 'today' && (() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Find all overdue tasks
+            const overdueTasks = filteredTasks.filter(task => {
+              if (!task.is_active || task.is_completed) return false;
+              if (!task.due_date) return false;
+              const dueDate = new Date(task.due_date);
+              dueDate.setHours(0, 0, 0, 0);
+              return dueDate < today;
+            }).sort((a, b) => {
+              const dateA = new Date(a.due_date!);
+              const dateB = new Date(b.due_date!);
+              return dateA.getTime() - dateB.getTime(); // Oldest first
+            });
+
+            if (overdueTasks.length === 0) return null;
+
+            // Group by project and goal
+            const byProject = new Map<number, typeof overdueTasks>();
+            const byGoal = new Map<number, typeof overdueTasks>();
+            const ungrouped: typeof overdueTasks = [];
+
+            overdueTasks.forEach(task => {
+              if (task.project_id) {
+                if (!byProject.has(task.project_id)) {
+                  byProject.set(task.project_id, []);
+                }
+                byProject.get(task.project_id)!.push(task);
+              } else if (task.goal_id) {
+                if (!byGoal.has(task.goal_id)) {
+                  byGoal.set(task.goal_id, []);
+                }
+                byGoal.get(task.goal_id)!.push(task);
+              } else {
+                ungrouped.push(task);
+              }
+            });
+
+            // Load project and goal names (we'll need to fetch these)
+            const [projectData, setProjectData] = useState<Map<number, any>>(new Map());
+            const [goalData, setGoalData] = useState<Map<number, any>>(new Map());
+
+            useEffect(() => {
+              const loadProjectsAndGoals = async () => {
+                try {
+                  if (byProject.size > 0) {
+                    const projects = await api.get<any[]>('/api/projects/');
+                    const projectMap = new Map(projects.map(p => [p.id, p]));
+                    setProjectData(projectMap);
+                  }
+                  if (byGoal.size > 0) {
+                    const goals = await api.get<any[]>('/api/life-goals/');
+                    const goalMap = new Map(goals.map(g => [g.id, g]));
+                    setGoalData(goalMap);
+                  }
+                } catch (err) {
+                  console.error('Error loading projects/goals:', err);
+                }
+              };
+              if (overdueTasks.length > 0) {
+                loadProjectsAndGoals();
+              }
+            }, [overdueTasks.length]);
+
+            return (
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ 
+                  marginBottom: '12px', 
+                  color: '#dc2626', 
+                  fontSize: '18px', 
+                  fontWeight: '700',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span>🚨</span>
+                  <span>Overdue Tasks</span>
+                  <span style={{ fontSize: '13px', fontWeight: '400', color: '#ef4444' }}>
+                    ({overdueTasks.length})
+                  </span>
+                </h3>
+
+                {/* Projects */}
+                {Array.from(byProject.entries()).map(([projectId, tasks]) => {
+                  const project = projectData.get(projectId);
+                  return (
+                    <div key={`project-${projectId}`} style={{ marginBottom: '16px' }}>
+                      <h4 style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#4a5568',
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        paddingLeft: '8px',
+                        borderLeft: '3px solid #3b82f6'
+                      }}>
+                        <span>📂</span>
+                        <span>Project: {project?.name || `Project #${projectId}`}</span>
+                        <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
+                          ({tasks.length})
+                        </span>
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '20px' }}>
+                        {tasks.map(task => renderOverdueTask(task, today))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Goals */}
+                {Array.from(byGoal.entries()).map(([goalId, tasks]) => {
+                  const goal = goalData.get(goalId);
+                  return (
+                    <div key={`goal-${goalId}`} style={{ marginBottom: '16px' }}>
+                      <h4 style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#4a5568',
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        paddingLeft: '8px',
+                        borderLeft: '3px solid #10b981'
+                      }}>
+                        <span>🎯</span>
+                        <span>Goal: {goal?.name || `Goal #${goalId}`}</span>
+                        <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
+                          ({tasks.length})
+                        </span>
+                      </h4>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '20px' }}>
+                        {tasks.map(task => renderOverdueTask(task, today))}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Ungrouped */}
+                {ungrouped.length > 0 && (
+                  <div>
+                    <h4 style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#4a5568',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      paddingLeft: '8px'
+                    }}>
+                      <span>📋</span>
+                      <span>Other Overdue Tasks</span>
+                      <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
+                        ({ungrouped.length})
+                      </span>
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '20px' }}>
+                      {ungrouped.map(task => renderOverdueTask(task, today))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+
+            // Helper function to render individual overdue task
+            function renderOverdueTask(task: Task, today: Date) {
+              const dueDate = new Date(task.due_date!);
+              const daysOverdue = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+              
+              return (
+                <div
+                  key={task.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, #fef2f2 0%, #fff 100%)',
+                    border: '1px solid #fecaca',
+                    borderLeft: '4px solid #dc2626',
+                    borderRadius: '8px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                    transition: 'all 0.2s ease',
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => handleTaskClick(task.id)}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.transform = 'translateX(4px)';
+                    e.currentTarget.style.boxShadow = '0 2px 6px rgba(220, 38, 38, 0.2)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.transform = 'translateX(0)';
+                    e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                  }}
+                >
+                  {/* Priority indicator */}
+                  <div style={{
+                    minWidth: '28px',
+                    height: '28px',
+                    borderRadius: '6px',
+                    backgroundColor: '#fee2e2',
+                    border: '2px solid #dc2626',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    color: '#dc2626',
+                    flexShrink: 0
+                  }}>
+                    {task.priority || 5}
+                  </div>
+
+                  {/* Task info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ 
+                      fontSize: '14px', 
+                      fontWeight: '600',
+                      color: '#2d3748',
+                      marginBottom: '4px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {task.name}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: '#718096',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      {task.pillar_name && (
+                        <span>{task.pillar_name}{task.category_name ? ` › ${task.category_name}` : ''}</span>
+                      )}
+                      {task.task_type === 'time' && task.allocated_minutes > 0 && (
+                        <span>• {task.allocated_minutes} min</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Overdue badge */}
+                  <div style={{
+                    padding: '6px 12px',
+                    backgroundColor: '#dc2626',
+                    borderRadius: '12px',
+                    fontSize: '11px',
+                    fontWeight: '600',
+                    color: 'white',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    flexShrink: 0
+                  }}>
+                    <span>⏰</span>
+                    <span>{daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue</span>
+                  </div>
+                </div>
+              );
+            }
+          })()}
+
           <div className="tasks-table-container" style={activeTab === 'today' ? { marginTop: '20px' } : {}}>
             <table className={`tasks-table ${activeTab === 'yearly' ? 'daily-table' : ''}`}>
             <thead>
               <tr>
                 {activeTab === 'today' && <th style={{ width: '40px', textAlign: 'center' }}>☐</th>}
                 <th className="col-task sticky-col sticky-col-1">Task</th>
+                {activeTab === 'today' && <th className="col-priority" style={{ width: '80px' }}>Priority</th>}
                 {activeTab === 'yearly' ? (
                   <>
                     <th className="col-time sticky-col sticky-col-2">Allocated</th>
@@ -10439,6 +11783,45 @@ export default function Tasks() {
                           <span className="na-text">NA</span>
                         ) : (
                           <div className="action-buttons">
+                            {activeTab === 'today' && (
+                              task.priority && task.priority <= 3 ? (
+                                <button 
+                                  className="btn btn-sm"
+                                  onClick={() => handleMoveToToday(task.id, 'task')}
+                                  style={{
+                                    backgroundColor: '#f59e0b',
+                                    color: 'white',
+                                    padding: '6px 12px',
+                                    marginRight: '8px',
+                                    fontSize: '12px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Move back to Today tab (P4)"
+                                >
+                                  ← Today
+                                </button>
+                              ) : (
+                                <button 
+                                  className="btn btn-sm"
+                                  onClick={() => handleMoveToNow(task.id, 'task')}
+                                  style={{
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    padding: '6px 12px',
+                                    marginRight: '8px',
+                                    fontSize: '12px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                  title="Move to NOW tab (P1)"
+                                >
+                                  → NOW
+                                </button>
+                              )
+                            )}
                             <button 
                               className="btn-complete"
                               onClick={() => handleTaskComplete(task.id)}
@@ -10668,7 +12051,7 @@ export default function Tasks() {
       )}
 
       {/* Project Tasks Due Today (shown in Today tab) */}
-      {activeTab === 'today' && projectTasksDueToday.length > 0 && (
+      {activeTab === 'today' && projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
         <div className="project-tasks-today-section">
           <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
             📋 Project Tasks Due Today & Overdue
@@ -10680,13 +12063,12 @@ export default function Tasks() {
                   <th className="col-checkbox"></th>
                   <th className="col-task">Task</th>
                   <th className="col-task">Project</th>
-                  <th className="col-time">Priority</th>
                   <th className="col-time">Due Date</th>
                   <th className="col-action">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {projectTasksDueToday.map((task) => {
+                {projectTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
                   const dueDateClass = getDueDateColorClass(task.due_date);
                   return (
                     <tr key={task.id} className={`${dueDateClass} ${task.is_completed ? 'completed-row' : ''}`}>
@@ -10723,11 +12105,6 @@ export default function Tasks() {
                         {task.project_name || `Project #${task.project_id}`}
                       </td>
                       <td className="col-time">
-                        <span className={`task-priority priority-${task.priority}`}>
-                          {task.priority}
-                        </span>
-                      </td>
-                      <td className="col-time">
                         <input 
                           type="date"
                           value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
@@ -10743,6 +12120,33 @@ export default function Tasks() {
                         />
                       </td>
                       <td className="col-action">
+                        {task.priority && task.priority <= 3 ? (
+                          <button 
+                            className="btn btn-sm"
+                            onClick={() => handleMoveToToday(task.id, 'project')}
+                            style={{
+                              backgroundColor: '#f59e0b',
+                              color: 'white',
+                              marginRight: '5px'
+                            }}
+                            title="Task is in NOW - move back to Today (P5)"
+                          >
+                            ← Today
+                          </button>
+                        ) : (
+                          <button 
+                            className="btn btn-sm"
+                            onClick={() => handleMoveToNow(task.id, 'project')}
+                            style={{
+                              backgroundColor: '#dc2626',
+                              color: 'white',
+                              marginRight: '5px'
+                            }}
+                            title="Move to NOW tab (P1)"
+                          >
+                            → NOW
+                          </button>
+                        )}
                         <button 
                           className="btn btn-sm btn-primary"
                           onClick={() => handleEditTask(task)}
@@ -10760,7 +12164,7 @@ export default function Tasks() {
       )}
 
       {/* Goal Tasks Due Today (shown in Today tab) */}
-      {activeTab === 'today' && goalTasksDueToday.length > 0 && (
+      {activeTab === 'today' && goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
         <div className="project-tasks-today-section">
           <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
             🎯 Goal Tasks Due Today & Overdue
@@ -10772,12 +12176,12 @@ export default function Tasks() {
                   <th className="col-checkbox"></th>
                   <th className="col-task">Task</th>
                   <th className="col-task">Goal</th>
-                  <th className="col-time">Priority</th>
                   <th className="col-time">Due Date</th>
+                  <th className="col-action">Action</th>
                 </tr>
               </thead>
               <tbody>
-                {goalTasksDueToday.map((task) => {
+                {goalTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
                   const dueDateClass = getDueDateColorClass(task.due_date);
                   return (
                     <tr key={`goal-${task.id}`} className={`${dueDateClass} ${task.is_completed ? 'completed-row' : ''}`}>
@@ -10809,11 +12213,6 @@ export default function Tasks() {
                         {task.goal_name || `Goal #${task.goal_id}`}
                       </td>
                       <td className="col-time">
-                        <span className={`task-priority priority-${task.priority}`}>
-                          {task.priority}
-                        </span>
-                      </td>
-                      <td className="col-time">
                         <input 
                           type="date"
                           value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
@@ -10827,6 +12226,33 @@ export default function Tasks() {
                           }}
                           title="Click to change due date"
                         />
+                      </td>
+                      <td className="col-action">
+                        {task.priority && task.priority <= 3 ? (
+                          <button 
+                            className="btn btn-sm"
+                            onClick={() => handleMoveToToday(task.id, 'goal')}
+                            style={{
+                              backgroundColor: '#f59e0b',
+                              color: 'white'
+                            }}
+                            title="Move back to Today tab (P4)"
+                          >
+                            ← Today
+                          </button>
+                        ) : (
+                          <button 
+                            className="btn btn-sm"
+                            onClick={() => handleMoveToNow(task.id, 'goal')}
+                            style={{
+                              backgroundColor: '#dc2626',
+                              color: 'white'
+                            }}
+                            title="Move to NOW tab (P1)"
+                          >
+                            → NOW
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -10900,13 +12326,51 @@ export default function Tasks() {
                         {daysOver}
                       </td>
                       <td className="col-action">
-                        <button 
-                          className="btn btn-sm btn-success"
-                          onClick={() => updateOneTimeTask(oneTimeTask.task_id, { updated_date: formatDateForInput(new Date()) })}
-                          title="Mark as done today"
-                        >
-                          ✓ Done
-                        </button>
+                        {(() => {
+                          const task = tasks.find(t => t.id === oneTimeTask.task_id);
+                          const priority = task?.priority;
+                          const isInNOW = priority && priority <= 3;
+                          
+                          return (
+                            <>
+                              {isInNOW ? (
+                                <button 
+                                  className="btn btn-sm btn-warning me-2"
+                                  onClick={() => handleMoveToToday(oneTimeTask.task_id, 'task')}
+                                  title="Task is in NOW - move back to Today (P5)"
+                                  style={{ marginRight: '8px' }}
+                                >
+                                  ← Today
+                                </button>
+                              ) : (
+                                <button 
+                                  className="btn btn-sm"
+                                  onClick={() => handleMoveToNow(oneTimeTask.task_id, 'task')}
+                                  title="Move to NOW tab (P1)"
+                                  style={{
+                                    marginRight: '8px',
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  → NOW
+                                </button>
+                              )}
+                              <button 
+                                className="btn btn-sm btn-success"
+                                onClick={() => updateOneTimeTask(oneTimeTask.task_id, { updated_date: formatDateForInput(new Date()) })}
+                                title="Mark as done today"
+                              >
+                                ✓ Done
+                              </button>
+                            </>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
@@ -10919,8 +12383,13 @@ export default function Tasks() {
 
       {/* Needs Attention Section - Only show in Today tab */}
       {activeTab === 'today' && (() => {
-        const weeklyTasks = tasksNeedingAttention.filter(item => item.reason === 'weekly');
-        const monthlyTasks = tasksNeedingAttention.filter(item => item.reason === 'monthly');
+        // Filter out tasks that are in NOW (priority 1-3) - they should only show in NOW tab
+        const weeklyTasks = tasksNeedingAttention.filter(item => 
+          item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
+        );
+        const monthlyTasks = tasksNeedingAttention.filter(item => 
+          item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
+        );
         
         // Motivational quotes that rotate daily
         const motivationalQuotes = [
@@ -11011,6 +12480,48 @@ export default function Tasks() {
                           Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
                         </span>
                       )}
+                      {(() => {
+                        const priority = item.task.priority;
+                        const isInNOW = priority && priority <= 3;
+                        return (
+                          <>
+                            {isInNOW ? (
+                              <button 
+                                className="btn btn-sm btn-warning"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveToToday(item.task.id, 'task');
+                                }}
+                                title="Task is in NOW - move back to Today (P5)"
+                                style={{ marginLeft: 'auto' }}
+                              >
+                                ← Today
+                              </button>
+                            ) : (
+                              <button 
+                                className="btn btn-sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveToNow(item.task.id, 'task');
+                                }}
+                                title="Move to NOW tab (P1)"
+                                style={{
+                                  marginLeft: 'auto',
+                                  backgroundColor: '#dc2626',
+                                  color: 'white',
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                → NOW
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                     
                     {/* Line 2: Category, frequency badge, and detailed stats */}
@@ -11142,6 +12653,48 @@ export default function Tasks() {
                               Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
                             </span>
                           )}
+                          {(() => {
+                            const priority = item.task.priority;
+                            const isInNOW = priority && priority <= 3;
+                            return (
+                              <>
+                                {isInNOW ? (
+                                  <button 
+                                    className="btn btn-sm btn-warning"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleMoveToToday(item.task.id, 'task');
+                                    }}
+                                    title="Task is in NOW - move back to Today (P5)"
+                                    style={{ marginLeft: 'auto' }}
+                                  >
+                                    ← Today
+                                  </button>
+                                ) : (
+                                  <button 
+                                    className="btn btn-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleMoveToNow(item.task.id, 'task');
+                                    }}
+                                    title="Move to NOW tab (P1)"
+                                    style={{
+                                      marginLeft: 'auto',
+                                      backgroundColor: '#dc2626',
+                                      color: 'white',
+                                      padding: '6px 12px',
+                                      fontSize: '12px',
+                                      borderRadius: '6px',
+                                      border: 'none',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    → NOW
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         
                         {/* Line 2: Category, frequency badge, and detailed stats */}
@@ -11427,6 +12980,8 @@ export default function Tasks() {
                       }
                       return null;
                     })()}
+
+                    {/* Habits are daily practices - they don't need NOW tab prioritization */}
 
                     {/* Pillar and Category badge at the end */}
                     {habit.pillar_name && (
@@ -11716,6 +13271,317 @@ export default function Tasks() {
               </div>
             </div>
           )}
+
+          {/* Upcoming Tasks Section */}
+          {(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const oneWeekFromNow = new Date(today);
+            oneWeekFromNow.setDate(today.getDate() + 7);
+            const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+            // Filter tasks with due dates in the next 7 days (excluding today)
+            const upcomingWeekTasks = tasks.filter(task => {
+              if (!task.due_date || !task.is_active || task.is_completed) return false;
+              const dueDate = new Date(task.due_date);
+              dueDate.setHours(0, 0, 0, 0);
+              return dueDate > today && dueDate <= oneWeekFromNow;
+            }).sort((a, b) => {
+              const dateA = new Date(a.due_date!);
+              const dateB = new Date(b.due_date!);
+              if (dateA.getTime() !== dateB.getTime()) {
+                return dateA.getTime() - dateB.getTime();
+              }
+              return (a.priority || 5) - (b.priority || 5);
+            });
+
+            // Filter tasks due this month (beyond next 7 days)
+            const upcomingMonthTasks = tasks.filter(task => {
+              if (!task.due_date || !task.is_active || task.is_completed) return false;
+              const dueDate = new Date(task.due_date);
+              dueDate.setHours(0, 0, 0, 0);
+              return dueDate > oneWeekFromNow && dueDate <= endOfMonth;
+            }).sort((a, b) => {
+              const dateA = new Date(a.due_date!);
+              const dateB = new Date(b.due_date!);
+              if (dateA.getTime() !== dateB.getTime()) {
+                return dateA.getTime() - dateB.getTime();
+              }
+              return (a.priority || 5) - (b.priority || 5);
+            });
+
+            const hasUpcomingTasks = upcomingWeekTasks.length > 0 || upcomingMonthTasks.length > 0;
+
+            if (!hasUpcomingTasks) return null;
+
+            return (
+              <div style={{ marginTop: '24px' }}>
+                <h3 style={{ 
+                  marginBottom: '12px', 
+                  color: '#2d3748', 
+                  fontSize: '18px', 
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span>📅</span>
+                  <span>Upcoming Tasks</span>
+                  <span style={{ fontSize: '13px', fontWeight: '400', color: '#718096' }}>
+                    ({upcomingWeekTasks.length + upcomingMonthTasks.length})
+                  </span>
+                </h3>
+
+                {/* Next 7 Days */}
+                {upcomingWeekTasks.length > 0 && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <h4 style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#4a5568',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span>🔜</span>
+                      <span>Next 7 Days</span>
+                      <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
+                        ({upcomingWeekTasks.length})
+                      </span>
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {upcomingWeekTasks.map(task => {
+                        const dueDate = new Date(task.due_date!);
+                        const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                        const urgencyColor = daysUntilDue <= 2 ? '#ef4444' : daysUntilDue <= 4 ? '#f59e0b' : '#10b981';
+                        
+                        return (
+                          <div
+                            key={task.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '12px 16px',
+                              background: 'linear-gradient(135deg, #ffffff 0%, #f7fafc 100%)',
+                              border: '1px solid #e2e8f0',
+                              borderLeft: `4px solid ${urgencyColor}`,
+                              borderRadius: '8px',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => handleTaskClick(task.id)}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.transform = 'translateX(4px)';
+                              e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.12)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.transform = 'translateX(0)';
+                              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                            }}
+                          >
+                            {/* Priority indicator */}
+                            <div style={{
+                              minWidth: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              backgroundColor: task.priority && task.priority <= 3 ? '#fee2e2' : 
+                                              task.priority && task.priority <= 7 ? '#fef3c7' : '#f3f4f6',
+                              border: `2px solid ${task.priority && task.priority <= 3 ? '#ef4444' : 
+                                                    task.priority && task.priority <= 7 ? '#f59e0b' : '#9ca3af'}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              color: task.priority && task.priority <= 3 ? '#dc2626' : 
+                                     task.priority && task.priority <= 7 ? '#d97706' : '#6b7280',
+                              flexShrink: 0
+                            }}>
+                              {task.priority || 5}
+                            </div>
+
+                            {/* Task info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: '14px', 
+                                fontWeight: '600',
+                                color: '#2d3748',
+                                marginBottom: '4px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {task.name}
+                              </div>
+                              <div style={{
+                                fontSize: '11px',
+                                color: '#718096',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                {task.pillar_name && (
+                                  <span>{task.pillar_name}{task.category_name ? ` › ${task.category_name}` : ''}</span>
+                                )}
+                                {task.task_type === 'time' && task.allocated_minutes > 0 && (
+                                  <span>• {task.allocated_minutes} min</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Due date badge */}
+                            <div style={{
+                              padding: '6px 12px',
+                              backgroundColor: `${urgencyColor}15`,
+                              border: `1px solid ${urgencyColor}`,
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: urgencyColor,
+                              whiteSpace: 'nowrap',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              flexShrink: 0
+                            }}>
+                              <span>📅</span>
+                              <span>
+                                {daysUntilDue === 1 ? 'Tomorrow' : `${daysUntilDue} days`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* This Month */}
+                {upcomingMonthTasks.length > 0 && (
+                  <div>
+                    <h4 style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#4a5568',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <span>📆</span>
+                      <span>This Month</span>
+                      <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
+                        ({upcomingMonthTasks.length})
+                      </span>
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {upcomingMonthTasks.map(task => {
+                        const dueDate = new Date(task.due_date!);
+                        
+                        return (
+                          <div
+                            key={task.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '12px 16px',
+                              background: 'linear-gradient(135deg, #ffffff 0%, #f7fafc 100%)',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '8px',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                              transition: 'all 0.2s ease',
+                              cursor: 'pointer'
+                            }}
+                            onClick={() => handleTaskClick(task.id)}
+                            onMouseEnter={e => {
+                              e.currentTarget.style.transform = 'translateX(4px)';
+                              e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.12)';
+                            }}
+                            onMouseLeave={e => {
+                              e.currentTarget.style.transform = 'translateX(0)';
+                              e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
+                            }}
+                          >
+                            {/* Priority indicator */}
+                            <div style={{
+                              minWidth: '28px',
+                              height: '28px',
+                              borderRadius: '6px',
+                              backgroundColor: task.priority && task.priority <= 3 ? '#fee2e2' : 
+                                              task.priority && task.priority <= 7 ? '#fef3c7' : '#f3f4f6',
+                              border: `2px solid ${task.priority && task.priority <= 3 ? '#ef4444' : 
+                                                    task.priority && task.priority <= 7 ? '#f59e0b' : '#9ca3af'}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: '700',
+                              color: task.priority && task.priority <= 3 ? '#dc2626' : 
+                                     task.priority && task.priority <= 7 ? '#d97706' : '#6b7280',
+                              flexShrink: 0
+                            }}>
+                              {task.priority || 5}
+                            </div>
+
+                            {/* Task info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ 
+                                fontSize: '14px', 
+                                fontWeight: '600',
+                                color: '#2d3748',
+                                marginBottom: '4px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {task.name}
+                              </div>
+                              <div style={{
+                                fontSize: '11px',
+                                color: '#718096',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                {task.pillar_name && (
+                                  <span>{task.pillar_name}{task.category_name ? ` › ${task.category_name}` : ''}</span>
+                                )}
+                                {task.task_type === 'time' && task.allocated_minutes > 0 && (
+                                  <span>• {task.allocated_minutes} min</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Due date */}
+                            <div style={{
+                              padding: '6px 12px',
+                              backgroundColor: '#f3f4f6',
+                              borderRadius: '12px',
+                              fontSize: '11px',
+                              fontWeight: '600',
+                              color: '#4b5563',
+                              whiteSpace: 'nowrap',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              flexShrink: 0
+                            }}>
+                              <span>📅</span>
+                              <span>{dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

@@ -258,7 +258,7 @@ class TaskResponse(TaskBase):
     is_completed: bool = False
     completed_at: Optional[datetime] = None
     na_marked_at: Optional[datetime] = None
-    priority: int = 10
+    priority: int = 5
     created_at: datetime
     updated_at: Optional[datetime] = None
     pillar_name: Optional[str] = None

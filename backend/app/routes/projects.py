@@ -59,6 +59,7 @@ class ProjectTaskUpdate(BaseModel):
     description: Optional[str] = None
     due_date: Optional[date] = None
     priority: Optional[str] = None
+    priority_new: Optional[int] = None
     is_completed: Optional[bool] = None
     order: Optional[int] = None
 
@@ -500,7 +501,8 @@ def get_tasks_due_today(
             "name": task.name,
             "description": task.description,
             "due_date": task.due_date.date() if task.due_date else None,
-            "priority": task.priority,
+            "priority": task.priority_new if task.priority_new is not None else (2 if task.priority == "high" else 5 if task.priority == "medium" else 8),
+            "allocated_minutes": task.allocated_minutes if task.allocated_minutes else 60,
             "is_completed": task.is_completed,
             "completed_at": task.completed_at,
             "order": task.order,
@@ -527,7 +529,8 @@ def get_overdue_tasks(
             "name": task.name,
             "description": task.description,
             "due_date": task.due_date.date() if task.due_date else None,
-            "priority": task.priority,
+            "priority": task.priority_new if task.priority_new is not None else (2 if task.priority == "high" else 5 if task.priority == "medium" else 8),
+            "allocated_minutes": task.allocated_minutes if task.allocated_minutes else 60,
             "is_completed": task.is_completed,
             "completed_at": task.completed_at,
             "order": task.order,

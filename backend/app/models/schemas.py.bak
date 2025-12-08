@@ -192,7 +192,7 @@ class TaskBase(BaseModel):
     why_reason: Optional[str] = Field(None, description="Why this task is important")
     additional_whys: Optional[List[str]] = Field(None, description="Additional why reasons")
     due_date: Optional[datetime] = None
-    priority: int = Field(default=10, ge=1, le=10, description="Priority level (1=highest, 10=lowest)")
+    priority: int = Field(default=5, ge=1, le=10, description="Priority level (1=highest, 10=lowest)")
 
     @validator('additional_whys', pre=True)
     def parse_additional_whys(cls, v):
@@ -258,7 +258,7 @@ class TaskResponse(TaskBase):
     is_completed: bool = False
     completed_at: Optional[datetime] = None
     na_marked_at: Optional[datetime] = None
-    priority: int = 10
+    priority: int = 5
     created_at: datetime
     updated_at: Optional[datetime] = None
     pillar_name: Optional[str] = None

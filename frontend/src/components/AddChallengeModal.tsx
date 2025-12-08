@@ -208,6 +208,50 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
               />
             </div>
 
+            {/* Optional: Link to Task - RIGHT AFTER NAME */}
+            <div style={{ 
+              marginBottom: '16px', 
+              padding: '12px', 
+              border: '1px solid #e0e0e0', 
+              borderRadius: '8px',
+              backgroundColor: '#f9f9f9'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label style={{ fontWeight: 'bold', margin: 0 }}>
+                  📋 Is this part of a daily/monthly task? (Optional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowTaskLink(!showTaskLink)}
+                  style={{
+                    padding: '4px 12px',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    background: showTaskLink ? '#007bff' : 'white',
+                    color: showTaskLink ? 'white' : '#333',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  {showTaskLink ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              
+              {showTaskLink && (
+                <div style={{ marginTop: '12px' }}>
+                  <TaskSelector
+                    selectedTaskId={linkedTaskId}
+                    onTaskChange={(id) => setLinkedTaskId(id)}
+                    filterByPillar={pillarId || undefined}
+                    filterByCategory={categoryId || undefined}
+                    showFrequencyFilter={true}
+                    showTaskDetails={true}
+                    placeholder="-- No Task --"
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Organization: Pillar / Category / SubCategory */}
             <div style={{ 
               marginBottom: '20px', 
@@ -359,50 +403,6 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
                 <option value="medium">Medium</option>
                 <option value="hard">Hard</option>
               </select>
-            </div>
-
-            {/* Optional: Link to Task */}
-            <div style={{ 
-              marginBottom: '16px', 
-              padding: '12px', 
-              border: '1px solid #e0e0e0', 
-              borderRadius: '8px',
-              backgroundColor: '#f9f9f9'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <label style={{ fontWeight: 'bold', margin: 0 }}>
-                  📋 Track via Daily Task (Optional)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setShowTaskLink(!showTaskLink)}
-                  style={{
-                    padding: '4px 12px',
-                    border: '1px solid #ddd',
-                    borderRadius: '4px',
-                    background: showTaskLink ? '#007bff' : 'white',
-                    color: showTaskLink ? 'white' : '#333',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  {showTaskLink ? 'Hide' : 'Show'}
-                </button>
-              </div>
-              
-              {showTaskLink && (
-                <div style={{ marginTop: '12px' }}>
-                  <TaskSelector
-                    selectedTaskId={linkedTaskId}
-                    onTaskChange={(id) => setLinkedTaskId(id)}
-                    filterByPillar={pillarId || undefined}
-                    filterByCategory={categoryId || undefined}
-                    showFrequencyFilter={true}
-                    showTaskDetails={true}
-                    placeholder="-- No Task --"
-                  />
-                </div>
-              )}
             </div>
 
             {/* Optional: Link to Goal */}

@@ -96,7 +96,7 @@ export interface Task {
   is_completed: boolean;
   completed_at?: string;
   na_marked_at?: string;
-  priority: number;  // Priority 1-10 (1=highest, 10=lowest), default 10
+  priority: number;  // Priority 1-10 (1=highest, 10=lowest), default 5
   created_at: string;
   updated_at?: string;
   due_date?: string;
