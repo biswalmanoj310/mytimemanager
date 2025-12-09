@@ -927,16 +927,30 @@ td.section-header-cell.boolean-based {
   border-color: #a0aec0;
 }
 
-/* Remove spinner arrows from number input */
+/* Remove spinner arrows from number input - with higher specificity */
 .hour-input::-webkit-inner-spin-button,
-.hour-input::-webkit-outer-spin-button {
+.hour-input::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
+  appearance: none;
   margin: 0;
+  display: none;
 }
 
-.hour-input[type=number] {
+.hour-input[type=number],
+input[type="number"].hour-input {
   appearance: textfield;
   -moz-appearance: textfield;
+  -webkit-appearance: textfield;
+}
+
+/* Spent time input styling */
+.spent-time-input {
+  background-color: #f0f9ff !important;
+  border: 2px solid #3b82f6 !important;
+  font-weight: bold;
+  text-align: center;
 }
 
 /* Style for inputs showing daily aggregates in weekly tab */
