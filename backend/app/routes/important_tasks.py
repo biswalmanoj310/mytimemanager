@@ -34,33 +34,36 @@ class ImportantTaskUpdate(BaseModel):
 
 def calculate_status(task: ImportantTask) -> dict:
     """Calculate status (red/yellow/green) and days info"""
-    if not task.last_check_date:
+    now = datetime.now()
+    
+    # Use last_check_date if available, otherwise use start_date or created_at
+    reference_date = task.last_check_date or task.start_date or task.created_at
+    if not reference_date:
         return {
             "status": "red",
-            "days_since_check": None,
-            "days_overdue": None,
-            "message": "Never checked"
+            "days_since_check": 0,
+            "diff": -task.ideal_gap_days,
+            "message": "No reference date"
         }
     
-    now = datetime.now()
-    days_since = (now - task.last_check_date).days
-    days_overdue = days_since - task.ideal_gap_days
+    days_since = (now - reference_date).days
+    diff = task.ideal_gap_days - days_since  # Positive = still have time, Negative = overdue
     
-    if days_overdue > 0:
-        status = "red"
-        message = f"{days_overdue} days overdue"
-    elif days_overdue > -5:  # Within 5 days of due
-        status = "yellow"
-        message = f"Due in {abs(days_overdue)} days"
-    else:
+    # Color coding: Green (Diff > 5), Gray (0 < Diff <= 5), Red (Diff < 0)
+    if diff > 5:
         status = "green"
-        message = f"{abs(days_overdue)} days until due"
+        message = f"{diff} days remaining"
+    elif diff >= 0:
+        status = "gray"
+        message = f"{diff} days remaining (due soon)"
+    else:
+        status = "red"
+        message = f"{abs(diff)} days overdue"
     
     return {
         "status": status,
         "days_since_check": days_since,
-        "days_overdue": days_overdue if days_overdue > 0 else 0,
-        "days_until_due": abs(days_overdue) if days_overdue < 0 else 0,
+        "diff": diff,
         "message": message
     }
 
@@ -152,9 +155,14 @@ def update_important_task(
     return {"message": "Task updated"}
 
 
+class CheckTaskRequest(BaseModel):
+    check_date: Optional[str] = None  # ISO format date string
+
+
 @router.post("/{task_id}/check")
 def mark_task_checked(
     task_id: int,
+    request: CheckTaskRequest,
     db: Session = Depends(get_db)
 ):
     """Mark task as checked (completed for this cycle)"""
@@ -162,17 +170,22 @@ def mark_task_checked(
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    now = datetime.now()
-    db_task.last_check_date = now
+    # Use provided date or current time
+    if request.check_date:
+        check_time = datetime.fromisoformat(request.check_date.replace('Z', '+00:00'))
+    else:
+        check_time = datetime.now()
+    
+    db_task.last_check_date = check_time
     
     # Update check history
     history = json.loads(db_task.check_history or "[]")
-    history.append(now.isoformat())
+    history.append(check_time.isoformat())
     db_task.check_history = json.dumps(history[-10:])  # Keep last 10 checks
     
     db.commit()
     
-    return {"message": "Task marked as checked", "last_check_date": now}
+    return {"message": "Task marked as checked", "last_check_date": check_time}
 
 
 @router.delete("/{task_id}")
