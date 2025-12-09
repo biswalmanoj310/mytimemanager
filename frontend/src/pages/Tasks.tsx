@@ -12335,23 +12335,21 @@ export default function Tasks() {
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center', background: 'inherit' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                              {getNowTaskCount() < 3 && (
-                                <button
-                                  onClick={() => handleMoveToNow(task.id, 'task')}
-                                  style={{
-                                    padding: '4px 10px',
-                                    fontSize: '11px',
-                                    backgroundColor: '#dc2626',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontWeight: '600'
-                                  }}
-                                >
-                                  NOW
-                                </button>
-                              )}
+                              <button
+                                onClick={() => handleMoveToNow(task.id, 'task')}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#dc2626',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: '600'
+                                }}
+                              >
+                                NOW
+                              </button>
                               <button
                                 onClick={() => {
                                   setSelectedTaskId(task.id);
@@ -12500,23 +12498,21 @@ export default function Tasks() {
                             </td>
                             <td style={{ padding: '8px', textAlign: 'center', background: 'inherit' }}>
                               <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                                {getNowTaskCount() < 3 && (
-                                  <button
-                                    onClick={() => handleMoveToNow(task.id, 'project')}
-                                    style={{
-                                      padding: '4px 10px',
-                                      fontSize: '11px',
-                                      backgroundColor: '#dc2626',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      fontWeight: '600'
-                                    }}
-                                  >
-                                    NOW
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handleMoveToNow(task.id, 'project')}
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '11px',
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  NOW
+                                </button>
                                 <button
                                   onClick={() => handleEditTask(task)}
                                   style={{
@@ -12645,23 +12641,21 @@ export default function Tasks() {
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center', background: 'inherit' }}>
                               <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
-                                {getNowTaskCount() < 3 && (
-                                  <button
-                                    onClick={() => handleMoveToNow(task.id, 'goal')}
-                                    style={{
-                                      padding: '6px 12px',
-                                      fontSize: '12px',
-                                      backgroundColor: '#dc2626',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      fontWeight: '600'
-                                    }}
-                                  >
-                                    NOW
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => handleMoveToNow(task.id, 'goal')}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  NOW
+                                </button>
                                 <button
                                   onClick={() => handleEditTask(task)}
                                   style={{
@@ -12847,26 +12841,24 @@ export default function Tasks() {
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
                               <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                                {getNowTaskCount() < 3 && (
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleMoveToNow(task.id, 'task');
-                                    }}
-                                    style={{
-                                      padding: '6px 12px',
-                                      fontSize: '12px',
-                                      backgroundColor: '#dc2626',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '4px',
-                                      cursor: 'pointer',
-                                      fontWeight: '700'
-                                    }}
-                                  >
-                                    NOW
-                                  </button>
-                                )}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveToNow(task.id, 'task');
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '700'
+                                  }}
+                                >
+                                  NOW
+                                </button>
                                 <button
                                   onClick={() => {
                                     setSelectedTaskId(task.id);
@@ -14184,26 +14176,24 @@ export default function Tasks() {
 
                             {/* Action buttons */}
                             <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                              {getNowTaskCount() < 3 && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleMoveToNow(task.id, 'task');
-                                  }}
-                                  style={{
-                                    padding: '6px 12px',
-                                    fontSize: '12px',
-                                    backgroundColor: '#dc2626',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontWeight: '600'
-                                  }}
-                                >
-                                  NOW
-                                </button>
-                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveToNow(task.id, 'task');
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#dc2626',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: '600'
+                                }}
+                              >
+                                NOW
+                              </button>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -14391,26 +14381,24 @@ export default function Tasks() {
 
                             {/* Action buttons */}
                             <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
-                              {getNowTaskCount() < 3 && (
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleMoveToNow(task.id, 'task');
-                                  }}
-                                  style={{
-                                    padding: '6px 12px',
-                                    fontSize: '12px',
-                                    backgroundColor: '#dc2626',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    cursor: 'pointer',
-                                    fontWeight: '600'
-                                  }}
-                                >
-                                  NOW
-                                </button>
-                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleMoveToNow(task.id, 'task');
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#dc2626',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: '600'
+                                }}
+                              >
+                                NOW
+                              </button>
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
