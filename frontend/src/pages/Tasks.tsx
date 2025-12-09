@@ -216,6 +216,9 @@ export default function Tasks() {
     updated_at: string;
   };
   const [dailyStatuses, setDailyStatuses] = useState<Map<number, DailyTaskStatus>>(new Map());
+  
+  // Map of task_id -> first completion date (for daily tasks)
+  const [dailyTaskCompletionDates, setDailyTaskCompletionDates] = useState<Map<number, string>>(new Map());
 
   // Projects state
   interface ProjectData {
@@ -736,6 +739,8 @@ export default function Tasks() {
       setError(null);
       const data = await api.get<Task[]>('/api/tasks/');
       setTasks(data);
+      // Load completion dates for daily tasks
+      await loadDailyTaskCompletionDates();
     } catch (err: any) {
       console.error('Error loading tasks:', err);
       setError('Failed to load tasks');
@@ -1360,21 +1365,38 @@ export default function Tasks() {
         return true;
       }
       
-      // For daily tab: Hide completed/NA tasks if the selected date has passed (after midnight)
+      // For daily tab: Handle date-based visibility rules
       if (activeTab === 'daily') {
-        const status = dailyStatuses.get(task.id);
-        if (status && (status.is_completed || status.is_na)) {
-          // Check if we're viewing a date in the past (not today)
-          const viewingDate = new Date(selectedDate);
-          viewingDate.setHours(0, 0, 0, 0);
-          const todayDate = new Date();
-          todayDate.setHours(0, 0, 0, 0);
-          
-          // If viewing a past date, hide completed/NA tasks
-          if (viewingDate < todayDate) {
+        const viewingDate = new Date(selectedDate);
+        viewingDate.setHours(0, 0, 0, 0);
+        const todayDate = new Date();
+        todayDate.setHours(0, 0, 0, 0);
+        
+        // Rule 1: Don't show task if viewing date is BEFORE task was created
+        if (task.created_at) {
+          const taskCreatedDate = new Date(task.created_at);
+          taskCreatedDate.setHours(0, 0, 0, 0);
+          if (viewingDate < taskCreatedDate) {
+            return false; // Task didn't exist on this date
+          }
+        }
+        
+        // Rule 2: Check if task was EVER completed before or on the viewing date
+        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+        if (completionDateStr) {
+          const completionDate = new Date(completionDateStr);
+          completionDate.setHours(0, 0, 0, 0);
+          // If task was completed on or before viewing date, don't show it
+          if (completionDate <= viewingDate) {
             return false;
           }
+        }
+        
+        // Rule 3: Check daily status for this specific date (for UI styling)
+        const status = dailyStatuses.get(task.id);
+        if (status && (status.is_completed || status.is_na)) {
           // If viewing today or future, show them (with green/gray background)
+          // But this should only happen if Rule 2 didn't filter it out
           return true;
         }
       }
@@ -1469,6 +1491,18 @@ export default function Tasks() {
       // Don't set error state, just log - this is not critical
     }
   };
+  
+  // Load completion dates for all daily tasks (when they were first completed)
+  const loadDailyTaskCompletionDates = async () => {
+    try {
+      const response = await api.get<Record<number, string>>('/api/daily-tasks-history/completion-dates');
+      const completionMap = new Map(Object.entries(response).map(([id, date]) => [parseInt(id), date]));
+      setDailyTaskCompletionDates(completionMap);
+    } catch (err: any) {
+      console.error('Error loading completion dates:', err);
+      // Don't set error state, just log - this is not critical
+    }
+  };
 
   // Daily-specific completion handlers - mark only the daily entry for current date
   const handleDailyTaskComplete = async (taskId: number) => {
@@ -1477,9 +1511,10 @@ export default function Tasks() {
       await api.post(`/api/daily-task-status/${taskId}/complete`, null, {
         params: { status_date: dateStr }
       });
-      // Reload daily statuses and entries
+      // Reload daily statuses, entries, and completion dates
       await loadDailyStatuses(selectedDate);
       await loadDailyEntries(selectedDate);
+      await loadDailyTaskCompletionDates();
     } catch (err: any) {
       console.error('Error marking daily task complete:', err);
       alert('Failed to mark task as completed: ' + (err.response?.data?.detail || err.message));
