@@ -536,6 +536,7 @@ export default function Tasks() {
   const [editingHabit, setEditingHabit] = useState<HabitData | null>(null);
   const [habitMarkDate, setHabitMarkDate] = useState<Record<number, string>>({});
   const [habitMonthDays, setHabitMonthDays] = useState<Record<number, any[]>>({});
+  const [habitSelectedMonth, setHabitSelectedMonth] = useState<Date>(new Date()); // For month navigation
 
   // Today's habits and challenges
   interface TodaysHabit {
