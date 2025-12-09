@@ -383,6 +383,27 @@ export default function Tasks() {
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
   const [pendingProjectId, setPendingProjectId] = useState<number | null>(null); // Track project ID from URL
 
+  // Today Tab state - expandable sections
+  const [todayTabSections, setTodayTabSections] = useState({
+    todaysOnlyTasks: true,
+    projectTasksDueToday: true,
+    goalTasksDueToday: true,
+    miscTasksDueToday: true,
+    importantTasksDueToday: true,
+    weeklyNeedsAttention: true,
+    monthlyNeedsAttention: true,
+    todaysHabits: true,
+    upcomingTasks: true
+  });
+  
+  // Today Tab data
+  const [todaysOnlyTasks, setTodaysOnlyTasks] = useState<Task[]>([]);
+  const [miscTasksDueToday, setMiscTasksDueToday] = useState<Array<ProjectTaskData & { group_name?: string }>>([]);
+  const [importantTasksDueToday, setImportantTasksDueToday] = useState<Array<any>>([]);
+  const [weeklyTasksNeedingAttention, setWeeklyTasksNeedingAttention] = useState<Task[]>([]);
+  const [monthlyTasksNeedingAttention, setMonthlyTasksNeedingAttention] = useState<Task[]>([]);
+  const [upcomingTasks, setUpcomingTasks] = useState<Task[]>([]);
+
   // Habits state
   interface HabitData {
     id: number;
@@ -791,8 +812,9 @@ export default function Tasks() {
       }
       
       await handlePriorityChange(taskId, 1, taskType);
-      // Force refresh all data to update NOW tab
+      // Force refresh all data to update NOW tab and remove from source
       await loadTasks();
+      await loadTodaysOnlyTasks();
       await loadProjectTasksDueToday();
       await loadGoalTasksDueToday();
       console.log('Task moved to NOW successfully');
@@ -1097,6 +1119,12 @@ export default function Tasks() {
       loadTodaysChallenges();
       loadProjectTasksDueToday();
       loadGoalTasksDueToday();
+      loadTodaysOnlyTasks();
+      loadMiscTasksDueToday();
+      loadImportantTasksDueToday();
+      loadWeeklyTasksNeedingAttention();
+      loadMonthlyTasksNeedingAttention();
+      loadUpcomingTasks();
       // Load one-time tasks so we can check for overdue ones
       loadOneTimeTasks();
       // Load weekly and monthly data for "Needs Attention" section
@@ -1111,6 +1139,17 @@ export default function Tasks() {
       loadOverdueOneTimeTasks();
     }
   }, [tasks, oneTimeTasks, activeTab]);
+
+  // Reload Today tab sections when data changes
+  useEffect(() => {
+    if (activeTab === 'today') {
+      loadTodaysOnlyTasks();
+      loadMiscTasksDueToday();
+      loadWeeklyTasksNeedingAttention();
+      loadMonthlyTasksNeedingAttention();
+      loadUpcomingTasks();
+    }
+  }, [tasks, miscTasks, weeklyTaskStatuses, monthlyTaskStatuses, activeTab]);
 
   // Define hierarchy order for sorting (matches actual database pillar-category combinations)
   const hierarchyOrder: { [key: string]: number } = {
@@ -2803,6 +2842,148 @@ export default function Tasks() {
     } catch (err: any) {
       console.error('Error loading today\'s challenges:', err);
       setTodaysChallenges([]);
+    }
+  }
+
+  async function loadTodaysOnlyTasks() {
+    try {
+      // Load tasks created specifically for today (follow_up_frequency = 'today')
+      // Exclude NOW tasks (priority <= 3) to prevent duplicates
+      const todayTasks = tasks.filter(task => 
+        task.follow_up_frequency === 'today' && 
+        !task.is_completed &&
+        task.is_active &&
+        (!task.priority || task.priority > 3)  // Exclude NOW tasks
+      );
+      setTodaysOnlyTasks(todayTasks);
+    } catch (err: any) {
+      console.error('Error loading today\'s only tasks:', err);
+      setTodaysOnlyTasks([]);
+    }
+  }
+
+  async function loadMiscTasksDueToday() {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      // Get all misc tasks that are due today or overdue
+      const dueTasks: Array<ProjectTaskData & { group_name?: string; daysOverdue?: number }> = [];
+      
+      for (const task of miscTasks) {
+        if (task.is_completed || !task.due_date) continue;
+        
+        const dueDate = new Date(task.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        
+        if (dueDate <= today) {
+          const daysDiff = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
+          const group = miscTaskGroups.find(g => g.id === task.project_id);
+          
+          dueTasks.push({
+            ...task,
+            group_name: group?.name || 'No Group',
+            daysOverdue: daysDiff
+          });
+        }
+      }
+      
+      // Sort by most overdue first
+      dueTasks.sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
+      setMiscTasksDueToday(dueTasks);
+    } catch (err: any) {
+      console.error('Error loading misc tasks due today:', err);
+      setMiscTasksDueToday([]);
+    }
+  }
+
+  async function loadImportantTasksDueToday() {
+    try {
+      // Get important tasks that are red or yellow status (due or overdue)
+      const response: any = await api.get('/api/important-tasks/');
+      const allTasks = Array.isArray(response.data || response) ? (response.data || response) : [];
+      
+      // Filter for red (overdue) or yellow (due soon) tasks
+      const dueTasks = allTasks.filter((task: any) => 
+        task.status === 'red' || task.status === 'yellow'
+      );
+      
+      setImportantTasksDueToday(dueTasks);
+    } catch (err: any) {
+      console.error('Error loading important tasks due today:', err);
+      setImportantTasksDueToday([]);
+    }
+  }
+
+  async function loadWeeklyTasksNeedingAttention() {
+    try {
+      // Find weekly tasks that haven't been completed this week
+      const weekStart = new Date(selectedWeekStart);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const needsAttention = tasks.filter(task => {
+        if (task.follow_up_frequency !== 'weekly' || task.is_completed || !task.is_active) return false;
+        
+        // Check if task has been marked complete or NA this week
+        const statusKey = task.id;
+        const status = weeklyTaskStatuses[statusKey];
+        
+        return !status || (!status.is_completed && !status.is_na);
+      });
+      
+      setWeeklyTasksNeedingAttention(needsAttention);
+    } catch (err: any) {
+      console.error('Error loading weekly tasks needing attention:', err);
+      setWeeklyTasksNeedingAttention([]);
+    }
+  }
+
+  async function loadMonthlyTasksNeedingAttention() {
+    try {
+      // Find monthly tasks that haven't been completed this month
+      const needsAttention = tasks.filter(task => {
+        if (task.follow_up_frequency !== 'monthly' || task.is_completed || !task.is_active) return false;
+        
+        // Check if task has been marked complete or NA this month
+        const statusKey = task.id;
+        const status = monthlyTaskStatuses[statusKey];
+        
+        return !status || (!status.is_completed && !status.is_na);
+      });
+      
+      setMonthlyTasksNeedingAttention(needsAttention);
+    } catch (err: any) {
+      console.error('Error loading monthly tasks needing attention:', err);
+      setMonthlyTasksNeedingAttention([]);
+    }
+  }
+
+  async function loadUpcomingTasks() {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      
+      // Get tasks due in the next 7 days (but not today)
+      const upcoming = tasks.filter(task => {
+        if (!task.due_date || task.is_completed || !task.is_active) return false;
+        
+        const dueDate = new Date(task.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        
+        return dueDate > today && dueDate <= nextWeek;
+      }).sort((a, b) => {
+        const dateA = new Date(a.due_date!);
+        const dateB = new Date(b.due_date!);
+        return dateA.getTime() - dateB.getTime();
+      });
+      
+      setUpcomingTasks(upcoming);
+    } catch (err: any) {
+      console.error('Error loading upcoming tasks:', err);
+      setUpcomingTasks([]);
     }
   }
 
@@ -10815,6 +10996,8 @@ export default function Tasks() {
             }
           })()}
 
+          {/* Main tasks table - hidden for Today tab which has its own layout */}
+          {activeTab !== 'today' && (
           <div className="tasks-table-container" style={activeTab === 'today' ? { marginTop: '20px' } : {}}>
             <table className={`tasks-table ${activeTab === 'yearly' ? 'daily-table' : ''}`}>
             <thead>
@@ -11905,8 +12088,7 @@ export default function Tasks() {
             </tfoot>
           </table>
         </div>
-        </>
-      )}
+      )} {/* End of main tasks table - hidden for Today tab */}
 
       {/* Incomplete Days Alert */}
       {activeTab === 'daily' && incompleteDaysLoaded && incompleteDays.length > 0 && (
@@ -12049,702 +12231,1117 @@ export default function Tasks() {
           </div>
         </div>
       )}
-
-      {/* Project Tasks Due Today (shown in Today tab) */}
-      {activeTab === 'today' && projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
-        <div className="project-tasks-today-section">
-          <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
-            📋 Project Tasks Due Today & Overdue
-          </h3>
-          <div className="tasks-table-container" style={{ marginTop: '20px' }}>
-            <table className="tasks-table">
-              <thead>
-                <tr>
-                  <th className="col-checkbox"></th>
-                  <th className="col-task">Task</th>
-                  <th className="col-task">Project</th>
-                  <th className="col-time">Due Date</th>
-                  <th className="col-action">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {projectTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
-                  const dueDateClass = getDueDateColorClass(task.due_date);
-                  return (
-                    <tr key={task.id} className={`${dueDateClass} ${task.is_completed ? 'completed-row' : ''}`}>
-                      <td className="col-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={task.is_completed}
-                          onChange={(e) => {
-                            handleToggleTaskCompletion(task.id, task.is_completed);
-                          }}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer', pointerEvents: 'auto' }}
-                        />
-                      </td>
-                      <td className="col-task">
-                        <div 
-                          className={`task-name ${task.is_completed ? 'strikethrough' : ''}`}
-                          onClick={() => handleEditTask(task)}
-                          style={{ 
-                            cursor: 'pointer', 
-                            textDecoration: task.is_completed ? 'line-through' : 'underline',
-                            color: '#3182ce'
-                          }}
-                          title="Click to edit task"
-                        >
-                          {task.name}
-                        </div>
-                        {task.description && (
-                          <div className="task-pillar" style={{ fontSize: '13px', color: '#718096' }}>
-                            {task.description}
-                          </div>
-                        )}
-                      </td>
-                      <td className="col-task">
-                        {task.project_name || `Project #${task.project_id}`}
-                      </td>
-                      <td className="col-time">
-                        <input 
-                          type="date"
-                          value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
-                          onChange={(e) => handleUpdateTaskDueDate(task.id, e.target.value)}
-                          style={{
-                            border: '1px solid #e2e8f0',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '14px'
-                          }}
-                          title="Click to change due date"
-                        />
-                      </td>
-                      <td className="col-action">
-                        {task.priority && task.priority <= 3 ? (
-                          <button 
-                            className="btn btn-sm"
-                            onClick={() => handleMoveToToday(task.id, 'project')}
-                            style={{
-                              backgroundColor: '#f59e0b',
-                              color: 'white',
-                              marginRight: '5px'
-                            }}
-                            title="Task is in NOW - move back to Today (P5)"
-                          >
-                            ← Today
-                          </button>
-                        ) : (
-                          <button 
-                            className="btn btn-sm"
-                            onClick={() => handleMoveToNow(task.id, 'project')}
-                            style={{
-                              backgroundColor: '#dc2626',
-                              color: 'white',
-                              marginRight: '5px'
-                            }}
-                            title="Move to NOW tab (P1)"
-                          >
-                            → NOW
-                          </button>
-                        )}
-                        <button 
-                          className="btn btn-sm btn-primary"
-                          onClick={() => handleEditTask(task)}
-                        >
-                          Edit
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        </>
       )}
 
-      {/* Goal Tasks Due Today (shown in Today tab) */}
-      {activeTab === 'today' && goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
-        <div className="project-tasks-today-section">
-          <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
-            🎯 Goal Tasks Due Today & Overdue
-          </h3>
-          <div className="tasks-table-container" style={{ marginTop: '20px' }}>
-            <table className="tasks-table">
-              <thead>
-                <tr>
-                  <th className="col-checkbox"></th>
-                  <th className="col-task">Task</th>
-                  <th className="col-task">Goal</th>
-                  <th className="col-time">Due Date</th>
-                  <th className="col-action">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {goalTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
-                  const dueDateClass = getDueDateColorClass(task.due_date);
-                  return (
-                    <tr key={`goal-${task.id}`} className={`${dueDateClass} ${task.is_completed ? 'completed-row' : ''}`}>
-                      <td className="col-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={task.is_completed}
-                          onChange={() => handleToggleGoalTaskCompletion(task.id, task.is_completed)}
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                        />
-                      </td>
-                      <td className="col-task">
-                        <div 
-                          className={`task-name ${task.is_completed ? 'strikethrough' : ''}`}
-                          style={{ 
-                            cursor: 'default',
-                            color: '#2d3748'
-                          }}
-                        >
-                          {task.name}
-                        </div>
-                        {task.description && (
-                          <div className="task-pillar" style={{ fontSize: '13px', color: '#718096' }}>
-                            {task.description}
-                          </div>
-                        )}
-                      </td>
-                      <td className="col-task">
-                        {task.goal_name || `Goal #${task.goal_id}`}
-                      </td>
-                      <td className="col-time">
-                        <input 
-                          type="date"
-                          value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
-                          onChange={(e) => handleUpdateGoalTaskDueDate(task.id, e.target.value)}
-                          style={{
-                            border: '1px solid #e2e8f0',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '14px'
-                          }}
-                          title="Click to change due date"
-                        />
-                      </td>
-                      <td className="col-action">
-                        {task.priority && task.priority <= 3 ? (
-                          <button 
-                            className="btn btn-sm"
-                            onClick={() => handleMoveToToday(task.id, 'goal')}
-                            style={{
-                              backgroundColor: '#f59e0b',
-                              color: 'white'
-                            }}
-                            title="Move back to Today tab (P4)"
-                          >
-                            ← Today
-                          </button>
-                        ) : (
-                          <button 
-                            className="btn btn-sm"
-                            onClick={() => handleMoveToNow(task.id, 'goal')}
-                            style={{
-                              backgroundColor: '#dc2626',
-                              color: 'white'
-                            }}
-                            title="Move to NOW tab (P1)"
-                          >
-                            → NOW
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+      {/* ========== TODAY TAB SECTIONS ========== */}
+      {activeTab === 'today' && (
+        <div style={{ marginTop: '30px' }}>
+          
+          {/* Today's Only Tasks Section */}
+          {todaysOnlyTasks.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, todaysOnlyTasks: !prev.todaysOnlyTasks }))}
+                style={{
+                  background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>⏰</span>
+                  <span>Today's Only Tasks ({todaysOnlyTasks.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.todaysOnlyTasks ? '▼' : '▶'}
+                </span>
+              </div>
 
-      {/* Overdue One-Time Tasks (shown in Today tab) */}
-      {activeTab === 'today' && overdueOneTimeTasks.length > 0 && (
-        <div className="project-tasks-today-section">
-          <h3 style={{ marginTop: '40px', marginBottom: '20px', color: '#2d3748', fontSize: '24px' }}>
-            🔴 One-Time Tasks Due Today or Overdue
-          </h3>
-          <div className="tasks-table-container" style={{ marginTop: '20px' }}>
-            <table className="tasks-table">
-              <thead>
-                <tr>
-                  <th className="col-checkbox"></th>
-                  <th className="col-task">Task Name</th>
-                  <th className="col-date">Start Date</th>
-                  <th className="col-number">Target Gap (days)</th>
-                  <th className="col-date">Last Updated</th>
-                  <th className="col-number">Days Over</th>
-                  <th className="col-action">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {overdueOneTimeTasks.map((oneTimeTask) => {
-                  const daysOver = calculateDaysOver(oneTimeTask.updated_date);
-                  return (
-                    <tr key={oneTimeTask.id} className="row-overdue">
-                      <td className="col-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={false}
-                          disabled
-                          style={{ width: '18px', height: '18px', cursor: 'not-allowed', opacity: 0.5 }}
-                          title="Use 'Done' button to complete"
-                        />
-                      </td>
-                      <td className="col-task">
-                        <div className="task-name">
-                          {oneTimeTask.task_name}
-                        </div>
-                      </td>
-                      <td className="col-date">
-                        {new Date(oneTimeTask.start_date).toLocaleDateString()}
-                      </td>
-                      <td className="col-number">
-                        {oneTimeTask.target_gap || 'N/A'}
-                      </td>
-                      <td className="col-date">
-                        <input
-                          type="date"
-                          value={oneTimeTask.updated_date ? formatDateForInput(new Date(oneTimeTask.updated_date)) : ''}
-                          onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { updated_date: e.target.value })}
+              {todayTabSections.todaysOnlyTasks && (
+                <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+                  <table className="tasks-table" style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #3b82f6' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f8fafc', borderBottom: '3px solid #3b82f6' }}>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#475569', borderRight: '2px solid #3b82f6' }}>Task Name</th>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#475569', borderRight: '2px solid #3b82f6' }}>Pillar - Category</th>
+                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#475569', width: '120px', borderRight: '2px solid #3b82f6' }}>Time (min)</th>
+                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#475569', width: '200px' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {todaysOnlyTasks.map(task => (
+                        <tr 
+                          key={task.id}
                           style={{
-                            border: '1px solid #e2e8f0',
-                            padding: '4px 8px',
-                            borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontSize: '14px'
+                            borderBottom: '1px solid #e2e8f0',
+                            backgroundColor: '#fff',
+                            transition: 'background-color 0.15s ease'
                           }}
-                          title="Click to update date"
-                        />
-                      </td>
-                      <td className="col-number">
-                        {daysOver}
-                      </td>
-                      <td className="col-action">
-                        {(() => {
-                          const task = tasks.find(t => t.id === oneTimeTask.task_id);
-                          const priority = task?.priority;
-                          const isInNOW = priority && priority <= 3;
-                          
-                          return (
-                            <>
-                              {isInNOW ? (
-                                <button 
-                                  className="btn btn-sm btn-warning me-2"
-                                  onClick={() => handleMoveToToday(oneTimeTask.task_id, 'task')}
-                                  title="Task is in NOW - move back to Today (P5)"
-                                  style={{ marginRight: '8px' }}
-                                >
-                                  ← Today
-                                </button>
-                              ) : (
-                                <button 
-                                  className="btn btn-sm"
-                                  onClick={() => handleMoveToNow(oneTimeTask.task_id, 'task')}
-                                  title="Move to NOW tab (P1)"
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                        >
+                          <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1e293b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                            {task.name}
+                          </td>
+                          <td style={{ padding: '12px', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                            {task.pillar_name} - {task.category_name}
+                          </td>
+                          <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                            {task.allocated_minutes || 0}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'center', background: 'inherit' }}>
+                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                              {getNowTaskCount() < 3 && (
+                                <button
+                                  onClick={() => handleMoveToNow(task.id, 'task')}
                                   style={{
-                                    marginRight: '8px',
+                                    padding: '4px 10px',
+                                    fontSize: '11px',
                                     backgroundColor: '#dc2626',
                                     color: 'white',
-                                    padding: '6px 12px',
-                                    fontSize: '12px',
-                                    borderRadius: '6px',
                                     border: 'none',
-                                    cursor: 'pointer'
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
                                   }}
                                 >
-                                  → NOW
+                                  NOW
                                 </button>
                               )}
-                              <button 
-                                className="btn btn-sm btn-success"
-                                onClick={() => updateOneTimeTask(oneTimeTask.task_id, { updated_date: formatDateForInput(new Date()) })}
-                                title="Mark as done today"
-                              >
-                                ✓ Done
-                              </button>
-                            </>
-                          );
-                        })()}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* Needs Attention Section - Only show in Today tab */}
-      {activeTab === 'today' && (() => {
-        // Filter out tasks that are in NOW (priority 1-3) - they should only show in NOW tab
-        const weeklyTasks = tasksNeedingAttention.filter(item => 
-          item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
-        );
-        const monthlyTasks = tasksNeedingAttention.filter(item => 
-          item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
-        );
-        
-        // Motivational quotes that rotate daily
-        const motivationalQuotes = [
-          "💪 Today's effort = Tomorrow's freedom. Catch up now, coast later!",
-          "🎯 Small daily wins compound into massive yearly gains.",
-          "🔥 Discipline today = Regret avoided tomorrow.",
-          "⚡ The best time to catch up? Right now. The second best? Never comes.",
-          "🚀 Every minute you invest today is a minute you don't owe tomorrow.",
-          "💎 Consistency beats intensity. Get back on track today!",
-          "⏰ Future you will thank present you for catching up now."
-        ];
-        
-        // Pick quote based on day of year (consistent for the day)
-        const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
-        const todaysQuote = motivationalQuotes[dayOfYear % motivationalQuotes.length];
-        
-        return (
-          <>
-            {/* Weekly Tasks Needing Attention */}
-            {weeklyTasks.length > 0 && (
-              <div style={{ marginTop: '30px', marginBottom: '20px' }}>
-                {/* Motivational Quote */}
-                <div style={{
-                  padding: '12px 20px',
-                  backgroundColor: '#fff3cd',
-                  border: '2px solid #ffc107',
-                  borderRadius: '8px',
-                  marginBottom: '12px',
-                  textAlign: 'center',
-                  fontSize: '15px',
-                  fontWeight: '500',
-                  color: '#856404',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }}>
-                  {todaysQuote}
-                </div>
-                
-                <div 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between',
-                    padding: '14px 16px',
-                    background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 6px rgba(255, 107, 107, 0.3)',
-                    animation: 'pulse 2s ease-in-out infinite'
-                  }}
-                  onClick={() => setShowNeedsAttentionWeekly(!showNeedsAttentionWeekly)}
-                >
-                  <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
-                    � Needs Attention - Weekly Tasks ({weeklyTasks.length} {weeklyTasks.length === 1 ? 'task' : 'tasks'})
-                  </h3>
-                  <span style={{ fontSize: '20px', color: '#ffffff' }}>
-                    {showNeedsAttentionWeekly ? '▼' : '▶'}
-                  </span>
-                </div>
-
-                {showNeedsAttentionWeekly && (
-                  <div style={{ marginTop: '12px' }}>
-                    {weeklyTasks.map((item, index) => (
-                  <div 
-                    key={item.task.id}
-                    style={{
-                      marginBottom: '6px',
-                      padding: '10px 14px',
-                      backgroundColor: '#fff',
-                      border: '1px solid #ffcccc',
-                      borderLeft: '4px solid #e53e3e',
-                      borderRadius: '4px',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                    }}
-                  >
-                    {/* Line 1: Task name, Need Today prominently displayed */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
-                        {item.task.name}
-                      </span>
-                      {item.weeklyIssue && (
-                        <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '600' }}>
-                          Need <strong>{item.weeklyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.weeklyIssue.dailyTarget}, Lagged: {item.weeklyIssue.deficit || 0}, {item.weeklyIssue.totalDays - item.weeklyIssue.redDays} days left)
-                        </span>
-                      )}
-                      {item.monthlyIssue && !item.weeklyIssue && (
-                        <span style={{ fontSize: '14px', color: '#d97706', fontWeight: '600' }}>
-                          Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
-                        </span>
-                      )}
-                      {(() => {
-                        const priority = item.task.priority;
-                        const isInNOW = priority && priority <= 3;
-                        return (
-                          <>
-                            {isInNOW ? (
-                              <button 
-                                className="btn btn-sm btn-warning"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveToToday(item.task.id, 'task');
+                              <button
+                                onClick={() => {
+                                  setSelectedTaskId(task.id);
+                                  setIsTaskFormOpen(true);
                                 }}
-                                title="Task is in NOW - move back to Today (P5)"
-                                style={{ marginLeft: 'auto' }}
-                              >
-                                ← Today
-                              </button>
-                            ) : (
-                              <button 
-                                className="btn btn-sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleMoveToNow(item.task.id, 'task');
-                                }}
-                                title="Move to NOW tab (P1)"
                                 style={{
-                                  marginLeft: 'auto',
-                                  backgroundColor: '#dc2626',
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#3b82f6',
                                   color: 'white',
-                                  padding: '6px 12px',
-                                  fontSize: '12px',
-                                  borderRadius: '6px',
                                   border: 'none',
+                                  borderRadius: '4px',
                                   cursor: 'pointer'
                                 }}
                               >
-                                → NOW
+                                Edit
                               </button>
-                            )}
-                          </>
-                        );
-                      })()}
-                    </div>
-                    
-                    {/* Line 2: Category, frequency badge, and detailed stats */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                      <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
-                        {item.task.pillar_name} - {item.task.category_name}
-                      </span>
-                      <span style={{ 
-                        fontSize: '10px', 
-                        padding: '2px 6px', 
-                        backgroundColor: '#e2e8f0', 
-                        borderRadius: '10px',
-                        color: '#4a5568'
-                      }}>
-                        {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : 'Monthly'}
-                      </span>
-                      {item.weeklyIssue && (
-                        <span style={{ fontSize: '12px', color: '#718096' }}>
-                          Target: <strong style={{ color: '#e53e3e' }}>{item.weeklyIssue.dailyTarget}</strong> | 
-                          Current: <strong style={{ color: '#10b981' }}>{item.weeklyIssue.currentAverage}</strong> | 
-                          Need Today: <strong style={{ color: '#dc2626' }}>{item.weeklyIssue.neededToday}</strong> {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} | 
-                          📅 {item.weeklyIssue.redDays}/{item.weeklyIssue.totalDays} red | Lag: {item.weeklyIssue.deficit || 0}
-                        </span>
-                      )}
-                      {item.monthlyIssue && !item.weeklyIssue && (
-                        <span style={{ fontSize: '12px', color: '#718096' }}>
-                          Target: <strong style={{ color: '#f59e0b' }}>{item.monthlyIssue.dailyTarget}</strong> | 
-                          Current: <strong style={{ color: '#10b981' }}>{item.monthlyIssue.currentAverage}</strong> | 
-                          📊 {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)}
-                        </span>
-                      )}
-                      <button
-                        onClick={() => {
-                          // Jump to weekly or monthly tab
-                          if (item.reason === 'weekly') {
-                            setActiveTab('weekly');
-                          } else {
-                            setActiveTab('monthly');
-                          }
-                        }}
-                        style={{
-                          padding: '6px 12px',
-                          fontSize: '11px',
-                          backgroundColor: '#4299e1',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap'
-                        }}
-                        title={`Go to ${item.reason} tab`}
-                      >
-                        View →
-                      </button>
-                    </div>
-                  </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Monthly Tasks Needing Attention */}
-            {monthlyTasks.length > 0 && (
-              <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-                {/* Same motivational quote (shown once for both sections) */}
-                {weeklyTasks.length === 0 && (
-                  <div style={{
-                    padding: '12px 20px',
-                    backgroundColor: '#fff3cd',
-                    border: '2px solid #ffc107',
-                    borderRadius: '8px',
-                    marginBottom: '12px',
-                    textAlign: 'center',
-                    fontSize: '15px',
-                    fontWeight: '500',
-                    color: '#856404',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}>
-                    {todaysQuote}
-                  </div>
-                )}
-                
-                <div 
-                  style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between',
-                    padding: '14px 16px',
-                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 6px rgba(245, 158, 11, 0.3)',
-                    animation: 'pulse 2s ease-in-out infinite'
-                  }}
-                  onClick={() => setShowNeedsAttentionMonthly(!showNeedsAttentionMonthly)}
-                >
-                  <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
-                    � Needs Attention - Monthly Tasks ({monthlyTasks.length} {monthlyTasks.length === 1 ? 'task' : 'tasks'})
-                  </h3>
-                  <span style={{ fontSize: '20px', color: '#ffffff' }}>
-                    {showNeedsAttentionMonthly ? '▼' : '▶'}
-                  </span>
+                              <button
+                                onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#10b981',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: '600'
+                                }}
+                              >
+                                Done
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  if (confirm('Are you sure you want to delete this task?')) {
+                                    try {
+                                      await api.delete(`/api/tasks/${task.id}`);
+                                      await loadTasks();
+                                      await loadTodaysOnlyTasks();
+                                    } catch (err: any) {
+                                      console.error('Error deleting task:', err);
+                                      alert('Failed to delete task: ' + (err.response?.data?.detail || err.message));
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+              )}
+            </div>
+          )}
 
-                {showNeedsAttentionMonthly && (
-                  <div style={{ marginTop: '12px' }}>
-                    {monthlyTasks.map((item, index) => (
-                      <div 
-                        key={item.task.id}
-                        style={{
-                          marginBottom: '6px',
-                          padding: '10px 14px',
-                          backgroundColor: '#fff',
-                          border: '1px solid #bbdefb',
-                          borderLeft: '4px solid #2196f3',
-                          borderRadius: '4px',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                        }}
-                      >
-                        {/* Line 1: Task name, Need Today prominently displayed */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
-                            {item.task.name}
-                          </span>
-                          {item.monthlyIssue && (
-                            <span style={{ fontSize: '14px', color: '#d97706', fontWeight: '600' }}>
-                              Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
-                            </span>
-                          )}
-                          {(() => {
-                            const priority = item.task.priority;
-                            const isInNOW = priority && priority <= 3;
-                            return (
-                              <>
-                                {isInNOW ? (
-                                  <button 
-                                    className="btn btn-sm btn-warning"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleMoveToToday(item.task.id, 'task');
-                                    }}
-                                    title="Task is in NOW - move back to Today (P5)"
-                                    style={{ marginLeft: 'auto' }}
-                                  >
-                                    ← Today
-                                  </button>
-                                ) : (
-                                  <button 
-                                    className="btn btn-sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleMoveToNow(item.task.id, 'task');
-                                    }}
-                                    title="Move to NOW tab (P1)"
+          {/* Project Tasks Due Today & Overdue Section */}
+          {projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, projectTasksDueToday: !prev.projectTasksDueToday }))}
+                style={{
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📋</span>
+                  <span>Project Tasks Due Today & Overdue ({projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.projectTasksDueToday ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.projectTasksDueToday && (
+                <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+                  <table className="tasks-table" style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #3b82f6' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#eff6ff', borderBottom: '3px solid #3b82f6' }}>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#1e40af', borderRight: '2px solid #3b82f6' }}>Task Name</th>
+                        <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#1e40af', width: '200px', borderRight: '2px solid #3b82f6' }}>Project</th>
+                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#1e40af', width: '150px', borderRight: '2px solid #3b82f6' }}>Target Date</th>
+                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#1e40af', width: '200px' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {projectTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
+                        const dueDateClass = getDueDateColorClass(task.due_date);
+                        const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
+                        const rowBgColor = isOverdue ? '#fee2e2' : '#fff';
+                        const rowHoverColor = isOverdue ? '#fecaca' : '#f1f5f9';
+                        
+                        return (
+                          <tr 
+                            key={task.id}
+                            style={{
+                              borderBottom: '1px solid #e2e8f0',
+                              backgroundColor: rowBgColor,
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = rowHoverColor}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = rowBgColor}
+                          >
+                            <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1e293b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                              {task.name}
+                            </td>
+                            <td style={{ padding: '12px', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                              📂 {task.project_name || `Project #${task.project_id}`}
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                              <input 
+                                type="date"
+                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                onChange={(e) => handleUpdateTaskDueDate(task.id, e.target.value)}
+                                style={{
+                                  border: '1px solid #cbd5e1',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px',
+                                  backgroundColor: isOverdue ? '#fee2e2' : '#fff',
+                                  color: isOverdue ? '#dc2626' : '#475569'
+                                }}
+                                title="Click to change due date"
+                              />
+                            </td>
+                            <td style={{ padding: '8px', textAlign: 'center', background: 'inherit' }}>
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                {getNowTaskCount() < 3 && (
+                                  <button
+                                    onClick={() => handleMoveToNow(task.id, 'project')}
                                     style={{
-                                      marginLeft: 'auto',
+                                      padding: '4px 10px',
+                                      fontSize: '11px',
                                       backgroundColor: '#dc2626',
                                       color: 'white',
-                                      padding: '6px 12px',
-                                      fontSize: '12px',
-                                      borderRadius: '6px',
                                       border: 'none',
-                                      cursor: 'pointer'
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: '600'
                                     }}
                                   >
-                                    → NOW
+                                    NOW
                                   </button>
                                 )}
-                              </>
-                            );
-                          })()}
-                        </div>
+                                <button
+                                  onClick={() => handleEditTask(task)}
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '11px',
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '11px',
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  Done
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Goal Tasks Due Today & Overdue Section */}
+          {goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, goalTasksDueToday: !prev.goalTasksDueToday }))}
+                style={{
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🎯</span>
+                  <span>Goal Tasks Due Today & Overdue ({goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.goalTasksDueToday ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.goalTasksDueToday && (
+                <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+                  <table className="tasks-table" style={{ width: '100%', borderCollapse: 'collapse', border: '2px solid #3b82f6' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#d1fae5', borderBottom: '3px solid #3b82f6' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: '#065f46', borderRight: '2px solid #3b82f6' }}>
+                          Task Name
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: '600', color: '#065f46', width: '200px', borderRight: '2px solid #3b82f6' }}>
+                          Goal
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: '600', color: '#065f46', width: '150px', borderRight: '2px solid #3b82f6' }}>
+                          Target Date
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: '600', color: '#065f46', width: '200px' }}>
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {goalTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
+                        const dueDateClass = getDueDateColorClass(task.due_date);
+                        const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
+                        const rowBgColor = isOverdue ? '#fee2e2' : '#fff';
+                        const rowHoverColor = isOverdue ? '#fecaca' : '#f1f5f9';
                         
-                        {/* Line 2: Category, frequency badge, and detailed stats */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
-                            {item.task.pillar_name} - {item.task.category_name}
+                        return (
+                          <tr 
+                            key={`goal-${task.id}`}
+                            style={{ 
+                              backgroundColor: rowBgColor,
+                              borderBottom: '1px solid #e2e8f0',
+                              transition: 'background-color 0.15s ease'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = rowHoverColor}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = rowBgColor}
+                          >
+                            <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '600', color: '#2d3748', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                              {task.name}
+                            </td>
+                            <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                              🎯 {task.goal_name || `Goal #${task.goal_id}`}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                              <input 
+                                type="date"
+                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                onChange={(e) => handleUpdateGoalTaskDueDate(task.id, e.target.value)}
+                                style={{
+                                  border: '1px solid #cbd5e1',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '13px',
+                                  backgroundColor: isOverdue ? '#fee2e2' : '#fff',
+                                  color: isOverdue ? '#dc2626' : '#475569',
+                                  cursor: 'pointer'
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', background: 'inherit' }}>
+                              <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
+                                {getNowTaskCount() < 3 && (
+                                  <button
+                                    onClick={() => handleMoveToNow(task.id, 'goal')}
+                                    style={{
+                                      padding: '6px 12px',
+                                      fontSize: '12px',
+                                      backgroundColor: '#dc2626',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: '600'
+                                    }}
+                                  >
+                                    NOW
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleEditTask(task)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleToggleGoalTaskCompletion(task.id, task.is_completed)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  Done
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Misc Tasks Due Today & Overdue Section */}
+          {miscTasksDueToday.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, miscTasksDueToday: !prev.miscTasksDueToday }))}
+                style={{
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📁</span>
+                  <span>Misc Tasks: Due Today & Overdue ({miscTasksDueToday.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.miscTasksDueToday ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.miscTasksDueToday && (
+                <div style={{ marginTop: '12px' }}>
+                  {miscTasksDueToday.map((task) => {
+                    const isOverdue = (task.daysOverdue || 0) > 0;
+                    
+                    return (
+                      <div 
+                        key={task.id}
+                        style={{
+                          marginBottom: '8px',
+                          padding: '12px 16px',
+                          backgroundColor: '#fff',
+                          border: isOverdue ? '1px solid #fca5a5' : '1px solid #ddd6fe',
+                          borderLeft: isOverdue ? '4px solid #dc2626' : '4px solid #8b5cf6',
+                          borderRadius: '6px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                            {task.name}
                           </span>
-                          <span style={{ 
-                            fontSize: '10px', 
-                            padding: '2px 6px', 
-                            backgroundColor: '#e2e8f0', 
-                            borderRadius: '10px',
-                            color: '#4a5568'
-                          }}>
-                            {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : 'Monthly'}
-                          </span>
-                          {item.monthlyIssue && (
-                            <span style={{ fontSize: '12px', color: '#718096' }}>
-                              Target: <strong style={{ color: '#f59e0b' }}>{item.monthlyIssue.dailyTarget}</strong> | 
-                              Current: <strong style={{ color: '#10b981' }}>{item.monthlyIssue.currentAverage}</strong> | 
-                              📊 {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)}
-                            </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              onClick={() => {
+                                setEditingMiscTask(task);
+                                setShowEditMiscTaskModal(true);
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                backgroundColor: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm('Mark this task as complete?')) {
+                                  try {
+                                    await api.put(`/api/misc-tasks/tasks/${task.id}`, { is_completed: true });
+                                    await loadMiscTaskGroups();
+                                    await loadMiscTasksDueToday();
+                                  } catch (err) {
+                                    alert('Failed to mark task as complete');
+                                  }
+                                }
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#718096' }}>
+                          📁 {task.group_name} | 
+                          {isOverdue ? (
+                            <span style={{ color: '#dc2626', fontWeight: '600' }}> ⚠️ {task.daysOverdue} {(task.daysOverdue || 0) === 1 ? 'day' : 'days'} overdue</span>
+                          ) : (
+                            <span style={{ color: '#10b981', fontWeight: '600' }}> ✓ Due today</span>
                           )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Important Tasks Due Today & Overdue Section */}
+          {importantTasksDueToday.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, importantTasksDueToday: !prev.importantTasksDueToday }))}
+                style={{
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>⚡</span>
+                  <span>Important Tasks: Due Today & Overdue ({importantTasksDueToday.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.importantTasksDueToday ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.importantTasksDueToday && (
+                <div style={{ marginTop: '12px' }}>
+                  {importantTasksDueToday.map((task) => {
+                    const isRed = task.status === 'red';
+                    
+                    return (
+                      <div 
+                        key={task.id}
+                        style={{
+                          marginBottom: '8px',
+                          padding: '12px 16px',
+                          backgroundColor: '#fff',
+                          border: isRed ? '1px solid #fca5a5' : '1px solid #fde68a',
+                          borderLeft: isRed ? '4px solid #dc2626' : '4px solid #f59e0b',
+                          borderRadius: '6px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                            {task.name}
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              onClick={async () => {
+                                if (confirm('Mark this check as done today?')) {
+                                  try {
+                                    await api.post(`/api/important-tasks/${task.id}/check`, {
+                                      check_date: new Date().toISOString().split('T')[0]
+                                    });
+                                    await loadImportantTasksDueToday();
+                                  } catch (err) {
+                                    alert('Failed to mark task as checked');
+                                  }
+                                }
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#718096' }}>
+                          ⚡ Check every {task.ideal_gap_days} days | 
+                          <span style={{ color: isRed ? '#dc2626' : '#f59e0b', fontWeight: '600' }}> {task.message}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Needs Attention - Weekly Tasks Section */}
+          {weeklyTasksNeedingAttention.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, weeklyNeedsAttention: !prev.weeklyNeedsAttention }))}
+                style={{
+                  background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📅</span>
+                  <span>Needs Attention - Weekly Tasks ({weeklyTasksNeedingAttention.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.weeklyNeedsAttention ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.weeklyNeedsAttention && (
+                <div style={{ marginTop: '12px' }}>
+                  {weeklyTasksNeedingAttention.map((task) => (
+                    <div 
+                      key={task.id}
+                      style={{
+                        marginBottom: '8px',
+                        padding: '12px 16px',
+                        backgroundColor: '#fff',
+                        border: '1px solid #a5f3fc',
+                        borderLeft: '4px solid #06b6d4',
+                        borderRadius: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                          {task.name}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {getNowTaskCount() < 3 ? (
+                            <button
+                              onClick={() => handleMoveToNow(task.id, 'task')}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                backgroundColor: '#dc2626',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                            >
+                              NOW
+                            </button>
+                          ) : null}
                           <button
-                            onClick={() => setActiveTab('monthly')}
+                            onClick={() => {
+                              setSelectedTaskId(task.id);
+                              setIsTaskFormOpen(true);
+                            }}
                             style={{
                               padding: '6px 12px',
-                              fontSize: '13px',
-                              backgroundColor: '#2196f3',
+                              fontSize: '12px',
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: '#10b981',
                               color: 'white',
                               border: 'none',
                               borderRadius: '4px',
                               cursor: 'pointer',
-                              marginLeft: '12px',
-                              whiteSpace: 'nowrap'
+                              fontWeight: '600'
                             }}
-                            title="Go to monthly tab"
                           >
-                            View →
+                            Done
                           </button>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <div style={{ fontSize: '12px', color: '#718096' }}>
+                        {task.pillar_name} - {task.category_name} | 📅 Weekly
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Needs Attention - Monthly Tasks Section */}
+          {monthlyTasksNeedingAttention.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, monthlyNeedsAttention: !prev.monthlyNeedsAttention }))}
+                style={{
+                  background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📊</span>
+                  <span>Needs Attention - Monthly Tasks ({monthlyTasksNeedingAttention.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.monthlyNeedsAttention ? '▼' : '▶'}
+                </span>
               </div>
-            )}
-          </>
-        );
-      })()}
+
+              {todayTabSections.monthlyNeedsAttention && (
+                <div style={{ marginTop: '12px' }}>
+                  {monthlyTasksNeedingAttention.map((task) => (
+                    <div 
+                      key={task.id}
+                      style={{
+                        marginBottom: '8px',
+                        padding: '12px 16px',
+                        backgroundColor: '#fff',
+                        border: '1px solid #bbdefb',
+                        borderLeft: '4px solid #2196f3',
+                        borderRadius: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                          {task.name}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {getNowTaskCount() < 3 ? (
+                            <button
+                              onClick={() => handleMoveToNow(task.id, 'task')}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                backgroundColor: '#dc2626',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                            >
+                              NOW
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => {
+                              setSelectedTaskId(task.id);
+                              setIsTaskFormOpen(true);
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: '600'
+                            }}
+                          >
+                            Done
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#718096' }}>
+                        {task.pillar_name} - {task.category_name} | 📊 Monthly
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Today's Habits Section */}
+          {todaysHabits.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, todaysHabits: !prev.todaysHabits }))}
+                style={{
+                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🔥</span>
+                  <span>Today's Habits ({todaysHabits.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.todaysHabits ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.todaysHabits && (
+                <div style={{ marginTop: '12px' }}>
+                  {todaysHabits.map((habit) => (
+                    <div 
+                      key={habit.id}
+                      style={{
+                        marginBottom: '8px',
+                        padding: '12px 16px',
+                        backgroundColor: '#fff',
+                        border: '1px solid #fed7aa',
+                        borderLeft: '4px solid #f97316',
+                        borderRadius: '6px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                          {habit.name}
+                        </span>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button
+                            onClick={async () => {
+                              if (!habit.completed_today) {
+                                try {
+                                  await api.post(`/api/habits/${habit.id}/mark`, {
+                                    entry_date: new Date().toISOString().split('T')[0],
+                                    is_successful: true
+                                  });
+                                  await loadTodaysHabits();
+                                } catch (err) {
+                                  alert('Failed to mark habit');
+                                }
+                              }
+                            }}
+                            disabled={habit.completed_today}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '12px',
+                              backgroundColor: habit.completed_today ? '#9ca3af' : '#10b981',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: habit.completed_today ? 'not-allowed' : 'pointer',
+                              fontWeight: '600'
+                            }}
+                          >
+                            {habit.completed_today ? '✓ Done Today' : 'Mark Done'}
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#718096' }}>
+                        🔥 {habit.current_streak} day streak | 
+                        {habit.pillar_name && ` ${habit.pillar_name} - ${habit.category_name}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Today's Challenges Section */}
+          {todaysChallenges.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                style={{
+                  background: 'linear-gradient(135deg, #ec4899 0%, #db2777 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🚀</span>
+                  <span>Today's Challenges ({todaysChallenges.length})</span>
+                </h3>
+              </div>
+
+              <div style={{ marginTop: '12px' }}>
+                {todaysChallenges.map((challenge) => (
+                  <div 
+                    key={challenge.id}
+                    style={{
+                      marginBottom: '8px',
+                      padding: '12px 16px',
+                      backgroundColor: '#fff',
+                      border: '1px solid #fbcfe8',
+                      borderLeft: '4px solid #ec4899',
+                      borderRadius: '6px',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                        {challenge.name}
+                      </span>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={async () => {
+                            if (!challenge.completed_today) {
+                              try {
+                                await api.post(`/api/challenges/${challenge.id}/log`, {
+                                  log_date: new Date().toISOString().split('T')[0],
+                                  value: 1
+                                });
+                                await loadTodaysChallenges();
+                              } catch (err) {
+                                alert('Failed to log challenge');
+                              }
+                            }
+                          }}
+                          disabled={challenge.completed_today}
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: '12px',
+                            backgroundColor: challenge.completed_today ? '#9ca3af' : '#10b981',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: challenge.completed_today ? 'not-allowed' : 'pointer',
+                            fontWeight: '600'
+                          }}
+                        >
+                          {challenge.completed_today ? '✓ Logged Today' : 'Log Today'}
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#718096' }}>
+                      🚀 Day {challenge.days_elapsed + 1}/{challenge.days_total} | Progress: {challenge.progress_percentage}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upcoming Tasks Section */}
+          {upcomingTasks.length > 0 && (
+            <div style={{ marginBottom: '30px' }}>
+              <div 
+                onClick={() => setTodayTabSections(prev => ({ ...prev, upcomingTasks: !prev.upcomingTasks }))}
+                style={{
+                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                  padding: '14px 20px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>📆</span>
+                  <span>Upcoming Tasks (Next 7 Days) ({upcomingTasks.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.upcomingTasks ? '▼' : '▶'}
+                </span>
+              </div>
+
+              {todayTabSections.upcomingTasks && (
+                <div style={{ marginTop: '12px' }}>
+                  {upcomingTasks.map((task) => {
+                    const daysUntil = task.due_date ? Math.ceil((new Date(task.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                    
+                    return (
+                      <div 
+                        key={task.id}
+                        style={{
+                          marginBottom: '8px',
+                          padding: '12px 16px',
+                          backgroundColor: '#fff',
+                          border: '1px solid #c7d2fe',
+                          borderLeft: '4px solid #6366f1',
+                          borderRadius: '6px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
+                            {task.name}
+                          </span>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            {getNowTaskCount() < 3 ? (
+                              <button
+                                onClick={() => handleMoveToNow(task.id, 'task')}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#dc2626',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontWeight: '600'
+                                }}
+                              >
+                                NOW
+                              </button>
+                            ) : null}
+                            <button
+                              onClick={() => {
+                                setSelectedTaskId(task.id);
+                                setIsTaskFormOpen(true);
+                              }}
+                              style={{
+                                padding: '6px 12px',
+                                fontSize: '12px',
+                                backgroundColor: '#3b82f6',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer'
+                              }}
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#718096' }}>
+                          {task.pillar_name} - {task.category_name} | 
+                          <span style={{ color: '#6366f1', fontWeight: '600' }}> 📅 Due in {daysUntil} {daysUntil === 1 ? 'day' : 'days'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+          
+        </div>
+      )}
 
       {/* Compact Habits & Challenges - Bottom of Today Tab */}
       {activeTab === 'today' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (

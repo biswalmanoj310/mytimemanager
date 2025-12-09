@@ -362,49 +362,48 @@ td.section-header-cell.boolean-based {
 }
 
 .tasks-table tbody tr td {
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 2px solid #3b82f6;
 }
 
 .tasks-table tbody tr:hover {
-  background: #f7fafc;
+  background: #f1f5f9 !important;
 }
 
-/* Row and Column Highlighting on Cell Hover */
+/* Row Highlighting on Hover - entire row gets same color */
 .tasks-table tbody tr:hover td {
-  background: #fef3c7; /* Light yellow - highlight entire row */
+  background: inherit !important; /* Inherit row background - ensures entire row has same color */
 }
 
+/* Remove individual cell hover to prevent color differences within row */
 .tasks-table tbody td:hover {
-  background: #fbbf24 !important; /* Bright yellow/orange - highlight hovered cell */
+  background: inherit !important; /* Inherit from row */
 }
 
-/* Column highlighting with JavaScript-managed class */
-/* Mouse hover highlighting - works when no cell is focused */
+/* Column highlighting disabled to allow uniform row hover */
 .tasks-table thead th.column-highlight:not(.focused-column) {
-  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%) !important; /* Orange gradient for headers */
-  color: #ffffff !important; /* Keep text white and visible */
+  /* Disabled */
 }
 
 .tasks-table tbody td.column-highlight:not(.focused-column):not(.focused-cell) {
-  background: #fef3c7 !important; /* Light yellow column highlight for body cells */
+  /* Disabled */
 }
 
 /* Sticky column highlighting - needs higher specificity */
 .tasks-table tbody td.sticky-col.column-highlight:not(.focused-column):not(.focused-cell) {
-  background: #fef3c7 !important; /* Light yellow for sticky task column */
+  /* Disabled */
 }
 
 .tasks-table tfoot td.column-highlight {
-  background: #fde68a !important; /* Medium yellow for footer */
+  /* Disabled */
 }
 
-/* Hovered cell should be darker than column */
+/* Hovered cell should inherit row color */
 .tasks-table tbody td.column-highlight:hover:not(.focused-cell) {
-  background: #fbbf24 !important;
+  background: inherit !important;
 }
 
 .tasks-table tbody td.sticky-col.column-highlight:hover:not(.focused-cell) {
-  background: #fbbf24 !important; /* Same bright yellow for sticky column hover */
+  background: inherit !important;
 }
 
 /* Focused cell highlighting (for keyboard navigation) - stronger than hover */
