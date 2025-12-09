@@ -902,14 +902,20 @@ export default function Tasks() {
     
     console.log('localStorage saved:', localStorage.getItem('nowHabits'));
     console.log('===================================');
+    
+    // Reload habits to update both NOW and Today tabs
+    loadTodaysHabits();
   };
 
   // Move habit back to Today
   const handleMoveHabitToToday = (habitId: number) => {
+    console.log('Moving habit to Today:', habitId);
     const updatedNowHabits = new Set(nowHabits);
     updatedNowHabits.delete(habitId);
     setNowHabits(updatedNowHabits);
     localStorage.setItem('nowHabits', JSON.stringify([...updatedNowHabits]));
+    // Reload habits to update both NOW and Today tabs
+    loadTodaysHabits();
   };
 
   // Move task to Today (set priority to 4 or higher)
@@ -2969,18 +2975,28 @@ export default function Tasks() {
       const response: any = await api.get('/api/habits/today/active');
       const allHabits = Array.isArray(response.data || response) ? (response.data || response) : [];
       
+      console.log('🔍 loadTodaysHabits - All habits from API:', allHabits.length, allHabits);
+      
       // Get current nowHabits from localStorage
       const storedNowHabits = localStorage.getItem('nowHabits');
       const nowHabitIds = storedNowHabits ? new Set(JSON.parse(storedNowHabits)) : new Set();
+      
+      console.log('🔍 nowHabitIds from localStorage:', Array.from(nowHabitIds));
       
       // Filter to only show habits that haven't been done for 2+ consecutive days
       // OR habits that are in the NOW list (those should always load)
       const habitsNeedingAttention = allHabits.filter((habit: any) => {
         // Always include habits that are in NOW list
-        if (nowHabitIds.has(habit.id)) return true;
+        if (nowHabitIds.has(habit.id)) {
+          console.log(`✅ Habit ${habit.id} (${habit.name}) - IN NOW list, always included`);
+          return true;
+        }
         
         // If completed today, don't show (they're on track)
-        if (habit.completed_today) return false;
+        if (habit.completed_today) {
+          console.log(`❌ Habit ${habit.id} (${habit.name}) - Completed today, excluded`);
+          return false;
+        }
         
         // Check monthly_completion array for consecutive misses
         // The array represents [day1, day2, ..., today] where:
@@ -2992,32 +3008,70 @@ export default function Tasks() {
           const completionArray = habit.monthly_completion;
           const todayIndex = completionArray.length - 1;
           
-          // Count consecutive missed days from the end (today going backwards)
+          // 1. Count consecutive missed days from today going backwards (only if not completed today)
           let consecutiveMissedDays = 0;
           
-          for (let i = todayIndex; i >= 0; i--) {
-            const dayStatus = completionArray[i];
-            
-            // Skip null days (before habit started)
-            if (dayStatus === null) continue;
-            
-            // If this day was missed (false), increment counter
-            if (dayStatus === false) {
-              consecutiveMissedDays++;
-            } else {
-              // If we hit a completed day, stop counting
-              break;
+          if (!habit.completed_today) {
+            // Only count consecutive if today is also missed
+            for (let i = todayIndex; i >= 0; i--) {
+              const dayStatus = completionArray[i];
+              
+              // Skip null days (before habit started)
+              if (dayStatus === null) continue;
+              
+              if (dayStatus === false) {
+                consecutiveMissedDays++;
+              } else {
+                // Hit a completed day, stop counting
+                break;
+              }
             }
           }
           
-          // Show habit if missed for 2 or more consecutive days
-          return consecutiveMissedDays >= 2;
+          // 2. Check for recent miss streak in last 7 days (even if completed today)
+          let maxRecentMissStreak = 0;
+          let currentStreak = 0;
+          const startIndex = Math.max(0, todayIndex - 6);
+          
+          for (let i = todayIndex; i >= startIndex; i--) {
+            const dayStatus = completionArray[i];
+            
+            if (dayStatus === null) continue;
+            
+            if (dayStatus === false) {
+              currentStreak++;
+              maxRecentMissStreak = Math.max(maxRecentMissStreak, currentStreak);
+            } else {
+              currentStreak = 0;
+            }
+          }
+          
+          // 3. Check if behind on average (< 80% completion rate this month)
+          const isBehindOnAverage = habit.completion_rate !== undefined && habit.completion_rate < 80;
+          
+          console.log(`📊 Habit ${habit.id} (${habit.name}) - Consecutive missed now: ${consecutiveMissedDays}, Recent max streak: ${maxRecentMissStreak}, Completion rate: ${habit.completion_rate}%, Behind: ${isBehindOnAverage}, Completed today: ${habit.completed_today}`);
+          
+          // Show habit if ANY of these conditions are met:
+          // 1. Currently missing 2+ consecutive days, OR
+          // 2. Had a 2+ day miss streak in last 7 days (recent warning), OR
+          // 3. Behind on average (< 80% completion rate this month)
+          const shouldShow = consecutiveMissedDays >= 2 || maxRecentMissStreak >= 2 || isBehindOnAverage;
+          
+          const reasons = [];
+          if (consecutiveMissedDays >= 2) reasons.push(`${consecutiveMissedDays} consecutive now`);
+          if (maxRecentMissStreak >= 2 && consecutiveMissedDays < 2) reasons.push(`${maxRecentMissStreak} miss streak recently`);
+          if (isBehindOnAverage) reasons.push(`${habit.completion_rate}% completion`);
+          
+          console.log(`${shouldShow ? '✅' : '❌'} Habit ${habit.id} (${habit.name}) - ${shouldShow ? 'INCLUDED' : 'EXCLUDED'} (${reasons.join(', ') || 'on track'})`);
+          return shouldShow;
         }
         
         // Fallback: if no monthly_completion data and not completed today, show it
+        console.log(`⚠️ Habit ${habit.id} (${habit.name}) - No monthly_completion data, using fallback`);
         return !habit.completed_today;
       });
       
+      console.log('🎯 Final habitsNeedingAttention:', habitsNeedingAttention.length, habitsNeedingAttention);
       setTodaysHabits(habitsNeedingAttention);
     } catch (err: any) {
       console.error('Error loading today\'s habits:', err);
@@ -13662,7 +13716,7 @@ export default function Tasks() {
                   gap: '8px'
                 }}>
                   <span>🔥</span>
-                  <span>Habits Needing Attention (2+ Days Missed)</span>
+                  <span>Habits Needing Attention (2+ Consecutive Days Missed)</span>
                   <span style={{ fontSize: '13px', fontWeight: '400', opacity: 0.9 }}>({todaysHabits.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
@@ -13672,7 +13726,9 @@ export default function Tasks() {
               
               {todayTabSections.todaysHabits && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {todaysHabits.filter(h => !nowHabits.has(h.id)).map(habit => (
+                  {todaysHabits.map(habit => {
+                    const isInNOW = nowHabits.has(habit.id);
+                    return (
                   <div
                     key={habit.id}
                     style={{
@@ -13887,27 +13943,72 @@ export default function Tasks() {
                       return null;
                     })()}
 
-                    {/* NOW button for habits */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleMoveHabitToNow(habit.id);
-                      }}
-                      style={{
+                    {/* "IN NOW" badge indicator */}
+                    {isInNOW && (
+                      <div style={{
                         padding: '6px 12px',
-                        fontSize: '12px',
-                        backgroundColor: '#dc2626',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: '600',
-                        flexShrink: 0
-                      }}
-                      title="Move to NOW section"
-                    >
-                      NOW
-                    </button>
+                        backgroundColor: '#fee2e2',
+                        color: '#dc2626',
+                        borderRadius: '8px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        border: '2px solid #dc2626',
+                        boxShadow: '0 2px 4px rgba(220, 38, 38, 0.3)'
+                      }}>
+                        <span>🔥</span>
+                        <span>IN NOW</span>
+                      </div>
+                    )}
+
+                    {/* NOW/Today button for habits */}
+                    {isInNOW ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveHabitToToday(habit.id);
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#3b82f6',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          flexShrink: 0
+                        }}
+                        title="Move back to Today section"
+                      >
+                        ← Today
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveHabitToNow(habit.id);
+                        }}
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '12px',
+                          backgroundColor: '#dc2626',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontWeight: '600',
+                          flexShrink: 0
+                        }}
+                        title="Move to NOW section"
+                      >
+                        NOW
+                      </button>
+                    )}
 
                     {/* Pillar and Category badge at the end */}
                     {habit.pillar_name && (
@@ -13925,7 +14026,8 @@ export default function Tasks() {
                       </div>
                     )}
                   </div>
-                ))}
+                  );
+                })}
                 </div>
               )}
             </div>
