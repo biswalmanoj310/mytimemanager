@@ -118,13 +118,54 @@ def create_habit(habit_data: HabitCreate, db: Session = Depends(get_db)):
 
 @router.get("/")
 def get_all_habits(active_only: bool = True, db: Session = Depends(get_db)):
-    """Get all habits"""
+    """Get all habits with monthly completion data"""
+    from app.models.models import Habit, HabitEntry, DailyTimeEntry
+    from datetime import timedelta, date
+    
     habits = HabitService.get_all_habits(db, active_only=active_only)
+    
+    today = date.today()
+    first_day_of_month = date(today.year, today.month, 1)
     
     result = []
     for habit in habits:
         # Get current stats
         stats = HabitService.get_habit_stats(db, habit.id)
+        
+        # Get monthly completion data based on linked task or habit entries
+        if habit.linked_task_id:
+            # Get completion data from daily time entries
+            daily_entries = db.query(DailyTimeEntry).filter(
+                and_(
+                    DailyTimeEntry.task_id == habit.linked_task_id,
+                    func.date(DailyTimeEntry.entry_date) >= first_day_of_month,
+                    func.date(DailyTimeEntry.entry_date) <= today
+                )
+            ).all()
+            
+            # Create a map of dates with entries (minutes > 0)
+            completed_dates = {entry.entry_date.date() for entry in daily_entries if entry.minutes and entry.minutes > 0}
+        else:
+            # Get from HabitEntry
+            monthly_entries = db.query(HabitEntry).filter(
+                and_(
+                    HabitEntry.habit_id == habit.id,
+                    func.date(HabitEntry.entry_date) >= first_day_of_month,
+                    func.date(HabitEntry.entry_date) <= today
+                )
+            ).all()
+            
+            completed_dates = {entry.entry_date.date() for entry in monthly_entries if entry.is_successful}
+        
+        # Build array of daily completion status for this month
+        monthly_completion = []
+        current_date = first_day_of_month
+        while current_date <= today:
+            if current_date < habit.start_date.date():
+                monthly_completion.append(None)  # Not applicable
+            else:
+                monthly_completion.append(current_date in completed_dates)
+            current_date += timedelta(days=1)
         
         result.append({
             "id": habit.id,
@@ -153,7 +194,8 @@ def get_all_habits(active_only: bool = True, db: Session = Depends(get_db)):
             "end_date": habit.end_date.date() if habit.end_date else None,
             "is_active": habit.is_active,
             "created_at": habit.created_at,
-            "stats": stats
+            "stats": stats,
+            "monthly_completion": monthly_completion
         })
     
     return result
