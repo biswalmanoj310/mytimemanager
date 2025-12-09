@@ -19,7 +19,8 @@ backend/app/database/config.py   # DB session factory (get_db dependency)
 backend/app/services/            # Business logic (habit_service.py has streak calculations)
 frontend/src/contexts/           # Global state (TaskContext, TimeEntriesContext, UserPreferencesProvider)
 frontend/src/App.tsx             # Context providers wrap all routes
-backend/migrations/              # SQL migrations 001-020+ (numbered, sequential)
+backend/migrations/              # SQL migrations (numbered .sql/.py, sequential execution)
+backend/database/mytimemanager.db # SQLite database (backup at ~/mytimemanager_backups/)
 ```
 
 ## Core Domain Logic
@@ -80,13 +81,16 @@ POST /api/weekly-time/status/{taskId}/complete?week_start_date={date}  // Update
 python recalculate_summaries.py  # Recalculates daily summaries (run after bulk data changes)
 
 # Apply migrations (ALWAYS backup first)
-cd backend && python migrations/add_*.py
+cd backend/migrations
+python add_*.py             # Python migrations
+sqlite3 ../database/mytimemanager.db < 001_*.sql  # SQL migrations
 ```
 
 ### Testing
 - **Backend**: `cd backend && pytest` (tests in `backend/tests/`)
 - **API**: http://localhost:8000/docs (Swagger UI - test endpoints live)
 - **Quick validation**: See `QUICK_TEST_CHECKLIST.md` for regression tests
+- **No frontend tests yet** - manual testing via DevTools console
 
 ## Critical Implementation Patterns
 
@@ -118,6 +122,14 @@ Frontend has 3 global contexts (see `frontend/src/App.tsx`):
 ```typescript
 import { useTaskContext } from '../contexts/TaskContext';
 const { tasks, refreshTasks, completeTask, markTaskNA } = useTaskContext();
+```
+
+**Context wrapping order matters** (App.tsx):
+```typescript
+<TaskProvider>          // First - provides base entities
+  <TimeEntriesProvider> // Second - depends on tasks
+    <UserPreferencesProvider> // Third - UI layer
+      <Layout>...</Layout>
 ```
 
 ### 4. Time Entry Auto-Save
@@ -176,5 +188,39 @@ HabitService.recalculate_streaks(db, habit_id)  # Rebuilds streak data from entr
 3. Test new endpoints in http://localhost:8000/docs
 4. `cd backend && pytest` - All tests pass
 5. `./backup_database.sh` - Backup exists before schema changes
+
+## Migration Workflow
+
+When creating database migrations:
+1. **Always backup first**: `./backup_database.sh`
+2. **Name consistently**: Python migrations use `add_*.py` (e.g., `add_priority_to_tasks.py`), SQL uses `NNN_description.sql` (e.g., `001_add_na_marked_at.sql`)
+3. **Migration pattern** (Python):
+```python
+import sqlite3
+import os
+
+def run_migration():
+    db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'database', 'mytimemanager.db')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN priority INTEGER DEFAULT 5")
+        conn.commit()
+        print("✓ Migration completed!")
+    except sqlite3.OperationalError as e:
+        if "duplicate column" in str(e).lower():
+            print("⚠ Column exists, skipping...")
+        else:
+            raise
+    finally:
+        conn.close()
+
+if __name__ == "__main__":
+    run_migration()
+```
+4. **Apply**: `cd backend/migrations && python add_new_field.py`
+5. **Verify**: Check http://localhost:8000/docs that new fields appear in schemas
+6. **Run tests**: `cd backend && pytest`
 
 When adding features, mimic existing patterns (e.g., new time tab → copy `backend/app/routes/daily_time.py` structure).
