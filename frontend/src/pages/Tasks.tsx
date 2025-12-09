@@ -9313,11 +9313,11 @@ export default function Tasks() {
                               min="0"
                               value={spentTime}
                               onChange={(e) => {
-                                const newValue = parseInt(e.target.value) || 0;
                                 // Store in first hour slot (0) for simplicity
-                                handleTimeChange(task.id, 0, newValue);
+                                handleHourlyTimeChange(task.id, 0, e.target.value);
                               }}
                               disabled={isDailyCompleted || isDailyNA || isFutureDate(selectedDate)}
+                              className="hour-input"
                               style={{
                                 width: '70px',
                                 padding: '4px 8px',
