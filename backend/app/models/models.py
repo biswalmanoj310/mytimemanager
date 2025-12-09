@@ -657,8 +657,10 @@ class Habit(Base):
     
     # Dates
     start_date = Column(DateTime(timezone=True), nullable=False)
-    end_date = Column(DateTime(timezone=True), nullable=True)  # NULL = ongoing
+    end_date = Column(DateTime(timezone=True), nullable=True)  # NULL = ongoing indefinitely
     is_active = Column(Boolean, default=True, index=True)
+    is_completed = Column(Boolean, default=False, index=True)  # Manually mark habit as completed
+    completed_at = Column(DateTime(timezone=True), nullable=True)  # When habit was marked complete
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())

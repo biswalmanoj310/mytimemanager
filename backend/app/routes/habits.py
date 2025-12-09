@@ -430,47 +430,80 @@ def add_to_aggregate(
 @router.get("/today/active")
 def get_todays_active_habits(db: Session = Depends(get_db)):
     """Get all active habits for today with current status and monthly completion data"""
-    from app.models.models import Habit, HabitEntry
+    from app.models.models import Habit, HabitEntry, DailyTimeEntry
+    from datetime import timedelta
     from datetime import timedelta
     
     today = datetime.now().date()
     first_day_of_month = today.replace(day=1)
     
     # Get all active habits
+    # Get all active habits that have started and are not manually completed
     habits = db.query(Habit).filter(
         Habit.is_active == True,
+        Habit.is_completed == False,
         Habit.start_date <= datetime.now()
     ).all()
     
     result = []
     for habit in habits:
-        # Check if there's an entry for today
-        today_entry = db.query(HabitEntry).filter(
-            and_(
-                HabitEntry.habit_id == habit.id,
-                func.date(HabitEntry.entry_date) == today
-            )
-        ).first()
+        # If habit has a linked task, get completion data from DailyTimeEntry
+        if habit.linked_task_id:
+            # Get monthly completion data from daily time entries
+            daily_entries = db.query(DailyTimeEntry).filter(
+                and_(
+                    DailyTimeEntry.task_id == habit.linked_task_id,
+                    func.date(DailyTimeEntry.entry_date) >= first_day_of_month,
+                    func.date(DailyTimeEntry.entry_date) <= today
+                )
+            ).all()
+            
+            # Create a map of dates with entries (minutes > 0)
+            # Note: If no entry exists or minutes = 0, that date is considered incomplete
+            completed_dates = {entry.entry_date.date() for entry in daily_entries if entry.minutes and entry.minutes > 0}
+            
+            # Check today's entry from daily time entries
+            today_entry_from_task = db.query(DailyTimeEntry).filter(
+                and_(
+                    DailyTimeEntry.task_id == habit.linked_task_id,
+                    func.date(DailyTimeEntry.entry_date) == today
+                )
+            ).first()
+            completed_today = bool(today_entry_from_task and today_entry_from_task.minutes and today_entry_from_task.minutes > 0)
+            today_value = today_entry_from_task.minutes if today_entry_from_task else None
+            
+        else:
+            # Original logic - get from HabitEntry
+            # Check if there's an entry for today
+            today_entry = db.query(HabitEntry).filter(
+                and_(
+                    HabitEntry.habit_id == habit.id,
+                    func.date(HabitEntry.entry_date) == today
+                )
+            ).first()
+            
+            # Get monthly completion data (from first day of month to today)
+            monthly_entries = db.query(HabitEntry).filter(
+                and_(
+                    HabitEntry.habit_id == habit.id,
+                    func.date(HabitEntry.entry_date) >= first_day_of_month,
+                    func.date(HabitEntry.entry_date) <= today
+                )
+            ).all()
+            
+            # Create a map of completed dates
+            completed_dates = {entry.entry_date.date() for entry in monthly_entries if entry.is_successful}
+            completed_today = today_entry.is_successful if today_entry else False
+            today_value = today_entry.actual_value if today_entry else None
         
         # Get current streak
         stats = HabitService.get_habit_stats(db, habit.id)
-        
-        # Get monthly completion data (from first day of month to today)
-        monthly_entries = db.query(HabitEntry).filter(
-            and_(
-                HabitEntry.habit_id == habit.id,
-                func.date(HabitEntry.entry_date) >= first_day_of_month,
-                func.date(HabitEntry.entry_date) <= today
-            )
-        ).all()
-        
-        # Create a map of completed dates
-        completed_dates = {entry.entry_date.date() for entry in monthly_entries if entry.is_successful}
         
         # Calculate days from month start to today
         days_in_month_so_far = (today - first_day_of_month).days + 1
         
         # Build array of daily completion status for this month
+        # Note: Dates with no entry OR minutes=0 are marked as False (incomplete)
         monthly_completion = []
         current_date = first_day_of_month
         while current_date <= today:
@@ -478,6 +511,8 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
             if current_date < habit.start_date.date():
                 monthly_completion.append(None)  # Not applicable
             else:
+                # If date is in completed_dates (has entry with minutes > 0), mark as True
+                # Otherwise mark as False (no entry or minutes = 0)
                 monthly_completion.append(current_date in completed_dates)
             current_date += timedelta(days=1)
         
@@ -507,8 +542,8 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
             "is_positive": habit.is_positive,
             "current_streak": stats.get("current_streak", 0),
             "longest_streak": stats.get("longest_streak", 0),
-            "completed_today": today_entry.is_successful if today_entry else False,
-            "today_value": today_entry.actual_value if today_entry else None,
+            "completed_today": completed_today,
+            "today_value": today_value,
             "period_type": habit.period_type,
             "tracking_mode": habit.tracking_mode,
             "target_count_per_period": habit.target_count_per_period,
@@ -519,7 +554,75 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
             "monthly_completion": monthly_completion,
             "completed_days_this_month": completed_days,
             "total_days_this_month": len(applicable_days),
-            "completion_rate": round(completion_rate, 1)
+            "completion_rate": round(completion_rate, 1),
+            "is_completed": habit.is_completed,
+            "completed_at": habit.completed_at.isoformat() if habit.completed_at else None
+        })
+    
+    return result
+
+
+@router.post("/{habit_id}/mark-complete")
+def mark_habit_complete(
+    habit_id: int,
+    is_completed: bool = True,
+    db: Session = Depends(get_db)
+):
+    """
+    Mark a habit as manually completed (or uncomplete it)
+    This moves the habit to/from the completed section
+    """
+    from app.models.models import Habit
+    from datetime import datetime
+    
+    habit = db.query(Habit).filter(Habit.id == habit_id).first()
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    
+    habit.is_completed = is_completed
+    habit.completed_at = datetime.now() if is_completed else None
+    
+    db.commit()
+    db.refresh(habit)
+    
+    return {
+        "id": habit.id,
+        "name": habit.name,
+        "is_completed": habit.is_completed,
+        "completed_at": habit.completed_at.isoformat() if habit.completed_at else None
+    }
+
+
+@router.get("/completed")
+def get_completed_habits(db: Session = Depends(get_db)):
+    """
+    Get all completed habits
+    """
+    from app.models.models import Habit
+    
+    habits = db.query(Habit).filter(
+        Habit.is_completed == True
+    ).order_by(Habit.completed_at.desc()).all()
+    
+    result = []
+    for habit in habits:
+        # Get pillar color
+        pillar_color = None
+        if habit.pillar:
+            pillar_color = habit.pillar.color_code
+        
+        result.append({
+            "id": habit.id,
+            "name": habit.name,
+            "description": habit.description,
+            "habit_type": habit.habit_type,
+            "pillar_id": habit.pillar_id,
+            "pillar_name": habit.pillar.name if habit.pillar else None,
+            "pillar_color": pillar_color,
+            "category_id": habit.category_id,
+            "category_name": habit.category.name if habit.category else None,
+            "start_date": habit.start_date.isoformat(),
+            "completed_at": habit.completed_at.isoformat() if habit.completed_at else None
         })
     
     return result
