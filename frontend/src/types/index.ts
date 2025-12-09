@@ -10,7 +10,8 @@ export enum FollowUpFrequency {
   MONTHLY = 'monthly',
   QUARTERLY = 'quarterly',
   YEARLY = 'yearly',
-  ONE_TIME = 'one_time'
+  ONE_TIME = 'one_time',
+  MISC = 'misc'
 }
 
 export enum GoalTimePeriod {

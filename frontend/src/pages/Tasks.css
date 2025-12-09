@@ -1942,19 +1942,26 @@ td.section-header-cell.boolean-based {
 }
 
 .task-row.completed {
-  opacity: 0.6;
-  background-color: #f7fafc;
+  background-color: #d4edda !important; /* Light green background for completed tasks */
+  border-left: 4px solid #48bb78;
 }
 
-/* Due date color coding */
+/* Due date color coding - overdue takes priority over completion */
 .task-row.task-overdue {
   border-left: 4px solid #f56565;
-  background-color: #fff5f5;
+  background-color: #f8d7da !important; /* Light red background for overdue tasks */
 }
 
 .task-row.task-urgent {
   border-left: 4px solid #f56565;
-  background-color: #fff5f5;
+  background-color: #f8d7da !important; /* Light red background for urgent tasks */
+}
+
+/* Completed tasks should override overdue if task is done */
+.task-row.completed.task-overdue,
+.task-row.completed.task-urgent {
+  background-color: #d4edda !important; /* Green wins when task is completed */
+  border-left: 4px solid #48bb78;
 }
 
 .task-row.task-soon {

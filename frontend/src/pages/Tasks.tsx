@@ -362,22 +362,16 @@ export default function Tasks() {
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
 
   // Misc Tasks state (similar to Projects)
-  const [miscTaskGroups, setMiscTaskGroups] = useState<ProjectData[]>([]);
-  const [selectedMiscGroup, setSelectedMiscGroup] = useState<ProjectData | null>(null);
   const [miscTasks, setMiscTasks] = useState<ProjectTaskData[]>([]);
-  const [showAddMiscGroupModal, setShowAddMiscGroupModal] = useState(false);
+  const [expandedMiscTasks, setExpandedMiscTasks] = useState<Set<number>>(() => {
+    const saved = localStorage.getItem('expandedMiscTasks');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+  const [miscSubtaskParentId, setMiscSubtaskParentId] = useState<number | null>(null);
   const [showAddMiscTaskModal, setShowAddMiscTaskModal] = useState(false);
-  const [miscGroupName, setMiscGroupName] = useState('');
-  const [miscGroupDescription, setMiscGroupDescription] = useState('');
-  const [miscTaskName, setMiscTaskName] = useState('');
-  const [miscTaskDescription, setMiscTaskDescription] = useState('');
-  const [miscTaskParentId, setMiscTaskParentId] = useState<number | null>(null);
-  const [editingMiscGroup, setEditingMiscGroup] = useState<ProjectData | null>(null);
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
-  const [showEditMiscTaskModal, setShowEditMiscTaskModal] = useState(false);
-  const [expandedMiscTasks, setExpandedMiscTasks] = useState<Set<number>>(new Set());
   const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean }>({ milestones: true, allTasks: true });
-  const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'no-milestone'>('all');
+  const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone'>('all');
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
@@ -1134,6 +1128,7 @@ export default function Tasks() {
         loadTodaysChallenges();
         loadProjectTasksDueToday();
         loadGoalTasksDueToday();
+        loadMiscTaskGroups(); // Load misc tasks for Today tab
         loadOneTimeTasks();
         loadWeeklyEntries(selectedWeekStart);
         loadMonthlyEntries(selectedMonthStart);
@@ -1171,7 +1166,7 @@ export default function Tasks() {
       loadProjectTasksDueToday();
       loadGoalTasksDueToday();
       loadTodaysOnlyTasks();
-      loadMiscTasksDueToday();
+      loadMiscTaskGroups(); // Load misc tasks so they appear in Today tab
       loadImportantTasksDueToday();
       loadWeeklyTasksNeedingAttention();
       loadMonthlyTasksNeedingAttention();
@@ -2949,11 +2944,10 @@ export default function Tasks() {
         
         if (dueDate <= today) {
           const daysDiff = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-          const group = miscTaskGroups.find(g => g.id === task.project_id);
           
           dueTasks.push({
             ...task,
-            group_name: group?.name || 'No Group',
+            group_name: 'Misc Task',
             daysOverdue: daysDiff
           });
         }
@@ -3564,102 +3558,46 @@ export default function Tasks() {
 
   // Misc Tasks Functions (similar to Projects)
   async function loadMiscTaskGroups() {
+    // Load regular tasks with follow_up_frequency='misc'
     try {
-      const response: any = await api.get('/api/misc-tasks/');
+      const response: any = await api.get('/api/tasks/');
       const data = response.data || response;
-      const groupsList = Array.isArray(data) ? data : [];
-      setMiscTaskGroups(groupsList);
+      const allTasks = Array.isArray(data) ? data : [];
       
-      // Load all misc tasks to check for overdue status
-      if (groupsList.length > 0) {
-        const allTasks: ProjectTaskData[] = [];
-        for (const group of groupsList) {
-          try {
-            const tasksResponse: any = await api.get(`/api/misc-tasks/${group.id}/tasks`);
-            const tasks = tasksResponse.data || tasksResponse;
-            if (Array.isArray(tasks)) {
-              allTasks.push(...tasks);
-            }
-          } catch (err) {
-            console.error(`Error loading tasks for misc group ${group.id}:`, err);
-          }
-        }
-        setMiscTasks(allTasks);
+      // Filter for misc tasks only
+      const miscTasksList = allTasks.filter((t: Task) => t.follow_up_frequency === 'misc');
+      
+      // Convert to ProjectTaskData format for TaskNode component
+      const convertedTasks: ProjectTaskData[] = miscTasksList.map((task: Task) => ({
+        id: task.id,
+        name: task.name,
+        description: task.description || '',
+        due_date: task.due_date || null,
+        priority: task.priority,
+        is_completed: task.is_completed,
+        parent_task_id: task.parent_task_id || null, // Preserve parent_task_id for hierarchy
+        project_id: null,
+        milestone_id: null,
+        created_at: task.created_at
+      }));
+      
+      setMiscTasks(convertedTasks);
+      
+      // Auto-expand all tasks that have subtasks only if no saved state exists
+      const saved = localStorage.getItem('expandedMiscTasks');
+      if (!saved) {
+        const tasksWithChildren = convertedTasks
+          .filter(task => convertedTasks.some(t => t.parent_task_id === task.id))
+          .map(task => task.id);
+        const newExpanded = new Set(tasksWithChildren);
+        setExpandedMiscTasks(newExpanded);
+        localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
       }
-    } catch (err: any) {
-      console.error('Error loading misc task groups:', err);
-      setMiscTaskGroups([]);
-    }
-  };
-
-  const loadMiscTasks = async (groupId: number) => {
-    try {
-      const response: any = await api.get(`/api/misc-tasks/${groupId}/tasks`);
-      const data = response.data || response;
-      setMiscTasks(Array.isArray(data) ? data : []);
     } catch (err: any) {
       console.error('Error loading misc tasks:', err);
       setMiscTasks([]);
     }
-  };
-
-  const handleSelectMiscGroup = async (group: ProjectData) => {
-    setSelectedMiscGroup(group);
-    await loadMiscTasks(group.id);
-  };
-
-  const handleBackToMiscGroups = () => {
-    setSelectedMiscGroup(null);
-    setMiscTasks([]);
-    setExpandedMiscTasks(new Set());
-  };
-
-  const handleDeleteMiscGroup = async (groupId: number) => {
-    if (!confirm('Are you sure you want to delete this misc task group and all its tasks?')) {
-      return;
-    }
-
-    try {
-      await api.delete(`/api/misc-tasks/${groupId}`);
-      await loadMiscTaskGroups();
-      setSelectedMiscGroup(null);
-      setMiscTasks([]);
-    } catch (err: any) {
-      console.error('Error deleting misc task group:', err);
-      alert('Failed to delete misc task group: ' + (err.response?.data?.detail || err.message));
-    }
-  };
-
-  const handleAddMiscGroup = async (name: string, description: string) => {
-    try {
-      await api.post('/api/misc-tasks/', {
-        name,
-        description
-      });
-      await loadMiscTaskGroups();
-      setShowAddMiscGroupModal(false);
-    } catch (err: any) {
-      console.error('Error creating misc group:', err);
-      alert('Failed to create misc group: ' + (err.response?.data?.detail || err.message));
-    }
-  };
-
-  const handleAddMiscTask = async (taskName: string, description: string, parentTaskId: number | null) => {
-    if (!selectedMiscGroup) return;
-
-    try {
-      await api.post(`/api/misc-tasks/${selectedMiscGroup.id}/tasks`, {
-        name: taskName,
-        description,
-        parent_task_id: parentTaskId
-      });
-      await loadMiscTasks(selectedMiscGroup.id);
-      setShowAddMiscTaskModal(false);
-    } catch (err: any) {
-      console.error('Error creating misc task:', err);
-      alert('Failed to create misc task: ' + (err.response?.data?.detail || err.message));
-    }
-  };
+  }
 
   // Habits Functions
   const loadHabitEntries = async (habitId: number, startDate?: string, endDate?: string) => {
@@ -4923,7 +4861,8 @@ export default function Tasks() {
     onUpdateDueDate,
     getDueDateColorClass,
     getTasksByParentId,
-    projectTaskFilter 
+    projectTaskFilter,
+    onAddSubtask
   }: { 
     task: ProjectTaskData; 
     level: number; 
@@ -4937,6 +4876,7 @@ export default function Tasks() {
     getDueDateColorClass: (dueDate: string | null) => string;
     getTasksByParentId: (parentId: number | null) => ProjectTaskData[];
     projectTaskFilter?: 'all' | 'in-progress' | 'completed' | 'no-milestone';
+    onAddSubtask?: (parentTask: ProjectTaskData) => void;
   }) => {
     const subTasks = getTasksByParentId(task.id);
     const hasSubTasks = subTasks.length > 0;
@@ -4992,28 +4932,28 @@ export default function Tasks() {
                 }
                 
                 const descendants = getAllDescendants(task.id);
-                const completedDescendants = descendants.filter(t => t.is_completed).length;
-                const totalDescendants = descendants.length;
+                // Include the parent task itself in the count
+                const allTasksIncludingSelf = [task, ...descendants];
+                const completedCount = allTasksIncludingSelf.filter(t => t.is_completed).length;
+                const totalCount = allTasksIncludingSelf.length;
                 
-                if (totalDescendants > 0) {
-                  return (
-                    <span 
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: '500',
-                        background: completedDescendants === totalDescendants ? '#c6f6d5' : '#e6f3ff',
-                        color: completedDescendants === totalDescendants ? '#22543d' : '#1e5a8e',
-                        border: `1px solid ${completedDescendants === totalDescendants ? '#9ae6b4' : '#b3d9ff'}`
-                      }}
-                      title={`${completedDescendants} of ${totalDescendants} subtasks completed`}
-                    >
-                      📊 {completedDescendants}/{totalDescendants}
-                    </span>
-                  );
-                }
-                return null;
+                // Always show count (including just the task itself if no children)
+                return (
+                  <span 
+                    style={{
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      fontWeight: '500',
+                      background: completedCount === totalCount ? '#c6f6d5' : '#e6f3ff',
+                      color: completedCount === totalCount ? '#22543d' : '#1e5a8e',
+                      border: `1px solid ${completedCount === totalCount ? '#9ae6b4' : '#b3d9ff'}`
+                    }}
+                    title={`${completedCount} of ${totalCount} tasks completed (including this task)`}
+                  >
+                    📊 {completedCount}/{totalCount}
+                  </span>
+                );
               })()}
               {task.milestone_id && (() => {
                 const milestone = projectMilestones.find(m => m.id === task.milestone_id);
@@ -5062,16 +5002,34 @@ export default function Tasks() {
             </div>
           )}
           
-          <div className={`task-priority priority-${task.priority}`}>
-            {task.priority}
-          </div>
-          
           <div className="task-actions">
             <button 
               className="btn btn-sm"
+              onClick={() => onToggleComplete(task.id, task.is_completed)}
+              style={{ 
+                marginRight: '8px',
+                backgroundColor: task.is_completed ? '#48bb78' : '#4299e1',
+                color: 'white',
+                padding: '4px 8px',
+                fontSize: '12px',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title={task.is_completed ? 'Mark as incomplete' : 'Mark as done'}
+            >
+              {task.is_completed ? '✓ Done' : 'Done'}
+            </button>
+            <button 
+              className="btn btn-sm"
               onClick={() => {
-                setEditingTask(task);
-                setShowAddTaskModal(true);
+                if (onAddSubtask) {
+                  onAddSubtask(task);
+                } else {
+                  setEditingTask(task);
+                  setShowAddTaskModal(true);
+                }
               }}
               style={{ 
                 marginRight: '8px',
@@ -5129,6 +5087,7 @@ export default function Tasks() {
                 getDueDateColorClass={getDueDateColorClass}
                 getTasksByParentId={getTasksByParentId}
                 projectTaskFilter={projectTaskFilter}
+                onAddSubtask={onAddSubtask}
               />
             ))}
           </div>
@@ -7830,231 +7789,188 @@ export default function Tasks() {
         </div>
       ) : activeTab === 'misc' ? (
         <div className="projects-container">
-          {!selectedMiscGroup ? (
-            // Misc Task Groups List View
-            <>
-              <div className="projects-header">
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => setShowAddMiscGroupModal(true)}
-                  style={{ marginBottom: '20px' }}
-                >
-                  ➕ Add Misc Task Group
-                </button>
+          {/* Filter Buttons */}
+          <div style={{
+            display: 'flex',
+            gap: '10px',
+            marginBottom: '20px',
+            flexWrap: 'wrap'
+          }}>
+            <button
+              className={`btn ${projectTaskFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setProjectTaskFilter('all')}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500',
+                backgroundColor: projectTaskFilter === 'all' ? '#4299e1' : '#e2e8f0',
+                color: projectTaskFilter === 'all' ? 'white' : '#2d3748'
+              }}
+            >
+              🎯 Show All ({miscTasks.length})
+            </button>
+            <button
+              className={`btn ${projectTaskFilter === 'in-progress' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setProjectTaskFilter('in-progress')}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500',
+                backgroundColor: projectTaskFilter === 'in-progress' ? '#4299e1' : '#e2e8f0',
+                color: projectTaskFilter === 'in-progress' ? 'white' : '#2d3748'
+              }}
+            >
+              🔵 In Progress ({miscTasks.filter(t => !t.is_completed).length})
+            </button>
+            <button
+              className={`btn ${projectTaskFilter === 'overdue' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setProjectTaskFilter('overdue')}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500',
+                backgroundColor: projectTaskFilter === 'overdue' ? '#e53e3e' : '#e2e8f0',
+                color: projectTaskFilter === 'overdue' ? 'white' : '#2d3748'
+              }}
+            >
+              ⏰ Overdue ({miscTasks.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) < new Date()).length})
+            </button>
+            <button
+              className={`btn ${projectTaskFilter === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => setProjectTaskFilter('completed')}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                borderRadius: '6px',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500',
+                backgroundColor: projectTaskFilter === 'completed' ? '#4299e1' : '#e2e8f0',
+                color: projectTaskFilter === 'completed' ? 'white' : '#2d3748'
+              }}
+            >
+              ✅ Completed ({miscTasks.filter(t => t.is_completed).length})
+            </button>
+          </div>
+          
+          {/* Misc Tasks View - Simple list of tasks */}
+          <div className="project-tasks-tree" style={{ marginTop: '20px' }}>
+            {miscTasks.length === 0 ? (
+              <div className="empty-state">
+                <p>No misc tasks yet. Click "Add Task" and select "Misc Task" to get started.</p>
+                <p style={{ fontSize: '14px', color: '#666', marginTop: '10px' }}>
+                  Misc tasks are perfect for one-off items that don't fit into daily/weekly schedules.
+                </p>
               </div>
-
-              <div className="projects-grid">
-                {miscTaskGroups.length === 0 ? (
-                  <div className="empty-state">
-                    <p>No misc task groups yet. Click "Add Misc Task Group" to get started.</p>
-                  </div>
-                ) : (
-                  miscTaskGroups.map((group) => {
-                    // Calculate ETA and status
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const dueDate = group.due_date ? new Date(group.due_date) : null;
-                    let etaText = 'No due date';
-                    let backgroundClass = '';
-                    
-                    if (dueDate) {
-                      dueDate.setHours(0, 0, 0, 0);
-                      const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                      
-                      if (daysUntilDue < 0) {
-                        etaText = `${Math.abs(daysUntilDue)} day${Math.abs(daysUntilDue) !== 1 ? 's' : ''} overdue`;
-                        backgroundClass = 'misc-overdue';
-                      } else if (daysUntilDue === 0) {
-                        etaText = 'Due today';
-                        backgroundClass = 'misc-due-today';
-                      } else if (daysUntilDue <= 2) {
-                        etaText = `${daysUntilDue} day${daysUntilDue !== 1 ? 's' : ''} remaining`;
-                        backgroundClass = 'misc-warning';
+            ) : (
+              <div className="task-list">
+                {miscTasks.filter(t => !t.parent_task_id).filter(task => {
+                  if (projectTaskFilter === 'all') return true;
+                  if (projectTaskFilter === 'in-progress') return !task.is_completed;
+                  if (projectTaskFilter === 'completed') return task.is_completed;
+                  if (projectTaskFilter === 'overdue') {
+                    return !task.is_completed && task.due_date && new Date(task.due_date) < new Date();
+                  }
+                  return true;
+                }).map((task) => (
+                  <TaskNode 
+                    key={task.id} 
+                    task={task} 
+                    level={0}
+                    allTasks={miscTasks}
+                    expandedTasks={expandedMiscTasks}
+                    onToggleExpand={(taskId: number) => {
+                      const newExpanded = new Set(expandedMiscTasks);
+                      if (newExpanded.has(taskId)) {
+                        newExpanded.delete(taskId);
                       } else {
-                        etaText = `${daysUntilDue} days remaining`;
+                        newExpanded.add(taskId);
                       }
-                    }
-                    
-                    // Check if any sub-task is overdue
-                    const hasOverdueSubtask = (group.tasks || []).some((task: any) => {
-                      if (!task.due_date || task.is_completed) return false;
-                      const taskDueDate = new Date(task.due_date);
-                      taskDueDate.setHours(0, 0, 0, 0);
-                      return taskDueDate < today;
-                    });
-                    
-                    if (hasOverdueSubtask && !backgroundClass.includes('overdue')) {
-                      backgroundClass = 'misc-overdue';
-                    }
-                    
-                    const totalTasks = group.progress?.total_tasks || 0;
-                    const completedTasks = group.progress?.completed_tasks || 0;
-                    
-                    return (
-                      <div key={group.id} className={`project-card ${group.is_completed ? 'status-completed' : 'status-not_started'} ${backgroundClass}`}>
-                        <div className="project-card-header">
-                          <h3>{group.name}</h3>
-                          <span className={`project-status status-${group.is_completed ? 'completed' : 'in_progress'}`}>
-                            {group.is_completed ? 'completed' : 'in progress'}
-                          </span>
-                        </div>
-                      
-                        {group.description && (
-                          <p className="project-description">{group.description}</p>
-                        )}
+                      setExpandedMiscTasks(newExpanded);
+                      localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
+                    }}
+                    onToggleComplete={async (taskId: number, currentStatus: boolean) => {
+                      // If trying to mark as complete, check for incomplete subtasks
+                      if (!currentStatus) {
+                        const hasIncompleteSubtasks = miscTasks.some(t => 
+                          t.parent_task_id === taskId && !t.is_completed
+                        );
                         
-                        {/* Sub-task count and ETA */}
-                        <div style={{ 
-                          display: 'flex', 
-                          gap: '12px', 
-                          marginBottom: '12px',
-                          fontSize: '13px',
-                          color: '#4a5568'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontWeight: '600' }}>📋</span>
-                            <span>{totalTasks} task{totalTasks !== 1 ? 's' : ''}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span style={{ fontWeight: '600' }}>⏱️</span>
-                            <span>{etaText}</span>
-                          </div>
-                        </div>
+                        if (hasIncompleteSubtasks) {
+                          alert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.');
+                          return;
+                        }
+                      }
                       
-                        <div className="project-progress">
-                          <div className="progress-bar">
-                            <div 
-                              className="progress-fill" 
-                              style={{ width: `${group.progress?.progress_percentage || 0}%` }}
-                            />
-                          </div>
-                          <span className="progress-text">
-                            {group.progress?.completed_tasks || 0} / {group.progress?.total_tasks || 0} tasks completed 
-                            ({group.progress?.progress_percentage || 0}%)
-                          </span>
-                        </div>
+                      try {
+                        await api.put(`/api/tasks/${taskId}`, {
+                          is_completed: !currentStatus
+                        });
+                        await loadMiscTaskGroups();
+                      } catch (err: any) {
+                        console.error('Error toggling task:', err);
+                      }
+                    }}
+                    onEdit={(task: ProjectTaskData) => {
+                      setSelectedTaskId(task.id);
+                      setIsTaskFormOpen(true);
+                    }}
+                    onDelete={async (taskId: number) => {
+                      // Check if task has incomplete subtasks
+                      const hasIncompleteSubtasks = miscTasks.some(t => 
+                        t.parent_task_id === taskId && !t.is_completed
+                      );
                       
-                        <div className="project-meta">
-                          {group.due_date && (
-                            <div className="project-due-date">
-                              🗓️ Due: {new Date(group.due_date).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
+                      if (hasIncompleteSubtasks) {
+                        alert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.');
+                        return;
+                      }
                       
-                        <div className="project-actions">
-                          <button 
-                            className="btn btn-primary btn-view-tasks"
-                            onClick={() => handleSelectMiscGroup(group)}
-                          >
-                            View Tasks
-                          </button>
-                          <button 
-                            className="btn btn-danger"
-                            onClick={() => handleDeleteMiscGroup(group.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </>
-          ) : (
-            // Misc Group Detail View with Tasks
-            <>
-              <div className="project-detail-header">
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={handleBackToMiscGroups}
-                >
-                  ← Back to Misc Tasks
-                </button>
-                <h2>{selectedMiscGroup.name}</h2>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => setShowAddMiscTaskModal(true)}
-                >
-                  ➕ Add Task
-                </button>
-              </div>
-
-              {selectedMiscGroup.description && (
-                <p className="project-detail-description">{selectedMiscGroup.description}</p>
-              )}
-
-              <div className="project-progress" style={{ marginBottom: '20px' }}>
-                <div className="progress-bar">
-                  <div 
-                    className="progress-fill" 
-                    style={{ width: `${selectedMiscGroup.progress?.progress_percentage || 0}%` }}
+                      if (confirm('Are you sure you want to delete this task? This will also delete all subtasks.')) {
+                        try {
+                          await api.delete(`/api/tasks/${taskId}`);
+                          await loadMiscTaskGroups();
+                        } catch (err: any) {
+                          console.error('Error deleting task:', err);
+                          console.error('Delete error response:', err.response);
+                          const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+                          alert('Failed to delete task: ' + errorMsg);
+                        }
+                      }
+                    }}
+                    onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                      try {
+                        // Convert date to datetime format
+                        const dateTimeValue = newDueDate ? newDueDate + 'T00:00:00' : null;
+                        await api.put(`/api/tasks/${taskId}`, {
+                          due_date: dateTimeValue
+                        });
+                        await loadMiscTaskGroups();
+                      } catch (err: any) {
+                        console.error('Error updating due date:', err);
+                        alert('Failed to update due date. Please try again.');
+                      }
+                    }}
+                    getDueDateColorClass={getDueDateColorClass}
+                    getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
+                    onAddSubtask={(parentTask: ProjectTaskData) => {
+                      setEditingMiscTask(parentTask);
+                      setShowAddMiscTaskModal(true);
+                    }}
                   />
-                </div>
-                <span className="progress-text">
-                  {selectedMiscGroup.progress?.completed_tasks || 0} / {selectedMiscGroup.progress?.total_tasks || 0} tasks completed 
-                  ({selectedMiscGroup.progress?.progress_percentage || 0}%)
-                </span>
+                ))}
               </div>
-
-              <div className="project-tasks-tree">
-                {miscTasks.length === 0 ? (
-                  <div className="empty-state">
-                    <p>No tasks yet. Click "Add Task" to get started.</p>
-                  </div>
-                ) : (
-                  <div className="task-list">
-                    {miscTasks.filter(t => !t.parent_task_id).map((task) => (
-                      <TaskNode 
-                        key={task.id} 
-                        task={task} 
-                        level={0}
-                        isExpanded={expandedMiscTasks.has(task.id)}
-                        onToggleExpand={() => {
-                          const newExpanded = new Set(expandedMiscTasks);
-                          if (newExpanded.has(task.id)) {
-                            newExpanded.delete(task.id);
-                          } else {
-                            newExpanded.add(task.id);
-                          }
-                          setExpandedMiscTasks(newExpanded);
-                        }}
-                        onToggleComplete={async (taskId: number) => {
-                          const task = miscTasks.find(t => t.id === taskId);
-                          if (task) {
-                            try {
-                              await api.put(`/api/misc-tasks/tasks/${taskId}`, {
-                                is_completed: !task.is_completed
-                              });
-                              await loadMiscTasks(selectedMiscGroup.id);
-                            } catch (err: any) {
-                              console.error('Error toggling task:', err);
-                            }
-                          }
-                        }}
-                        onEdit={(task: ProjectTaskData) => {
-                          setEditingMiscTask(task);
-                          setShowEditMiscTaskModal(true);
-                        }}
-                        onDelete={async (taskId: number) => {
-                          if (confirm('Are you sure you want to delete this task?')) {
-                            try {
-                              await api.delete(`/api/misc-tasks/tasks/${taskId}`);
-                              await loadMiscTasks(selectedMiscGroup.id);
-                            } catch (err: any) {
-                              console.error('Error deleting task:', err);
-                            }
-                          }
-                        }}
-                        children={miscTasks.filter(t => t.parent_task_id === task.id)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+            )}
+          </div>
         </div>
       ) : activeTab === 'habits' ? (
         <div className="habits-container">
@@ -12792,83 +12708,190 @@ export default function Tasks() {
               </div>
 
               {todayTabSections.miscTasksDueToday && (
-                <div style={{ marginTop: '12px' }}>
-                  {miscTasksDueToday.map((task) => {
-                    const isOverdue = (task.daysOverdue || 0) > 0;
-                    
-                    return (
-                      <div 
-                        key={task.id}
-                        style={{
-                          marginBottom: '8px',
-                          padding: '12px 16px',
-                          backgroundColor: '#fff',
-                          border: isOverdue ? '1px solid #fca5a5' : '1px solid #ddd6fe',
-                          borderLeft: isOverdue ? '4px solid #dc2626' : '4px solid #8b5cf6',
-                          borderRadius: '6px',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
-                            {task.name}
-                          </span>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              onClick={() => {
-                                setEditingMiscTask(task);
-                                setShowEditMiscTaskModal(true);
-                              }}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                backgroundColor: '#3b82f6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={async () => {
-                                if (confirm('Mark this task as complete?')) {
+                <div style={{ marginTop: '12px', overflowX: 'auto' }}>
+                  <table style={{ 
+                    width: '100%', 
+                    borderCollapse: 'collapse',
+                    backgroundColor: '#ffffff',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                          Task Name
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                          Category
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                          Due Date
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                          Status
+                        </th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {miscTasksDueToday.map((task) => {
+                        const isOverdue = (task.daysOverdue || 0) > 0;
+                        
+                        return (
+                          <tr 
+                            key={task.id}
+                            style={{
+                              borderBottom: '1px solid #e2e8f0',
+                              borderLeft: isOverdue ? '4px solid #dc2626' : '4px solid #8b5cf6',
+                              backgroundColor: '#ffffff',
+                              transition: 'background-color 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ffffff'}
+                          >
+                            <td style={{ padding: '12px 16px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
+                                {task.name}
+                              </div>
+                              {task.description && (
+                                <div style={{ fontSize: '12px', color: '#718096', marginTop: '2px' }}>
+                                  {task.description}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 16px', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: '12px', color: '#718096' }}>
+                                📁 {task.group_name}
+                              </div>
+                            </td>
+                            <td style={{ padding: '12px 16px', border: '1px solid #e2e8f0' }}>
+                              <input
+                                type="date"
+                                value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                                onChange={async (e) => {
+                                  e.stopPropagation();
                                   try {
-                                    await api.put(`/api/misc-tasks/tasks/${task.id}`, { is_completed: true });
+                                    await api.put(`/api/tasks/${task.id}`, { 
+                                      due_date: e.target.value ? e.target.value + 'T00:00:00' : null 
+                                    });
                                     await loadMiscTaskGroups();
                                     await loadMiscTasksDueToday();
-                                  } catch (err) {
-                                    alert('Failed to mark task as complete');
+                                  } catch (err: any) {
+                                    console.error('Error updating due date:', err);
+                                    alert('Failed to update due date');
                                   }
-                                }
-                              }}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                backgroundColor: '#10b981',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontWeight: '600'
-                              }}
-                            >
-                              Done
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#718096' }}>
-                          📁 {task.group_name} | 
-                          {isOverdue ? (
-                            <span style={{ color: '#dc2626', fontWeight: '600' }}> ⚠️ {task.daysOverdue} {(task.daysOverdue || 0) === 1 ? 'day' : 'days'} overdue</span>
-                          ) : (
-                            <span style={{ color: '#10b981', fontWeight: '600' }}> ✓ Due today</span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '12px',
+                                  border: `1px solid ${isOverdue ? '#dc2626' : '#cbd5e0'}`,
+                                  borderRadius: '4px',
+                                  backgroundColor: isOverdue ? '#fee2e2' : '#ffffff',
+                                  color: isOverdue ? '#dc2626' : '#2d3748',
+                                  fontWeight: '500',
+                                  cursor: 'pointer'
+                                }}
+                              />
+                            </td>
+                            <td style={{ padding: '12px 16px', border: '1px solid #e2e8f0' }}>
+                              {isOverdue ? (
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  color: '#dc2626', 
+                                  fontWeight: '600',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  ⚠️ {task.daysOverdue} {(task.daysOverdue || 0) === 1 ? 'day' : 'days'} overdue
+                                </span>
+                              ) : (
+                                <span style={{ 
+                                  fontSize: '12px', 
+                                  color: '#10b981', 
+                                  fontWeight: '600',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}>
+                                  ✓ Due today
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 16px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                {getNowTaskCount() < 3 && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleMoveToNow(task.id, 'task');
+                                    }}
+                                    style={{
+                                      padding: '6px 12px',
+                                      fontSize: '12px',
+                                      backgroundColor: '#dc2626',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: '700'
+                                    }}
+                                  >
+                                    NOW
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => {
+                                    setSelectedTaskId(task.id);
+                                    setIsTaskFormOpen(true);
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#3b82f6',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    try {
+                                      await api.put(`/api/tasks/${task.id}`, { is_completed: true });
+                                      await loadMiscTaskGroups();
+                                    } catch (err) {
+                                      alert('Failed to mark task as complete');
+                                    }
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#10b981',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  Done
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -13369,11 +13392,10 @@ export default function Tasks() {
             </div>
           )}
 
-          
         </div>
       )}
 
-      {/* Compact Habits & Challenges - Bottom of Today Tab */}
+          {/* Compact Habits & Challenges - Bottom of Today Tab */}
       {activeTab === 'today' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
         <div style={{ marginTop: '30px', marginBottom: '20px' }}>
           {/* Compact Active Habits */}
@@ -16270,203 +16292,23 @@ export default function Tasks() {
         </div>
       )}
       
-      {/* Add Misc Group Modal */}
-      {showAddMiscGroupModal && (
-        <div className="modal-overlay" onClick={() => setShowAddMiscGroupModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Add Misc Task Group</h2>
-              <button className="btn-close" onClick={() => setShowAddMiscGroupModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label htmlFor="miscGroupName">Group Name:</label>
-                <input
-                  type="text"
-                  id="miscGroupName"
-                  className="form-control"
-                  value={miscGroupName}
-                  onChange={(e) => setMiscGroupName(e.target.value)}
-                  placeholder="Enter group name"
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px', 
-                    marginTop: '5px',
-                    borderRadius: '4px',
-                    border: '1px solid #cbd5e0'
-                  }}
-                />
-              </div>
-              
-              <div className="form-group" style={{ marginTop: '15px' }}>
-                <label htmlFor="miscGroupDescription">Description (Optional):</label>
-                <textarea
-                  id="miscGroupDescription"
-                  className="form-control"
-                  value={miscGroupDescription}
-                  onChange={(e) => setMiscGroupDescription(e.target.value)}
-                  placeholder="Enter description"
-                  rows={3}
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px', 
-                    marginTop: '5px',
-                    borderRadius: '4px',
-                    border: '1px solid #cbd5e0'
-                  }}
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => {
-                  setShowAddMiscGroupModal(false);
-                  setMiscGroupName('');
-                  setMiscGroupDescription('');
-                }}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={() => {
-                  if (miscGroupName.trim()) {
-                    handleAddMiscGroup(miscGroupName, miscGroupDescription);
-                    setMiscGroupName('');
-                    setMiscGroupDescription('');
-                  }
-                }}
-                disabled={!miscGroupName.trim()}
-                style={{ 
-                  opacity: miscGroupName.trim() ? 1 : 0.5,
-                  cursor: miscGroupName.trim() ? 'pointer' : 'not-allowed'
-                }}
-              >
-                Create Group
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Misc Task Modal */}
-      {showAddMiscTaskModal && (
-        <div className="modal-overlay" onClick={() => setShowAddMiscTaskModal(false)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Add Task to {selectedMiscGroup?.name}</h2>
-              <button className="btn-close" onClick={() => setShowAddMiscTaskModal(false)}>×</button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label htmlFor="miscTaskName">Task Name:</label>
-                <input
-                  type="text"
-                  id="miscTaskName"
-                  className="form-control"
-                  value={miscTaskName}
-                  onChange={(e) => setMiscTaskName(e.target.value)}
-                  placeholder="Enter task name"
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px', 
-                    marginTop: '5px',
-                    borderRadius: '4px',
-                    border: '1px solid #cbd5e0'
-                  }}
-                />
-              </div>
-              
-              <div className="form-group" style={{ marginTop: '15px' }}>
-                <label htmlFor="miscTaskDescription">Description (Optional):</label>
-                <textarea
-                  id="miscTaskDescription"
-                  className="form-control"
-                  value={miscTaskDescription}
-                  onChange={(e) => setMiscTaskDescription(e.target.value)}
-                  placeholder="Enter description"
-                  rows={3}
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px', 
-                    marginTop: '5px',
-                    borderRadius: '4px',
-                    border: '1px solid #cbd5e0'
-                  }}
-                />
-              </div>
-
-              <div className="form-group" style={{ marginTop: '15px' }}>
-                <label htmlFor="miscTaskParent">Parent Task (Optional):</label>
-                <select
-                  id="miscTaskParent"
-                  className="form-control"
-                  value={miscTaskParentId || ''}
-                  onChange={(e) => setMiscTaskParentId(e.target.value ? Number(e.target.value) : null)}
-                  style={{ 
-                    width: '100%', 
-                    padding: '8px', 
-                    marginTop: '5px',
-                    borderRadius: '4px',
-                    border: '1px solid #cbd5e0'
-                  }}
-                >
-                  <option value="">-- No parent (top-level task) --</option>
-                  {miscTasks
-                    .filter(t => !t.parent_task_id) // Only show top-level tasks as potential parents
-                    .map(task => (
-                      <option key={task.id} value={task.id}>
-                        {task.name}
-                      </option>
-                    ))
-                  }
-                </select>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button 
-                className="btn btn-secondary" 
-                onClick={() => {
-                  setShowAddMiscTaskModal(false);
-                  setMiscTaskName('');
-                  setMiscTaskDescription('');
-                  setMiscTaskParentId(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={() => {
-                  if (miscTaskName.trim()) {
-                    handleAddMiscTask(miscTaskName, miscTaskDescription, miscTaskParentId);
-                    setMiscTaskName('');
-                    setMiscTaskDescription('');
-                    setMiscTaskParentId(null);
-                  }
-                }}
-                disabled={!miscTaskName.trim()}
-                style={{ 
-                  opacity: miscTaskName.trim() ? 1 : 0.5,
-                  cursor: miscTaskName.trim() ? 'pointer' : 'not-allowed'
-                }}
-              >
-                Add Task
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      
       {/* Task Form Modal - for Daily and Today tabs */}
       <TaskForm
         isOpen={isTaskFormOpen}
         taskId={selectedTaskId || undefined}
-        onClose={() => setIsTaskFormOpen(false)}
+        defaultParentTaskId={miscSubtaskParentId || undefined}
+        defaultFrequency={miscSubtaskParentId ? FollowUpFrequency.MISC : undefined}
+        onClose={() => {
+          setIsTaskFormOpen(false);
+          setMiscSubtaskParentId(null);
+        }}
         onSuccess={async () => {
           await loadTasks();
+          if (activeTab === 'misc') {
+            await loadMiscTaskGroups();
+          }
           setIsTaskFormOpen(false);
+          setMiscSubtaskParentId(null);
         }}
       />
 
@@ -16480,6 +16322,271 @@ export default function Tasks() {
         onSuccess={loadHabits}
         editingHabit={editingHabit}
       />
+
+      {/* Add Misc Task Modal - Same as Project Task Modal */}
+      {showAddMiscTaskModal && (
+        <div className="modal-overlay" onClick={() => setShowAddMiscTaskModal(false)} style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
+            backgroundColor: '#f0f9ff',
+            padding: '24px',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+              padding: '16px 20px',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              boxShadow: '0 2px 8px rgba(79, 172, 254, 0.3)'
+            }}>
+              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>
+                ✅ {editingMiscTask?.id ? `Add Subtask to "${editingMiscTask.name}"` : 'Add New Misc Task'}
+              </h2>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.currentTarget);
+              try {
+                const dueDate = formData.get('due_date');
+                const priorityValue = formData.get('priority');
+                
+                const taskPayload: any = {
+                  name: formData.get('name'),
+                  description: formData.get('description') || '',
+                  pillar_id: 1,
+                  category_id: 1,
+                  task_type: 'time',
+                  allocated_minutes: 30,
+                  follow_up_frequency: 'misc',
+                  separately_followed: false,
+                  is_daily_one_time: false,
+                  priority: priorityValue ? parseInt(priorityValue as string) : 5
+                };
+
+                // Only add parent_task_id if creating a subtask
+                if (editingMiscTask?.id) {
+                  taskPayload.parent_task_id = editingMiscTask.id;
+                }
+
+                // Only add due_date if it's provided
+                if (dueDate && dueDate !== '') {
+                  // Convert date string to ISO datetime format (add time component)
+                  taskPayload.due_date = dueDate + 'T00:00:00';
+                }
+
+                console.log('Creating misc task with payload:', taskPayload);
+                await api.post('/api/tasks/', taskPayload);
+                setShowAddMiscTaskModal(false);
+                setEditingMiscTask(null);
+                await loadMiscTaskGroups();
+              } catch (err: any) {
+                console.error('Error creating misc task:', err);
+                console.error('Error response:', err.response);
+                console.error('Error data:', err.response?.data);
+                console.error('Error detail array:', err.response?.data?.detail);
+                
+                let errorMessage = 'Unknown error occurred';
+                if (err.response?.data) {
+                  const data = err.response.data;
+                  
+                  // Handle FastAPI validation errors (detail is an array)
+                  if (Array.isArray(data.detail)) {
+                    console.log('Validation errors:', data.detail);
+                    errorMessage = data.detail.map((item: any) => {
+                      console.log('Error item:', item);
+                      const field = item.loc ? item.loc.join(' -> ') : 'unknown field';
+                      return `${field}: ${item.msg}`;
+                    }).join('\n');
+                  } 
+                  // Handle string detail
+                  else if (data.detail) {
+                    errorMessage = data.detail;
+                  }
+                  // Handle object detail
+                  else if (typeof data === 'object') {
+                    errorMessage = JSON.stringify(data, null, 2);
+                  } 
+                  // Handle string data
+                  else {
+                    errorMessage = String(data);
+                  }
+                } else if (err.message) {
+                  errorMessage = err.message;
+                }
+                
+                alert('Failed to create task:\n' + errorMessage);
+              }
+            }}>
+              {editingMiscTask?.id && (
+                <div style={{ 
+                  marginBottom: '16px', 
+                  padding: '12px', 
+                  backgroundColor: '#e6f3ff', 
+                  borderRadius: '4px',
+                  border: '1px solid #b3d9ff'
+                }}>
+                  <strong>Parent Task:</strong> {editingMiscTask.name}
+                </div>
+              )}
+
+              <div style={{
+                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
+              }}>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>📋 Task Information</span>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Task Name *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+                padding: '10px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                marginTop: '20px',
+                boxShadow: '0 2px 6px rgba(67, 233, 123, 0.2)'
+              }}>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>🎯 Planning & Priority</span>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Due Date
+                </label>
+                <input
+                  type="date"
+                  name="due_date"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Priority
+                </label>
+                <select
+                  name="priority"
+                  defaultValue="5"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                >
+                  <option value="1">1 - Highest</option>
+                  <option value="2">2 - High</option>
+                  <option value="3">3 - Medium-High</option>
+                  <option value="4">4 - Medium</option>
+                  <option value="5">5 - Normal</option>
+                  <option value="6">6 - Medium-Low</option>
+                  <option value="7">7 - Low</option>
+                  <option value="8">8 - Very Low</option>
+                  <option value="9">9 - Minimal</option>
+                  <option value="10">10 - Lowest</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAddMiscTaskModal(false);
+                    setEditingMiscTask(null);
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#2d3748',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#48bb78',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  {editingMiscTask?.id ? 'Create Subtask' : 'Create Task'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

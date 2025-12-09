@@ -189,6 +189,7 @@ class TaskBase(BaseModel):
     is_part_of_goal: bool = Field(default=False)
     related_wish_id: Optional[int] = Field(None, gt=0, description="Link to Dream/Wish")
     project_id: Optional[int] = Field(None, gt=0, description="Link to Project")
+    parent_task_id: Optional[int] = Field(None, gt=0, description="Parent task ID for subtasks")
     why_reason: Optional[str] = Field(None, description="Why this task is important")
     additional_whys: Optional[List[str]] = Field(None, description="Additional why reasons")
     due_date: Optional[datetime] = None
@@ -229,6 +230,7 @@ class TaskUpdate(BaseModel):
     is_part_of_goal: Optional[bool] = None
     related_wish_id: Optional[int] = Field(None, gt=0)
     project_id: Optional[int] = Field(None, gt=0, description="Link to Project")
+    parent_task_id: Optional[int] = Field(None, gt=0, description="Parent task ID for subtasks")
     why_reason: Optional[str] = None
     additional_whys: Optional[List[str]] = None
     due_date: Optional[datetime] = None

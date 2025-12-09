@@ -26,6 +26,7 @@ class FollowUpFrequency(str, enum.Enum):
     QUARTERLY = "quarterly"
     YEARLY = "yearly"
     ONE_TIME = "one_time"
+    MISC = "misc"
 
 
 class GoalTimePeriod(str, enum.Enum):
@@ -189,6 +190,7 @@ class Task(Base):
     is_part_of_goal = Column(Boolean, default=False)
     related_wish_id = Column(Integer, ForeignKey("wishes.id", ondelete="SET NULL"), nullable=True)  # Link to Dream/Wish
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)  # Link to Project
+    parent_task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True)  # For subtasks
     
     # Motivation
     why_reason = Column(Text, nullable=True)  # Why this task is important

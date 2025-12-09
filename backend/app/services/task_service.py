@@ -90,6 +90,7 @@ class TaskService:
             goal_id=task_data.goal_id,
             is_part_of_goal=task_data.is_part_of_goal,
             project_id=task_data.project_id,
+            parent_task_id=task_data.parent_task_id,
             priority=task_data.priority,
             why_reason=task_data.why_reason,
             additional_whys=additional_whys_json,

@@ -15,6 +15,7 @@ interface TaskFormProps {
   taskId?: number;
   defaultFrequency?: FollowUpFrequency;
   defaultWishId?: number;
+  defaultParentTaskId?: number;
 }
 
 interface TaskFormData {
@@ -38,9 +39,10 @@ interface TaskFormData {
   additional_whys: string[];
   due_date: string;
   priority: number;
+  parent_task_id: number | null;
 }
 
-export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency, defaultWishId }: TaskFormProps) {
+export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency, defaultWishId, defaultParentTaskId }: TaskFormProps) {
   const [formData, setFormData] = useState<TaskFormData>({
     name: '',
     description: '',
@@ -61,7 +63,8 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     why_reason: '',
     additional_whys: [],
     due_date: '',
-    priority: 10
+    priority: 5,
+    parent_task_id: defaultParentTaskId || null
   });
 
   const [pillars, setPillars] = useState<Pillar[]>([]);
@@ -275,6 +278,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         goal_id: formData.is_part_of_goal ? formData.goal_id : undefined,
         project_id: formData.project_id || undefined,
         related_wish_id: formData.related_wish_id || undefined,
+        parent_task_id: formData.parent_task_id || undefined,
         why_reason: formData.why_reason || undefined,
         additional_whys: formData.additional_whys.filter(w => w.trim()).join('|||') || undefined,
         due_date: formData.due_date ? `${formData.due_date}T00:00:00` : undefined,
@@ -647,6 +651,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               <option value={FollowUpFrequency.QUARTERLY}>Quarterly</option>
               <option value={FollowUpFrequency.YEARLY}>Yearly</option>
               <option value={FollowUpFrequency.ONE_TIME}>One Time</option>
+              <option value={FollowUpFrequency.MISC}>Misc Task</option>
             </select>
           </div>
 
