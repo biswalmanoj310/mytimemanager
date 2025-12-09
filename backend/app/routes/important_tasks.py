@@ -86,10 +86,17 @@ def get_all_important_tasks(
             "name": task.name,
             "description": task.description,
             "pillar_id": task.pillar_id,
+            "pillar_name": task.pillar.name if task.pillar else None,
             "category_id": task.category_id,
+            "category_name": task.category.name if task.category else None,
+            "sub_category_id": task.sub_category_id,
             "ideal_gap_days": task.ideal_gap_days,
-            "last_check_date": task.last_check_date,
+            "last_check_date": task.last_check_date.isoformat() if task.last_check_date else None,
+            "start_date": task.start_date.isoformat() if task.start_date else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
             "priority": task.priority,
+            "is_active": task.is_active,
+            "parent_id": task.parent_id,
             **status_info
         })
     

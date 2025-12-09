@@ -6610,22 +6610,6 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* Important Tasks Navigator (formerly One Time Tasks) */}
-      {activeTab === 'onetime' && (
-        <div className="date-navigator">
-          <button 
-            className="btn-nav btn-add-onetime" 
-            onClick={() => setShowAddOneTimeTaskModal(true)}
-            style={{ backgroundColor: '#10b981', color: 'white' }}
-          >
-            ➕ Add Important Task
-          </button>
-          <span className="date-display">
-            Important Tasks
-          </span>
-        </div>
-      )}
-
       {/* Important Tasks Component */}
       {activeTab === 'onetime' ? (
         <ImportantTasks />

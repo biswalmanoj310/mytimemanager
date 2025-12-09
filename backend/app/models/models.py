@@ -1152,7 +1152,11 @@ class ImportantTask(Base):
     # Periodic check parameters
     ideal_gap_days = Column(Integer, nullable=False)
     last_check_date = Column(DateTime(timezone=True), nullable=True)
+    start_date = Column(DateTime(timezone=True), server_default=func.now())
     check_history = Column(Text, nullable=True)
+    
+    # Hierarchy support
+    parent_id = Column(Integer, ForeignKey("important_tasks.id"), nullable=True)
     
     # Priority & Status
     priority = Column(Integer, default=10)
@@ -1166,6 +1170,8 @@ class ImportantTask(Base):
     pillar = relationship("Pillar", foreign_keys=[pillar_id])
     category = relationship("Category", foreign_keys=[category_id])
     sub_category = relationship("SubCategory", foreign_keys=[sub_category_id])
+    parent = relationship("ImportantTask", remote_side=[id], foreign_keys=[parent_id])
+    children = relationship("ImportantTask", foreign_keys=[parent_id], remote_side=[parent_id])
 
     def __repr__(self):
         return f"<ImportantTask(id={self.id}, name=\"{self.name}\", gap_days={self.ideal_gap_days})>"
