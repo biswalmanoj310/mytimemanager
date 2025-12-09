@@ -2879,18 +2879,40 @@ export default function Tasks() {
         // If completed today, don't show (they're on track)
         if (habit.completed_today) return false;
         
-        // If current streak is 0, it means they broke the streak - check how many days missed
-        // We need to check the last 2+ days to see if habit was missed
-        // For now, we'll use a simple heuristic: if not completed today AND current_streak === 0
-        // that means they missed at least yesterday, so potentially 2+ days
+        // Check monthly_completion array for consecutive misses
+        // The array represents [day1, day2, ..., today] where:
+        // - true = completed
+        // - false = missed
+        // - null = before habit started
         
-        // More accurate: if they have a days_since_last_completion field and it's >= 2
-        if (habit.days_since_last_completion !== undefined) {
-          return habit.days_since_last_completion >= 2;
+        if (habit.monthly_completion && Array.isArray(habit.monthly_completion)) {
+          const completionArray = habit.monthly_completion;
+          const todayIndex = completionArray.length - 1;
+          
+          // Count consecutive missed days from the end (today going backwards)
+          let consecutiveMissedDays = 0;
+          
+          for (let i = todayIndex; i >= 0; i--) {
+            const dayStatus = completionArray[i];
+            
+            // Skip null days (before habit started)
+            if (dayStatus === null) continue;
+            
+            // If this day was missed (false), increment counter
+            if (dayStatus === false) {
+              consecutiveMissedDays++;
+            } else {
+              // If we hit a completed day, stop counting
+              break;
+            }
+          }
+          
+          // Show habit if missed for 2 or more consecutive days
+          return consecutiveMissedDays >= 2;
         }
         
-        // Fallback: if no streak and not completed today, likely needs attention
-        return habit.current_streak === 0 && !habit.completed_today;
+        // Fallback: if no monthly_completion data and not completed today, show it
+        return !habit.completed_today;
       });
       
       setTodaysHabits(habitsNeedingAttention);
