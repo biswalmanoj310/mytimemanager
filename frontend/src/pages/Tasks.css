@@ -313,6 +313,7 @@ td.section-header-cell.boolean-based {
   overflow-y: auto;
   max-height: calc(100vh - 250px); /* Allow vertical scrolling */
   position: relative;
+  isolation: isolate;
 }
 
 /* Only for daily time-based table - needs more height */
@@ -327,6 +328,8 @@ td.section-header-cell.boolean-based {
   border-spacing: 0;
   font-size: 14px;
   table-layout: auto; /* Allow columns to auto-size based on content */
+  position: relative;
+  z-index: 1;
 }
 
 .tasks-table thead {
@@ -363,6 +366,20 @@ td.section-header-cell.boolean-based {
 
 .tasks-table tbody tr td {
   border-bottom: 2px solid #3b82f6;
+  position: relative;
+  z-index: 1;
+}
+
+/* Regular hourly cells must stay below sticky columns */
+.daily-table tbody tr td.col-hour {
+  position: relative;
+  z-index: 1;
+}
+
+/* Sticky columns must have higher z-index than regular cells */
+.daily-table tbody tr td.sticky-col {
+  z-index: 30 !important;
+  position: sticky !important;
 }
 
 .tasks-table tbody tr:hover {
@@ -370,12 +387,17 @@ td.section-header-cell.boolean-based {
 }
 
 /* Row Highlighting on Hover - entire row gets same color */
-.tasks-table tbody tr:hover td {
+.tasks-table tbody tr:hover td:not(.sticky-col) {
   background: inherit !important; /* Inherit row background - ensures entire row has same color */
 }
 
+/* Sticky columns should maintain white background on row hover */
+.tasks-table tbody tr:hover td.sticky-col {
+  background: white !important;
+}
+
 /* Remove individual cell hover to prevent color differences within row */
-.tasks-table tbody td:hover {
+.tasks-table tbody td:hover:not(.sticky-col) {
   background: inherit !important; /* Inherit from row */
 }
 
@@ -945,33 +967,43 @@ td.section-header-cell.boolean-based {
 
 /* Sticky columns for daily tab - 4 columns fixed */
 .daily-table .sticky-col-1 {
-  position: sticky;
-  left: 0;
-  background: white;
-  z-index: 15;
+  position: sticky !important;
+  left: 0 !important;
+  background: white !important;
+  z-index: 100 !important;
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
-  min-width: 250px;
+  min-width: 250px !important;
+  width: 250px !important;
+  max-width: 250px !important;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
+.daily-table tbody .sticky-col-2,
+.daily-table thead .sticky-col-2,
 .daily-table .sticky-col-2 {
-  position: sticky;
-  left: 250px; /* Width of sticky-col-1 */
-  background: white;
-  z-index: 15;
+  position: sticky !important;
+  left: 250px !important; /* Width of sticky-col-1 */
+  background: white !important;
+  z-index: 100 !important;
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
-  min-width: 100px;
-  font-weight: bold;
-  text-align: center;
-  color: #2d3748;
+  min-width: 120px !important;
+  width: 120px !important;
+  max-width: 120px !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  color: #2d3748 !important;
+  display: table-cell !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 .daily-table .sticky-col-1.column-highlight {
   background: #fef3c7 !important; /* Override with yellow highlight */
   z-index: 16; /* Slightly higher to show highlight */
-}
-  z-index: 15;
-  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
-  min-width: 100px;
 }
 
 .daily-table .sticky-col-3 {

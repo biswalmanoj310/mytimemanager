@@ -384,17 +384,36 @@ export default function Tasks() {
   const [pendingProjectId, setPendingProjectId] = useState<number | null>(null); // Track project ID from URL
 
   // Today Tab state - expandable sections
-  const [todayTabSections, setTodayTabSections] = useState({
-    todaysOnlyTasks: true,
-    projectTasksDueToday: true,
-    goalTasksDueToday: true,
-    miscTasksDueToday: true,
-    importantTasksDueToday: true,
-    weeklyNeedsAttention: true,
-    monthlyNeedsAttention: true,
-    todaysHabits: true,
-    upcomingTasks: true
+  const [todayTabSections, setTodayTabSections] = useState(() => {
+    // Try to load saved state from localStorage
+    const saved = localStorage.getItem('todayTabSections');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error parsing todayTabSections from localStorage:', e);
+      }
+    }
+    // Default state if nothing saved
+    return {
+      todaysOnlyTasks: true,
+      projectTasksDueToday: true,
+      goalTasksDueToday: true,
+      miscTasksDueToday: true,
+      importantTasksDueToday: true,
+      weeklyNeedsAttention: true,
+      monthlyNeedsAttention: true,
+      todaysHabits: true,
+      upcomingTasks: true,
+      upcomingNext7Days: true,
+      upcomingThisMonth: true
+    };
   });
+  
+  // Save to localStorage whenever todayTabSections changes
+  useEffect(() => {
+    localStorage.setItem('todayTabSections', JSON.stringify(todayTabSections));
+  }, [todayTabSections]);
   
   // Today Tab data
   const [todaysOnlyTasks, setTodaysOnlyTasks] = useState<Task[]>([]);
@@ -2826,8 +2845,28 @@ export default function Tasks() {
   async function loadTodaysHabits() {
     try {
       const response: any = await api.get('/api/habits/today/active');
-      const data = Array.isArray(response.data || response) ? (response.data || response) : [];
-      setTodaysHabits(data);
+      const allHabits = Array.isArray(response.data || response) ? (response.data || response) : [];
+      
+      // Filter to only show habits that haven't been done for 2+ consecutive days
+      const habitsNeedingAttention = allHabits.filter((habit: any) => {
+        // If completed today, don't show (they're on track)
+        if (habit.completed_today) return false;
+        
+        // If current streak is 0, it means they broke the streak - check how many days missed
+        // We need to check the last 2+ days to see if habit was missed
+        // For now, we'll use a simple heuristic: if not completed today AND current_streak === 0
+        // that means they missed at least yesterday, so potentially 2+ days
+        
+        // More accurate: if they have a days_since_last_completion field and it's >= 2
+        if (habit.days_since_last_completion !== undefined) {
+          return habit.days_since_last_completion >= 2;
+        }
+        
+        // Fallback: if no streak and not completed today, likely needs attention
+        return habit.current_streak === 0 && !habit.completed_today;
+      });
+      
+      setTodaysHabits(habitsNeedingAttention);
     } catch (err: any) {
       console.error('Error loading today\'s habits:', err);
       setTodaysHabits([]);
@@ -4630,17 +4669,26 @@ export default function Tasks() {
       if (weeklyStatus && !weeklyStatus.is_completed && !weeklyStatus.is_na) {
         // Calculate total spent and check if behind schedule
         let totalSpent = 0;
-        let totalDaysElapsed = 0;
+        let totalDaysIncludingToday = 0; // Total days including today (for display)
+        let pastDaysOnly = 0; // Past days only (for deficit calculation)
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Start of today
+        
         weekDays.forEach(day => {
           totalSpent += getWeeklyTime(task.id, day.index);
           
           const dayDate = new Date(selectedWeekStart);
           dayDate.setDate(dayDate.getDate() + day.index);
-          const today = new Date();
-          today.setHours(23, 59, 59, 999);
+          dayDate.setHours(0, 0, 0, 0);
 
           if (dayDate <= today) {
-            totalDaysElapsed++;
+            totalDaysIncludingToday++;
+          }
+          
+          // Count only PAST days (before today) for deficit calculation
+          if (dayDate < today) {
+            pastDaysOnly++;
           }
         });
 
@@ -4655,7 +4703,7 @@ export default function Tasks() {
         }
 
         const remaining = weeklyTarget - totalSpent;
-        const daysLeft = 7 - totalDaysElapsed;
+        const daysLeft = 7 - totalDaysIncludingToday + 1; // +1 to include today
         
         // Calculate daily target
         let dailyTarget = 0;
@@ -4667,31 +4715,36 @@ export default function Tasks() {
           dailyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7;
         }
         
-        // Calculate expected vs actual
-        const expectedByNow = dailyTarget * totalDaysElapsed;
+        // Calculate expected vs actual - ONLY count PAST days (not including today)
+        const expectedByNow = dailyTarget * pastDaysOnly;
         const deficit = expectedByNow - totalSpent;
         
-        // Only show in attention if CURRENTLY behind schedule (deficit > 0)
-        // Don't trigger just because past days were red - user may have caught up!
-        if (deficit > 0) {
+        // TODAY = daily target + ALL catch-up (front-loaded)
+        const neededToday = dailyTarget + deficit;
+        
+        // Show in attention if:
+        // 1. Behind schedule from past days (deficit > 0), OR
+        // 2. Haven't completed today's target yet (totalSpent < expected including today)
+        const expectedIncludingToday = dailyTarget * totalDaysIncludingToday;
+        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        
+        if (shouldShowInAttention) {
           // Count red days for display purposes only
           let redDaysCount = 0;
+          const todayForCheck = new Date();
+          todayForCheck.setHours(23, 59, 59, 999);
+          
           weekDays.forEach(day => {
             const dayDate = new Date(selectedWeekStart);
             dayDate.setDate(dayDate.getDate() + day.index);
-            const today = new Date();
-            today.setHours(23, 59, 59, 999);
 
-            if (dayDate <= today) {
+            if (dayDate <= todayForCheck) {
               const cellColor = getWeeklyCellColorClass(task, day.index);
               if (cellColor === 'cell-below-target') {
                 redDaysCount++;
               }
             }
           });
-          
-          // TODAY = daily target + ALL catch-up (front-loaded)
-          const neededToday = dailyTarget + deficit;
           
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0 
@@ -4701,7 +4754,7 @@ export default function Tasks() {
           needsAttention.push({
             task,
             reason: 'weekly',
-            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysElapsed, neededToday: Math.ceil(neededToday), dailyTarget: Math.round(dailyTarget), deficit: Math.round(deficit) },
+            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysIncludingToday, neededToday: Math.ceil(neededToday), dailyTarget: Math.round(dailyTarget), deficit: Math.round(deficit) },
             recommendation
           });
         }
@@ -4710,52 +4763,74 @@ export default function Tasks() {
       // Check monthly tab (current month only)
       const monthlyStatus = monthlyTaskStatuses[task.id];
       if (monthlyStatus && !monthlyStatus.is_completed && !monthlyStatus.is_na) {
-        const monthlyColorClass = getMonthlyRowColorClass(task);
-        if (monthlyColorClass === 'weekly-below-target') {
-          // Calculate how much behind
-          const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
-          let totalSpent = 0;
-          for (let day = 1; day <= daysInMonth; day++) {
-            totalSpent += getMonthlyTime(task.id, day);
-          }
+        // Calculate how much behind
+        const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+        let totalSpent = 0;
+        for (let day = 1; day <= daysInMonth; day++) {
+          totalSpent += getMonthlyTime(task.id, day);
+        }
 
-          const today = new Date();
-          const monthStart = new Date(selectedMonthStart);
-          let daysElapsed = 1;
-          if (today >= monthStart) {
-            const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-            if (today <= monthEnd) {
-              const diffTime = today.getTime() - monthStart.getTime();
-              daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
-            } else {
-              daysElapsed = daysInMonth;
-            }
-          }
-
-          let expectedTarget = 0;
-          if (task.task_type === TaskType.COUNT) {
-            expectedTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) * daysElapsed : (task.target_value || 0) * (daysElapsed / daysInMonth);
-          } else if (task.task_type === TaskType.BOOLEAN) {
-            expectedTarget = daysElapsed;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const monthStart = new Date(selectedMonthStart);
+        monthStart.setHours(0, 0, 0, 0);
+        
+        let daysIncludingToday = 1; // Days including today
+        let pastDaysOnly = 0; // Past days only (for deficit calculation)
+        
+        if (today >= monthStart) {
+          const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+          monthEnd.setHours(0, 0, 0, 0);
+          
+          if (today <= monthEnd) {
+            const diffTime = today.getTime() - monthStart.getTime();
+            daysIncludingToday = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            pastDaysOnly = Math.max(0, daysIncludingToday - 1); // Exclude today
           } else {
-            expectedTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysElapsed : task.allocated_minutes * (daysElapsed / daysInMonth);
+            daysIncludingToday = daysInMonth;
+            pastDaysOnly = daysInMonth;
           }
+        }
 
-          const percentBehind = Math.round(((expectedTarget - totalSpent) / expectedTarget) * 100);
-          const daysLeft = daysInMonth - daysElapsed + 1; // +1 to include today
-          const deficit = expectedTarget - totalSpent; // Total amount behind
-          
-          // Calculate daily target
-          const dailyTarget = task.task_type === TaskType.COUNT 
-            ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / daysInMonth)
-            : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / daysInMonth);
-          
-          // Calculate current average
-          const currentAverage = daysElapsed > 0 ? totalSpent / daysElapsed : 0;
-          
-          // TODAY = daily target + ALL catch-up (front-loaded)
-          const neededToday = dailyTarget + deficit;
+        let expectedTarget = 0;
+        if (task.task_type === TaskType.COUNT) {
+          expectedTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) * pastDaysOnly : (task.target_value || 0) * (pastDaysOnly / daysInMonth);
+        } else if (task.task_type === TaskType.BOOLEAN) {
+          expectedTarget = pastDaysOnly;
+        } else {
+          expectedTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes * pastDaysOnly : task.allocated_minutes * (pastDaysOnly / daysInMonth);
+        }
 
+        const percentBehind = expectedTarget > 0 ? Math.round(((expectedTarget - totalSpent) / expectedTarget) * 100) : 0;
+        const daysLeft = daysInMonth - daysIncludingToday + 1; // +1 to include today
+        const deficit = expectedTarget - totalSpent; // Total amount behind
+        
+        // Calculate daily target
+        const dailyTarget = task.task_type === TaskType.COUNT 
+          ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / daysInMonth)
+          : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / daysInMonth);
+        
+        // Calculate current average
+        const currentAverage = daysIncludingToday > 0 ? totalSpent / daysIncludingToday : 0;
+        
+        // TODAY = daily target + ALL catch-up (front-loaded)
+        const neededToday = dailyTarget + deficit;
+        
+        // Show in attention if:
+        // 1. Behind schedule from past days (deficit > 0), OR
+        // 2. Haven't completed today's target yet (totalSpent < expected including today)
+        let expectedIncludingToday = 0;
+        if (task.task_type === TaskType.COUNT) {
+          expectedIncludingToday = task.follow_up_frequency === 'daily' ? (task.target_value || 0) * daysIncludingToday : (task.target_value || 0) * (daysIncludingToday / daysInMonth);
+        } else if (task.task_type === TaskType.BOOLEAN) {
+          expectedIncludingToday = daysIncludingToday;
+        } else {
+          expectedIncludingToday = task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysIncludingToday : task.allocated_minutes * (daysIncludingToday / daysInMonth);
+        }
+        
+        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        
+        if (shouldShowInAttention) {
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0
             ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
@@ -8741,8 +8816,8 @@ export default function Tasks() {
                 <table className="tasks-table daily-table">
                   <thead>
                     <tr>
-                      <th className={`col-task sticky-col sticky-col-1 ${focusedCell && focusedCell.col === -1 ? 'focused-column' : hoveredColumn === -1 ? 'column-highlight' : ''}`}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ left: 'var(--sticky-col-1-width, 200px)' }}>Spent Time</th>
+                      <th className={`col-task sticky-col sticky-col-1 ${focusedCell && focusedCell.col === -1 ? 'focused-column' : hoveredColumn === -1 ? 'column-highlight' : ''}`} style={{ minWidth: '250px', width: '250px' }}>Task</th>
+                      <th className="col-time sticky-col sticky-col-2" style={{ left: '250px', minWidth: '120px', width: '120px' }}>Spent Time</th>
                       {hourLabels.map(hour => (
                         <th 
                           key={hour.index} 
@@ -8803,7 +8878,7 @@ export default function Tasks() {
                           </td>
                           
                           {/* Spent Time column - sum of all hours - sticky after Task column */}
-                          <td className="col-time sticky-col sticky-col-2" style={{ left: 'var(--sticky-col-1-width, 200px)' }}>
+                          <td className="col-time sticky-col sticky-col-2" style={{ left: '250px', minWidth: '120px', width: '120px', maxWidth: '120px', position: 'sticky', background: 'white', zIndex: 100 }}>
                             <strong>
                               {hourLabels.reduce((sum, hour) => sum + getHourlyTime(task.id, hour.index), 0)} min
                             </strong>
@@ -8841,9 +8916,8 @@ export default function Tasks() {
                                     handleHourlyTimeFocus(task.id, hour.index, e);
                                     e.target.select();
                                   }}
-                                  onWheel={(e) => {
-                                    e.preventDefault();
-                                    e.currentTarget.blur();
+                                  onBlur={(e) => {
+                                    // Auto-blur on scroll to prevent accidental changes
                                   }}
                                   onKeyDown={(e) => {
                                     const input = e.currentTarget;
@@ -12864,306 +12938,333 @@ export default function Tasks() {
             </div>
           )}
 
-          {/* Needs Attention - Weekly Tasks Section */}
-          {weeklyTasksNeedingAttention.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
-              <div 
-                onClick={() => setTodayTabSections(prev => ({ ...prev, weeklyNeedsAttention: !prev.weeklyNeedsAttention }))}
-                style={{
-                  background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-                  padding: '14px 20px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
-                }}
-              >
-                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📅</span>
-                  <span>Needs Attention - Weekly Tasks ({weeklyTasksNeedingAttention.length})</span>
-                </h3>
-                <span style={{ fontSize: '20px', color: '#ffffff' }}>
-                  {todayTabSections.weeklyNeedsAttention ? '▼' : '▶'}
-                </span>
-              </div>
-
-              {todayTabSections.weeklyNeedsAttention && (
-                <div style={{ marginTop: '12px' }}>
-                  {weeklyTasksNeedingAttention.map((task) => (
-                    <div 
-                      key={task.id}
-                      style={{
-                        marginBottom: '8px',
-                        padding: '12px 16px',
-                        backgroundColor: '#fff',
-                        border: '1px solid #a5f3fc',
-                        borderLeft: '4px solid #06b6d4',
-                        borderRadius: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
-                          {task.name}
-                        </span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          {getNowTaskCount() < 3 ? (
-                            <button
-                              onClick={() => handleMoveToNow(task.id, 'task')}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                backgroundColor: '#dc2626',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontWeight: '600'
-                              }}
-                            >
-                              NOW
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={() => {
-                              setSelectedTaskId(task.id);
-                              setIsTaskFormOpen(true);
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: '#3b82f6',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: '#10b981',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontWeight: '600'
-                            }}
-                          >
-                            Done
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#718096' }}>
-                        {task.pillar_name} - {task.category_name} | 📅 Weekly
-                      </div>
+          {/* Needs Attention Section - Only show in Today tab */}
+          {activeTab === 'today' && (() => {
+            // Filter out tasks that are in NOW (priority 1-3) - they should only show in NOW tab
+            const weeklyTasks = tasksNeedingAttention.filter(item => 
+              item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
+            );
+            const monthlyTasks = tasksNeedingAttention.filter(item => 
+              item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
+            );
+            
+            // Motivational quotes that rotate daily
+            const motivationalQuotes = [
+              "💪 Today's effort = Tomorrow's freedom. Catch up now, coast later!",
+              "🎯 Small daily wins compound into massive yearly gains.",
+              "🔥 Discipline today = Regret avoided tomorrow.",
+              "⚡ The best time to catch up? Right now. The second best? Never comes.",
+              "🚀 Every minute you invest today is a minute you don't owe tomorrow.",
+              "💎 Consistency beats intensity. Get back on track today!",
+              "⏰ Future you will thank present you for catching up now."
+            ];
+            
+            // Pick quote based on day of year (consistent for the day)
+            const dayOfYear = Math.floor((new Date().getTime() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+            const todaysQuote = motivationalQuotes[dayOfYear % motivationalQuotes.length];
+            
+            return (
+              <>
+                {/* Weekly Tasks Needing Attention */}
+                {weeklyTasks.length > 0 && (
+                  <div style={{ marginTop: '30px', marginBottom: '20px' }}>
+                    {/* Motivational Quote */}
+                    <div style={{
+                      padding: '12px 20px',
+                      backgroundColor: '#fff3cd',
+                      border: '2px solid #ffc107',
+                      borderRadius: '8px',
+                      marginBottom: '12px',
+                      textAlign: 'center',
+                      fontSize: '15px',
+                      fontWeight: '500',
+                      color: '#856404',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                    }}>
+                      {todaysQuote}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Needs Attention - Monthly Tasks Section */}
-          {monthlyTasksNeedingAttention.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
-              <div 
-                onClick={() => setTodayTabSections(prev => ({ ...prev, monthlyNeedsAttention: !prev.monthlyNeedsAttention }))}
-                style={{
-                  background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
-                  padding: '14px 20px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
-                }}
-              >
-                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📊</span>
-                  <span>Needs Attention - Monthly Tasks ({monthlyTasksNeedingAttention.length})</span>
-                </h3>
-                <span style={{ fontSize: '20px', color: '#ffffff' }}>
-                  {todayTabSections.monthlyNeedsAttention ? '▼' : '▶'}
-                </span>
-              </div>
-
-              {todayTabSections.monthlyNeedsAttention && (
-                <div style={{ marginTop: '12px' }}>
-                  {monthlyTasksNeedingAttention.map((task) => (
+                    
                     <div 
-                      key={task.id}
-                      style={{
-                        marginBottom: '8px',
-                        padding: '12px 16px',
-                        backgroundColor: '#fff',
-                        border: '1px solid #bbdefb',
-                        borderLeft: '4px solid #2196f3',
-                        borderRadius: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 6px rgba(255, 107, 107, 0.3)',
                       }}
+                      onClick={() => setTodayTabSections(prev => ({ ...prev, weeklyNeedsAttention: !prev.weeklyNeedsAttention }))}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
-                          {task.name}
-                        </span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          {getNowTaskCount() < 3 ? (
-                            <button
-                              onClick={() => handleMoveToNow(task.id, 'task')}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                backgroundColor: '#dc2626',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontWeight: '600'
-                              }}
-                            >
-                              NOW
-                            </button>
-                          ) : null}
-                          <button
-                            onClick={() => {
-                              setSelectedTaskId(task.id);
-                              setIsTaskFormOpen(true);
-                            }}
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: '#3b82f6',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: '#10b981',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              fontWeight: '600'
-                            }}
-                          >
-                            Done
-                          </button>
-                        </div>
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#718096' }}>
-                        {task.pillar_name} - {task.category_name} | 📊 Monthly
-                      </div>
+                      <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
+                        🚨 Needs Attention - Weekly Tasks ({weeklyTasks.length} {weeklyTasks.length === 1 ? 'task' : 'tasks'})
+                      </h3>
+                      <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                        {todayTabSections.weeklyNeedsAttention ? '▼' : '▶'}
+                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Today's Habits Section */}
-          {todaysHabits.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
-              <div 
-                onClick={() => setTodayTabSections(prev => ({ ...prev, todaysHabits: !prev.todaysHabits }))}
-                style={{
-                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-                  padding: '14px 20px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
-                }}
-              >
-                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>🔥</span>
-                  <span>Today's Habits ({todaysHabits.length})</span>
-                </h3>
-                <span style={{ fontSize: '20px', color: '#ffffff' }}>
-                  {todayTabSections.todaysHabits ? '▼' : '▶'}
-                </span>
-              </div>
+                    {todayTabSections.weeklyNeedsAttention && (
+                      <div style={{ marginTop: '12px' }}>
+                        {weeklyTasks.map((item, index) => (
+                          <div 
+                            key={item.task.id}
+                            style={{
+                              marginBottom: '6px',
+                              padding: '10px 14px',
+                              backgroundColor: '#fff',
+                              border: '1px solid #ffcccc',
+                              borderLeft: '4px solid #e53e3e',
+                              borderRadius: '4px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                          >
+                            {/* Line 1: Task name, Need Today prominently displayed */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
+                                {item.task.name}
+                              </span>
+                              {item.weeklyIssue && (
+                                <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '600' }}>
+                                  Need <strong>{item.weeklyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.weeklyIssue.dailyTarget}, Lagged: {item.weeklyIssue.deficit || 0}, {item.weeklyIssue.totalDays - item.weeklyIssue.redDays} days left)
+                                </span>
+                              )}
+                              {item.monthlyIssue && !item.weeklyIssue && (
+                                <span style={{ fontSize: '14px', color: '#d97706', fontWeight: '600' }}>
+                                  Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
+                                </span>
+                              )}
+                              {(() => {
+                                const priority = item.task.priority;
+                                const isInNOW = priority && priority <= 3;
+                                return (
+                                  <>
+                                    {isInNOW ? (
+                                      <button 
+                                        className="btn btn-sm btn-warning"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToToday(item.task.id, 'task');
+                                        }}
+                                        title="Task is in NOW - move back to Today (P5)"
+                                        style={{ marginLeft: 'auto' }}
+                                      >
+                                        ← Today
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        className="btn btn-sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToNow(item.task.id, 'task');
+                                        }}
+                                        title="Move to NOW tab (P1)"
+                                        style={{
+                                          marginLeft: 'auto',
+                                          backgroundColor: '#dc2626',
+                                          color: 'white',
+                                          padding: '6px 12px',
+                                          fontSize: '12px',
+                                          borderRadius: '6px',
+                                          border: 'none',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        → NOW
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                            
+                            {/* Line 2: Category, frequency badge, and detailed stats */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
+                                {item.task.pillar_name} - {item.task.category_name}
+                              </span>
+                              <span style={{ 
+                                fontSize: '10px', 
+                                padding: '2px 6px', 
+                                backgroundColor: '#e2e8f0', 
+                                borderRadius: '10px',
+                                color: '#4a5568'
+                              }}>
+                                {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : 'Monthly'}
+                              </span>
+                              {item.weeklyIssue && (
+                                <span style={{ fontSize: '12px', color: '#718096' }}>
+                                  Target: <strong style={{ color: '#e53e3e' }}>{item.weeklyIssue.dailyTarget}</strong> |
+                                  Current: <strong style={{ color: '#10b981' }}>{item.weeklyIssue.currentAverage}</strong> |
+                                  Need Today: <strong style={{ color: '#dc2626' }}>{item.weeklyIssue.neededToday}</strong> {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} |
+                                  📅 {item.weeklyIssue.redDays}/{item.weeklyIssue.totalDays} red | Lag: {item.weeklyIssue.deficit || 0}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => setActiveTab('weekly')}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  marginLeft: 'auto'
+                                }}
+                              >
+                                View Weekly →
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              {todayTabSections.todaysHabits && (
-                <div style={{ marginTop: '12px' }}>
-                  {todaysHabits.map((habit) => (
+                {/* Monthly Tasks Needing Attention */}
+                {monthlyTasks.length > 0 && (
+                  <div style={{ marginBottom: '20px' }}>
                     <div 
-                      key={habit.id}
-                      style={{
-                        marginBottom: '8px',
-                        padding: '12px 16px',
-                        backgroundColor: '#fff',
-                        border: '1px solid #fed7aa',
-                        borderLeft: '4px solid #f97316',
-                        borderRadius: '6px',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 6px rgba(245, 158, 11, 0.3)',
                       }}
+                      onClick={() => setTodayTabSections(prev => ({ ...prev, monthlyNeedsAttention: !prev.monthlyNeedsAttention }))}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                        <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
-                          {habit.name}
-                        </span>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button
-                            onClick={async () => {
-                              if (!habit.completed_today) {
-                                try {
-                                  await api.post(`/api/habits/${habit.id}/mark`, {
-                                    entry_date: new Date().toISOString().split('T')[0],
-                                    is_successful: true
-                                  });
-                                  await loadTodaysHabits();
-                                } catch (err) {
-                                  alert('Failed to mark habit');
-                                }
-                              }
-                            }}
-                            disabled={habit.completed_today}
+                      <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
+                        📊 Needs Attention - Monthly Tasks ({monthlyTasks.length} {monthlyTasks.length === 1 ? 'task' : 'tasks'})
+                      </h3>
+                      <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                        {todayTabSections.monthlyNeedsAttention ? '▼' : '▶'}
+                      </span>
+                    </div>
+
+                    {todayTabSections.monthlyNeedsAttention && (
+                      <div style={{ marginTop: '12px' }}>
+                        {monthlyTasks.map((item, index) => (
+                          <div 
+                            key={item.task.id}
                             style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: habit.completed_today ? '#9ca3af' : '#10b981',
-                              color: 'white',
-                              border: 'none',
+                              marginBottom: '6px',
+                              padding: '10px 14px',
+                              backgroundColor: '#fff',
+                              border: '1px solid #bbdefb',
+                              borderLeft: '4px solid #2196f3',
                               borderRadius: '4px',
-                              cursor: habit.completed_today ? 'not-allowed' : 'pointer',
-                              fontWeight: '600'
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                             }}
                           >
-                            {habit.completed_today ? '✓ Done Today' : 'Mark Done'}
-                          </button>
-                        </div>
+                            {/* Line 1: Task name, Need Today prominently displayed */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
+                                {item.task.name}
+                              </span>
+                              {item.monthlyIssue && (
+                                <span style={{ fontSize: '14px', color: '#d97706', fontWeight: '600' }}>
+                                  Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
+                                </span>
+                              )}
+                              {(() => {
+                                const priority = item.task.priority;
+                                const isInNOW = priority && priority <= 3;
+                                return (
+                                  <>
+                                    {isInNOW ? (
+                                      <button 
+                                        className="btn btn-sm btn-warning"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToToday(item.task.id, 'task');
+                                        }}
+                                        title="Task is in NOW - move back to Today (P5)"
+                                        style={{ marginLeft: 'auto' }}
+                                      >
+                                        ← Today
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        className="btn btn-sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToNow(item.task.id, 'task');
+                                        }}
+                                        title="Move to NOW tab (P1)"
+                                        style={{
+                                          marginLeft: 'auto',
+                                          backgroundColor: '#dc2626',
+                                          color: 'white',
+                                          padding: '6px 12px',
+                                          fontSize: '12px',
+                                          borderRadius: '6px',
+                                          border: 'none',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        → NOW
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                            
+                            {/* Line 2: Category, frequency badge, and detailed stats */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
+                                {item.task.pillar_name} - {item.task.category_name}
+                              </span>
+                              <span style={{ 
+                                fontSize: '10px', 
+                                padding: '2px 6px', 
+                                backgroundColor: '#e2e8f0', 
+                                borderRadius: '10px',
+                                color: '#4a5568'
+                              }}>
+                                {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : 'Monthly'}
+                              </span>
+                              {item.monthlyIssue && (
+                                <span style={{ fontSize: '12px', color: '#718096' }}>
+                                  Target: <strong style={{ color: '#f59e0b' }}>{item.monthlyIssue.dailyTarget}</strong> |
+                                  Current: <strong style={{ color: '#10b981' }}>{item.monthlyIssue.currentAverage}</strong> |
+                                  📊 {Math.round(item.monthlyIssue.totalSpent)}/{Math.round(item.monthlyIssue.expectedTarget)}
+                                </span>
+                              )}
+                              <button
+                                onClick={() => setActiveTab('monthly')}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  marginLeft: 'auto'
+                                }}
+                              >
+                                View Monthly →
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div style={{ fontSize: '12px', color: '#718096' }}>
-                        🔥 {habit.current_streak} day streak | 
-                        {habit.pillar_name && ` ${habit.pillar_name} - ${habit.category_name}`}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    )}
+                  </div>
+                )}
+              </>
+            );
+          })()}
 
           {/* Today's Challenges Section */}
           {todaysChallenges.length > 0 && (
@@ -13243,102 +13344,6 @@ export default function Tasks() {
             </div>
           )}
 
-          {/* Upcoming Tasks Section */}
-          {upcomingTasks.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
-              <div 
-                onClick={() => setTodayTabSections(prev => ({ ...prev, upcomingTasks: !prev.upcomingTasks }))}
-                style={{
-                  background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                  padding: '14px 20px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
-                }}
-              >
-                <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📆</span>
-                  <span>Upcoming Tasks (Next 7 Days) ({upcomingTasks.length})</span>
-                </h3>
-                <span style={{ fontSize: '20px', color: '#ffffff' }}>
-                  {todayTabSections.upcomingTasks ? '▼' : '▶'}
-                </span>
-              </div>
-
-              {todayTabSections.upcomingTasks && (
-                <div style={{ marginTop: '12px' }}>
-                  {upcomingTasks.map((task) => {
-                    const daysUntil = task.due_date ? Math.ceil((new Date(task.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 0;
-                    
-                    return (
-                      <div 
-                        key={task.id}
-                        style={{
-                          marginBottom: '8px',
-                          padding: '12px 16px',
-                          backgroundColor: '#fff',
-                          border: '1px solid #c7d2fe',
-                          borderLeft: '4px solid #6366f1',
-                          borderRadius: '6px',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
-                            {task.name}
-                          </span>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            {getNowTaskCount() < 3 ? (
-                              <button
-                                onClick={() => handleMoveToNow(task.id, 'task')}
-                                style={{
-                                  padding: '6px 12px',
-                                  fontSize: '12px',
-                                  backgroundColor: '#dc2626',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontWeight: '600'
-                                }}
-                              >
-                                NOW
-                              </button>
-                            ) : null}
-                            <button
-                              onClick={() => {
-                                setSelectedTaskId(task.id);
-                                setIsTaskFormOpen(true);
-                              }}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                backgroundColor: '#3b82f6',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer'
-                              }}
-                            >
-                              Edit
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#718096' }}>
-                          {task.pillar_name} - {task.category_name} | 
-                          <span style={{ color: '#6366f1', fontWeight: '600' }}> 📅 Due in {daysUntil} {daysUntil === 1 ? 'day' : 'days'}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
           
         </div>
       )}
@@ -13349,21 +13354,42 @@ export default function Tasks() {
           {/* Compact Active Habits */}
           {todaysHabits.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
-              <h3 style={{ 
-                marginBottom: '12px', 
-                color: '#2d3748', 
-                fontSize: '18px', 
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <span>🔥</span>
-                <span>Today's Habits</span>
-                <span style={{ fontSize: '13px', fontWeight: '400', color: '#718096' }}>({todaysHabits.length})</span>
-              </h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {todaysHabits.map(habit => (
+              <div
+                onClick={() => setTodayTabSections(prev => ({ ...prev, todaysHabits: !prev.todaysHabits }))}
+                style={{
+                  marginBottom: '12px',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  userSelect: 'none'
+                }}
+              >
+                <h3 style={{ 
+                  margin: 0,
+                  color: '#ffffff', 
+                  fontSize: '18px', 
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span>🔥</span>
+                  <span>Habits Needing Attention (2+ Days Missed)</span>
+                  <span style={{ fontSize: '13px', fontWeight: '400', opacity: 0.9 }}>({todaysHabits.length})</span>
+                </h3>
+                <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                  {todayTabSections.todaysHabits ? '▼' : '▶'}
+                </span>
+              </div>
+              
+              {todayTabSections.todaysHabits && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {todaysHabits.map(habit => (
                   <div
                     key={habit.id}
                     style={{
@@ -13597,7 +13623,8 @@ export default function Tasks() {
                     )}
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -13913,42 +13940,75 @@ export default function Tasks() {
 
             return (
               <div style={{ marginTop: '24px' }}>
-                <h3 style={{ 
-                  marginBottom: '12px', 
-                  color: '#2d3748', 
-                  fontSize: '18px', 
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <span>📅</span>
-                  <span>Upcoming Tasks</span>
-                  <span style={{ fontSize: '13px', fontWeight: '400', color: '#718096' }}>
-                    ({upcomingWeekTasks.length + upcomingMonthTasks.length})
+                <div
+                  onClick={() => setTodayTabSections(prev => ({ ...prev, upcomingTasks: !prev.upcomingTasks }))}
+                  style={{
+                    marginBottom: '12px',
+                    padding: '14px 20px',
+                    background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    userSelect: 'none'
+                  }}
+                >
+                  <h3 style={{ 
+                    margin: 0,
+                    color: '#ffffff', 
+                    fontSize: '18px', 
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span>📅</span>
+                    <span>Upcoming Tasks</span>
+                    <span style={{ fontSize: '13px', fontWeight: '400', opacity: 0.9 }}>
+                      ({upcomingWeekTasks.length + upcomingMonthTasks.length})
+                    </span>
+                  </h3>
+                  <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                    {todayTabSections.upcomingTasks ? '▼' : '▶'}
                   </span>
-                </h3>
+                </div>
 
-                {/* Next 7 Days */}
-                {upcomingWeekTasks.length > 0 && (
+                {todayTabSections.upcomingTasks && (
+                  <div>
+                    {/* Next 7 Days */}
+                    {upcomingWeekTasks.length > 0 && (
                   <div style={{ marginBottom: '16px' }}>
-                    <h4 style={{
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#4a5568',
-                      marginBottom: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
+                    <div
+                      onClick={() => setTodayTabSections(prev => ({ ...prev, upcomingNext7Days: !prev.upcomingNext7Days }))}
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#4a5568',
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        padding: '8px 12px',
+                        backgroundColor: '#f7fafc',
+                        borderRadius: '6px',
+                        userSelect: 'none'
+                      }}
+                    >
                       <span>🔜</span>
                       <span>Next 7 Days</span>
                       <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
                         ({upcomingWeekTasks.length})
                       </span>
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {upcomingWeekTasks.map(task => {
+                      <span style={{ marginLeft: 'auto', fontSize: '16px' }}>
+                        {todayTabSections.upcomingNext7Days ? '▼' : '▶'}
+                      </span>
+                    </div>
+                    {todayTabSections.upcomingNext7Days && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {upcomingWeekTasks.map(task => {
                         const dueDate = new Date(task.due_date!);
                         const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
                         const urgencyColor = daysUntilDue <= 2 ? '#ef4444' : daysUntilDue <= 4 ? '#f59e0b' : '#10b981';
@@ -13966,16 +14026,12 @@ export default function Tasks() {
                               borderLeft: `4px solid ${urgencyColor}`,
                               borderRadius: '8px',
                               boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                              transition: 'all 0.2s ease',
-                              cursor: 'pointer'
+                              transition: 'all 0.2s ease'
                             }}
-                            onClick={() => handleTaskClick(task.id)}
                             onMouseEnter={e => {
-                              e.currentTarget.style.transform = 'translateX(4px)';
                               e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.12)';
                             }}
                             onMouseLeave={e => {
-                              e.currentTarget.style.transform = 'translateX(0)';
                               e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
                             }}
                           >
@@ -14029,53 +14085,140 @@ export default function Tasks() {
                               </div>
                             </div>
 
-                            {/* Due date badge */}
-                            <div style={{
-                              padding: '6px 12px',
-                              backgroundColor: `${urgencyColor}15`,
-                              border: `1px solid ${urgencyColor}`,
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: '600',
-                              color: urgencyColor,
-                              whiteSpace: 'nowrap',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              flexShrink: 0
-                            }}>
-                              <span>📅</span>
-                              <span>
-                                {daysUntilDue === 1 ? 'Tomorrow' : `${daysUntilDue} days`}
-                              </span>
+                            {/* Due date picker */}
+                            <input
+                              type="date"
+                              value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                              onChange={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await api.patch(`/api/tasks/${task.id}`, { due_date: e.target.value });
+                                  await loadTasks();
+                                } catch (err: any) {
+                                  console.error('Error updating due date:', err);
+                                  alert('Failed to update due date');
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '12px',
+                                border: `1px solid ${urgencyColor}`,
+                                borderRadius: '6px',
+                                backgroundColor: `${urgencyColor}15`,
+                                color: urgencyColor,
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                flexShrink: 0
+                              }}
+                            />
+
+                            {/* Action buttons */}
+                            <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                              {getNowTaskCount() < 3 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveToNow(task.id, 'task');
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  NOW
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTaskId(task.id);
+                                  setIsTaskFormOpen(true);
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm('Are you sure you want to delete this task?')) {
+                                    try {
+                                      await api.delete(`/api/tasks/${task.id}`);
+                                      await loadTasks();
+                                    } catch (err: any) {
+                                      console.error('Error deleting task:', err);
+                                      alert('Failed to delete task');
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Delete
+                              </button>
                             </div>
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* This Month */}
                 {upcomingMonthTasks.length > 0 && (
                   <div>
-                    <h4 style={{
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      color: '#4a5568',
-                      marginBottom: '8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px'
-                    }}>
+                    <div
+                      onClick={() => setTodayTabSections(prev => ({ ...prev, upcomingThisMonth: !prev.upcomingThisMonth }))}
+                      style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#4a5568',
+                        marginBottom: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                        padding: '8px 12px',
+                        backgroundColor: '#f7fafc',
+                        borderRadius: '6px',
+                        userSelect: 'none'
+                      }}
+                    >
                       <span>📆</span>
                       <span>This Month</span>
                       <span style={{ fontSize: '12px', fontWeight: '400', color: '#718096' }}>
                         ({upcomingMonthTasks.length})
                       </span>
-                    </h4>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {upcomingMonthTasks.map(task => {
+                      <span style={{ marginLeft: 'auto', fontSize: '16px' }}>
+                        {todayTabSections.upcomingThisMonth ? '▼' : '▶'}
+                      </span>
+                    </div>
+                    {todayTabSections.upcomingThisMonth && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {upcomingMonthTasks.map(task => {
                         const dueDate = new Date(task.due_date!);
                         
                         return (
@@ -14090,16 +14233,12 @@ export default function Tasks() {
                               border: '1px solid #e2e8f0',
                               borderRadius: '8px',
                               boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                              transition: 'all 0.2s ease',
-                              cursor: 'pointer'
+                              transition: 'all 0.2s ease'
                             }}
-                            onClick={() => handleTaskClick(task.id)}
                             onMouseEnter={e => {
-                              e.currentTarget.style.transform = 'translateX(4px)';
                               e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.12)';
                             }}
                             onMouseLeave={e => {
-                              e.currentTarget.style.transform = 'translateX(0)';
                               e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
                             }}
                           >
@@ -14153,27 +14292,107 @@ export default function Tasks() {
                               </div>
                             </div>
 
-                            {/* Due date */}
-                            <div style={{
-                              padding: '6px 12px',
-                              backgroundColor: '#f3f4f6',
-                              borderRadius: '12px',
-                              fontSize: '11px',
-                              fontWeight: '600',
-                              color: '#4b5563',
-                              whiteSpace: 'nowrap',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              flexShrink: 0
-                            }}>
-                              <span>📅</span>
-                              <span>{dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            {/* Due date picker */}
+                            <input
+                              type="date"
+                              value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                              onChange={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await api.patch(`/api/tasks/${task.id}`, { due_date: e.target.value });
+                                  await loadTasks();
+                                } catch (err: any) {
+                                  console.error('Error updating due date:', err);
+                                  alert('Failed to update due date');
+                                }
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              style={{
+                                padding: '6px 10px',
+                                fontSize: '12px',
+                                border: '1px solid #9ca3af',
+                                borderRadius: '6px',
+                                backgroundColor: '#f3f4f6',
+                                color: '#4b5563',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                flexShrink: 0
+                              }}
+                            />
+
+                            {/* Action buttons */}
+                            <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                              {getNowTaskCount() < 3 && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleMoveToNow(task.id, 'task');
+                                  }}
+                                  style={{
+                                    padding: '6px 12px',
+                                    fontSize: '12px',
+                                    backgroundColor: '#dc2626',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  NOW
+                                </button>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTaskId(task.id);
+                                  setIsTaskFormOpen(true);
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#3b82f6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm('Are you sure you want to delete this task?')) {
+                                    try {
+                                      await api.delete(`/api/tasks/${task.id}`);
+                                      await loadTasks();
+                                    } catch (err: any) {
+                                      console.error('Error deleting task:', err);
+                                      alert('Failed to delete task');
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  padding: '6px 12px',
+                                  fontSize: '12px',
+                                  backgroundColor: '#ef4444',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                Delete
+                              </button>
                             </div>
                           </div>
                         );
                       })}
-                    </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                   </div>
                 )}
               </div>
