@@ -532,6 +532,7 @@ export default function Tasks() {
   const [habitEntries, setHabitEntries] = useState<HabitEntry[]>([]);
   const [habitStreaks, setHabitStreaks] = useState<HabitStreak[]>([]);
   const [showAddHabitModal, setShowAddHabitModal] = useState(false);
+  const [showEditHabitModal, setShowEditHabitModal] = useState(false);
   const [showHabitDetailsModal, setShowHabitDetailsModal] = useState(false);
   const [editingHabit, setEditingHabit] = useState<HabitData | null>(null);
   const [habitMarkDate, setHabitMarkDate] = useState<Record<number, string>>({});
@@ -891,16 +892,21 @@ export default function Tasks() {
   // Load habits function
   const loadHabits = async () => {
     try {
+      console.log('🔄 loadHabits() called - fetching habits...');
       // Load active habits
       const response: any = await api.get('/api/habits/');
       const data = response.data || response;
+      console.log('✅ Active habits API response:', data);
       const habitsList = Array.isArray(data) ? data : [];
+      console.log('✅ Setting active habits count:', habitsList.length, habitsList.map((h: any) => ({ id: h.id, name: h.name, is_active: h.is_active })));
       setHabits(habitsList);
       
       // Load completed habits (inactive habits)
       const completedResponse: any = await api.get('/api/habits/?active_only=false');
       const completedData = completedResponse.data || completedResponse;
+      console.log('✅ All habits API response:', completedData);
       const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => !h.is_active) : [];
+      console.log('✅ Setting completed habits count:', completedList.length, completedList.map((h: any) => ({ id: h.id, name: h.name, is_active: h.is_active })));
       setCompletedHabits(completedList);
       
       // Reset selected month to current month when loading habits
@@ -8072,17 +8078,16 @@ export default function Tasks() {
             </div>
           ) : (
             <div 
-              className="habits-grid" 
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
+                display: 'flex',
+                flexDirection: 'column',
                 gap: '20px',
                 width: '100%',
                 marginTop: '20px'
               }}
             >
               {habits.filter((habit) => {
-                // Filter habits: only show if they were active during the selected month
+                // Filter habits: only show ACTIVE habits (no end_date) that were active during the selected month
                 const selectedMonthStart = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth(), 1);
                 selectedMonthStart.setHours(0, 0, 0, 0);
                 const selectedMonthEnd = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth() + 1, 0);
@@ -8091,13 +8096,13 @@ export default function Tasks() {
                 const habitStart = habit.start_date ? new Date(habit.start_date) : null;
                 const habitEnd = habit.end_date ? new Date(habit.end_date) : null;
                 
-                // Show habit if:
-                // 1. It started before or during the selected month, AND
-                // 2. It hasn't ended, OR it ended after the selected month started
-                const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;
-                const notEndedOrEndedAfterMonthStart = !habitEnd || habitEnd >= selectedMonthStart;
+                // Exclude completed habits (with end_date)
+                if (habitEnd) return false;
                 
-                return startedBeforeOrDuringMonth && notEndedOrEndedAfterMonthStart;
+                // Show habit if it started before or during the selected month
+                const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;
+                
+                return startedBeforeOrDuringMonth;
               }).map((habit) => {
                 const periodStats = currentPeriodStats[habit.id];
                 const trackingMode = habit.tracking_mode || 'daily_streak';
@@ -8126,459 +8131,45 @@ export default function Tasks() {
                   e.currentTarget.style.transform = 'translateY(0)';
                 }}
                 >
-                  <div style={{ marginBottom: '15px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                      <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', flex: 1 }}>
-                        {habit.name}
-                      </h3>
+                  {/* Habit Name with Pillar-Category */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>
+                      {habit.name}
                       {habit.pillar_name && (
                         <span style={{
-                          padding: '4px 10px',
-                          backgroundColor: pillarColor,
-                          color: 'white',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: '600',
-                          flexShrink: 0
+                          fontSize: '14px',
+                          fontWeight: '500',
+                          color: '#718096',
+                          marginLeft: '8px'
                         }}>
-                          {habit.pillar_name}
-                          {habit.category_name && `: ${habit.category_name}`}
-                          {' • '}
-                          {habit.target_comparison === 'at_least' ? `${habit.target_value}+ ` : 
-                           habit.target_comparison === 'at_most' ? `≤${habit.target_value} ` :
-                           habit.target_comparison === 'exactly' ? `${habit.target_value} ` : 
-                           `${habit.target_value} `}
-                          {habit.unit || 'times'}
-                          {habit.period_type === 'weekly' ? '/week' : 
-                           habit.period_type === 'monthly' ? '/month' : '/day'}
+                          ({habit.pillar_name}{habit.category_name && ` - ${habit.category_name}`})
                         </span>
                       )}
-                    </div>
-                    {habit.description && (
-                      <p style={{ margin: '0', fontSize: '14px', color: '#666' }}>
-                        {habit.description}
-                      </p>
-                    )}
-                    {showPeriodTracking && (
-                      <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-                        📅 {habit.period_type === 'weekly' ? 'Weekly' : 'Monthly'} • 
-                        {trackingMode === 'occurrence' && ' Simple tracking'}
-                        {trackingMode === 'occurrence_with_value' && ' Value tracking'}
-                        {trackingMode === 'aggregate' && ' Aggregate total'}
-                      </div>
-                    )}
+                    </h3>
                   </div>
-
-                  {/* Traditional streak display for daily habits */}
-                  {!showPeriodTracking && (
-                    <div style={{ 
-                      padding: '15px',
-                      backgroundColor: '#f7fafc',
-                      borderRadius: '6px',
-                      marginBottom: '15px'
-                    }}>
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>Current Streak:</div>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#e53e3e' }}>
-                          🔥 {habit.stats?.current_streak || 0} days
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>Best Streak:</div>
-                        <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#3182ce' }}>
-                          🏆 {habit.stats?.top_3_streaks?.[0]?.streak_length || habit.stats?.longest_streak || 0} days
-                        </div>
-                      </div>
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>2nd Best Streak:</div>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#805ad5' }}>
-                          🥈 {habit.stats?.top_3_streaks?.[1]?.streak_length || 0} days
-                        </div>
-                      </div>
-                      <div>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>Success Rate:</div>
-                        <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#38a169' }}>
-                          ✅ {habit.stats?.success_rate || 0}%
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Period-based tracking display */}
-                  {showPeriodTracking && (
-                    <div style={{ marginBottom: '15px' }}>
-                      {!periodStats ? (
-                        <div style={{ textAlign: 'center', padding: '20px' }}>
-                          <button
-                            className="btn btn-secondary"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const stats = await loadPeriodStats(habit.id);
-                              if (!stats || stats.sessions.length === 0) {
-                                await initializePeriod(habit.id);
-                              }
-                            }}
-                          >
-                            Load {habit.period_type === 'weekly' ? 'This Week' : 'This Month'}
-                          </button>
-                        </div>
-                      ) : trackingMode === 'occurrence' || trackingMode === 'occurrence_with_value' ? (
-                        <div>
-                          {/* Session checkboxes */}
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(80px, 1fr))',
-                            gap: '10px',
-                            marginBottom: '15px'
-                          }}>
-                            {periodStats.sessions.map((session) => (
-                              <div key={session.id} style={{
-                                padding: '10px',
-                                border: session.is_completed ? '2px solid #48bb78' : '2px solid #e2e8f0',
-                                borderRadius: '6px',
-                                backgroundColor: session.is_completed ? '#f0fff4' : 'white',
-                                textAlign: 'center',
-                                cursor: 'pointer'
-                              }}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (!session.is_completed) {
-                                  if (trackingMode === 'occurrence_with_value') {
-                                    const value = prompt(`Enter ${habit.session_target_unit || 'value'} for session ${session.session_number}:`);
-                                    if (value) {
-                                      await markSessionComplete(session.id, parseInt(value));
-                                    }
-                                  } else {
-                                    await markSessionComplete(session.id);
-                                  }
-                                }
-                              }}
-                              >
-                                <div style={{ fontSize: '20px', marginBottom: '4px' }}>
-                                  {session.is_completed ? '✅' : '☐'}
-                                </div>
-                                <div style={{ fontSize: '11px', color: '#666' }}>
-                                  #{session.session_number}
-                                </div>
-                                {trackingMode === 'occurrence_with_value' && session.value_achieved && (
-                                  <div style={{ 
-                                    fontSize: '12px', 
-                                    fontWeight: 'bold',
-                                    color: session.meets_target ? '#38a169' : '#ed8936',
-                                    marginTop: '4px'
-                                  }}>
-                                    {session.value_achieved}
-                                    {session.meets_target ? ' ⭐' : ' ⚠️'}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Progress stats */}
-                          <div style={{
-                            padding: '12px',
-                            backgroundColor: '#f7fafc',
-                            borderRadius: '6px',
-                            fontSize: '14px'
-                          }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                              <span>Progress:</span>
-                              <span style={{ fontWeight: 'bold' }}>
-                                {periodStats.completed_count} / {periodStats.target_count} 
-                                ({Math.round(periodStats.success_percentage)}%)
-                              </span>
-                            </div>
-                            {trackingMode === 'occurrence_with_value' && periodStats.quality_percentage !== undefined && (
-                              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                <span>Quality:</span>
-                                <span style={{ fontWeight: 'bold', color: periodStats.quality_percentage >= 75 ? '#38a169' : '#ed8936' }}>
-                                  {Math.round(periodStats.quality_percentage)}%
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      ) : trackingMode === 'aggregate' ? (
-                        <div>
-                          {/* Progress bar */}
-                          <div style={{ marginBottom: '15px' }}>
-                            <div style={{
-                              width: '100%',
-                              height: '30px',
-                              backgroundColor: '#e2e8f0',
-                              borderRadius: '15px',
-                              overflow: 'hidden',
-                              position: 'relative'
-                            }}>
-                              <div style={{
-                                width: `${Math.min(periodStats.success_percentage, 100)}%`,
-                                height: '100%',
-                                backgroundColor: periodStats.success_percentage >= 100 ? '#48bb78' : '#3182ce',
-                                transition: 'width 0.3s ease',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: '13px'
-                              }}>
-                                {Math.round(periodStats.success_percentage)}%
-                              </div>
-                            </div>
-                            <div style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              marginTop: '8px',
-                              fontSize: '13px',
-                              color: '#666'
-                            }}>
-                              <span>{periodStats.aggregate_achieved} {habit.session_target_unit}</span>
-                              <span>Goal: {periodStats.aggregate_target} {habit.session_target_unit}</span>
-                            </div>
-                          </div>
-
-                          {/* Add value input */}
-                          <div style={{ display: 'flex', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
-                            <input
-                              type="number"
-                              placeholder={`Add ${habit.session_target_unit || 'value'}`}
-                              style={{
-                                flex: 1,
-                                padding: '8px 12px',
-                                border: '1px solid #e2e8f0',
-                                borderRadius: '6px',
-                                fontSize: '14px'
-                              }}
-                              onKeyPress={async (e) => {
-                                if (e.key === 'Enter') {
-                                  const input = e.currentTarget;
-                                  const value = parseInt(input.value);
-                                  if (value && value > 0) {
-                                    await addToAggregate(habit.id, value);
-                                    input.value = '';
-                                  }
-                                }
-                              }}
-                            />
-                            <button
-                              className="btn btn-sm btn-primary"
-                              style={{ padding: '8px 16px' }}
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                const input = (e.currentTarget.previousSibling as HTMLInputElement);
-                                const value = parseInt(input.value);
-                                if (value && value > 0) {
-                                  await addToAggregate(habit.id, value);
-                                  input.value = '';
-                                }
-                              }}
-                            >
-                              Add
-                            </button>
-                          </div>
-
-                          {/* Pace info */}
-                          <div style={{
-                            marginTop: '10px',
-                            padding: '8px',
-                            backgroundColor: '#f7fafc',
-                            borderRadius: '4px',
-                            fontSize: '12px',
-                            color: '#666'
-                          }}>
-                            {periodStats.days_remaining > 0 && periodStats.aggregate_target ? (
-                              <>
-                                📊 {periodStats.days_remaining} days left • 
-                                Need {Math.ceil((periodStats.aggregate_target - periodStats.aggregate_achieved) / periodStats.days_remaining)} 
-                                {' '}{habit.session_target_unit}/day
-                              </>
-                            ) : (
-                              '✨ Period ending soon!'
-                            )}
-                          </div>
-                        </div>
-                      ) : null}
-                    </div>
-                  )}
 
                   {/* Quick action buttons for daily habits */}
                   {!showPeriodTracking && (
                     <>
-                      {/* Compact stats row: Current streak, Best, Second best, Success rate */}
-                      <div style={{ 
-                        display: 'flex', 
-                        justifyContent: 'space-between',
-                        gap: '8px',
-                        marginBottom: '12px',
-                        padding: '8px',
-                        backgroundColor: '#f7fafc',
-                        borderRadius: '6px',
-                        fontSize: '11px'
-                      }}>
-                        <div style={{ textAlign: 'center', flex: 1 }}>
-                          <div style={{ color: '#718096', marginBottom: '2px' }}>Current</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: habit.stats?.current_streak || 0 > 0 ? '#48bb78' : '#718096' }}>
-                            {habit.stats?.current_streak || 0} 🔥
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center', flex: 1 }}>
-                          <div style={{ color: '#718096', marginBottom: '2px' }}>Best</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#f6ad55' }}>
-                            {habit.stats?.top_3_streaks?.[0]?.streak_length || habit.stats?.longest_streak || 0}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center', flex: 1 }}>
-                          <div style={{ color: '#718096', marginBottom: '2px' }}>2nd Best</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#ed8936' }}>
-                            {habit.stats?.top_3_streaks?.[1]?.streak_length || 0}
-                          </div>
-                        </div>
-                        <div style={{ textAlign: 'center', flex: 1 }}>
-                          <div style={{ color: '#718096', marginBottom: '2px' }}>Success</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#38a169' }}>
-                            {habit.stats?.success_rate || 0}%
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Bottom row: Auto-track info + Date selector + Action buttons */}
-                      <div style={{ 
-                        display: 'flex', 
-                        gap: '8px',
-                        marginBottom: '12px',
-                        alignItems: 'center',
-                        flexWrap: 'wrap'
-                      }}>
-                        {/* Auto-tracked info - compact box */}
-                        {habit.linked_task_id && habit.linked_task_name ? (
-                          <div style={{ 
-                            flex: '1 1 auto',
-                            minWidth: '200px',
-                            padding: '8px', 
-                            backgroundColor: '#e6fffa',
-                            border: '1px solid #81e6d9',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            color: '#234e52'
-                          }}>
-                            <div style={{ fontWeight: 'bold' }}>🔗 Auto-tracked</div>
-                            <div style={{ fontSize: '10px', color: '#2c7a7b' }}>from: {habit.linked_task_name}</div>
-                          </div>
-                        ) : (
-                          <div style={{ 
-                            flex: '1 1 auto',
-                            minWidth: '150px',
-                            padding: '8px', 
-                            backgroundColor: '#f7fafc',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                            color: '#718096'
-                          }}>
-                            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '600' }}>
-                              Mark for date:
-                            </label>
-                            <input 
-                              type="date"
-                              value={habitMarkDate[habit.id] || formatDateForInput(new Date())}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                setHabitMarkDate({ ...habitMarkDate, [habit.id]: e.target.value });
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                              max={formatDateForInput(new Date())}
-                              style={{
-                                width: '100%',
-                                padding: '4px',
-                                border: '1px solid #cbd5e0',
-                                borderRadius: '3px',
-                                fontSize: '11px'
-                              }}
-                            />
-                          </div>
-                        )}
-
-                        {/* Action buttons - Edit, Mark Complete, Delete */}
-                        <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
-                          <button
-                            className="btn btn-sm btn-secondary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedHabit(habit);
-                              setShowEditHabitModal(true);
-                            }}
-                            style={{ padding: '6px 10px', fontSize: '11px' }}
-                            title="Edit habit"
-                          >
-                            ✏️
-                          </button>
-                          {!habit.end_date && (
-                            <button
-                              className="btn btn-sm btn-success"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (confirm(`Mark habit "${habit.name}" as completed? This will set an end date to today.`)) {
-                                  try {
-                                    await api.put(`/api/habits/${habit.id}`, {
-                                      ...habit,
-                                      end_date: new Date().toISOString(),
-                                      is_active: false
-                                    });
-                                    await loadHabits();
-                                    alert('🎉 Congratulations! Habit marked as complete!');
-                                  } catch (err: any) {
-                                    console.error('Error completing habit:', err);
-                                    alert('Failed to complete habit: ' + (err.response?.data?.detail || err.message));
-                                  }
-                                }
-                              }}
-                              style={{ padding: '6px 10px', fontSize: '11px' }}
-                              title="Mark habit as done/complete"
-                            >
-                              ✅ Done
-                            </button>
-                          )}
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (confirm(`Delete habit "${habit.name}"?`)) {
-                                try {
-                                  await api.delete(`/api/habits/${habit.id}`);
-                                  await loadHabits();
-                                } catch (err: any) {
-                                  console.error('Error deleting habit:', err);
-                                  alert('Failed to delete habit: ' + (err.response?.data?.detail || err.message));
-                                }
-                              }
-                            }}
-                            style={{ padding: '6px 10px', fontSize: '11px' }}
-                            title="Delete habit"
-                          >
-                            🗑️
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Month navigation and visual tracker */}
+                      {/* Month navigation and visual tracker - MOVED TO TOP */}
                       {habitMonthDays[habit.id] && (
                         <div style={{ 
-                          marginBottom: '10px',
+                          marginBottom: '12px',
                           padding: '8px',
                           backgroundColor: '#f7fafc',
                           borderRadius: '6px',
                           border: '1px solid #e2e8f0'
                         }}>
-                          {/* Month navigation header */}
+                          {/* Month navigation header - aligned left */}
                           <div style={{ 
                             display: 'flex', 
-                            justifyContent: 'space-between', 
+                            justifyContent: 'flex-start', 
                             alignItems: 'center',
-                            marginBottom: '8px'
+                            gap: '12px',
+                            marginBottom: '10px'
                           }}>
                             <button
-                              className="btn btn-sm btn-secondary"
+                              className="btn btn-sm"
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const newMonth = new Date(habitSelectedMonth);
@@ -8586,17 +8177,34 @@ export default function Tasks() {
                                 setHabitSelectedMonth(newMonth);
                                 await loadHabitMonthDays(habit.id, newMonth);
                               }}
-                              style={{ padding: '4px 8px', fontSize: '11px' }}
+                              style={{ 
+                                padding: '6px 12px', 
+                                fontSize: '12px',
+                                backgroundColor: '#4299e1',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontWeight: '600',
+                                cursor: 'pointer'
+                              }}
                             >
                               ← Previous
                             </button>
                             
-                            <div style={{ fontSize: '12px', color: '#718096', fontWeight: '600' }}>
+                            <div style={{ 
+                              fontSize: '14px', 
+                              color: '#2d3748', 
+                              fontWeight: '700',
+                              padding: '6px 20px',
+                              backgroundColor: '#edf2f7',
+                              borderRadius: '6px',
+                              border: '2px solid #cbd5e0'
+                            }}>
                               {habitSelectedMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
                             </div>
                             
                             <button
-                              className="btn btn-sm btn-secondary"
+                              className="btn btn-sm"
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const today = new Date();
@@ -8615,60 +8223,53 @@ export default function Tasks() {
                                 return nextMonth.getFullYear() > today.getFullYear() || 
                                        (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
                               })()}
-                              style={{ padding: '4px 8px', fontSize: '11px' }}
+                              style={{ 
+                                padding: '6px 12px', 
+                                fontSize: '12px',
+                                backgroundColor: (() => {
+                                  const today = new Date();
+                                  const nextMonth = new Date(habitSelectedMonth);
+                                  nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                  const disabled = nextMonth.getFullYear() > today.getFullYear() || 
+                                         (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
+                                  return disabled ? '#cbd5e0' : '#4299e1';
+                                })(),
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                fontWeight: '600',
+                                cursor: (() => {
+                                  const today = new Date();
+                                  const nextMonth = new Date(habitSelectedMonth);
+                                  nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                  const disabled = nextMonth.getFullYear() > today.getFullYear() || 
+                                         (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
+                                  return disabled ? 'not-allowed' : 'pointer';
+                                })()
+                              }}
                             >
                               Next →
                             </button>
                           </div>
                           
-                          {/* Week day headers */}
+                          {/* All dates in one horizontal line */}
                           <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: 'repeat(7, 1fr)',
-                            gap: '3px',
-                            marginBottom: '4px'
-                          }}>
-                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                              <div key={day} style={{ 
-                                fontSize: '8px', 
-                                color: '#9ca3af',
-                                fontWeight: '600',
-                                textAlign: 'center'
-                              }}>
-                                {day}
-                              </div>
-                            ))}
-                          </div>
-                          
-                          {/* Calendar grid starting from Monday - smaller squares to fit all days */}
-                          <div style={{ 
-                            display: 'grid', 
-                            gridTemplateColumns: 'repeat(7, 1fr)',
-                            gap: '3px'
+                            display: 'flex',
+                            flexWrap: 'nowrap',
+                            gap: '4px',
+                            overflowX: 'auto',
+                            paddingBottom: '4px'
                           }}>
                             {(() => {
                               const year = habitSelectedMonth.getFullYear();
                               const month = habitSelectedMonth.getMonth();
-                              const firstDay = new Date(year, month, 1);
                               const today = new Date();
                               today.setHours(0, 0, 0, 0);
-                              
-                              // Get day of week (0=Sun, 1=Mon, ..., 6=Sat)
-                              // Convert to Monday-based (0=Mon, 1=Tue, ..., 6=Sun)
-                              let firstDayOfWeek = firstDay.getDay() - 1;
-                              if (firstDayOfWeek === -1) firstDayOfWeek = 6; // Sunday becomes 6
                               
                               const daysInMonth = new Date(year, month + 1, 0).getDate();
                               const cells = [];
                               
-                              // Add empty cells for days before month starts
-                              for (let i = 0; i < firstDayOfWeek; i++) {
-                                cells.push(
-                                  <div key={`empty-${i}`} style={{ width: '28px', height: '28px' }} />
-                                );
-                              }
-                              
-                              // Add cells for each day of the month
+                              // Add cells for each day of the month (1-31)
                               for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
                                 const dayData = habitMonthDays[habit.id].find((d: any) => d.dayNum === dayNum);
                                 
@@ -8708,28 +8309,29 @@ export default function Tasks() {
                                       display: 'flex',
                                       flexDirection: 'column',
                                       alignItems: 'center',
-                                      gap: '1px'
+                                      gap: '2px',
+                                      minWidth: '32px'
                                     }}
                                     title={tooltip}
                                   >
                                     <div style={{ 
-                                      fontSize: '7px', 
+                                      fontSize: '9px', 
                                       color: '#718096',
                                       fontWeight: isToday ? '700' : '500',
-                                      height: '10px'
+                                      height: '12px'
                                     }}>
                                       {dayNum}
                                     </div>
                                     <div style={{
-                                      width: '28px',
-                                      height: '28px',
+                                      width: '32px',
+                                      height: '32px',
                                       backgroundColor: bgColor,
                                       borderRadius: '4px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
                                       color: textColor,
-                                      fontSize: '14px',
+                                      fontSize: '16px',
                                       fontWeight: 'bold',
                                       boxShadow: isToday ? '0 0 0 2px #4299e1' : '0 1px 2px rgba(0,0,0,0.1)',
                                       border: isToday ? '2px solid white' : 'none',
@@ -8746,12 +8348,234 @@ export default function Tasks() {
                           </div>
                         </div>
                       )}
-                      
-                      {/* Disable manual entry if linked to task */}
-                      {!habit.linked_task_id && (
-                        <div style={{ display: 'flex', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
-                          <button 
+
+                      {/* Info boxes: Single row layout with streak, date, and buttons */}
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: '10px',
+                        alignItems: 'center',
+                        marginBottom: '12px'
+                      }}>
+                        {/* Auto-tracked info - two line box */}
+                        {habit.linked_task_id && habit.linked_task_name ? (
+                          <div style={{ 
+                            padding: '8px 12px', 
+                            backgroundColor: '#e6fffa',
+                            border: '1px solid #81e6d9',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            color: '#234e52',
+                            fontWeight: '600',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '2px'
+                          }}>
+                            <div style={{ fontSize: '9px', opacity: 0.8 }}>Linked Task:</div>
+                            <div>🔗 {habit.linked_task_name}</div>
+                          </div>
+                        ) : null}
+
+                        {/* Streak info box - one horizontal line, compact */}
+                        <div style={{ 
+                          padding: '10px 14px',
+                          backgroundColor: '#fef5e7',
+                          border: '2px solid #f9e79f',
+                          borderRadius: '8px',
+                          fontSize: '15px',
+                          color: '#7d6608',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Current:</span> 🔥 {habit.stats?.current_streak || 0}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Best:</span> 🏆 {habit.stats?.longest_streak || 0}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Success:</span> ✅ {habit.stats?.success_rate || 0}%</div>
+                        </div>
+
+                        {/* Start date and Days info - one horizontal line, same size */}
+                        <div style={{ 
+                          padding: '10px 14px',
+                          backgroundColor: '#f0f4ff',
+                          border: '2px solid #c3dafe',
+                          borderRadius: '8px',
+                          fontSize: '15px',
+                          color: '#2c5282',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> 📅 {new Date(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> 📊 {Math.floor((new Date().getTime() - new Date(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Entries:</span> ⚡ {habit.stats?.total_entries || 0}</div>
+                        </div>
+
+                        {/* Date selector for manual habits */}
+                        {!habit.linked_task_id && (
+                          <div style={{ 
+                            padding: '4px 8px',
+                            backgroundColor: '#f7fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '4px',
+                            fontSize: '10px'
+                          }}>
+                            <input 
+                              type="date"
+                              value={habitMarkDate[habit.id] || formatDateForInput(new Date())}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setHabitMarkDate({ ...habitMarkDate, [habit.id]: e.target.value });
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              max={formatDateForInput(new Date())}
+                              style={{
+                                padding: '3px',
+                                border: 'none',
+                                fontSize: '10px',
+                                backgroundColor: 'transparent'
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Action buttons - Edit, Mark Complete, Delete - with gap */}
+                        <div style={{ display: 'flex', gap: '4px', marginLeft: '16px' }}>
+                          <button
                             className="btn btn-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingHabit(habit);
+                              setShowAddHabitModal(true);
+                            }}
+                            style={{ 
+                              padding: '3px 8px', 
+                              fontSize: '11px',
+                              backgroundColor: '#667eea',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: '600'
+                            }}
+                            title="Edit habit"
+                          >
+                            ✏️ Edit
+                          </button>
+                          {!habit.end_date && (
+                            <button
+                              className="btn btn-sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (confirm(`Mark habit "${habit.name}" as completed? This will set an end date to today.`)) {
+                                  try {
+                                    const today = new Date().toISOString().split('T')[0];
+                                    const updatePayload = {
+                                      name: habit.name,
+                                      description: habit.description,
+                                      pillar_id: habit.pillar_id,
+                                      category_id: habit.category_id,
+                                      subcategory_id: habit.subcategory_id,
+                                      start_date: habit.start_date,
+                                      end_date: today,
+                                      is_active: false,
+                                      tracking_mode: habit.tracking_mode,
+                                      period_type: habit.period_type,
+                                      target_count: habit.target_count,
+                                      target_comparison: habit.target_comparison,
+                                      linked_task_id: habit.linked_task_id,
+                                      session_target_value: habit.session_target_value,
+                                      session_target_unit: habit.session_target_unit
+                                    };
+                                    await api.put(`/api/habits/${habit.id}`, updatePayload);
+                                    await loadHabits();
+                                    alert('🎉 Congratulations! Habit marked as complete!');
+                                  } catch (err: any) {
+                                    console.error('Error completing habit:', err);
+                                    const errorMsg = err.response?.data?.detail || err.message || JSON.stringify(err);
+                                    alert('Failed to complete habit: ' + errorMsg);
+                                  }
+                                }
+                              }}
+                              style={{ 
+                                padding: '3px 8px', 
+                                fontSize: '11px',
+                                backgroundColor: '#48bb78',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                              title="Mark habit as done/complete"
+                            >
+                              ✅ Done
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-sm"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm(`Complete habit "${habit.name}"? It will be moved to Completed Habits.`)) {
+                                try {
+                                  // Set end_date to mark as completed instead of deleting
+                                  const today = new Date().toISOString().split('T')[0];
+                                  const updatePayload = {
+                                    name: habit.name,
+                                    description: habit.description,
+                                    pillar_id: habit.pillar_id,
+                                    category_id: habit.category_id,
+                                    subcategory_id: habit.subcategory_id,
+                                    start_date: habit.start_date,
+                                    end_date: today,
+                                    is_active: false,
+                                    tracking_mode: habit.tracking_mode,
+                                    period_type: habit.period_type,
+                                    target_count: habit.target_count,
+                                    target_comparison: habit.target_comparison,
+                                    linked_task_id: habit.linked_task_id,
+                                    session_target_value: habit.session_target_value,
+                                    session_target_unit: habit.session_target_unit
+                                  };
+                                  await api.put(`/api/habits/${habit.id}`, updatePayload);
+                                  await loadHabits();
+                                  alert('✅ Habit moved to Completed section!');
+                                } catch (err: any) {
+                                  console.error('Error completing habit:', err);
+                                  const errorMsg = err.response?.data?.detail || err.message || JSON.stringify(err);
+                                  alert('Failed to complete habit: ' + errorMsg);
+                                }
+                              }
+                            }}
+                            style={{ 
+                              padding: '3px 8px', 
+                              fontSize: '11px',
+                              backgroundColor: '#fc8181',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: '600'
+                            }}
+                            title="Move to completed habits"
+                          >
+                            ✅ Complete
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Done/Missed buttons for manual habits */}
+                      {!habit.linked_task_id && (
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button
+                            className="btn btn-sm"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                              await handleMarkHabitEntry(habit.id, dateStr, true);
+                            }}
                             style={{ 
                               flex: 1,
                               padding: '10px',
@@ -8759,21 +8583,20 @@ export default function Tasks() {
                               color: 'white',
                               border: 'none',
                               borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              fontWeight: '500'
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
                             }}
-                            onClick={() => {
-                              const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
-                              handleMarkHabitEntry(habit.id, dateToMark, true);
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#38a169'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#48bb78'}
                           >
-                            ✅ Done
+                            ✓ Done
                           </button>
-                          <button 
+                          <button
                             className="btn btn-sm"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                              await handleMarkHabitEntry(habit.id, dateStr, false);
+                            }}
                             style={{ 
                               flex: 1,
                               padding: '10px',
@@ -8781,235 +8604,209 @@ export default function Tasks() {
                               color: 'white',
                               border: 'none',
                               borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              fontWeight: '500'
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              cursor: 'pointer'
                             }}
-                            onClick={() => {
-                              const dateToMark = habitMarkDate[habit.id] || formatDateForInput(new Date());
-                              handleMarkHabitEntry(habit.id, dateToMark, false);
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fc8181'}
                           >
-                            ❌ Missed
+                            ✗ Missed
                           </button>
                         </div>
                       )}
                     </>
                   )}
+                </div>
+              );
+            })}
 
-                  {habit.linked_task_name && (
-                    <div style={{ 
-                      marginTop: '12px', 
-                      padding: '8px', 
-                      backgroundColor: '#edf2f7',
+            {/* Completed Habits Section */}
+            {completedHabits.length > 0 && (
+              <div style={{ marginTop: '30px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                  <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#718096' }}>
+                    ✨ Completed Habits
+                  </h3>
+                  <button
+                    onClick={() => setShowCompletedHabits(!showCompletedHabits)}
+                    style={{
+                      padding: '4px 12px',
+                      backgroundColor: '#e2e8f0',
+                      color: '#4a5568',
+                      border: 'none',
                       borderRadius: '4px',
                       fontSize: '12px',
-                      color: '#4a5568'
-                    }}>
-                      🔗 Linked to: <strong>{habit.linked_task_name}</strong>
-                    </div>
-                  )}
-
-                  {/* Edit and Delete buttons */}
+                      fontWeight: '600',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {showCompletedHabits ? '▼ Hide' : '▶ Show'} ({completedHabits.length})
+                  </button>
+                </div>
+                {showCompletedHabits && (
                   <div style={{ 
-                    display: 'flex', 
-                    gap: '8px', 
-                    marginTop: '12px', 
-                    paddingTop: '12px',
-                    borderTop: '1px solid #e2e8f0'
-                  }} onClick={(e) => e.stopPropagation()}>
-                    <button 
-                      className="btn btn-sm"
-                      style={{ 
-                        flex: 1,
-                        padding: '8px',
-                        backgroundColor: '#3182ce',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                      onClick={() => {
-                        setEditingHabit(habit);
-                        setShowAddHabitModal(true);
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2c5282'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#3182ce'}
-                    >
-                      ✏️ Edit
-                    </button>
-                    <button 
-                      className="btn btn-sm"
-                      style={{ 
-                        flex: 1,
-                        padding: '8px',
-                        backgroundColor: '#e53e3e',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '13px',
-                        fontWeight: '500'
-                      }}
-                      onClick={async () => {
-                        if (window.confirm(`Delete habit "${habit.name}"? This action cannot be undone.`)) {
-                          try {
-                            await api.delete(`/api/habits/${habit.id}`);
-                            loadHabits();
-                          } catch (err) {
-                            console.error('Error deleting habit:', err);
-                            alert('Failed to delete habit');
-                          }
-                        }
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#c53030'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#e53e3e'}
-                    >
-                      🗑️ Delete
-                    </button>
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          )}
-          
-          {/* Completed Habits Section */}
-          {completedHabits.length > 0 && (
-            <div style={{ marginTop: '40px' }}>
-              <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                marginBottom: '20px',
-                paddingBottom: '10px',
-                borderBottom: '2px solid #e2e8f0'
-              }}>
-                <h2 style={{ margin: 0, color: '#718096' }}>✅ Completed Habits</h2>
-                <button
-                  onClick={() => setShowCompletedHabits(!showCompletedHabits)}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#f7fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: '500',
-                    color: '#4a5568'
-                  }}
-                >
-                  {showCompletedHabits ? '▼ Hide' : '▶ Show'} ({completedHabits.length})
-                </button>
-              </div>
-              
-              {showCompletedHabits && (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 350px), 1fr))',
-                  gap: '20px'
+                    display: 'flex',
+                    flexDirection: 'column',
+                  gap: '20px',
+                  width: '100%'
                 }}>
-                  {completedHabits.map((habit) => (
-                    <div key={habit.id} style={{
-                      border: '2px solid #cbd5e0',
-                      borderRadius: '12px',
-                      padding: '20px',
-                      backgroundColor: '#f7fafc',
-                      opacity: 0.8
-                    }}>
-                      <div style={{ marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', flex: 1, color: '#4a5568' }}>
-                            {habit.name}
-                          </h3>
-                          <span style={{
-                            padding: '4px 10px',
-                            backgroundColor: '#48bb78',
-                            color: 'white',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '600'
+                  {completedHabits.map((habit: any) => {
+                      const pillarColor = 
+                        habit.pillar_name === 'Hard Work' ? '#4299e1' :
+                        habit.pillar_name === 'Calmness' ? '#48bb78' :
+                        habit.pillar_name === 'Family' ? '#9f7aea' : '#718096';
+
+                      return (
+                        <div
+                          key={habit.id}
+                          style={{
+                            padding: '20px',
+                            borderRadius: '8px',
+                            border: '2px solid #e2e8f0',
+                            backgroundColor: '#f7fafc',
+                            cursor: 'default',
+                            opacity: 0.8
+                          }}
+                        >
+                          {/* Habit Name and Pillar Badge */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', flex: 1 }}>
+                                {habit.name}
+                              </h3>
+                              {habit.pillar_name && (
+                                <span style={{
+                                  padding: '4px 10px',
+                                  backgroundColor: pillarColor,
+                                  color: 'white',
+                                  borderRadius: '12px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  flexShrink: 0
+                                }}>
+                                  {habit.pillar_name}
+                                  {habit.category_name && `: ${habit.category_name}`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Completion Info */}
+                          <div style={{ 
+                            display: 'flex', 
+                            gap: '8px',
+                            alignItems: 'center',
+                            marginBottom: '12px',
+                            flexWrap: 'nowrap'
                           }}>
-                            ✓ Completed
-                          </span>
-                        </div>
-                        {habit.description && (
-                          <p style={{ margin: '8px 0 0 0', fontSize: '14px', color: '#718096' }}>
-                            {habit.description}
-                          </p>
-                        )}
-                      </div>
-                      
-                      {/* Show stats */}
-                      {habit.stats && (
-                        <div style={{ 
-                          padding: '12px',
-                          backgroundColor: 'white',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          color: '#4a5568',
-                          marginBottom: '12px'
-                        }}>
-                          <div style={{ marginBottom: '8px' }}>
-                            🔥 Final Streak: <strong>{habit.stats.current_streak} days</strong>
+                            {/* Completion date */}
+                            <div style={{ 
+                              padding: '6px 10px',
+                              backgroundColor: '#e6fffa',
+                              border: '1px solid #81e6d9',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              color: '#234e52',
+                              whiteSpace: 'nowrap',
+                              fontWeight: '600'
+                            }}>
+                              ✅ Completed: {new Date(habit.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </div>
+
+                            {/* Final stats */}
+                            <div style={{ 
+                              padding: '6px 10px',
+                              backgroundColor: '#fef5e7',
+                              border: '1px solid #f9e79f',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              color: '#7d6608',
+                              whiteSpace: 'nowrap',
+                              fontWeight: '600'
+                            }}>
+                              🔥 {habit.stats?.current_streak || 0} | 🏆 {habit.stats?.longest_streak || 0} | ✅ {habit.stats?.success_rate || 0}%
+                            </div>
+
+                            {/* Duration */}
+                            <div style={{ 
+                              padding: '6px 10px',
+                              backgroundColor: '#f0f4ff',
+                              border: '1px solid #c3dafe',
+                              borderRadius: '4px',
+                              fontSize: '10px',
+                              color: '#2c5282',
+                              whiteSpace: 'nowrap',
+                              fontWeight: '600'
+                            }}>
+                              📊 {Math.floor((new Date(habit.end_date).getTime() - new Date(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))} days total
+                            </div>
+
+                            {/* Reactivate button */}
+                            <button
+                              className="btn btn-sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (confirm(`Reactivate habit "${habit.name}"? This will make it active again.`)) {
+                                  try {
+                                    console.log('Reactivating habit:', habit.id, habit.name);
+                                    
+                                    // Create update payload
+                                    const updatePayload = {
+                                      name: habit.name,
+                                      description: habit.description,
+                                      pillar_id: habit.pillar_id,
+                                      category_id: habit.category_id,
+                                      subcategory_id: habit.subcategory_id,
+                                      start_date: habit.start_date,
+                                      end_date: null,  // Remove end date
+                                      is_active: true,  // Set to active
+                                      tracking_mode: habit.tracking_mode,
+                                      period_type: habit.period_type,
+                                      target_count: habit.target_count,
+                                      target_comparison: habit.target_comparison,
+                                      linked_task_id: habit.linked_task_id,
+                                      session_target_value: habit.session_target_value,
+                                      session_target_unit: habit.session_target_unit
+                                    };
+                                    
+                                    console.log('Update payload:', updatePayload);
+                                    const response = await api.put(`/api/habits/${habit.id}`, updatePayload);
+                                    console.log('Reactivate response:', response);
+                                    
+                                    // Reload all habits
+                                    await loadHabits();
+                                    
+                                    alert(`✅ Success! "${habit.name}" has been reactivated!`);
+                                  } catch (err: any) {
+                                    console.error('Error reactivating habit:', err);
+                                    console.error('Error details:', err.response?.data);
+                                    const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+                                    alert('Failed to reactivate habit: ' + errorMsg);
+                                  }
+                                }
+                              }}
+                              style={{ 
+                                padding: '5px 10px', 
+                                fontSize: '11px',
+                                backgroundColor: '#4299e1',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                marginLeft: 'auto'
+                              }}
+                              title="Reactivate habit"
+                            >
+                              ♻️ Reactivate
+                            </button>
                           </div>
-                          <div style={{ marginBottom: '8px' }}>
-                            🏆 Best Streak: <strong>{habit.stats.longest_streak} days</strong>
-                          </div>
-                          <div>
-                            ✅ Success Rate: <strong>{habit.stats.success_rate}%</strong>
-                          </div>
                         </div>
-                      )}
-                      
-                      {habit.end_date && (
-                        <div style={{ 
-                          padding: '8px',
-                          backgroundColor: '#e6fffa',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          color: '#2c7a7b',
-                          marginBottom: '12px'
-                        }}>
-                          📅 Ended: {new Date(habit.end_date).toLocaleDateString()}
-                        </div>
-                      )}
-                      
-                      {/* Action button to reactivate */}
-                      <button
-                        onClick={async () => {
-                          if (window.confirm(`Reactivate habit "${habit.name}"?`)) {
-                            try {
-                              await api.put(`/api/habits/${habit.id}`, { is_active: true, end_date: null });
-                              loadHabits();
-                            } catch (err) {
-                              console.error('Error reactivating habit:', err);
-                              alert('Failed to reactivate habit');
-                            }
-                          }
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '10px',
-                          backgroundColor: '#48bb78',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          fontSize: '14px',
-                          fontWeight: '500'
-                        }}
-                      >
-                        ↩️ Reactivate Habit
-                      </button>
-                    </div>
-                  ))}
+                      );
+                    })}
                 </div>
-              )}
+                )}
+              </div>
+            )}
             </div>
           )}
         </div>

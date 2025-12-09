@@ -201,7 +201,14 @@ def get_habit(habit_id: int, db: Session = Depends(get_db)):
 @router.put("/{habit_id}")
 def update_habit(habit_id: int, habit_data: HabitUpdate, db: Session = Depends(get_db)):
     """Update a habit"""
-    update_dict = {k: v for k, v in habit_data.dict().items() if v is not None}
+    # Build update dict, but include explicitly provided None values for end_date
+    habit_dict = habit_data.dict()
+    update_dict = {}
+    for k, v in habit_dict.items():
+        # Include the field if it's not None OR if it's end_date (to allow clearing it)
+        if v is not None or (k == 'end_date' and k in habit_dict):
+            update_dict[k] = v
+    
     habit = HabitService.update_habit(db, habit_id, update_dict)
     
     if not habit:
