@@ -902,9 +902,12 @@ export default function Tasks() {
       const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => !h.is_active) : [];
       setCompletedHabits(completedList);
       
+      // Reset selected month to current month when loading habits
+      setHabitSelectedMonth(new Date());
+      
       // Load month days for each active habit
       habitsList.forEach((habit: any) => {
-        loadHabitMonthDays(habit.id);
+        loadHabitMonthDays(habit.id, new Date());
       });
     } catch (err: any) {
       console.error('Error loading habits:', err);
@@ -914,15 +917,15 @@ export default function Tasks() {
   };
 
   // Load last 7 days of habit entries
-  const loadHabitMonthDays = async (habitId: number) => {
+  const loadHabitMonthDays = async (habitId: number, monthDate?: Date) => {
     try {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = today.getMonth();
+      const targetMonth = monthDate || habitSelectedMonth;
+      const year = targetMonth.getFullYear();
+      const month = targetMonth.getMonth();
       
-      // First day of current month
+      // First day of target month
       const startDate = new Date(year, month, 1);
-      // Last day of current month
+      // Last day of target month
       const endDate = new Date(year, month + 1, 0);
       
       const start = formatDateForInput(startDate);
@@ -931,27 +934,49 @@ export default function Tasks() {
       const entries: any = await api.get(`/api/habits/${habitId}/entries?start_date=${start}&end_date=${end}`);
       const entriesData = entries.data || entries;
       
-      // Create map of date -> entry for all days in current month
+      // Get habit details to check start_date
+      const habit = habits.find(h => h.id === habitId);
+      const habitStartDate = habit?.start_date ? new Date(habit.start_date) : null;
+      
+      // Create map of date -> entry for all days in target month
       const monthDays: Array<{
         date: string;
         dayName: string;
         dayNum: number;
         isSuccessful?: boolean;
         exists: boolean;
+        beforeStart?: boolean; // Date is before habit start date
       }> = [];
       const daysInMonth = endDate.getDate();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
       
       for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(year, month, day);
+        date.setHours(0, 0, 0, 0);
         const dateStr = formatDateForInput(date);
         const entry = entriesData.find((e: any) => e.entry_date === dateStr);
+        
+        // Check if date is before habit start date
+        const beforeStart = habitStartDate && date < habitStartDate;
+        
+        // For dates in the past (before today) and after habit start, if no entry exists, consider it as failed (is_successful = false)
+        let isSuccessful = entry?.is_successful;
+        let exists = !!entry;
+        
+        // Auto-mark as failed for past dates without entries (but after habit start date)
+        if (!beforeStart && date < today && !entry) {
+          isSuccessful = false;
+          exists = true; // Show as cross
+        }
         
         monthDays.push({
           date: dateStr,
           dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
           dayNum: date.getDate(),
-          isSuccessful: entry?.is_successful,
-          exists: !!entry
+          isSuccessful,
+          exists,
+          beforeStart
         });
       }
       
@@ -8055,7 +8080,24 @@ export default function Tasks() {
                 marginTop: '20px'
               }}
             >
-              {habits.map((habit) => {
+              {habits.filter((habit) => {
+                // Filter habits: only show if they were active during the selected month
+                const selectedMonthStart = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth(), 1);
+                selectedMonthStart.setHours(0, 0, 0, 0);
+                const selectedMonthEnd = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth() + 1, 0);
+                selectedMonthEnd.setHours(23, 59, 59, 999);
+                
+                const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                const habitEnd = habit.end_date ? new Date(habit.end_date) : null;
+                
+                // Show habit if:
+                // 1. It started before or during the selected month, AND
+                // 2. It hasn't ended, OR it ended after the selected month started
+                const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;
+                const notEndedOrEndedAfterMonthStart = !habitEnd || habitEnd >= selectedMonthStart;
+                
+                return startedBeforeOrDuringMonth && notEndedOrEndedAfterMonthStart;
+              }).map((habit) => {
                 const periodStats = currentPeriodStats[habit.id];
                 const trackingMode = habit.tracking_mode || 'daily_streak';
                 const showPeriodTracking = ['occurrence', 'occurrence_with_value', 'aggregate'].includes(trackingMode);
@@ -8362,49 +8404,232 @@ export default function Tasks() {
                   {/* Quick action buttons for daily habits */}
                   {!showPeriodTracking && (
                     <>
-                      {/* Date selector for marking past habits */}
-                      <div style={{ marginBottom: '10px' }} onClick={(e) => e.stopPropagation()}>
-                        <label style={{ display: 'block', fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-                          Mark for date:
-                        </label>
-                        <input 
-                          type="date"
-                          value={habitMarkDate[habit.id] || formatDateForInput(new Date())}
-                          onChange={(e) => setHabitMarkDate({ ...habitMarkDate, [habit.id]: e.target.value })}
-                          max={formatDateForInput(new Date())}
-                          style={{
-                            width: '100%',
-                            padding: '6px',
-                            border: '1px solid #cbd5e0',
-                            borderRadius: '4px',
-                            fontSize: '13px'
-                          }}
-                        />
+                      {/* Compact stats row: Current streak, Best, Second best, Success rate */}
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        marginBottom: '12px',
+                        padding: '8px',
+                        backgroundColor: '#f7fafc',
+                        borderRadius: '6px',
+                        fontSize: '11px'
+                      }}>
+                        <div style={{ textAlign: 'center', flex: 1 }}>
+                          <div style={{ color: '#718096', marginBottom: '2px' }}>Current</div>
+                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: habit.stats?.current_streak || 0 > 0 ? '#48bb78' : '#718096' }}>
+                            {habit.stats?.current_streak || 0} 🔥
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'center', flex: 1 }}>
+                          <div style={{ color: '#718096', marginBottom: '2px' }}>Best</div>
+                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#f6ad55' }}>
+                            {habit.stats?.top_3_streaks?.[0]?.streak_length || habit.stats?.longest_streak || 0}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'center', flex: 1 }}>
+                          <div style={{ color: '#718096', marginBottom: '2px' }}>2nd Best</div>
+                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#ed8936' }}>
+                            {habit.stats?.top_3_streaks?.[1]?.streak_length || 0}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'center', flex: 1 }}>
+                          <div style={{ color: '#718096', marginBottom: '2px' }}>Success</div>
+                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#38a169' }}>
+                            {habit.stats?.success_rate || 0}%
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Current month visual tracker - organized by weeks starting Monday */}
+                      {/* Bottom row: Auto-track info + Date selector + Action buttons */}
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: '8px',
+                        marginBottom: '12px',
+                        alignItems: 'center',
+                        flexWrap: 'wrap'
+                      }}>
+                        {/* Auto-tracked info - compact box */}
+                        {habit.linked_task_id && habit.linked_task_name ? (
+                          <div style={{ 
+                            flex: '1 1 auto',
+                            minWidth: '200px',
+                            padding: '8px', 
+                            backgroundColor: '#e6fffa',
+                            border: '1px solid #81e6d9',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: '#234e52'
+                          }}>
+                            <div style={{ fontWeight: 'bold' }}>🔗 Auto-tracked</div>
+                            <div style={{ fontSize: '10px', color: '#2c7a7b' }}>from: {habit.linked_task_name}</div>
+                          </div>
+                        ) : (
+                          <div style={{ 
+                            flex: '1 1 auto',
+                            minWidth: '150px',
+                            padding: '8px', 
+                            backgroundColor: '#f7fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            color: '#718096'
+                          }}>
+                            <label style={{ display: 'block', marginBottom: '4px', fontWeight: '600' }}>
+                              Mark for date:
+                            </label>
+                            <input 
+                              type="date"
+                              value={habitMarkDate[habit.id] || formatDateForInput(new Date())}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setHabitMarkDate({ ...habitMarkDate, [habit.id]: e.target.value });
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              max={formatDateForInput(new Date())}
+                              style={{
+                                width: '100%',
+                                padding: '4px',
+                                border: '1px solid #cbd5e0',
+                                borderRadius: '3px',
+                                fontSize: '11px'
+                              }}
+                            />
+                          </div>
+                        )}
+
+                        {/* Action buttons - Edit, Mark Complete, Delete */}
+                        <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto' }}>
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedHabit(habit);
+                              setShowEditHabitModal(true);
+                            }}
+                            style={{ padding: '6px 10px', fontSize: '11px' }}
+                            title="Edit habit"
+                          >
+                            ✏️
+                          </button>
+                          {!habit.end_date && (
+                            <button
+                              className="btn btn-sm btn-success"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (confirm(`Mark habit "${habit.name}" as completed? This will set an end date to today.`)) {
+                                  try {
+                                    await api.put(`/api/habits/${habit.id}`, {
+                                      ...habit,
+                                      end_date: new Date().toISOString(),
+                                      is_active: false
+                                    });
+                                    await loadHabits();
+                                    alert('🎉 Congratulations! Habit marked as complete!');
+                                  } catch (err: any) {
+                                    console.error('Error completing habit:', err);
+                                    alert('Failed to complete habit: ' + (err.response?.data?.detail || err.message));
+                                  }
+                                }
+                              }}
+                              style={{ padding: '6px 10px', fontSize: '11px' }}
+                              title="Mark habit as done/complete"
+                            >
+                              ✅ Done
+                            </button>
+                          )}
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete habit "${habit.name}"?`)) {
+                                try {
+                                  await api.delete(`/api/habits/${habit.id}`);
+                                  await loadHabits();
+                                } catch (err: any) {
+                                  console.error('Error deleting habit:', err);
+                                  alert('Failed to delete habit: ' + (err.response?.data?.detail || err.message));
+                                }
+                              }
+                            }}
+                            style={{ padding: '6px 10px', fontSize: '11px' }}
+                            title="Delete habit"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Month navigation and visual tracker */}
                       {habitMonthDays[habit.id] && (
                         <div style={{ 
                           marginBottom: '10px',
-                          padding: '10px',
+                          padding: '8px',
                           backgroundColor: '#f7fafc',
                           borderRadius: '6px',
                           border: '1px solid #e2e8f0'
                         }}>
-                          <div style={{ fontSize: '12px', color: '#718096', marginBottom: '8px', fontWeight: '600' }}>
-                            {new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}:
+                          {/* Month navigation header */}
+                          <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center',
+                            marginBottom: '8px'
+                          }}>
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const newMonth = new Date(habitSelectedMonth);
+                                newMonth.setMonth(newMonth.getMonth() - 1);
+                                setHabitSelectedMonth(newMonth);
+                                await loadHabitMonthDays(habit.id, newMonth);
+                              }}
+                              style={{ padding: '4px 8px', fontSize: '11px' }}
+                            >
+                              ← Previous
+                            </button>
+                            
+                            <div style={{ fontSize: '12px', color: '#718096', fontWeight: '600' }}>
+                              {habitSelectedMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                            </div>
+                            
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const today = new Date();
+                                const newMonth = new Date(habitSelectedMonth);
+                                newMonth.setMonth(newMonth.getMonth() + 1);
+                                // Don't allow navigating beyond current month
+                                if (newMonth <= today) {
+                                  setHabitSelectedMonth(newMonth);
+                                  await loadHabitMonthDays(habit.id, newMonth);
+                                }
+                              }}
+                              disabled={(() => {
+                                const today = new Date();
+                                const nextMonth = new Date(habitSelectedMonth);
+                                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                return nextMonth.getFullYear() > today.getFullYear() || 
+                                       (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
+                              })()}
+                              style={{ padding: '4px 8px', fontSize: '11px' }}
+                            >
+                              Next →
+                            </button>
                           </div>
                           
                           {/* Week day headers */}
                           <div style={{ 
                             display: 'grid', 
                             gridTemplateColumns: 'repeat(7, 1fr)',
-                            gap: '6px',
+                            gap: '3px',
                             marginBottom: '4px'
                           }}>
                             {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
                               <div key={day} style={{ 
-                                fontSize: '9px', 
+                                fontSize: '8px', 
                                 color: '#9ca3af',
                                 fontWeight: '600',
                                 textAlign: 'center'
@@ -8414,17 +8639,18 @@ export default function Tasks() {
                             ))}
                           </div>
                           
-                          {/* Calendar grid starting from Monday */}
+                          {/* Calendar grid starting from Monday - smaller squares to fit all days */}
                           <div style={{ 
                             display: 'grid', 
                             gridTemplateColumns: 'repeat(7, 1fr)',
-                            gap: '6px'
+                            gap: '3px'
                           }}>
                             {(() => {
-                              const today = new Date();
-                              const year = today.getFullYear();
-                              const month = today.getMonth();
+                              const year = habitSelectedMonth.getFullYear();
+                              const month = habitSelectedMonth.getMonth();
                               const firstDay = new Date(year, month, 1);
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
                               
                               // Get day of week (0=Sun, 1=Mon, ..., 6=Sat)
                               // Convert to Monday-based (0=Mon, 1=Tue, ..., 6=Sun)
@@ -8437,7 +8663,7 @@ export default function Tasks() {
                               // Add empty cells for days before month starts
                               for (let i = 0; i < firstDayOfWeek; i++) {
                                 cells.push(
-                                  <div key={`empty-${i}`} style={{ width: '38px', height: '38px' }} />
+                                  <div key={`empty-${i}`} style={{ width: '28px', height: '28px' }} />
                                 );
                               }
                               
@@ -8445,12 +8671,34 @@ export default function Tasks() {
                               for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
                                 const dayData = habitMonthDays[habit.id].find((d: any) => d.dayNum === dayNum);
                                 
-                                let bgColor = '#e2e8f0'; // Gray - not entered
-                                if (dayData?.exists) {
+                                // Determine color and symbol
+                                let bgColor = '#e2e8f0'; // Gray - not entered or future date
+                                let symbol = '';
+                                let textColor = '#718096';
+                                
+                                if (dayData?.beforeStart) {
+                                  // Gray box before habit start date
+                                  bgColor = '#e2e8f0';
+                                  symbol = '';
+                                } else if (dayData?.exists) {
+                                  // Has entry or auto-marked as failed
                                   bgColor = dayData.isSuccessful ? '#48bb78' : '#fc8181'; // Green or Red
+                                  symbol = dayData.isSuccessful ? '✓' : '✗';
+                                  textColor = 'white';
                                 }
                                 
-                                const isToday = dayNum === today.getDate();
+                                const cellDate = new Date(year, month, dayNum);
+                                cellDate.setHours(0, 0, 0, 0);
+                                const isToday = cellDate.getTime() === today.getTime();
+                                
+                                let tooltip = `${dayData?.dayName || ''}, ${habitSelectedMonth.toLocaleString('en-US', { month: 'short' })} ${dayNum}`;
+                                if (dayData?.beforeStart) {
+                                  tooltip += ': Before habit start';
+                                } else if (dayData?.exists) {
+                                  tooltip += dayData.isSuccessful ? ': Done ✓' : ': Missed ✗';
+                                } else {
+                                  tooltip += ': Future date';
+                                }
                                 
                                 cells.push(
                                   <div 
@@ -8459,32 +8707,34 @@ export default function Tasks() {
                                       display: 'flex',
                                       flexDirection: 'column',
                                       alignItems: 'center',
-                                      gap: '2px'
+                                      gap: '1px'
                                     }}
-                                    title={dayData ? `${dayData.dayName}, ${new Date().toLocaleString('en-US', { month: 'short' })} ${dayNum}: ${dayData.exists ? (dayData.isSuccessful ? 'Done ✓' : 'Missed ✗') : 'Not entered'}` : `Day ${dayNum}`}
+                                    title={tooltip}
                                   >
                                     <div style={{ 
-                                      fontSize: '9px', 
+                                      fontSize: '7px', 
                                       color: '#718096',
-                                      fontWeight: isToday ? '700' : '500'
+                                      fontWeight: isToday ? '700' : '500',
+                                      height: '10px'
                                     }}>
                                       {dayNum}
                                     </div>
                                     <div style={{
-                                      width: '38px',
-                                      height: '38px',
+                                      width: '28px',
+                                      height: '28px',
                                       backgroundColor: bgColor,
-                                      borderRadius: '6px',
+                                      borderRadius: '4px',
                                       display: 'flex',
                                       alignItems: 'center',
                                       justifyContent: 'center',
-                                      color: dayData?.exists ? 'white' : '#718096',
-                                      fontSize: '18px',
+                                      color: textColor,
+                                      fontSize: '14px',
                                       fontWeight: 'bold',
-                                      boxShadow: isToday ? '0 0 0 2px #4299e1' : '0 1px 3px rgba(0,0,0,0.1)',
-                                      border: isToday ? '2px solid white' : 'none'
+                                      boxShadow: isToday ? '0 0 0 2px #4299e1' : '0 1px 2px rgba(0,0,0,0.1)',
+                                      border: isToday ? '2px solid white' : 'none',
+                                      cursor: dayData?.beforeStart || cellDate > today ? 'default' : 'pointer'
                                     }}>
-                                      {dayData?.exists ? (dayData.isSuccessful ? '✓' : '✗') : ''}
+                                      {symbol}
                                     </div>
                                   </div>
                                 );
@@ -8492,29 +8742,6 @@ export default function Tasks() {
                               
                               return cells;
                             })()}
-                          </div>
-                        </div>
-                      )}
-                      
-                      {/* Show auto-track warning if habit is linked to a task */}
-                      {habit.linked_task_id && habit.linked_task_name && (
-                        <div style={{ 
-                          marginBottom: '12px',
-                          padding: '12px', 
-                          backgroundColor: '#e6fffa',
-                          border: '2px solid #81e6d9',
-                          borderRadius: '6px',
-                          fontSize: '13px',
-                          color: '#234e52'
-                        }}>
-                          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                            🔗 Auto-tracked from Daily Task
-                          </div>
-                          <div>
-                            Task: <strong>{habit.linked_task_name}</strong>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#2c7a7b', marginTop: '6px' }}>
-                            ℹ️ Manual entry disabled - tracked automatically via daily task completion
                           </div>
                         </div>
                       )}

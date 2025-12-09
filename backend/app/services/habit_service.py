@@ -339,17 +339,43 @@ class HabitService:
         # Get all entries
         all_entries = db.query(HabitEntry).filter(HabitEntry.habit_id == habit_id).all()
         
-        if not all_entries:
+        # Calculate date range: from habit start_date to today (or end_date if completed)
+        start_date = habit.start_date.date() if isinstance(habit.start_date, datetime) else habit.start_date
+        end_date = date.today()
+        if habit.end_date:
+            habit_end = habit.end_date.date() if isinstance(habit.end_date, datetime) else habit.end_date
+            end_date = min(end_date, habit_end)
+        
+        # Calculate total days in range
+        total_days = (end_date - start_date).days + 1
+        
+        if not all_entries and total_days > 0:
+            # No entries but days have passed - all days are failures
             return {
                 'total_entries': 0,
+                'total_days': total_days,
                 'successful_entries': 0,
                 'success_rate': 0,
                 'current_streak': 0,
-                'longest_streak': 0
+                'longest_streak': 0,
+                'top_3_streaks': []
+            }
+        
+        if not all_entries:
+            return {
+                'total_entries': 0,
+                'total_days': 0,
+                'successful_entries': 0,
+                'success_rate': 0,
+                'current_streak': 0,
+                'longest_streak': 0,
+                'top_3_streaks': []
             }
         
         successful = len([e for e in all_entries if e.is_successful])
-        total = len(all_entries)
+        
+        # Success rate based on total days since start (missing days = failures)
+        success_rate = round((successful / total_days) * 100, 1) if total_days > 0 else 0
         
         # Get current streak
         current_streak = HabitService.calculate_current_streak(db, habit_id)
@@ -370,9 +396,10 @@ class HabitService:
         ]
         
         return {
-            'total_entries': total,
+            'total_entries': len(all_entries),  # Only explicit entries
+            'total_days': total_days,  # Total days since habit start
             'successful_entries': successful,
-            'success_rate': round((successful / total) * 100, 1) if total > 0 else 0,
+            'success_rate': success_rate,  # Based on total days, not just entries
             'current_streak': current_streak,
             'longest_streak': longest_streak,
             'top_3_streaks': top_3_streaks
