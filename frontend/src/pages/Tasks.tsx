@@ -732,6 +732,18 @@ export default function Tasks() {
     return checkDate.getTime() > today.getTime();
   };
 
+  // Load completion dates for all daily tasks (when they were first completed)
+  const loadDailyTaskCompletionDates = async () => {
+    try {
+      const response = await api.get<Record<number, string>>('/api/daily-tasks-history/completion-dates');
+      const completionMap = new Map(Object.entries(response).map(([id, date]) => [parseInt(id), date]));
+      setDailyTaskCompletionDates(completionMap);
+    } catch (err: any) {
+      console.error('Error loading completion dates:', err);
+      // Don't set error state, just log - this is not critical
+    }
+  };
+
   // Load tasks function (needed by error UI)
   const loadTasks = async () => {
     try {
@@ -1488,18 +1500,6 @@ export default function Tasks() {
       setDailyStatuses(statusMap);
     } catch (err: any) {
       console.error('Error loading daily statuses:', err);
-      // Don't set error state, just log - this is not critical
-    }
-  };
-  
-  // Load completion dates for all daily tasks (when they were first completed)
-  const loadDailyTaskCompletionDates = async () => {
-    try {
-      const response = await api.get<Record<number, string>>('/api/daily-tasks-history/completion-dates');
-      const completionMap = new Map(Object.entries(response).map(([id, date]) => [parseInt(id), date]));
-      setDailyTaskCompletionDates(completionMap);
-    } catch (err: any) {
-      console.error('Error loading completion dates:', err);
       // Don't set error state, just log - this is not critical
     }
   };
