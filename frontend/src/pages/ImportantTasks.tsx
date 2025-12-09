@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Tasks.css';
+import AddImportantTaskModal from '../components/AddImportantTaskModal';
 
 interface ImportantTask {
   id: number;
@@ -41,6 +42,7 @@ const ImportantTasks: React.FC = () => {
   const [tasks, setTasks] = useState<ImportantTaskWithCalculations[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     loadImportantTasks();
@@ -265,6 +267,17 @@ const ImportantTasks: React.FC = () => {
 
   return (
     <div className="important-tasks-container">
+      {/* Add Task Button */}
+      <div style={{ marginBottom: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+        <button 
+          className="btn btn-primary"
+          onClick={() => setShowAddModal(true)}
+          style={{ padding: '10px 20px', fontSize: '14px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+        >
+          ➕ Add Important Task
+        </button>
+      </div>
+
       {/* Summary Metrics */}
       <div className="summary-metrics" style={{ 
         display: 'flex', 
@@ -324,6 +337,13 @@ const ImportantTasks: React.FC = () => {
           </tbody>
         </table>
       </div>
+
+      {/* Add Task Modal */}
+      <AddImportantTaskModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onTaskAdded={loadImportantTasks}
+      />
     </div>
   );
 };
