@@ -290,6 +290,8 @@ class HabitService:
     ) -> List[HabitEntry]:
         """Auto-populate habit entries from linked task time entries"""
         
+        print(f"🎯 auto_sync_from_task called: task_id={task_id}, date={entry_date}, minutes={actual_minutes}")
+        
         # Find all habits linked to this task
         linked_habits = db.query(Habit).filter(
             and_(
@@ -298,9 +300,16 @@ class HabitService:
             )
         ).all()
         
+        print(f"🎯 Found {len(linked_habits)} linked habits")
+        
         created_entries = []
         
         for habit in linked_habits:
+            print(f"🎯 Processing habit: {habit.name} (id={habit.id})")
+            print(f"   - habit_type: {habit.habit_type}")
+            print(f"   - target_value: {habit.target_value}")
+            print(f"   - target_comparison: {habit.target_comparison}")
+            
             # Determine if habit criteria was met
             is_successful = False
             
@@ -312,6 +321,8 @@ class HabitService:
                 elif habit.target_comparison == 'exactly':
                     is_successful = actual_minutes == habit.target_value
             
+            print(f"   - is_successful: {is_successful} ({actual_minutes} vs {habit.target_value})")
+            
             # Create or update habit entry
             entry = HabitService.mark_habit_entry(
                 db=db,
@@ -321,6 +332,7 @@ class HabitService:
                 actual_value=actual_minutes,
                 note=f"Auto-synced from task (actual: {actual_minutes} min)"
             )
+            print(f"   ✅ Habit entry created/updated: entry_id={entry.id}")
             created_entries.append(entry)
         
         return created_entries

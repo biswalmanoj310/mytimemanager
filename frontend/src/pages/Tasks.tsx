@@ -3,7 +3,7 @@
  * Display and manage all tasks with tabs and table view
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import './Tasks.css';
@@ -1060,8 +1060,21 @@ export default function Tasks() {
     }
   };
 
+  // Load daily task statuses for a specific date
+  const loadDailyStatuses = useCallback(async (date: Date) => {
+    try {
+      const dateStr = formatDateForInput(date);
+      const response = await api.get<DailyTaskStatus[]>(`/api/daily-task-status/date/${dateStr}`);
+      const statusMap = new Map(response.map((s: DailyTaskStatus) => [s.task_id, s]));
+      setDailyStatuses(statusMap);
+    } catch (err: any) {
+      console.error('Error loading daily statuses:', err);
+      // Don't set error state, just log - this is not critical
+    }
+  }, []);
+
   // Load daily time entries from backend for selected date
-  async function loadDailyEntries(date: Date) {
+  const loadDailyEntries = useCallback(async (date: Date) => {
     try {
       const dateStr = formatDateForInput(date);
       const entries = await api.get<any[]>(`/api/daily-time/entries/${dateStr}`);
@@ -1086,7 +1099,7 @@ export default function Tasks() {
       hourlyEntriesRef.current = emptyMap;
       setHourlyEntries(emptyMap);
     }
-  }
+  }, [loadDailyStatuses]);
 
   // Handle URL parameters on mount and when location changes
   useEffect(() => {
@@ -1548,19 +1561,6 @@ export default function Tasks() {
       </div>
     );
   }
-
-  // Load daily task statuses for a specific date
-  const loadDailyStatuses = async (date: Date) => {
-    try {
-      const dateStr = formatDateForInput(date);
-      const response = await api.get<DailyTaskStatus[]>(`/api/daily-task-status/date/${dateStr}`);
-      const statusMap = new Map(response.map((s: DailyTaskStatus) => [s.task_id, s]));
-      setDailyStatuses(statusMap);
-    } catch (err: any) {
-      console.error('Error loading daily statuses:', err);
-      // Don't set error state, just log - this is not critical
-    }
-  };
 
   // Daily-specific completion handlers - mark only the daily entry for current date
   const handleDailyTaskComplete = async (taskId: number) => {
@@ -8239,7 +8239,7 @@ export default function Tasks() {
               }}
             >
               {habits.filter((habit) => {
-                // Filter habits: only show ACTIVE habits (no end_date) that were active during the selected month
+                // Filter habits: only show ACTIVE habits that were active during the selected month
                 const selectedMonthStart = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth(), 1);
                 selectedMonthStart.setHours(0, 0, 0, 0);
                 const selectedMonthEnd = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth() + 1, 0);
@@ -8248,8 +8248,8 @@ export default function Tasks() {
                 const habitStart = habit.start_date ? new Date(habit.start_date) : null;
                 const habitEnd = habit.end_date ? new Date(habit.end_date) : null;
                 
-                // Exclude completed habits (with end_date)
-                if (habitEnd) return false;
+                // Exclude habits that ended BEFORE the selected month (only exclude past habits)
+                if (habitEnd && habitEnd < selectedMonthStart) return false;
                 
                 // Show habit if it started before or during the selected month
                 const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;

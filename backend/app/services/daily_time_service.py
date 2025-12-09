@@ -106,28 +106,52 @@ def bulk_save_daily_entries(db: Session, entry_date: date, entries: List[Dict]) 
         update_daily_summary(db, entry_date)
         
         # AUTO-SYNC: Update linked habits for each task
+        import sys
         from app.services.habit_service import HabitService
         
-        # Calculate total time per task for the day
-        task_totals = {}
+        # Collect all tasks that were updated (including those set to 0)
+        affected_task_ids = set()
         for entry in entries:
             task_id = entry.get('task_id')
-            minutes = entry.get('minutes', 0)
-            if task_id and minutes > 0:
-                task_totals[task_id] = task_totals.get(task_id, 0) + minutes
+            if task_id:
+                affected_task_ids.add(task_id)
         
-        # Auto-sync habits for each task
+        print(f"🔄 HABIT SYNC: Affected tasks: {affected_task_ids}", flush=True)
+        sys.stdout.flush()
+        
+        # Calculate total time per task for the ENTIRE day (not just from bulk update)
+        # This ensures we get the accurate total even if only one hour was updated
+        task_totals = {}
+        for task_id in affected_task_ids:
+            # Query all entries for this task on this date
+            day_entries = db.query(DailyTimeEntry).filter(
+                and_(
+                    DailyTimeEntry.task_id == task_id,
+                    func.date(DailyTimeEntry.entry_date) == entry_date
+                )
+            ).all()
+            
+            total_minutes = sum(e.minutes for e in day_entries)
+            task_totals[task_id] = total_minutes
+            print(f"🔄 HABIT SYNC: Task {task_id} total for {entry_date}: {total_minutes} minutes", flush=True)
+            sys.stdout.flush()
+        
+        # Auto-sync habits for each task (including tasks now at 0 minutes)
         for task_id, total_minutes in task_totals.items():
             try:
-                HabitService.auto_sync_from_task(
+                print(f"🔄 HABIT SYNC: Calling auto_sync_from_task for task {task_id} with {total_minutes} minutes", flush=True)
+                sys.stdout.flush()
+                result = HabitService.auto_sync_from_task(
                     db=db,
                     task_id=task_id,
                     entry_date=entry_date,
                     actual_minutes=total_minutes
                 )
+                print(f"✅ HABIT SYNC: Created/updated {len(result)} habit entries for task {task_id}", flush=True)
+                sys.stdout.flush()
             except Exception as e:
                 # Don't fail the whole operation if habit sync fails
-                print(f"Warning: Failed to auto-sync habits for task {task_id}: {e}")
+                print(f"❌ Warning: Failed to auto-sync habits for task {task_id}: {e}")
         
         # Auto-sync challenges for each task
         from app.services.challenge_service import sync_challenge_from_task

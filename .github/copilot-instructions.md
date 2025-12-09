@@ -2,191 +2,179 @@
 
 ## Project Overview
 
-MyTimeManager is a comprehensive time and task management application built on the **CANI (Constant And Never-ending Improvement)** philosophy. The app helps users balance life across three 8-hour pillars: **Hard Work** (💼), **Calmness** (🧘), and **Family** (👨‍👩‍👦).
+MyTimeManager is a time and task management application built on the **CANI (Constant And Never-ending Improvement)** philosophy. The app balances life across three 8-hour pillars: **Hard Work** (💼), **Calmness** (🧘), and **Family** (👨‍👩‍👦).
 
 ## Architecture
 
 ### Tech Stack
-- **Backend**: FastAPI 0.104.1 + SQLAlchemy 2.0.23 + SQLite (at `backend/database/mytimemanager.db`)
+- **Backend**: FastAPI 0.104.1 + SQLAlchemy 2.0.23 + SQLite at `backend/database/mytimemanager.db`
 - **Frontend**: React 18.2 + TypeScript 5.3.3 + Vite 5.0.8
 - **Ports**: Backend on 8000, Frontend on 3000
+- **Database**: SQLite (easily migrates to PostgreSQL/MySQL via `backend/app/database/config.py`)
 
-### Project Structure
+### Critical File Locations
 ```
-mytimemanager/
-├── backend/
-│   ├── app/
-│   │   ├── models/        # SQLAlchemy ORM models (models.py, goal.py)
-│   │   ├── routes/        # FastAPI endpoints (25+ routers)
-│   │   ├── services/      # Business logic (habit_service.py, etc.)
-│   │   ├── database/      # DB config (config.py, init_db)
-│   │   └── main.py        # FastAPI app with CORS and router registration
-│   ├── migrations/        # SQL migration scripts (001-017)
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── components/    # Reusable UI (Layout, PillarCategorySelector)
-│       ├── contexts/      # React Context (TaskContext, TimeEntriesContext)
-│       ├── pages/         # Route pages (Dashboard, Tasks, Goals, etc.)
-│       ├── services/      # API client (api.ts)
-│       └── types/         # TypeScript definitions
-└── database/              # SQLite database location
+backend/app/main.py              # Router registration - ALL routes must be added here
+backend/app/database/config.py   # DB session factory (get_db dependency)
+backend/app/services/            # Business logic (habit_service.py has streak calculations)
+frontend/src/contexts/           # Global state (TaskContext, TimeEntriesContext, UserPreferencesProvider)
+frontend/src/App.tsx             # Context providers wrap all routes
+backend/migrations/              # SQL migrations 001-020+ (numbered, sequential)
 ```
 
-## Core Domain Concepts
+## Core Domain Logic
 
-### 1. Three-Pillar System
-All entities (tasks, goals, habits, challenges) are organized under pillars → categories → subcategories. This hierarchy is fundamental to the app's organization philosophy.
+### 1. Three-Pillar Organization Hierarchy
+**All entities** (tasks, goals, habits, challenges) MUST organize under: `pillar → category → subcategory`
+- Use `PillarCategorySelector` component (`frontend/src/components/PillarCategorySelector.tsx`) for consistent UI
+- Backend validates pillar/category relationships in routes
 
-### 2. Task Frequencies & Home Tabs
-Tasks have a `follow_up_frequency` field that determines their "home tab":
-- `daily` → Daily tab (disappears after completion/NA until next day)
-- `weekly` → Weekly tab (resets weekly)
-- `monthly` → Monthly tab (resets monthly)
+### 2. Task Frequency System (Critical)
+Tasks have ONE "home tab" determined by `follow_up_frequency` field:
+- `daily` → Daily tab (resets daily after completion/NA)
+- `weekly` → Weekly tab (resets Sunday)
+- `monthly` → Monthly tab (resets 1st of month)
 - `yearly` → Yearly tab
-- `one_time` → One Time tab (project-based)
+- `one_time` → Projects/One-Time tab
 
-**Critical**: Tasks can be "monitored" in multiple tabs via `weekly_task_status`, `monthly_task_status`, `yearly_task_status` tables for cross-tab tracking, but have only ONE home tab.
+**Multi-Tab Monitoring**: Tasks can be monitored in OTHER tabs via status tables (`weekly_task_status`, `monthly_task_status`, `yearly_task_status`), but only have ONE home tab.
 
-### 3. Completion vs. Status Tracking
-- **Global Completion**: `task.is_completed`, `task.completed_at` (set when completed in home tab)
-- **Tab-Specific Status**: Separate status tables (`daily_task_status`, `weekly_task_status`, `monthly_task_status`) track per-period completion
-- **NA (Not Applicable)**: `task.is_active = false` marks tasks as NA; they stay visible with gray background until period ends
+### 3. Dual Completion Tracking
+**Global Completion** (set in home tab only):
+- `task.is_completed = true`
+- `task.completed_at = timestamp`
+
+**Tab-Specific Status** (set in monitoring tabs):
+- Separate rows in `daily_task_status`, `weekly_task_status`, `monthly_task_status`
+- Allows cross-tab tracking without affecting global state
+
+**NA (Not Applicable)**: `task.is_active = false` + `task.na_marked_at = timestamp` → shows gray background until period ends
+
+**Completion Logic**: When marking complete/NA in a monitoring tab, hit BOTH endpoints:
+```typescript
+// Example: Complete daily task in Weekly tab
+POST /api/tasks/{taskId}/complete           // Updates global task.is_completed
+POST /api/weekly-time/status/{taskId}/complete?week_start_date={date}  // Updates weekly_task_status
+```
 
 ### 4. Key Entity Types
-- **Tasks**: Daily work items with time allocation (`allocated_minutes`, `spent_minutes`)
-- **Life Goals**: Long-term aspirations (1-10 years) with milestones
-- **Projects**: Structured task containers with dependencies and milestones
-- **Habits**: Behavioral tracking with streak calculations (4 tracking modes: daily_streak, occurrences, occurrences_with_value, aggregate_total)
-- **Challenges**: Time-bound experiments (7-30 days) with daily logging
-- **Wishes**: Dreams that can graduate to goals/projects
+- **Tasks**: Work items with `allocated_minutes`/`spent_minutes` tracking
+- **Life Goals**: 1-10 year goals with milestones (link to tasks/projects)
+- **Goal Projects**: Structured projects under goals with dependencies
+- **Habits**: Behavioral tracking with 4 modes (`daily_streak`, `occurrences`, `occurrences_with_value`, `aggregate_total`)
+- **Challenges**: 7-30 day experiments with daily logging + auto-sync from habits
+- **Wishes**: Dream parking lot (can graduate to goals/projects)
 
 ## Development Workflows
 
-### Starting the Application
+### Starting the App
 ```bash
-# From project root
-./start_app.sh              # Starts both backend + frontend
-# OR separately:
-./start_backend.sh          # Backend only
-./start_frontend.sh         # Frontend only
+./start_app.sh              # Both backend + frontend (prompts for backup)
+./start_backend.sh          # Backend only (uvicorn on port 8000)
+./start_frontend.sh         # Frontend only (vite dev server on port 3000)
 ```
 
 ### Database Operations
 ```bash
-# Backup database (creates timestamped .db.gz in ~/mytimemanager_backups/)
-./backup_database.sh
+./backup_database.sh        # Creates ~/mytimemanager_backups/mytimemanager_backup_YYYYMMDD_HHMMSS.db.gz
+python recalculate_summaries.py  # Recalculates daily summaries (run after bulk data changes)
 
-# Apply migrations (from backend/)
+# Apply migrations (ALWAYS backup first)
 cd backend && python migrations/add_*.py
-
-# Recalculate summaries (when data integrity issues occur)
-python recalculate_summaries.py
 ```
 
 ### Testing
-- Backend tests: `backend/tests/` (pytest)
-- API docs: http://localhost:8000/docs (Swagger UI)
-- Quick testing checklist: See `QUICK_TEST_CHECKLIST.md`
+- **Backend**: `cd backend && pytest` (tests in `backend/tests/`)
+- **API**: http://localhost:8000/docs (Swagger UI - test endpoints live)
+- **Quick validation**: See `QUICK_TEST_CHECKLIST.md` for regression tests
 
 ## Critical Implementation Patterns
 
-### 1. API Route Registration
-All routers MUST be registered in `backend/app/main.py`. Pattern:
+### 1. API Route Registration (ALWAYS DO THIS)
+New routes are invisible until registered in `backend/app/main.py`:
 ```python
 from app.routes import new_feature
 app.include_router(new_feature.router, prefix="/api/new-feature", tags=["New Feature"])
 ```
 
 ### 2. Database Session Management
-Always use dependency injection for DB sessions:
+Use dependency injection (never create sessions manually):
 ```python
 from app.database.config import get_db
 from sqlalchemy.orm import Session
 
-@router.get("/endpoint")
-def endpoint(db: Session = Depends(get_db)):
-    # db session automatically managed
+@router.post("/endpoint")
+def endpoint(data: Schema, db: Session = Depends(get_db)):
+    # Session auto-committed/rolled back
 ```
 
-### 3. React Context Usage
-Frontend uses three main contexts (in `App.tsx`):
-- `TaskProvider`: Task CRUD operations
-- `TimeEntriesProvider`: Time tracking data (daily/weekly/monthly/yearly/one-time entries + statuses)
+### 3. React Context Pattern
+Frontend has 3 global contexts (see `frontend/src/App.tsx`):
+- `TaskProvider`: CRUD for tasks/pillars/categories/goals
+- `TimeEntriesProvider`: Daily/Weekly/Monthly/Yearly entries + statuses (handles debounced auto-save)
 - `UserPreferencesProvider`: UI preferences
 
-**Pattern**: Components consume contexts via hooks:
+**Components consume via hooks**:
 ```typescript
 import { useTaskContext } from '../contexts/TaskContext';
-const { tasks, loading, refreshTasks } = useTaskContext();
+const { tasks, refreshTasks, completeTask, markTaskNA } = useTaskContext();
 ```
 
-### 4. Reusable Organization Components
-Use `PillarCategorySelector` component for consistent pillar/category/subcategory selection across forms (see `REUSABLE_COMPONENTS_GUIDE.md`).
-
-### 5. Time Entry Auto-Save
-Time entries use debounced auto-save to backend with bulk endpoints:
+### 4. Time Entry Auto-Save
+Time entries use debounced saves (1-2 seconds) with bulk endpoints:
 ```typescript
-POST /api/daily-time/entries/bulk/      // Daily entries
-POST /api/weekly-time/entries/bulk/     // Weekly entries
-POST /api/monthly-time/entries/bulk/    // Monthly entries
+POST /api/daily-time/entries/bulk/      # [{task_id, date, hour, minutes}, ...]
+POST /api/weekly-time/entries/bulk/     # [{task_id, week_start_date, time_spent}, ...]
+POST /api/monthly-time/entries/bulk/    # [{task_id, month_start_date, time_spent}, ...]
 ```
+Pattern in `TimeEntriesContext`: Update local state immediately → debounce → batch save
 
-### 6. Status Management for Multi-Tab Tracking
-When marking task complete/NA in a monitoring tab, hit BOTH task completion endpoint AND status endpoint:
-```typescript
-// Example: Complete daily task in Weekly tab
-POST /api/tasks/{taskId}/complete           // Global completion
-POST /api/weekly-time/status/{taskId}/complete?week_start_date={date}  // Weekly status
+### 5. Habit Streak Recalculation
+When habit sessions/entries change, call `backend/app/services/habit_service.py::recalculate_streaks()`:
+```python
+from app.services.habit_service import HabitService
+HabitService.recalculate_streaks(db, habit_id)  # Rebuilds streak data from entries
 ```
-
-## Migration Strategy
-
-- SQL migrations in `backend/migrations/` numbered 001-017
-- Apply new migrations with Python scripts: `python migrations/add_*.py`
-- Always backup database before migrations: `./backup_database.sh`
-- Migration documentation: `MIGRATION_GUIDE.md`
 
 ## Data Integrity Rules
 
-1. **Time Allocation**: For daily tasks, `SUM(allocated_minutes)` should equal 480 minutes (8 hours) per pillar
-2. **Streak Recalculation**: Habits have `recalculate_streaks()` in `backend/app/services/habit_service.py` - use when session data changes
-3. **Summary Recalculation**: Run `recalculate_summaries.py` after bulk data changes
-4. **Task Completion Cleanup**: Completed tasks auto-hide after period ends (no manual cleanup needed)
-
-## UI/UX Conventions
-
-- **Color Coding**: Each pillar has distinct colors (Hard Work: blue, Calmness: green, Family: purple)
-- **Compact Cards**: Use compact card layouts for list views (see `COMPACT_CARDS_IMPLEMENTATION.md`)
-- **Confetti Celebrations**: Trigger on challenge completion, habit milestones (canvas-confetti library)
-- **Empty States**: Provide helpful empty states with action prompts
-- **Date Selectors**: All time-tracking tabs have date navigation (Previous/Today/Next)
+1. **Time Allocation**: Daily tasks should total 480 minutes (8 hours) per pillar (not enforced but expected)
+2. **Completed Task Visibility**: Tasks with `is_completed=true` AND `completed_at` matching current period show with green background until period ends, then disappear
+3. **NA Task Lifecycle**: `is_active=false` tasks show gray background until period ends, then disappear
+4. **Summary Recalculation**: After bulk changes, run `python recalculate_summaries.py` from project root
+5. **Migration Safety**: ALWAYS run `./backup_database.sh` before migrations (database corruption is unrecoverable)
 
 ## Common Pitfalls
 
-1. **Don't** create tasks without `follow_up_frequency` - it determines home tab visibility
-2. **Don't** forget to register new routes in `main.py` - they won't be accessible otherwise
-3. **Don't** modify task completion state without updating corresponding status tables for monitored tabs
-4. **Don't** run migrations without backups - database corruption is unrecoverable
-5. **Don't** bypass `TimeEntriesContext` for time tracking - it manages complex state synchronization
-6. **Avoid** hardcoding 24-hour allocation - system is built around three 8-hour pillars (flexible for future)
+1. **Missing Router Registration**: New routes in `app/routes/` won't work until added to `main.py` includes
+2. **Context Bypass**: Don't call API directly from components - use `useTaskContext()` or `useTimeEntriesContext()` to leverage caching/state sync
+3. **Incomplete Multi-Tab Completion**: When completing tasks in monitoring tabs, must call BOTH task endpoint + status endpoint
+4. **Migration Without Backup**: Database has no WAL mode - corruption requires restore from backup
+5. **Hardcoded 24-Hour Logic**: System assumes three 8-hour pillars (never hardcode 24 hours)
+6. **Task Without Frequency**: `follow_up_frequency` is required - determines home tab visibility
 
-## Key Documentation Files
+## UI/UX Standards
 
-- `PROJECT_SUMMARY.md` - Complete feature list with implementation details
-- `TASK_LIFECYCLE_DOCUMENTATION.md` - Deep dive into task completion logic
-- `DATABASE_INFO.md` - Database location, backup strategy, schema
-- `REUSABLE_COMPONENTS_GUIDE.md` - Reusable UI component patterns
-- `MIGRATION_GUIDE.md` - Laptop migration and Docker strategy
-- `VISUAL_UI_GUIDE.md` - UI mockups and visual examples
+- **Pillar Colors**: Hard Work (blue), Calmness (green), Family (purple) - consistent across app
+- **Confetti Celebrations**: Use `canvas-confetti` for challenge completion, habit milestones (see existing patterns)
+- **Compact Card Layouts**: List views use compact cards (see `COMPACT_CARDS_IMPLEMENTATION.md`)
+- **Empty States**: Provide actionable empty states with "Add [Entity]" buttons
+- **Date Navigation**: All time tabs have Previous/Today/Next date selectors
 
-## Testing & Validation
+## Essential Documentation
 
-Before committing changes:
-1. Start both servers: `./start_app.sh`
-2. Verify no console errors in browser DevTools
-3. Test in API docs: http://localhost:8000/docs
-4. Run backend tests: `cd backend && pytest`
-5. Check database backup exists: `ls ~/mytimemanager_backups/`
+- `PROJECT_SUMMARY.md` - Complete feature catalog with implementation details
+- `TASK_LIFECYCLE_DOCUMENTATION.md` - Deep dive into task completion/NA/status logic (513 lines - READ THIS for task changes)
+- `REUSABLE_COMPONENTS_GUIDE.md` - PillarCategorySelector, TaskSelector patterns
+- `DATABASE_INFO.md` - Backup location (`~/mytimemanager_backups/`), restore procedures
+- `QUICK_TEST_CHECKLIST.md` - Regression tests for time entry system
 
-When adding new features, follow existing patterns in similar routes (e.g., new tab → mimic `daily_time.py` structure).
+## Pre-Commit Checklist
+
+1. `./start_app.sh` - Verify both servers start
+2. Check browser DevTools console - no errors
+3. Test new endpoints in http://localhost:8000/docs
+4. `cd backend && pytest` - All tests pass
+5. `./backup_database.sh` - Backup exists before schema changes
+
+When adding features, mimic existing patterns (e.g., new time tab → copy `backend/app/routes/daily_time.py` structure).

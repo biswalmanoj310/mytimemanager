@@ -100,11 +100,20 @@ def bulk_save_entries(
 ):
     """Bulk save time entries for a specific date"""
     try:
+        print(f"🔵 BULK SAVE ENDPOINT CALLED")
+        print(f"🔵 Date: {bulk_data.entry_date}")
+        print(f"🔵 Number of entries: {len(bulk_data.entries)}")
+        
         # Convert datetime to date
         entry_date = bulk_data.entry_date.date() if hasattr(bulk_data.entry_date, 'date') else bulk_data.entry_date
+        print(f"🔵 Converted date: {entry_date}")
+        
         success = daily_time_service.bulk_save_daily_entries(db, entry_date, bulk_data.entries)
+        
+        print(f"🔵 BULK SAVE COMPLETED: success={success}")
         return {"success": success, "message": "Entries saved successfully"}
     except Exception as e:
+        print(f"🔴 BULK SAVE ERROR: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
