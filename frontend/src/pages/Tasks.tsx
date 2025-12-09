@@ -833,7 +833,7 @@ export default function Tasks() {
     }
   };
 
-  // Move task to NOW (set priority to 1)
+  // Move task to NOW (set priority to 1 and due_date to today)
   const handleMoveToNow = async (taskId: number, taskType: 'task' | 'project' | 'goal' = 'task') => {
     try {
       console.log('handleMoveToNow called:', taskId, taskType);
@@ -843,12 +843,34 @@ export default function Tasks() {
         return;
       }
       
-      await handlePriorityChange(taskId, 1, taskType);
+      // Set priority to 1 and due_date to today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
+      
+      if (taskType === 'goal') {
+        await api.put(`/api/life-goals/tasks/${taskId}`, { 
+          priority: 'high',
+          due_date: todayStr
+        });
+        await loadGoalTasksDueToday();
+      } else if (taskType === 'project') {
+        await api.put(`/api/projects/tasks/${taskId}`, { 
+          priority_new: 1,
+          due_date: todayStr
+        });
+        await loadProjectTasksDueToday();
+      } else {
+        await api.put(`/api/tasks/${taskId}`, { 
+          priority: 1,
+          due_date: todayStr
+        });
+        await loadTasks();
+      }
+      
       // Force refresh all data to update NOW tab and remove from source
-      await loadTasks();
       await loadTodaysOnlyTasks();
-      await loadProjectTasksDueToday();
-      await loadGoalTasksDueToday();
+      await loadUpcomingTasks();
       console.log('Task moved to NOW successfully');
     } catch (err: any) {
       console.error('Failed to move to NOW:', err);
@@ -13700,7 +13722,27 @@ export default function Tasks() {
                       return null;
                     })()}
 
-                    {/* Habits are daily practices - they don't need NOW tab prioritization */}
+                    {/* NOW button for habits - creates a reminder to work on this habit */}
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        // Habits don't have priority/due_date, so we show them in Habits tab
+                        alert(`Habit "${habit.name}" is already tracked daily. Check it off when completed today!`);
+                      }}
+                      style={{
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        backgroundColor: '#dc2626',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        flexShrink: 0
+                      }}
+                    >
+                      NOW
+                    </button>
 
                     {/* Pillar and Category badge at the end */}
                     {habit.pillar_name && (
