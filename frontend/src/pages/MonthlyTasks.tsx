@@ -141,9 +141,12 @@ const MonthlyTasks: React.FC = () => {
         ? task.allocated_minutes * daysElapsed 
         : task.allocated_minutes * (daysElapsed / daysInMonth);
     }
-    if (totalSpent >= expectedTarget) return 'weekly-on-track';
-    else if (totalSpent > 0) return 'weekly-below-target';
-    return '';
+    if (totalSpent >= expectedTarget) {
+      return 'weekly-on-track'; // Green - meeting or exceeding target
+    } else {
+      // Below target (includes zero progress) - show red to indicate behind schedule
+      return 'weekly-below-target'; // Red - below target or no progress
+    }
   };
 
   const getMonthlyCellColorClass = (task: Task, actualValue: number, dayDate: Date): string => {
@@ -224,8 +227,8 @@ const MonthlyTasks: React.FC = () => {
     
     return (
       <tr key={task.id} className={rowClassName} style={bgColor ? { backgroundColor: bgColor } : undefined}>
-        <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`} style={bgColor ? { backgroundColor: bgColor } : undefined}>
-          <div className="task-name">
+        <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`} style={{ ...(bgColor ? { backgroundColor: bgColor } : {}), color: '#1a202c' }}>
+          <div className="task-name" style={{ color: '#1a202c' }}>
             {task.name}
             {task.follow_up_frequency === 'daily' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>}
             {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#4299e1', fontWeight: '600' }}>(Monthly)</span>}
@@ -290,10 +293,10 @@ const MonthlyTasks: React.FC = () => {
           <table className="tasks-table daily-table">
             <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
               <tr>
-                <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Day</th>
-                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual<br/>Average/Day</th>
-                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Day</th>
+                <th className="col-task sticky-col sticky-col-1" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#fef3c7' }}>Task</th>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Ideal<br/>Average/Day</th>
+                <th className="col-time sticky-col sticky-col-3" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Actual<br/>Average/Day</th>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Needed<br/>Average/Day</th>
                 {monthDays.map(day => <th key={day.day} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.day}</th>)}
                 <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
               </tr>

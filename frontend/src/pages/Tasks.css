@@ -383,17 +383,35 @@ td.section-header-cell.boolean-based {
 }
 
 .tasks-table tbody tr:hover {
-  background: #f1f5f9 !important;
+  background: #fde68a !important; /* Yellow hover for entire row */
 }
 
 /* Row Highlighting on Hover - entire row gets same color */
-.tasks-table tbody tr:hover td:not(.sticky-col) {
-  background: inherit !important; /* Inherit row background - ensures entire row has same color */
+.tasks-table tbody tr:hover td {
+  background: #fde68a !important; /* Yellow for all cells including sticky columns */
 }
 
-/* Sticky columns should maintain white background on row hover */
-.tasks-table tbody tr:hover td.sticky-col {
-  background: white !important;
+/* Colored rows (green/red) should show darker shade on hover for ALL cells */
+.tasks-table tbody tr:hover td.weekly-on-track {
+  background: #a7f3d0 !important; /* Darker green on hover */
+}
+
+.tasks-table tbody tr:hover td.weekly-below-target {
+  background: #fca5a5 !important; /* Darker red on hover */
+}
+
+/* Sticky columns should inherit row hover color */
+.tasks-table tbody tr:hover td.sticky-col:not(.weekly-on-track):not(.weekly-below-target) {
+  background: #fde68a !important; /* Yellow hover for neutral rows */
+}
+
+/* Sticky columns WITH color classes should show darker shade on hover */
+.tasks-table tbody tr:hover td.sticky-col.weekly-on-track {
+  background: #a7f3d0 !important; /* Darker green on hover */
+}
+
+.tasks-table tbody tr:hover td.sticky-col.weekly-below-target {
+  background: #fca5a5 !important; /* Darker red on hover */
 }
 
 /* Remove individual cell hover to prevent color differences within row */
@@ -503,7 +521,7 @@ td.section-header-cell.boolean-based {
 }
 
 .tasks-table tr:hover td.weekly-on-track {
-  background: #b8ecbd !important;
+  background: #a7f3d0 !important; /* Darker green on hover */
 }
 
 .tasks-table td.weekly-below-target {
@@ -512,7 +530,12 @@ td.section-header-cell.boolean-based {
 }
 
 .tasks-table tr:hover td.weekly-below-target {
-  background: #ff9999 !important;
+  background: #fca5a5 !important; /* Darker red on hover */
+}
+
+/* Entire row hover effect for non-colored rows */
+.tasks-table tbody tr:hover td:not(.weekly-on-track):not(.weekly-below-target) {
+  background: #fde68a !important; /* Yellow hover for neutral rows */
 }
 
 /* Cell-level colors for weekly/monthly individual days */
@@ -980,7 +1003,7 @@ input[type="number"].hour-input {
 }
 
 /* Sticky columns for daily tab - 4 columns fixed */
-.daily-table .sticky-col-1 {
+.daily-table .sticky-col-1:not(.weekly-on-track):not(.weekly-below-target) {
   position: sticky !important;
   left: 0 !important;
   background: white !important;
@@ -993,9 +1016,38 @@ input[type="number"].hour-input {
   will-change: transform;
 }
 
-.daily-table tbody .sticky-col-2,
-.daily-table thead .sticky-col-2,
-.daily-table .sticky-col-2 {
+/* Sticky col-1 with color classes */
+.daily-table .sticky-col-1.weekly-on-track {
+  position: sticky !important;
+  left: 0 !important;
+  background: #d4f4dd !important;
+  z-index: 100 !important;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 250px !important;
+  width: 250px !important;
+  max-width: 250px !important;
+  transform: translateZ(0);
+  will-change: transform;
+  border-left: 4px solid #48bb78 !important;
+}
+
+.daily-table .sticky-col-1.weekly-below-target {
+  position: sticky !important;
+  left: 0 !important;
+  background: #ffb3b3 !important;
+  z-index: 100 !important;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 250px !important;
+  width: 250px !important;
+  max-width: 250px !important;
+  transform: translateZ(0);
+  will-change: transform;
+  border-left: 4px solid #e53e3e !important;
+}
+
+.daily-table tbody .sticky-col-2:not(.weekly-on-track):not(.weekly-below-target),
+.daily-table thead .sticky-col-2:not(.weekly-on-track):not(.weekly-below-target),
+.daily-table .sticky-col-2:not(.weekly-on-track):not(.weekly-below-target) {
   position: sticky !important;
   left: 250px !important; /* Width of sticky-col-1 */
   background: white !important;
@@ -1015,12 +1067,47 @@ input[type="number"].hour-input {
   will-change: transform;
 }
 
+/* Sticky col-2 with color classes */
+.daily-table .sticky-col-2.weekly-on-track {
+  position: sticky !important;
+  left: 250px !important;
+  background: #d4f4dd !important;
+  z-index: 100 !important;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 120px !important;
+  width: 120px !important;
+  max-width: 120px !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  color: #2d3748 !important;
+  display: table-cell !important;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.daily-table .sticky-col-2.weekly-below-target {
+  position: sticky !important;
+  left: 250px !important;
+  background: #ffb3b3 !important;
+  z-index: 100 !important;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 120px !important;
+  width: 120px !important;
+  max-width: 120px !important;
+  font-weight: bold !important;
+  text-align: center !important;
+  color: #2d3748 !important;
+  display: table-cell !important;
+  transform: translateZ(0);
+  will-change: transform;
+}
+
 .daily-table .sticky-col-1.column-highlight {
   background: #fef3c7 !important; /* Override with yellow highlight */
   z-index: 16; /* Slightly higher to show highlight */
 }
 
-.daily-table .sticky-col-3 {
+.daily-table .sticky-col-3:not(.weekly-on-track):not(.weekly-below-target) {
   position: sticky;
   left: 350px; /* Width of col-1 + col-2 */
   background: white;
@@ -1029,10 +1116,46 @@ input[type="number"].hour-input {
   min-width: 100px;
 }
 
-.daily-table .sticky-col-4 {
+.daily-table .sticky-col-3.weekly-on-track {
+  position: sticky;
+  left: 350px;
+  background: #d4f4dd !important;
+  z-index: 15;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 100px;
+}
+
+.daily-table .sticky-col-3.weekly-below-target {
+  position: sticky;
+  left: 350px;
+  background: #ffb3b3 !important;
+  z-index: 15;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 100px;
+}
+
+.daily-table .sticky-col-4:not(.weekly-on-track):not(.weekly-below-target) {
   position: sticky;
   left: 450px; /* Width of col-1 + col-2 + col-3 */
   background: white;
+  z-index: 15;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 100px;
+}
+
+.daily-table .sticky-col-4.weekly-on-track {
+  position: sticky;
+  left: 450px;
+  background: #d4f4dd !important;
+  z-index: 15;
+  box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
+  min-width: 100px;
+}
+
+.daily-table .sticky-col-4.weekly-below-target {
+  position: sticky;
+  left: 450px;
+  background: #ffb3b3 !important;
   z-index: 15;
   box-shadow: 2px 0 4px rgba(0, 0, 0, 0.05);
   min-width: 100px;
@@ -1042,8 +1165,14 @@ input[type="number"].hour-input {
 .daily-table thead .sticky-col-2,
 .daily-table thead .sticky-col-3,
 .daily-table thead .sticky-col-4 {
-  background: #f7fafc;
-  z-index: 25; /* Higher than sticky header */
+  background: #f7fafc !important;
+  z-index: 25 !important; /* Higher than sticky header */
+  color: #1a202c !important; /* Ensure text is visible */
+}
+
+/* Preserve header background colors with inline styles */
+.tasks-table thead th.sticky-col {
+  z-index: 25 !important;
 }
 
 .daily-table .total-row .sticky-col-1,

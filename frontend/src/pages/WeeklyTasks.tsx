@@ -278,10 +278,10 @@ const WeeklyTasks: React.FC = () => {
     // Return color based on progress
     if (totalSpent >= expectedTarget) {
       return 'weekly-on-track'; // Green - meeting or exceeding target
-    } else if (totalSpent > 0) {
-      return 'weekly-below-target'; // Light red - below target but has progress
+    } else {
+      // Below target (includes zero progress) - show red to indicate behind schedule
+      return 'weekly-below-target'; // Red - below target or no progress
     }
-    return ''; // No color if no progress yet
   };
 
   /**
@@ -443,9 +443,9 @@ const WeeklyTasks: React.FC = () => {
         {/* Task Name - Sticky Column 1 */}
         <td 
           className={`col-task sticky-col sticky-col-1 ${rowColorClass}`}
-          style={bgColor ? { backgroundColor: bgColor } : undefined}
+          style={{ ...(bgColor ? { backgroundColor: bgColor } : {}), color: '#1a202c' }}
         >
-          <div className="task-name">
+          <div className="task-name" style={{ color: '#1a202c' }}>
             {task.name}
             {task.follow_up_frequency === 'daily' && (
               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
@@ -594,16 +594,16 @@ const WeeklyTasks: React.FC = () => {
               borderBottom: '2px solid #5a67d8'
             }}>
               <tr>
-                <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>
+                <th className="col-task sticky-col sticky-col-1" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#fef3c7' }}>
                   Task
                 </th>
-                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>
                   Ideal<br/>Average/Day
                 </th>
-                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>
+                <th className="col-time sticky-col sticky-col-3" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>
                   Actual<br/>Average/Day
                 </th>
-                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>
                   Needed<br/>Average/Day
                 </th>
                 {weekDays.map(day => (
