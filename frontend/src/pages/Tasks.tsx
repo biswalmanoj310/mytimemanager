@@ -16,6 +16,7 @@ import { getWeekStart } from '../utils/dateHelpers';
 import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
+import ImportantTasks from './ImportantTasks';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -6625,106 +6626,9 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* One-Time Tasks Table */}
+      {/* Important Tasks Component */}
       {activeTab === 'onetime' ? (
-        <div className="tasks-table-container">
-          <table className="tasks-table">
-            <thead>
-              <tr>
-                <th className="col-date">Start Date</th>
-                <th className="col-task-name">Task Name</th>
-                <th className="col-number">Target Gap (days)</th>
-                <th className="col-date">Updated Date</th>
-                <th className="col-number">Days Over</th>
-                <th className="col-category">Pillar - Category</th>
-                <th className="col-action">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {oneTimeTasks.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                    No one-time tasks yet. Click "Add One Time Task" to get started.
-                  </td>
-                </tr>
-              ) : (
-                oneTimeTasks.map((oneTimeTask) => {
-                  const task = tasks.find(t => t.id === oneTimeTask.task_id);
-                  if (!task) return null;
-                  
-                  const daysOver = calculateDaysOver(oneTimeTask.updated_date);
-                  const rowClass = getOneTimeRowColorClass(oneTimeTask.target_gap, daysOver);
-                  
-                  return (
-                    <tr key={oneTimeTask.id} className={rowClass}>
-                      <td className="col-date">
-                        <input
-                          type="date"
-                          value={oneTimeTask.start_date ? formatDateForInput(new Date(oneTimeTask.start_date)) : ''}
-                          onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { start_date: e.target.value })}
-                          style={{ width: '100%', padding: '4px' }}
-                        />
-                      </td>
-                      <td className="col-task-name">
-                        {task.name}
-                      </td>
-                      <td className="col-number">
-                        <input
-                          type="number"
-                          min="0"
-                          value={oneTimeTask.target_gap || ''}
-                          onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { target_gap: parseInt(e.target.value) || null })}
-                          placeholder="0"
-                          style={{ width: '100%', padding: '4px', textAlign: 'center' }}
-                        />
-                      </td>
-                      <td className="col-date">
-                        <input
-                          type="date"
-                          value={oneTimeTask.updated_date ? formatDateForInput(new Date(oneTimeTask.updated_date)) : ''}
-                          onChange={(e) => updateOneTimeTask(oneTimeTask.task_id, { updated_date: e.target.value })}
-                          style={{ width: '100%', padding: '4px' }}
-                        />
-                      </td>
-                      <td className="col-number" style={{ textAlign: 'center' }}>
-                        {daysOver}
-                      </td>
-                      <td className="col-category">
-                        {task.pillar_name} - {task.category_name}
-                      </td>
-                      <td className="col-action">
-                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-                          <button 
-                            className="btn-complete"
-                            onClick={() => {
-                              const today = new Date().toISOString().split('T')[0];
-                              updateOneTimeTask(oneTimeTask.task_id, { updated_date: today });
-                            }}
-                            style={{ padding: '4px 12px', fontSize: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                            title="Mark as completed/checked today"
-                          >
-                            ✓ Complete
-                          </button>
-                          <button 
-                            className="btn-delete"
-                            onClick={() => {
-                              if (window.confirm('Are you sure you want to remove this task from one-time tracking?')) {
-                                deleteOneTimeTask(oneTimeTask.task_id);
-                              }
-                            }}
-                            style={{ padding: '4px 8px', fontSize: '12px' }}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <ImportantTasks />
       ) : activeTab === 'projects' ? (
         <div className="projects-container">
           {!selectedProject ? (
