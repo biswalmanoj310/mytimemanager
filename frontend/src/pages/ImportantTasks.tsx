@@ -7,39 +7,37 @@ interface ImportantTask {
   id: number;
   name: string;
   description?: string;
-  pillar_id: number;
+  pillar_id?: number;
   pillar_name?: string;
-  category_id: number;
+  category_id?: number;
   category_name?: string;
   sub_category_id?: number;
   ideal_gap_days: number;
   last_check_date?: string;
   start_date?: string;
-  check_history?: string;
+  created_at: string;
   priority?: number;
   is_active: boolean;
-  created_at: string;
-  updated_at: string;
   parent_id?: number;
   children?: ImportantTask[];
-}
-
-interface ImportantTaskWithCalculations extends ImportantTask {
+  // Fields from backend calculation
+  status: 'green' | 'gray' | 'red';
   days_since_check: number;
   diff: number;
-  week_number: number;
-  status: 'green' | 'gray' | 'red';
+  message: string;
+  // Added by frontend
+  week_number?: number;
 }
 
 interface SummaryMetrics {
   total_tasks: number;
   overdue_tasks: number;
   ideal_average: number;
-  highest_gap_task?: ImportantTaskWithCalculations;
+  highest_gap_task?: ImportantTask;
 }
 
 const ImportantTasks: React.FC = () => {
-  const [tasks, setTasks] = useState<ImportantTaskWithCalculations[]>([]);
+  const [tasks, setTasks] = useState<ImportantTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
   const [showAddModal, setShowAddModal] = useState(false);
@@ -51,18 +49,22 @@ const ImportantTasks: React.FC = () => {
   const loadImportantTasks = async () => {
     try {
       const response = await axios.get('http://localhost:8000/api/important-tasks');
-      const tasksWithCalculations = response.data.map((task: ImportantTask) => 
-        calculateTaskMetrics(task)
-      );
+      
+      // API already returns calculated status, days_since_check, and diff
+      // Just need to add week_number and organize into hierarchy
+      const tasksWithWeek = response.data.map((task: any) => ({
+        ...task,
+        week_number: calculateWeekNumber()
+      }));
       
       // Organize into hierarchy
-      const taskMap = new Map<number, ImportantTaskWithCalculations>();
-      tasksWithCalculations.forEach((task: ImportantTaskWithCalculations) => {
+      const taskMap = new Map<number, any>();
+      tasksWithWeek.forEach((task: any) => {
         taskMap.set(task.id, { ...task, children: [] });
       });
 
-      const rootTasks: ImportantTaskWithCalculations[] = [];
-      tasksWithCalculations.forEach((task: ImportantTaskWithCalculations) => {
+      const rootTasks: any[] = [];
+      tasksWithWeek.forEach((task: any) => {
         if (task.parent_id) {
           const parent = taskMap.get(task.parent_id);
           if (parent) {
@@ -82,43 +84,20 @@ const ImportantTasks: React.FC = () => {
     }
   };
 
-  const calculateTaskMetrics = (task: ImportantTask): ImportantTaskWithCalculations => {
+  const calculateWeekNumber = (): number => {
     const today = new Date();
-    const lastCheck = task.last_check_date ? new Date(task.last_check_date) : new Date(task.start_date || task.created_at);
-    
-    const daysSinceCheck = Math.floor((today.getTime() - lastCheck.getTime()) / (1000 * 60 * 60 * 24));
-    const diff = task.ideal_gap_days - daysSinceCheck;
-    
-    let status: 'green' | 'gray' | 'red';
-    if (diff > 5) {
-      status = 'green';
-    } else if (diff >= 0) {
-      status = 'gray';
-    } else {
-      status = 'red';
-    }
-
-    // Calculate week number (simple: week of year)
     const startOfYear = new Date(today.getFullYear(), 0, 1);
     const dayOfYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
-    const weekNumber = Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
-
-    return {
-      ...task,
-      days_since_check: daysSinceCheck,
-      diff,
-      week_number: weekNumber,
-      status
-    };
+    return Math.ceil((dayOfYear + startOfYear.getDay() + 1) / 7);
   };
 
   const calculateSummaryMetrics = (): SummaryMetrics => {
-    const flattenTasks = (tasks: ImportantTaskWithCalculations[]): ImportantTaskWithCalculations[] => {
-      let result: ImportantTaskWithCalculations[] = [];
+    const flattenTasks = (tasks: any[]): any[] => {
+      let result: any[] = [];
       tasks.forEach(task => {
         result.push(task);
         if (task.children && task.children.length > 0) {
-          result = result.concat(flattenTasks(task.children as ImportantTaskWithCalculations[]));
+          result = result.concat(flattenTasks(task.children));
         }
       });
       return result;
@@ -126,10 +105,10 @@ const ImportantTasks: React.FC = () => {
 
     const allTasks = flattenTasks(tasks);
     const overdueTasks = allTasks.filter(t => t.diff < 0);
-    const totalGap = allTasks.reduce((sum, t) => sum + t.ideal_gap_days, 0);
+    const totalGap = allTasks.reduce((sum, t) => sum + (t.ideal_gap_days || 0), 0);
     const idealAverage = allTasks.length > 0 ? Math.round(totalGap / allTasks.length) : 0;
     const highestGapTask = allTasks.length > 0 
-      ? allTasks.reduce((max, t) => t.ideal_gap_days > max.ideal_gap_days ? t : max)
+      ? allTasks.reduce((max, t) => (t.ideal_gap_days || 0) > (max.ideal_gap_days || 0) ? t : max)
       : undefined;
 
     return {
@@ -142,8 +121,8 @@ const ImportantTasks: React.FC = () => {
 
   const handleMarkDone = async (taskId: number) => {
     try {
-      const today = new Date().toISOString().split('T')[0];
-      await axios.put(`http://localhost:8000/api/important-tasks/${taskId}/check`, {
+      const today = new Date().toISOString();
+      await axios.post(`http://localhost:8000/api/important-tasks/${taskId}/check`, {
         check_date: today
       });
       await loadImportantTasks();
@@ -185,7 +164,7 @@ const ImportantTasks: React.FC = () => {
     return 'important-task-red';
   };
 
-  const renderTask = (task: ImportantTaskWithCalculations, level: number = 0) => {
+  const renderTask = (task: ImportantTask, level: number = 0) => {
     const hasChildren = task.children && task.children.length > 0;
     const isExpanded = expandedTasks.has(task.id);
 
@@ -254,7 +233,7 @@ const ImportantTasks: React.FC = () => {
             </div>
           </td>
         </tr>
-        {hasChildren && isExpanded && task.children!.map(child => renderTask(child as ImportantTaskWithCalculations, level + 1))}
+        {hasChildren && isExpanded && task.children!.map((child: ImportantTask) => renderTask(child, level + 1))}
       </React.Fragment>
     );
   };
