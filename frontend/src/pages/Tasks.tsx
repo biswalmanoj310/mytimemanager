@@ -874,7 +874,8 @@ export default function Tasks() {
       console.log('Task moved to NOW successfully');
     } catch (err: any) {
       console.error('Failed to move to NOW:', err);
-      alert('Failed to move task to NOW');
+      console.error('Error details:', err.response?.data || err.message);
+      alert(`Failed to move task to NOW: ${err.response?.data?.detail || err.message || 'Unknown error'}`);
     }
   };
 
@@ -13722,17 +13723,21 @@ export default function Tasks() {
                       return null;
                     })()}
 
-                    {/* NOW button for habits - creates a reminder to work on this habit */}
+                    {/* NOW button for habits - provides feedback about habit tracking */}
                     <button
-                      onClick={async (e) => {
+                      onClick={(e) => {
                         e.stopPropagation();
-                        // Habits don't have priority/due_date, so we show them in Habits tab
-                        alert(`Habit "${habit.name}" is already tracked daily. Check it off when completed today!`);
+                        // Habits don't have priority/due_date, they're tracked daily
+                        // Just check the checkbox to mark as done
+                        const checkbox = e.currentTarget.parentElement?.querySelector('input[type="checkbox"]') as HTMLInputElement;
+                        if (checkbox && !checkbox.checked) {
+                          checkbox.click();
+                        }
                       }}
                       style={{
                         padding: '6px 12px',
                         fontSize: '12px',
-                        backgroundColor: '#dc2626',
+                        backgroundColor: '#10b981',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
@@ -13740,8 +13745,9 @@ export default function Tasks() {
                         fontWeight: '600',
                         flexShrink: 0
                       }}
+                      title="Mark habit as completed for today"
                     >
-                      NOW
+                      ✓ DO IT
                     </button>
 
                     {/* Pillar and Category badge at the end */}
