@@ -237,6 +237,7 @@ class TaskUpdate(BaseModel):
     priority: Optional[int] = Field(None, ge=1, le=10, description="Priority level (1=highest, 10=lowest)")
     is_active: Optional[bool] = None
     is_completed: Optional[bool] = None
+    completed_at: Optional[datetime] = None
 
     @validator('additional_whys', pre=True)
     def parse_additional_whys(cls, v):

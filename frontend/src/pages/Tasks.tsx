@@ -852,7 +852,9 @@ export default function Tasks() {
       // Set priority to 1 and due_date to today
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = today.toISOString(); // Full ISO string with time: 2025-12-09T00:00:00.000Z
+      
+      console.log('Updating task with:', { priority: 1, due_date: todayStr });
       
       if (taskType === 'goal') {
         await api.put(`/api/life-goals/tasks/${taskId}`, { 
@@ -867,21 +869,46 @@ export default function Tasks() {
         });
         await loadProjectTasksDueToday();
       } else {
-        await api.put(`/api/tasks/${taskId}`, { 
+        console.log('Making API call to /api/tasks/' + taskId);
+        const response = await api.put(`/api/tasks/${taskId}`, { 
           priority: 1,
           due_date: todayStr
         });
-        await loadTasks();
+        console.log('API response:', response);
       }
       
-      // Force refresh all data to update NOW tab and remove from source
+      // Wait for all data to reload before navigating
+      console.log('Reloading all task data...');
+      await loadTasks(); // Must complete before navigating to NOW tab
+      await loadProjectTasksDueToday();
+      await loadGoalTasksDueToday();
       await loadTodaysOnlyTasks();
       await loadUpcomingTasks();
-      console.log('Task moved to NOW successfully');
+      console.log('Task moved to NOW successfully, all data reloaded');
+      
+      // Don't auto-navigate - let user stay on current tab
+      // They can manually switch to NOW tab to see the task
     } catch (err: any) {
-      console.error('Failed to move to NOW:', err);
+      console.error('Failed to move to NOW - Full error:', err);
       console.error('Error response:', err.response);
-      const errorMsg = err.response?.data?.detail || err.message || JSON.stringify(err);
+      console.error('Error response data:', err.response?.data);
+      console.error('Error message:', err.message);
+      
+      // Handle validation errors (422)
+      let errorMsg = 'Unknown error';
+      if (err.response?.data?.detail) {
+        if (Array.isArray(err.response.data.detail)) {
+          // Pydantic validation errors
+          errorMsg = err.response.data.detail.map((e: any) => 
+            `${e.loc?.join('.') || 'field'}: ${e.msg}`
+          ).join(', ');
+        } else if (typeof err.response.data.detail === 'string') {
+          errorMsg = err.response.data.detail;
+        }
+      } else {
+        errorMsg = err.response?.data?.message || err.message;
+      }
+      
       alert(`Failed to move task to NOW: ${errorMsg}`);
     }
   };
@@ -3094,12 +3121,29 @@ export default function Tasks() {
     try {
       // Load tasks created specifically for today (follow_up_frequency = 'today')
       // Exclude NOW tasks (priority <= 3) to prevent duplicates
-      const todayTasks = tasks.filter(task => 
-        task.follow_up_frequency === 'today' && 
-        !task.is_completed &&
-        task.is_active &&
-        (!task.priority || task.priority > 3)  // Exclude NOW tasks
-      );
+      // Include completed tasks if completed today (they'll be styled differently)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(today);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      const todayTasks = tasks.filter(task => {
+        if (task.follow_up_frequency !== 'today') return false;
+        if (!task.is_active) return false;
+        if (task.priority && task.priority <= 3) return false; // Exclude NOW tasks
+        
+        // Include incomplete tasks
+        if (!task.is_completed) return true;
+        
+        // Include tasks completed today (show until midnight)
+        if (task.is_completed && task.completed_at) {
+          const completedDate = new Date(task.completed_at);
+          return completedDate >= today && completedDate <= todayEnd;
+        }
+        
+        return false;
+      });
+      
       setTodaysOnlyTasks(todayTasks);
     } catch (err: any) {
       console.error('Error loading today\'s only tasks:', err);
@@ -3459,18 +3503,39 @@ export default function Tasks() {
     return '';
   };
 
-  const handleToggleTaskCompletion = async (taskId: number, currentStatus: boolean) => {
+  const handleToggleTaskCompletion = async (taskId: number, currentStatus: boolean, taskType: 'task' | 'project' | 'goal' = 'task') => {
     try {
-      await api.put(`/api/projects/tasks/${taskId}`, {
-        is_completed: !currentStatus
-      });
-      
-      // Refresh both projects list and tasks
-      await loadProjects(); // This will reload all projects with updated status
-      await loadProjectTasksDueToday(); // Reload the today tasks list
-      
-      if (selectedProject) {
-        await loadProjectTasks(selectedProject.id);
+      if (taskType === 'project') {
+        await api.put(`/api/projects/tasks/${taskId}`, {
+          is_completed: !currentStatus
+        });
+        // Refresh both projects list and tasks
+        await loadProjects(); // This will reload all projects with updated status
+        await loadProjectTasksDueToday(); // Reload the today tasks list
+        
+        if (selectedProject) {
+          await loadProjectTasks(selectedProject.id);
+        }
+      } else if (taskType === 'goal') {
+        await api.put(`/api/life-goals/tasks/${taskId}`, {
+          is_completed: !currentStatus
+        });
+        await loadGoalTasksDueToday();
+      } else {
+        // Regular task
+        if (!currentStatus) {
+          // Mark as complete - backend sets completed_at automatically
+          await api.put(`/api/tasks/${taskId}`, { 
+            is_completed: true
+          });
+        } else {
+          // Mark as incomplete
+          await api.put(`/api/tasks/${taskId}`, { 
+            is_completed: false
+          });
+        }
+        await loadTasks();
+        await loadTodaysOnlyTasks();
       }
     } catch (err: any) {
       console.error('Error toggling task completion:', err);
@@ -5906,37 +5971,38 @@ export default function Tasks() {
           }}>
             <h2 style={{ margin: '0 0 10px 0', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '24px' }}>🔥</span>
-              High Priority Tasks (Priority 1-3)
+              NOW - Focus Tasks (Max 3)
             </h2>
             <p style={{ margin: 0, color: '#7f1d1d' }}>
-              These are your most urgent tasks that need immediate attention. Focus on these first!
+              These are your top 3 focus tasks for right now. Move tasks here from other tabs using the NOW button.
             </p>
           </div>
 
           {(() => {
-            // NOW tab logic: Shows top 3 priority tasks (P1-P3 only) due today or earlier
-            // Important: Only tasks explicitly set to P1, P2, or P3 appear here
-            // Setting a task to P3 will move it to NOW if there's space
+            // NOW tab logic: Shows top 3 tasks with priority 1-3 due today or earlier
+            // ANY priority can be set to 1-3 to appear here
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             
-            // Filter tasks: priority 1-3 AND (due_date <= today OR no due_date for weekly/monthly)
+            // Filter tasks: priority 1-3 (any task can have this) AND due_date <= today
             const nowTasks = tasks.filter(task => {
               if (!task.priority || task.priority < 1 || task.priority > 3) return false;
               if (!task.is_active || task.is_completed) return false;
               
               // For tasks with due dates, must be today or earlier
               if (task.due_date) {
-                return new Date(task.due_date) <= today;
+                const taskDueDate = new Date(task.due_date);
+                taskDueDate.setHours(0, 0, 0, 0);
+                return taskDueDate <= today;
               }
               
               // For tasks without due dates (weekly/monthly), allow them in NOW
               return true;
             });
             
-            console.log(`NOW tab filtering: found ${nowTasks.length} regular tasks with P1-3`);
+            console.log(`NOW tab filtering: found ${nowTasks.length} tasks with P1-3 and due today`);
             if (nowTasks.length > 0) {
-              console.log('NOW tasks:', nowTasks.map(t => `${t.id}: ${t.name} (P${t.priority}, ${t.follow_up_frequency})`));
+              console.log('NOW tasks:', nowTasks.map(t => `${t.id}: ${t.name} (P${t.priority}, due: ${t.due_date})`));
             }
             
             const nowProjectTasks = projectTasksDueToday.filter(task => 
@@ -12589,18 +12655,31 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {todaysOnlyTasks.map(task => (
+                      {todaysOnlyTasks.map(task => {
+                        const isCompleted = task.is_completed;
+                        const baseBackgroundColor = isCompleted ? '#d1fae5' : '#fff'; // Green for completed, white for active
+                        const hoverBackgroundColor = isCompleted ? '#a7f3d0' : '#f1f5f9';
+                        
+                        return (
                         <tr 
                           key={task.id}
                           style={{
                             borderBottom: '1px solid #e2e8f0',
-                            backgroundColor: '#fff',
+                            backgroundColor: baseBackgroundColor,
                             transition: 'background-color 0.15s ease'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = hoverBackgroundColor}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = baseBackgroundColor}
                         >
-                          <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1e293b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                          <td style={{ 
+                            padding: '12px', 
+                            fontSize: '14px', 
+                            fontWeight: '600', 
+                            color: '#1e293b', 
+                            borderRight: '2px solid #3b82f6', 
+                            background: 'inherit',
+                            textDecoration: isCompleted ? 'line-through' : 'none'
+                          }}>
                             {task.name}
                           </td>
                           <td style={{ padding: '12px', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
@@ -12648,7 +12727,7 @@ export default function Tasks() {
                                 style={{
                                   padding: '4px 10px',
                                   fontSize: '11px',
-                                  backgroundColor: '#10b981',
+                                  backgroundColor: isCompleted ? '#f59e0b' : '#10b981',
                                   color: 'white',
                                   border: 'none',
                                   borderRadius: '4px',
@@ -12656,7 +12735,7 @@ export default function Tasks() {
                                   fontWeight: '600'
                                 }}
                               >
-                                Done
+                                {isCompleted ? 'Undo' : 'Done'}
                               </button>
                               <button
                                 onClick={async () => {
@@ -12686,7 +12765,8 @@ export default function Tasks() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
