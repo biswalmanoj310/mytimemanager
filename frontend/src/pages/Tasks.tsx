@@ -604,6 +604,12 @@ export default function Tasks() {
   const [todaysHabits, setTodaysHabits] = useState<TodaysHabit[]>([]);
   const [todaysChallenges, setTodaysChallenges] = useState<TodaysChallenge[]>([]);
   const [currentPeriodStats, setCurrentPeriodStats] = useState<Record<number, PeriodStats>>({});
+  
+  // NOW habits - stored in localStorage
+  const [nowHabits, setNowHabits] = useState<Set<number>>(() => {
+    const stored = localStorage.getItem('nowHabits');
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
 
   // Life Goals state
   const [lifeGoals, setLifeGoals] = useState<LifeGoalData[]>([]);
@@ -874,9 +880,36 @@ export default function Tasks() {
       console.log('Task moved to NOW successfully');
     } catch (err: any) {
       console.error('Failed to move to NOW:', err);
-      console.error('Error details:', err.response?.data || err.message);
-      alert(`Failed to move task to NOW: ${err.response?.data?.detail || err.message || 'Unknown error'}`);
+      console.error('Error response:', err.response);
+      const errorMsg = err.response?.data?.detail || err.message || JSON.stringify(err);
+      alert(`Failed to move task to NOW: ${errorMsg}`);
     }
+  };
+
+  // Move habit to NOW
+  const handleMoveHabitToNow = (habitId: number) => {
+    console.log('=== handleMoveHabitToNow called ===');
+    console.log('habitId:', habitId);
+    console.log('Current nowHabits before:', Array.from(nowHabits));
+    
+    const updatedNowHabits = new Set(nowHabits);
+    updatedNowHabits.add(habitId);
+    
+    console.log('Updated nowHabits after:', Array.from(updatedNowHabits));
+    
+    setNowHabits(updatedNowHabits);
+    localStorage.setItem('nowHabits', JSON.stringify([...updatedNowHabits]));
+    
+    console.log('localStorage saved:', localStorage.getItem('nowHabits'));
+    console.log('===================================');
+  };
+
+  // Move habit back to Today
+  const handleMoveHabitToToday = (habitId: number) => {
+    const updatedNowHabits = new Set(nowHabits);
+    updatedNowHabits.delete(habitId);
+    setNowHabits(updatedNowHabits);
+    localStorage.setItem('nowHabits', JSON.stringify([...updatedNowHabits]));
   };
 
   // Move task to Today (set priority to 4 or higher)
@@ -1144,9 +1177,10 @@ export default function Tasks() {
       
       // Trigger initial data load for the active tab
       if (activeTab === 'now') {
-        // NOW tab needs project and goal tasks
+        // NOW tab needs project and goal tasks, plus habits
         loadProjectTasksDueToday();
         loadGoalTasksDueToday();
+        loadTodaysHabits(); // Load habits so NOW habits can be displayed
       } else if (activeTab === 'daily') {
         loadDailyEntries(selectedDate);
       } else if (activeTab === 'weekly') {
@@ -1181,9 +1215,10 @@ export default function Tasks() {
     if (!tasksLoadedRef.current) return;
     
     if (activeTab === 'now') {
-      // NOW tab needs project and goal tasks
+      // NOW tab needs project and goal tasks, plus habits
       loadProjectTasksDueToday();
       loadGoalTasksDueToday();
+      loadTodaysHabits(); // Load habits so NOW habits can be displayed
     } else if (activeTab === 'daily') {
       loadDailyEntries(selectedDate);
     } else if (activeTab === 'weekly') {
@@ -2932,8 +2967,16 @@ export default function Tasks() {
       const response: any = await api.get('/api/habits/today/active');
       const allHabits = Array.isArray(response.data || response) ? (response.data || response) : [];
       
+      // Get current nowHabits from localStorage
+      const storedNowHabits = localStorage.getItem('nowHabits');
+      const nowHabitIds = storedNowHabits ? new Set(JSON.parse(storedNowHabits)) : new Set();
+      
       // Filter to only show habits that haven't been done for 2+ consecutive days
+      // OR habits that are in the NOW list (those should always load)
       const habitsNeedingAttention = allHabits.filter((habit: any) => {
+        // Always include habits that are in NOW list
+        if (nowHabitIds.has(habit.id)) return true;
+        
         // If completed today, don't show (they're on track)
         if (habit.completed_today) return false;
         
@@ -5864,7 +5907,10 @@ export default function Tasks() {
               })
               .slice(0, 3); // Show top 3 only
             
-            if (allNowTasks.length === 0) {
+            // Check if there are NOW habits to display
+            const hasNowHabits = nowHabits.size > 0 && todaysHabits.filter(h => nowHabits.has(h.id)).length > 0;
+            
+            if (allNowTasks.length === 0 && !hasNowHabits) {
               return (
                 <div style={{
                   padding: '40px',
@@ -6144,6 +6190,116 @@ export default function Tasks() {
                         </tr>
                       );
                     })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+          
+          {/* NOW Habits Section - Always render outside tasks IIFE */}
+          {(() => {
+            console.log('=== NOW Habits Section Debug ===');
+            console.log('nowHabits Set:', nowHabits);
+            console.log('nowHabits.size:', nowHabits.size);
+            console.log('nowHabits array:', Array.from(nowHabits));
+            console.log('localStorage nowHabits:', localStorage.getItem('nowHabits'));
+            console.log('todaysHabits:', todaysHabits);
+            console.log('todaysHabits.length:', todaysHabits.length);
+            console.log('================================');
+            
+            if (nowHabits.size === 0) {
+              console.log('NO NOW HABITS - size is 0');
+              return null;
+            }
+            
+            const nowHabitsList = todaysHabits.filter(h => nowHabits.has(h.id));
+            console.log('Filtered NOW Habits List:', nowHabitsList);
+            if (nowHabitsList.length === 0) {
+              console.log('NO HABITS FOUND IN FILTER');
+              return null;
+            }
+                  
+            return (
+              <div className="tasks-table-container" style={{ marginTop: '24px' }}>
+                <h3 style={{ 
+                  fontSize: '16px', 
+                  fontWeight: '600', 
+                  color: '#1f2937', 
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  🎯 NOW Habits
+                  <span style={{ fontSize: '14px', fontWeight: '400', color: '#6b7280' }}>
+                    ({nowHabitsList.length})
+                  </span>
+                </h3>
+                <table className="tasks-table">
+                  <thead>
+                    <tr>
+                      <th className="col-checkbox"></th>
+                      <th className="col-task">Habit</th>
+                      <th className="col-time">Target</th>
+                      <th className="col-action">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {nowHabitsList.map(habit => (
+                      <tr 
+                        key={habit.id}
+                        style={{ 
+                          backgroundColor: '#fee2e2'
+                        }}
+                      >
+                        <td className="col-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={habit.completed_today}
+                            onChange={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                await api.post(`/api/habits/${habit.id}/mark-today?is_completed=${!habit.completed_today}`);
+                                loadTodaysHabits();
+                              } catch (err) {
+                                console.error('Error toggling habit:', err);
+                              }
+                            }}
+                            style={{ cursor: 'pointer', width: '18px', height: '18px' }}
+                          />
+                        </td>
+                        <td className="col-task">
+                          <div style={{ fontWeight: '600', color: '#1f2937' }}>
+                            {habit.name}
+                          </div>
+                        </td>
+                        <td className="col-time">
+                          {habit.target_value ? (
+                            <span>{habit.target_value} {habit.session_target_unit || 'units'}/day</span>
+                          ) : (
+                            <span style={{ color: '#9ca3af' }}>-</span>
+                          )}
+                        </td>
+                        <td className="col-action">
+                          <button
+                            onClick={() => handleMoveHabitToToday(habit.id)}
+                            style={{
+                              padding: '6px 12px',
+                              fontSize: '13px',
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: '600'
+                            }}
+                            title="Move back to Today section"
+                          >
+                            ← Today
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -13508,7 +13664,7 @@ export default function Tasks() {
               
               {todayTabSections.todaysHabits && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {todaysHabits.map(habit => (
+                  {todaysHabits.filter(h => !nowHabits.has(h.id)).map(habit => (
                   <div
                     key={habit.id}
                     style={{
@@ -13723,21 +13879,16 @@ export default function Tasks() {
                       return null;
                     })()}
 
-                    {/* NOW button for habits - provides feedback about habit tracking */}
+                    {/* NOW button for habits */}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        // Habits don't have priority/due_date, they're tracked daily
-                        // Just check the checkbox to mark as done
-                        const checkbox = e.currentTarget.parentElement?.querySelector('input[type="checkbox"]') as HTMLInputElement;
-                        if (checkbox && !checkbox.checked) {
-                          checkbox.click();
-                        }
+                        handleMoveHabitToNow(habit.id);
                       }}
                       style={{
                         padding: '6px 12px',
                         fontSize: '12px',
-                        backgroundColor: '#10b981',
+                        backgroundColor: '#dc2626',
                         color: 'white',
                         border: 'none',
                         borderRadius: '4px',
@@ -13745,9 +13896,9 @@ export default function Tasks() {
                         fontWeight: '600',
                         flexShrink: 0
                       }}
-                      title="Mark habit as completed for today"
+                      title="Move to NOW section"
                     >
-                      ✓ DO IT
+                      NOW
                     </button>
 
                     {/* Pillar and Category badge at the end */}
