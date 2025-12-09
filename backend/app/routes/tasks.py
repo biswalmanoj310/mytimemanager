@@ -45,19 +45,9 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     try:
         db_task = TaskService.create_task(db, task)
         
-        # If task is one_time, automatically create entry in one_time_tasks
-        if db_task.follow_up_frequency == FollowUpFrequency.ONE_TIME:
-            from app.models.models import OneTimeTask
-            from datetime import datetime
-            
-            one_time_entry = OneTimeTask(
-                task_id=db_task.id,
-                start_date=datetime.utcnow(),
-                target_gap=None,
-                updated_date=None
-            )
-            db.add(one_time_entry)
-            db.commit()
+        # Note: If task is one_time (Important Task), it should be created 
+        # through the /api/important-tasks/ endpoint instead
+        # The old one_time_tasks table has been replaced with important_tasks
         
         # Parse additional_whys from JSON string for response
         task_dict = TaskResponse.model_validate(db_task).model_dump()

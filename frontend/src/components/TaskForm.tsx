@@ -40,6 +40,7 @@ interface TaskFormData {
   due_date: string;
   priority: number;
   parent_task_id: number | null;
+  ideal_gap_days?: number;
 }
 
 export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency, defaultWishId, defaultParentTaskId }: TaskFormProps) {
@@ -303,6 +304,26 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         console.log('Task created successfully:', response);
         // Extract the task ID from the response
         createdTaskId = response?.data?.id || response?.id;
+        
+        // If this is an Important Task (ONE_TIME) with ideal_gap_days, create in important_tasks table
+        if (formData.follow_up_frequency === FollowUpFrequency.ONE_TIME && formData.ideal_gap_days) {
+          try {
+            const importantTaskData = {
+              name: formData.name,
+              description: formData.description || undefined,
+              pillar_id: formData.pillar_id || undefined,
+              category_id: formData.category_id || undefined,
+              sub_category_id: formData.sub_category_id || undefined,
+              ideal_gap_days: formData.ideal_gap_days,
+              priority: formData.priority
+            };
+            await api.post('/api/important-tasks/', importantTaskData);
+            console.log('Important task tracking created');
+          } catch (importantErr) {
+            console.error('Failed to create important task tracking:', importantErr);
+            // Don't fail the whole operation - task was created successfully
+          }
+        }
       }
       
       onSuccess(createdTaskId);
@@ -650,7 +671,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               <option value={FollowUpFrequency.MONTHLY}>Monthly</option>
               <option value={FollowUpFrequency.QUARTERLY}>Quarterly</option>
               <option value={FollowUpFrequency.YEARLY}>Yearly</option>
-              <option value={FollowUpFrequency.ONE_TIME}>One Time</option>
+              <option value={FollowUpFrequency.ONE_TIME}>Important</option>
               <option value={FollowUpFrequency.MISC}>Misc Task</option>
             </select>
           </div>
@@ -690,6 +711,25 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               Set task priority (1 = highest, 10 = lowest). Default is 10.
             </small>
           </div>
+
+          {/* Ideal Gap Days for Important Tasks */}
+          {formData.follow_up_frequency === FollowUpFrequency.ONE_TIME && (
+            <div className="form-group">
+              <label htmlFor="ideal_gap_days">Ideal Gap (Days): <span className="required">*</span></label>
+              <input
+                type="number"
+                id="ideal_gap_days"
+                min="1"
+                value={formData.ideal_gap_days || ''}
+                onChange={(e) => setFormData({ ...formData, ideal_gap_days: parseInt(e.target.value) || undefined })}
+                placeholder="e.g., 7, 30, 45, 90"
+                required={formData.follow_up_frequency === FollowUpFrequency.ONE_TIME}
+              />
+              <small className="help-text">
+                How many days between checks? (e.g., check bank account every 45 days)
+              </small>
+            </div>
+          )}
 
           {/* Separately Followed */}
           <div className="form-group checkbox-group">

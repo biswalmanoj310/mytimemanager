@@ -22,14 +22,20 @@ class ImportantTaskCreate(BaseModel):
     sub_category_id: Optional[int] = None
     ideal_gap_days: int
     priority: int = 5
+    parent_id: Optional[int] = None  # For creating sub-tasks
 
 
 class ImportantTaskUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
     ideal_gap_days: Optional[int] = None
     priority: Optional[int] = None
     is_active: Optional[bool] = None
+    start_date: Optional[str] = None  # ISO format date string
+    parent_id: Optional[int] = None  # For moving tasks to become sub-tasks
 
 
 def calculate_status(task: ImportantTask) -> dict:
@@ -71,10 +77,15 @@ def calculate_status(task: ImportantTask) -> dict:
 @router.get("/")
 def get_all_important_tasks(
     status_filter: Optional[str] = None,  # red, yellow, green
+    include_inactive: bool = True,  # Include completed tasks
     db: Session = Depends(get_db)
 ):
     """Get all important tasks with status"""
-    tasks = db.query(ImportantTask).filter(ImportantTask.is_active == True).all()
+    query = db.query(ImportantTask)
+    if not include_inactive:
+        query = query.filter(ImportantTask.is_active == True)
+    
+    tasks = query.all()
     
     result = []
     for task in tasks:
@@ -120,6 +131,7 @@ def create_important_task(
         sub_category_id=task.sub_category_id,
         ideal_gap_days=task.ideal_gap_days,
         priority=task.priority,
+        parent_id=task.parent_id,
         check_history="[]"
     )
     db.add(db_task)
@@ -144,12 +156,22 @@ def update_important_task(
         db_task.name = task.name
     if task.description is not None:
         db_task.description = task.description
+    if task.pillar_id is not None:
+        db_task.pillar_id = task.pillar_id
+    if task.category_id is not None:
+        db_task.category_id = task.category_id
+    if task.sub_category_id is not None:
+        db_task.sub_category_id = task.sub_category_id
     if task.ideal_gap_days is not None:
         db_task.ideal_gap_days = task.ideal_gap_days
     if task.priority is not None:
         db_task.priority = task.priority
     if task.is_active is not None:
         db_task.is_active = task.is_active
+    if task.start_date is not None:
+        db_task.start_date = datetime.fromisoformat(task.start_date.replace('Z', '+00:00'))
+    if task.parent_id is not None:
+        db_task.parent_id = task.parent_id
     
     db.commit()
     return {"message": "Task updated"}

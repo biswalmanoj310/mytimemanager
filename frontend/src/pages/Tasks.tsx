@@ -11,7 +11,7 @@ import './MiscTaskColors.css';
 import './Projects.css';
 import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
-import { WeeklyTasks, MonthlyTasks, YearlyTasks, OneTimeTasks } from './index';
+import { WeeklyTasks, MonthlyTasks, YearlyTasks } from './index';
 import { getWeekStart } from '../utils/dateHelpers';
 import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
@@ -2807,14 +2807,9 @@ export default function Tasks() {
 
   // One-Time Tasks Functions
   async function loadOneTimeTasks() {
-    try {
-      const response: any = await api.get('/api/one-time-tasks/');
-      const data = response.data || response;
-      setOneTimeTasks(Array.isArray(data) ? data : []);
-    } catch (err: any) {
-      console.error('Error loading one-time tasks:', err);
-      setOneTimeTasks([]);
-    }
+    // Deprecated: Now using ImportantTasks component which manages its own data
+    // Old one_time_tasks table has been replaced with important_tasks
+    console.log('loadOneTimeTasks() is deprecated - using ImportantTasks component');
   };
 
   const handleAddOneTimeTask = async () => {
@@ -5873,47 +5868,6 @@ export default function Tasks() {
         
         <div className="container-fluid">
           <YearlyTasks />
-        </div>
-        <TaskForm
-          isOpen={isTaskFormOpen}
-          taskId={selectedTaskId || undefined}
-          onClose={() => setIsTaskFormOpen(false)}
-          onSuccess={async () => {
-            await loadTasks();
-            setIsTaskFormOpen(false);
-          }}
-        />
-      </div>
-    );
-  };
-
-  if (activeTab === 'onetime') {
-    return (
-      <div className="tasks-page">
-        <header className="tasks-header">
-          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
-            ➕ Add Task
-          </button>
-        </header>
-        <div className="tasks-tabs">
-          {tabs.map(tab => (
-            <button
-              key={tab.key}
-              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab(tab.key);
-                const searchParams = new URLSearchParams(location.search);
-                searchParams.set('tab', tab.key);
-                navigate(`?${searchParams.toString()}`, { replace: true });
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        <div className="container-fluid">
-          <OneTimeTasks />
         </div>
         <TaskForm
           isOpen={isTaskFormOpen}
@@ -12518,8 +12472,7 @@ export default function Tasks() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -12675,8 +12628,7 @@ export default function Tasks() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -12811,8 +12763,7 @@ export default function Tasks() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -12954,8 +12905,7 @@ export default function Tasks() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -13168,8 +13118,7 @@ export default function Tasks() {
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -13670,23 +13619,25 @@ export default function Tasks() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                  userSelect: 'none'
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                 }}
               >
-                <h3 style={{ 
-                  margin: 0,
-                  color: '#ffffff', 
-                  fontSize: '18px', 
-                  fontWeight: '600',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}>
-                  <span>🔥</span>
-                  <span>Habits Needing Attention (2+ Consecutive Days Missed)</span>
-                  <span style={{ fontSize: '13px', fontWeight: '400', opacity: 0.9 }}>({todaysHabits.length})</span>
-                </h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                  <span style={{ fontSize: '22px' }}>🔥</span>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '2px' }}>
+                      <span style={{ fontSize: '18px', fontWeight: '600', color: '#ffffff' }}>
+                        Habits Needing Attention
+                      </span>
+                      <span style={{ fontSize: '13px', fontWeight: '400', opacity: 0.9, color: '#ffffff' }}>
+                        ({todaysHabits.length})
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', fontWeight: '400', opacity: 0.85, color: '#ffffff' }}>
+                      2+ consecutive days missed or monthly average below 80%
+                    </div>
+                  </div>
+                </div>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.todaysHabits ? '▼' : '▶'}
                 </span>
