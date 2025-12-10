@@ -75,6 +75,19 @@ POST /api/weekly-time/status/{taskId}/complete?week_start_date={date}  // Update
 ./start_frontend.sh         # Frontend only (vite dev server on port 3000)
 ```
 
+**First Time Setup**:
+```bash
+# Backend
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Frontend
+cd frontend
+npm install
+```
+
 ### Database Operations
 ```bash
 ./backup_database.sh        # Creates ~/mytimemanager_backups/mytimemanager_backup_YYYYMMDD_HHMMSS.db.gz
@@ -84,6 +97,9 @@ python recalculate_summaries.py  # Recalculates daily summaries (run after bulk 
 cd backend/migrations
 python add_*.py             # Python migrations
 sqlite3 ../database/mytimemanager.db < 001_*.sql  # SQL migrations
+
+# Restore from backup
+./restore_database.sh       # Interactive restore from ~/mytimemanager_backups/
 ```
 
 ### Testing
@@ -148,6 +164,13 @@ from app.services.habit_service import HabitService
 HabitService.recalculate_streaks(db, habit_id)  # Rebuilds streak data from entries
 ```
 
+### 6. Service Layer Pattern
+Business logic lives in `backend/app/services/` NOT in route handlers. Each entity has a dedicated service:
+- `task_service.py`, `habit_service.py`, `challenge_service.py`, `goal_service.py`, etc.
+- Routes handle HTTP concerns (validation, status codes), services handle domain logic
+- Example: `HabitService.recalculate_streaks()` for complex streak calculations
+- Services are stateless classes with `@staticmethod` methods taking `db: Session` as first param
+
 ## Data Integrity Rules
 
 1. **Time Allocation**: Daily tasks should total 480 minutes (8 hours) per pillar (not enforced but expected)
@@ -158,12 +181,14 @@ HabitService.recalculate_streaks(db, habit_id)  # Rebuilds streak data from entr
 
 ## Common Pitfalls
 
-1. **Missing Router Registration**: New routes in `app/routes/` won't work until added to `main.py` includes
+1. **Missing Router Registration**: New routes in `app/routes/` won't work until added to `main.py` includes (see lines 70-95 for all router imports/registrations)
 2. **Context Bypass**: Don't call API directly from components - use `useTaskContext()` or `useTimeEntriesContext()` to leverage caching/state sync
 3. **Incomplete Multi-Tab Completion**: When completing tasks in monitoring tabs, must call BOTH task endpoint + status endpoint
 4. **Migration Without Backup**: Database has no WAL mode - corruption requires restore from backup
 5. **Hardcoded 24-Hour Logic**: System assumes three 8-hour pillars (never hardcode 24 hours)
 6. **Task Without Frequency**: `follow_up_frequency` is required - determines home tab visibility
+7. **Service Layer Bypass**: Don't put business logic in routes - use existing service classes or create new ones in `backend/app/services/`
+8. **Direct Session Creation**: Never `Session()` - always use `db: Session = Depends(get_db)` for automatic transaction management
 
 ## UI/UX Standards
 
@@ -175,11 +200,13 @@ HabitService.recalculate_streaks(db, habit_id)  # Rebuilds streak data from entr
 
 ## Essential Documentation
 
-- `PROJECT_SUMMARY.md` - Complete feature catalog with implementation details
+- `PROJECT_SUMMARY.md` - Complete feature catalog with implementation details (606 lines - comprehensive system overview)
 - `TASK_LIFECYCLE_DOCUMENTATION.md` - Deep dive into task completion/NA/status logic (513 lines - READ THIS for task changes)
-- `REUSABLE_COMPONENTS_GUIDE.md` - PillarCategorySelector, TaskSelector patterns
-- `DATABASE_INFO.md` - Backup location (`~/mytimemanager_backups/`), restore procedures
-- `QUICK_TEST_CHECKLIST.md` - Regression tests for time entry system
+- `REUSABLE_COMPONENTS_GUIDE.md` - PillarCategorySelector, TaskSelector patterns with research-backed UX patterns
+- `DATABASE_INFO.md` - Backup location (`~/mytimemanager_backups/`), restore procedures, schema reference
+- `QUICK_TEST_CHECKLIST.md` - Regression tests for time entry system (critical for validating changes)
+- `COMPACT_CARDS_IMPLEMENTATION.md` - UI card layout patterns
+- `GOAL_PROJECT_STRATEGY_GUIDE.md` - Goals vs Projects architecture decisions
 
 ## Pre-Commit Checklist
 
