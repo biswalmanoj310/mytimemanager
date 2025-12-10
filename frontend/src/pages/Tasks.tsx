@@ -5233,7 +5233,6 @@ export default function Tasks() {
                   onUpdateDueDate(task.id, formattedDate);
                 }
               }}
-              showIcon={true}
             />
           )}
           
@@ -6145,12 +6144,11 @@ export default function Tasks() {
                           </td>
                           <td className="col-time" style={{ textAlign: 'center' }}>
                             {task.due_date ? (
-                              <input 
-                                type="date"
-                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
-                                onChange={async (e) => {
-                                  e.stopPropagation();
-                                  const newDate = e.target.value;
+                              <CustomDatePicker
+                                selectedDate={new Date(task.due_date)}
+                                onChange={async (date) => {
+                                  if (!date) return;
+                                  const newDate = date.toISOString().split('T')[0];
                                   try {
                                     if (taskType === 'project') {
                                       await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
@@ -6167,24 +6165,17 @@ export default function Tasks() {
                                     alert('Failed to update due date');
                                   }
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                                 style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '4px 8px',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontSize: '13px',
                                   color: new Date(task.due_date) < new Date() ? '#dc2626' : '#6b7280',
                                   fontWeight: new Date(task.due_date) < new Date() ? '600' : '400'
                                 }}
                               />
                             ) : (
-                              <input 
-                                type="date"
-                                value=""
-                                onChange={async (e) => {
-                                  e.stopPropagation();
-                                  const newDate = e.target.value;
+                              <CustomDatePicker
+                                selectedDate={null}
+                                onChange={async (date) => {
+                                  if (!date) return;
+                                  const newDate = date.toISOString().split('T')[0];
                                   try {
                                     if (taskType === 'project') {
                                       await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
@@ -6199,14 +6190,7 @@ export default function Tasks() {
                                     alert('Failed to update due date');
                                   }
                                 }}
-                                onClick={(e) => e.stopPropagation()}
-                                style={{
-                                  border: '1px solid #e2e8f0',
-                                  padding: '4px 8px',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontSize: '13px'
-                                }}
+                                placeholderText="Set due date"
                               />
                             )}
                           </td>

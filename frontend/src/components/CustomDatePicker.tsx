@@ -9,7 +9,6 @@ interface CustomDatePickerProps {
   placeholderText?: string;
   minDate?: Date;
   maxDate?: Date;
-  showIcon?: boolean;
   className?: string;
   style?: React.CSSProperties;
 }
@@ -21,13 +20,11 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({
   placeholderText = 'Select date',
   minDate,
   maxDate,
-  showIcon = true,
   className,
   style
 }) => {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', ...style }}>
-      {showIcon && <span style={{ fontSize: '16px' }}>📅</span>}
       <DatePicker
         selected={selectedDate}
         onChange={onChange}
