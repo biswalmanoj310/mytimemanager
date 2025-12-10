@@ -3509,6 +3509,9 @@ export default function Tasks() {
 
   const handleToggleTaskCompletion = async (taskId: number, currentStatus: boolean, taskType: 'task' | 'project' | 'goal' = 'task') => {
     try {
+      // Save scroll position
+      const scrollY = window.scrollY;
+      
       if (taskType === 'project') {
         await api.put(`/api/projects/tasks/${taskId}`, {
           is_completed: !currentStatus
@@ -3520,11 +3523,17 @@ export default function Tasks() {
         if (selectedProject) {
           await loadProjectTasks(selectedProject.id);
         }
+        
+        // Restore scroll position
+        setTimeout(() => window.scrollTo(0, scrollY), 0);
       } else if (taskType === 'goal') {
         await api.put(`/api/life-goals/tasks/${taskId}`, {
           is_completed: !currentStatus
         });
         await loadGoalTasksDueToday();
+        
+        // Restore scroll position
+        setTimeout(() => window.scrollTo(0, scrollY), 0);
       } else {
         // Regular task
         if (!currentStatus) {
@@ -3540,6 +3549,9 @@ export default function Tasks() {
         }
         await loadTasks();
         await loadTodaysOnlyTasks();
+        
+        // Restore scroll position
+        setTimeout(() => window.scrollTo(0, scrollY), 0);
       }
     } catch (err: any) {
       console.error('Error toggling task completion:', err);
@@ -3626,12 +3638,18 @@ export default function Tasks() {
 
   const handleToggleGoalTaskCompletion = async (taskId: number, isCompleted: boolean) => {
     try {
+      // Save scroll position
+      const scrollY = window.scrollY;
+      
       await api.put(`/api/life-goals/tasks/${taskId}`, {
         is_completed: !isCompleted
       });
       
       // Refresh goal tasks
       await loadGoalTasksDueToday();
+      
+      // Restore scroll position
+      setTimeout(() => window.scrollTo(0, scrollY), 0);
     } catch (err: any) {
       console.error('Error toggling goal task completion:', err);
       alert('Failed to update goal task: ' + (err.response?.data?.detail || err.message));
@@ -7953,7 +7971,7 @@ export default function Tasks() {
                               allTasks={thisProjectTasks}
                               expandedTasks={expandedTasks}
                               onToggleExpand={toggleTaskExpansion}
-                              onToggleComplete={handleToggleTaskCompletion}
+                              onToggleComplete={(taskId, currentStatus) => handleToggleTaskCompletion(taskId, currentStatus, 'project')}
                               onDelete={handleDeleteTask}
                               onEdit={handleEditTask}
                               onUpdateDueDate={handleUpdateTaskDueDate}
@@ -13458,7 +13476,7 @@ export default function Tasks() {
                                   Edit
                                 </button>
                                 <button
-                                  onClick={() => handleToggleTaskCompletion(task.id, task.is_completed)}
+                                  onClick={() => handleToggleTaskCompletion(task.id, task.is_completed, 'project')}
                                   style={{
                                     padding: '4px 10px',
                                     fontSize: '11px',
