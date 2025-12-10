@@ -2159,7 +2159,7 @@ input[type="number"].hour-input {
 
 .task-row.task-ok {
   border-left: 4px solid #48bb78;
-  background-color: #f0fff4;
+  background-color: transparent; /* No background for tasks with comfortable due dates */
 }
 
 /* Today tab table row colors */
