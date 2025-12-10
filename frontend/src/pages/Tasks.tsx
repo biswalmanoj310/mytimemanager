@@ -8084,7 +8084,7 @@ export default function Tasks() {
             border: '1px solid #e2e8f0'
           }}>
             <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-              📊 Monthly Planning Overview
+              📊 Overdue Tasks: Monthly
             </h4>
             <div style={{
               display: 'flex',
@@ -11374,7 +11374,7 @@ export default function Tasks() {
                 scrollMarginTop: '80px'
               }}>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-                  📈 Task Breakdown - Today's Tab
+                  📈 Overdue Tasks: Today's Tab
                 </h4>
                 <div style={{
                   display: 'flex',
@@ -11395,6 +11395,7 @@ export default function Tasks() {
                   </div>
 
                   {/* Project Tasks */}
+                  {projectCount > 0 && (
                   <button
                     onClick={() => scrollToSection('project-tasks-section')}
                     style={{
@@ -11418,8 +11419,10 @@ export default function Tasks() {
                   >
                     📋 Projects: {projectCount}
                   </button>
+                  )}
 
                   {/* Goal Tasks */}
+                  {goalCount > 0 && (
                   <button
                     onClick={() => scrollToSection('goal-tasks-section')}
                     style={{
@@ -11443,8 +11446,10 @@ export default function Tasks() {
                   >
                     🎯 Goals: {goalCount}
                   </button>
+                  )}
 
                   {/* Misc Tasks */}
+                  {miscCount > 0 && (
                   <button
                     onClick={() => scrollToSection('misc-tasks-section')}
                     style={{
@@ -11468,8 +11473,10 @@ export default function Tasks() {
                   >
                     📝 Misc: {miscCount}
                   </button>
+                  )}
 
                   {/* Important Tasks */}
+                  {importantCount > 0 && (
                   <button
                     onClick={() => scrollToSection('important-tasks-section')}
                     style={{
@@ -11493,8 +11500,10 @@ export default function Tasks() {
                   >
                     ⚡ Important: {importantCount}
                   </button>
+                  )}
 
                   {/* Habits */}
+                  {habitsCount > 0 && (
                   <button
                     onClick={() => scrollToSection('habits-section')}
                     style={{
@@ -11518,6 +11527,7 @@ export default function Tasks() {
                   >
                     💪 Habits: {habitsCount}
                   </button>
+                  )}
                   
                   {/* Weekly Needs Attention */}
                   {weeklyNeedsAttentionCount > 0 && (
@@ -11574,6 +11584,7 @@ export default function Tasks() {
                   )}
 
                   {/* Upcoming (not part of total) */}
+                  {upcomingCount > 0 && (
                   <button
                     onClick={() => scrollToSection('upcoming-tasks-section')}
                     style={{
@@ -11600,6 +11611,7 @@ export default function Tasks() {
                   >
                     📅 Upcoming: {upcomingCount}
                   </button>
+                  )}
                 </div>
               </div>
             );
@@ -11652,7 +11664,7 @@ export default function Tasks() {
                 border: '1px solid #e2e8f0'
               }}>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-                  📊 Monthly Planning Overview
+                  📊 Overdue Tasks: Monthly
                 </h4>
                 <div style={{
                   display: 'flex',
