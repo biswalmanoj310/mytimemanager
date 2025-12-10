@@ -8043,33 +8043,42 @@ export default function Tasks() {
               fontSize: '13px'
             }}>
               {(() => {
-                // Get last 12 months including current month
-                const months: { year: number; month: number; label: string }[] = [];
-                const now = new Date();
-                for (let i = 11; i >= 0; i--) {
-                  const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                  months.push({
-                    year: d.getFullYear(),
-                    month: d.getMonth(),
-                    label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                  });
-                }
+                // Group tasks by their due date month
+                const tasksByMonth: Record<string, { year: number; month: number; tasks: ProjectTaskData[] }> = {};
                 
-                return months.map(({ year, month, label }) => {
-                  // Filter tasks created in this month
-                  const tasksInMonth = miscTasks.filter(t => {
-                    if (!t.created_at) return false;
-                    const taskDate = new Date(t.created_at);
-                    return taskDate.getFullYear() === year && taskDate.getMonth() === month;
+                miscTasks.forEach(task => {
+                  if (task.due_date) {
+                    const dueDate = new Date(task.due_date);
+                    const year = dueDate.getFullYear();
+                    const month = dueDate.getMonth();
+                    const key = `${year}-${month}`;
+                    
+                    if (!tasksByMonth[key]) {
+                      tasksByMonth[key] = { year, month, tasks: [] };
+                    }
+                    tasksByMonth[key].tasks.push(task);
+                  }
+                });
+                
+                // Sort by date (oldest to newest)
+                const sortedMonths = Object.entries(tasksByMonth)
+                  .sort(([keyA], [keyB]) => {
+                    const [yearA, monthA] = keyA.split('-').map(Number);
+                    const [yearB, monthB] = keyB.split('-').map(Number);
+                    if (yearA !== yearB) return yearA - yearB;
+                    return monthA - monthB;
                   });
-                  
-                  const completed = tasksInMonth.filter(t => t.is_completed).length;
-                  const total = tasksInMonth.length;
-                  
-                  if (total === 0) return null; // Don't show months with no tasks
+                
+                const now = new Date();
+                
+                return sortedMonths.map(([key, { year, month, tasks }]) => {
+                  const label = new Date(year, month, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                  const completed = tasks.filter(t => t.is_completed).length;
+                  const total = tasks.length;
                   
                   const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
                   const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
+                  const isPastMonth = year < now.getFullYear() || (year === now.getFullYear() && month < now.getMonth());
                   
                   // Color coding based on completion rate
                   let bgColor = '#e2e8f0'; // gray - low completion
@@ -8087,7 +8096,7 @@ export default function Tasks() {
                   
                   return (
                     <div
-                      key={`${year}-${month}`}
+                      key={key}
                       style={{
                         padding: '8px 12px',
                         borderRadius: '6px',
@@ -8098,24 +8107,26 @@ export default function Tasks() {
                         boxShadow: isCurrentMonth ? '0 0 0 3px rgba(49, 130, 206, 0.1)' : 'none',
                         display: 'flex',
                         flexDirection: 'column',
-                        minWidth: '140px'
+                        minWidth: '140px',
+                        opacity: isPastMonth && total - completed > 0 ? 0.7 : 1
                       }}
-                      title={`${completed} completed out of ${total} tasks planned in ${label}`}
+                      title={`${completed} completed out of ${total} tasks planned for ${label}`}
                     >
                       <div style={{ fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>
-                        {label} {isCurrentMonth && '(Current)'}
+                        {label} {isCurrentMonth && '(Current)'} {isPastMonth && total - completed > 0 && '⚠️'}
                       </div>
                       <div style={{ fontSize: '13px', fontWeight: '700' }}>
                         {completed}/{total} tasks ({completionRate}%)
                       </div>
                       <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '2px' }}>
-                        {total - completed > 0 && !isCurrentMonth && `${total - completed} incomplete`}
-                        {isCurrentMonth && total - completed > 0 && `${total - completed} in progress`}
+                        {total - completed > 0 && isPastMonth && `${total - completed} overdue`}
+                        {total - completed > 0 && isCurrentMonth && `${total - completed} in progress`}
+                        {total - completed > 0 && !isPastMonth && !isCurrentMonth && `${total - completed} planned`}
                         {total - completed === 0 && '✓ All done'}
                       </div>
                     </div>
                   );
-                }).filter(Boolean);
+                });
               })()}
             </div>
             <p style={{ 
