@@ -8149,7 +8149,7 @@ export default function Tasks() {
                   return true;
                 }).map((task) => (
                   <TaskNode 
-                    key={task.id} 
+                    key={`${task.id}-${task.is_completed}`} 
                     task={task} 
                     level={0}
                     allTasks={miscTasks}
@@ -8181,6 +8181,8 @@ export default function Tasks() {
                         await api.put(`/api/tasks/${taskId}`, {
                           is_completed: !currentStatus
                         });
+                        // Force a complete refresh by clearing and reloading
+                        setMiscTasks([]);
                         await loadMiscTaskGroups();
                       } catch (err: any) {
                         console.error('Error toggling task:', err);
@@ -8268,7 +8270,7 @@ export default function Tasks() {
                   <div className="task-list">
                     {miscTasks.filter(t => !t.parent_task_id && t.is_completed).map((task) => (
                       <TaskNode 
-                        key={task.id} 
+                        key={`${task.id}-${task.is_completed}`} 
                         task={task} 
                         level={0}
                         allTasks={miscTasks}
@@ -8283,17 +8285,19 @@ export default function Tasks() {
                           setExpandedMiscTasks(newExpanded);
                           localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
                         }}
-                        onToggleComplete={async (taskId: number, currentStatus: boolean) => {
-                          // Allow uncompleting tasks
-                          try {
-                            await api.put(`/api/tasks/${taskId}`, {
-                              is_completed: !currentStatus
-                            });
-                            await loadMiscTaskGroups();
-                          } catch (err: any) {
-                            console.error('Error toggling task:', err);
-                          }
-                        }}
+                    onToggleComplete={async (taskId: number, currentStatus: boolean) => {
+                      // Allow uncompleting tasks
+                      try {
+                        await api.put(`/api/tasks/${taskId}`, {
+                          is_completed: !currentStatus
+                        });
+                        // Force a complete refresh by clearing and reloading
+                        setMiscTasks([]);
+                        await loadMiscTaskGroups();
+                      } catch (err: any) {
+                        console.error('Error toggling task:', err);
+                      }
+                    }}
                         onEdit={(task: ProjectTaskData) => {
                           setSelectedTaskId(task.id);
                           setIsTaskFormOpen(true);
