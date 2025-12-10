@@ -102,6 +102,28 @@ class GoalTaskUpdate(BaseModel):
     time_allocated_hours: Optional[float] = None
     time_spent_hours: Optional[float] = None
     order: Optional[int] = None
+    
+    # Pillar/Category organization
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    
+    # Follow-up
+    follow_up_frequency: Optional[str] = None
+    separately_followed: Optional[bool] = None
+    is_daily_one_time: Optional[bool] = None
+    
+    # Project/Wish linkage
+    project_id: Optional[int] = None
+    related_wish_id: Optional[int] = None
+    parent_task_id: Optional[int] = None
+    
+    # Motivation
+    why_reason: Optional[str] = None
+    additional_whys: Optional[str] = None
+    
+    # Status
+    is_active: Optional[bool] = None
 
 
 # Goal endpoints

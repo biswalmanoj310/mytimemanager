@@ -88,6 +88,36 @@ class MiscTaskItemUpdate(BaseModel):
     is_completed: Optional[bool] = None
     order: Optional[int] = None
     
+    # Pillar/Category organization
+    pillar_id: Optional[int] = None
+    category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    
+    # Task type and allocation
+    task_type: Optional[str] = None
+    allocated_minutes: Optional[int] = None
+    target_value: Optional[int] = None
+    unit: Optional[str] = None
+    
+    # Follow-up
+    follow_up_frequency: Optional[str] = None
+    separately_followed: Optional[bool] = None
+    is_daily_one_time: Optional[bool] = None
+    
+    # Goal/Project linkage
+    goal_id: Optional[int] = None
+    is_part_of_goal: Optional[bool] = None
+    related_wish_id: Optional[int] = None
+    project_id: Optional[int] = None
+    
+    # Motivation
+    why_reason: Optional[str] = None
+    additional_whys: Optional[str] = None
+    
+    # Status
+    is_active: Optional[bool] = None
+    na_marked_at: Optional[datetime] = None
+    
     @field_validator('due_date', mode='before')
     @classmethod
     def parse_due_date(cls, v):

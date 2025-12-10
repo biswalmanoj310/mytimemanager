@@ -3,7 +3,7 @@ Service layer for daily time entries and summaries
 """
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
 from app.models.models import DailyTimeEntry, DailySummary, Task
@@ -172,43 +172,31 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
     """Calculate and update daily summary"""
     from app.models.models import DailyTaskStatus
     
-    # Get all daily tasks (follow_up_frequency = 'daily')
-    # Exclude globally completed tasks (is_completed = 1) as they've been replaced with new tasks
-    daily_tasks = db.query(Task).filter(
+    # Get time-based tasks from Daily tab's ⏰Time-Based Tasks section ONLY
+    # Excludes is_daily_one_time tasks (which appear in separate "Daily: One Time Tasks" section)
+    # User ensures these tasks total 1440 minutes (24 hours)
+    # Note: task_type can be 'TIME' or 'time' (case-insensitive in database)
+    time_based_tasks = db.query(Task).filter(
         and_(
             Task.follow_up_frequency == 'daily',
+            func.upper(Task.task_type) == 'TIME',  # Case-insensitive match
             Task.is_active == True,
-            Task.is_completed == False  # Exclude globally completed tasks
+            Task.is_completed == False,
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
         )
     ).all()
 
-    # Calculate total allocated - only count tasks being tracked on this date
-    total_allocated = 0
-    for task in daily_tasks:
-        # Check per-date status (new system)
-        # Note: Globally completed tasks are already excluded from the query above
-        
-        # SECOND: Check per-date status (new system)
-        status = db.query(DailyTaskStatus).filter(
-            and_(
-                DailyTaskStatus.task_id == task.id,
-                DailyTaskStatus.date == entry_date
-            )
-        ).first()
-        
-        # If no status record, task is tracked by default
-        # If status exists, only count if is_tracked is True AND not completed/NA
-        if not status:
-            # No status = tracked by default, not completed/NA
-            total_allocated += task.allocated_minutes
-        elif status.is_tracked and not status.is_completed and not status.is_na:
-            # Only count if tracked AND not completed AND not NA
-            total_allocated += task.allocated_minutes
-
-    # Calculate total spent
+    # Get all time entries for this date
     entries = db.query(DailyTimeEntry).filter(
         func.date(DailyTimeEntry.entry_date) == entry_date
     ).all()
+    
+    # Calculate total allocated
+    # Since user ensures daily TIME tasks always total 1440 minutes (24 hours),
+    # we sum ALL active daily TIME tasks as they represent what should be in the table
+    total_allocated = sum(task.allocated_minutes for task in time_based_tasks)
+
+    # Calculate total spent (using entries already fetched above)
     total_spent = sum(entry.minutes for entry in entries)
 
     # Check if day is complete
