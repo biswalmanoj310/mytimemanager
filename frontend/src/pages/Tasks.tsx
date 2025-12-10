@@ -13346,7 +13346,8 @@ export default function Tasks() {
           {/* Project Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            const filteredTasks = projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3) && filterByMonth(t));
+            // Don't filter out completed tasks - backend returns them only if completed today (visible until midnight)
+            const filteredTasks = projectTasksDueToday.filter(t => (!t.priority || t.priority > 3) && filterByMonth(t));
             
             return filteredTasks.length > 0 && (
             <div id="project-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -13387,8 +13388,9 @@ export default function Tasks() {
                       {filteredTasks.map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
-                        const rowBgColor = isOverdue ? '#fee2e2' : '#fff';
-                        const rowHoverColor = isOverdue ? '#fecaca' : '#f1f5f9';
+                        const isCompleted = task.is_completed;
+                        const rowBgColor = isCompleted ? 'repeating-linear-gradient(45deg, #d1fae5, #d1fae5 10px, #a7f3d0 10px, #a7f3d0 20px)' : (isOverdue ? '#fee2e2' : '#fff');
+                        const rowHoverColor = isCompleted ? 'repeating-linear-gradient(45deg, #a7f3d0, #a7f3d0 10px, #6ee7b7 10px, #6ee7b7 20px)' : (isOverdue ? '#fecaca' : '#f1f5f9');
                         
                         return (
                           <tr 
@@ -13401,7 +13403,7 @@ export default function Tasks() {
                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = rowHoverColor}
                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = rowBgColor}
                           >
-                            <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1e293b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                            <td style={{ padding: '12px', fontSize: '14px', fontWeight: '600', color: '#1e293b', borderRight: '2px solid #3b82f6', background: 'inherit', textDecoration: task.is_completed ? 'line-through' : 'none' }}>
                               {task.name}
                             </td>
                             <td style={{ padding: '12px', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
@@ -13486,7 +13488,8 @@ export default function Tasks() {
           {/* Goal Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            const filteredTasks = goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3) && filterByMonth(t));
+            // Don't filter out completed tasks - backend returns them only if completed today (visible until midnight)
+            const filteredTasks = goalTasksDueToday.filter(t => (!t.priority || t.priority > 3) && filterByMonth(t));
             
             return filteredTasks.length > 0 && (
             <div id="goal-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -13532,11 +13535,12 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {goalTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
+                      {filteredTasks.map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
-                        const rowBgColor = isOverdue ? '#fee2e2' : '#fff';
-                        const rowHoverColor = isOverdue ? '#fecaca' : '#f1f5f9';
+                        const isCompleted = task.is_completed;
+                        const rowBgColor = isCompleted ? 'repeating-linear-gradient(45deg, #d1fae5, #d1fae5 10px, #a7f3d0 10px, #a7f3d0 20px)' : (isOverdue ? '#fee2e2' : '#fff');
+                        const rowHoverColor = isCompleted ? 'repeating-linear-gradient(45deg, #a7f3d0, #a7f3d0 10px, #6ee7b7 10px, #6ee7b7 20px)' : (isOverdue ? '#fecaca' : '#f1f5f9');
                         
                         return (
                           <tr 
@@ -13549,7 +13553,7 @@ export default function Tasks() {
                             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = rowHoverColor}
                             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = rowBgColor}
                           >
-                            <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '600', color: '#2d3748', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                            <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '600', color: '#2d3748', borderRight: '2px solid #3b82f6', background: 'inherit', textDecoration: task.is_completed ? 'line-through' : 'none' }}>
                               {task.name}
                             </td>
                             <td style={{ padding: '12px 16px', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>

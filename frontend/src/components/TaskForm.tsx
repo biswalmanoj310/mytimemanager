@@ -173,8 +173,11 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
   const loadProjects = async () => {
     try {
       const data = await api.get<any[]>('/api/projects/');
-      console.log('Projects loaded:', data);
-      setProjects(data.filter((p: any) => p.status === 'active'));
+      console.log('Projects loaded (raw):', data);
+      const activeProjects = data.filter((p: any) => p.status === 'active');
+      console.log('Active projects:', activeProjects);
+      console.log('All project statuses:', data.map(p => ({ id: p.id, name: p.name, status: p.status })));
+      setProjects(activeProjects);
     } catch (err) {
       console.error('Error loading projects:', err);
     }
@@ -282,7 +285,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         parent_task_id: formData.parent_task_id || undefined,
         why_reason: formData.why_reason || undefined,
         additional_whys: formData.additional_whys.filter(w => w.trim()).join('|||') || undefined,
-        due_date: formData.due_date ? `${formData.due_date}T00:00:00` : undefined,
+        due_date: formData.due_date ? (formData.due_date.includes('T') ? formData.due_date : `${formData.due_date}T00:00:00`) : undefined,
         priority: formData.priority,
         is_active: true,
         is_completed: false
