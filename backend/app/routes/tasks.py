@@ -175,7 +175,16 @@ def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
     Validates hierarchy (pillar > category > sub-category > goal)
     """
     try:
+        print(f"\n=== UPDATE TASK DEBUG ===")
+        print(f"Task ID: {task_id}")
+        print(f"Request data: {task.model_dump(exclude_unset=True)}")
+        if task.due_date:
+            print(f"Due date received: {task.due_date} (type: {type(task.due_date)})")
+        
         updated_task = TaskService.update_task(db, task_id, task)
+        
+        print(f"After update - due_date in DB: {updated_task.due_date}")
+        print(f"=== END DEBUG ===\n")
         
         # Parse additional_whys from JSON string
         task_dict = TaskResponse.model_validate(updated_task).model_dump()

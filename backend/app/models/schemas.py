@@ -2,7 +2,7 @@
 Pydantic schemas for API request/response validation
 """
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, field_validator
 from typing import Optional, List
 from datetime import datetime
 from app.models.models import FollowUpFrequency, GoalTimePeriod
@@ -238,6 +238,29 @@ class TaskUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_completed: Optional[bool] = None
     completed_at: Optional[datetime] = None
+
+    @field_validator('due_date', mode='before')
+    @classmethod
+    def parse_due_date(cls, v):
+        """Parse due_date from string to datetime at noon UTC to avoid timezone shifts"""
+        if v is None:
+            return None
+        if isinstance(v, str):
+            from datetime import datetime, timezone
+            # Handle date-only strings (YYYY-MM-DD)
+            if len(v) == 10 and 'T' not in v:
+                # Parse as date and create datetime at noon UTC
+                # This prevents date shifting when stored/retrieved in different timezones
+                parts = v.split('-')
+                year, month, day = int(parts[0]), int(parts[1]), int(parts[2])
+                return datetime(year, month, day, 12, 0, 0, tzinfo=timezone.utc)
+            # Handle full ISO format
+            dt = datetime.fromisoformat(v.replace('Z', '+00:00'))
+            # If timezone-aware, convert to UTC; if naive, assume UTC
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone.utc)
+            return dt.replace(tzinfo=timezone.utc)
+        return v
 
     @validator('additional_whys', pre=True)
     def parse_additional_whys(cls, v):

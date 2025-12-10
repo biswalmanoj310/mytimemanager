@@ -57,7 +57,6 @@ const ImportantTasks: React.FC = () => {
   const [addingSubTaskFor, setAddingSubTaskFor] = useState<number | null>(null);
   const [showAddSubTaskModal, setShowAddSubTaskModal] = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(false);
-  const [editingUpdateDate, setEditingUpdateDate] = useState<number | null>(null);
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [highestGapTaskId, setHighestGapTaskId] = useState<number | null>(null);
@@ -272,7 +271,6 @@ const ImportantTasks: React.FC = () => {
       await axios.post(`http://localhost:8000/api/important-tasks/${taskId}/check`, {
         check_date: newDate
       });
-      setEditingUpdateDate(null);
       await loadImportantTasks();
     } catch (error) {
       console.error('Error updating check date:', error);
@@ -363,27 +361,19 @@ const ImportantTasks: React.FC = () => {
             {level > 0 && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999', fontStyle: 'italic' }}>(sub-task)</span>}
           </td>
           <td className="col-date">
-            {editingUpdateDate === task.id ? (
-              <input
-                type="date"
-                defaultValue={task.last_check_date ? task.last_check_date.split('T')[0] : ''}
-                onChange={(e) => handleUpdateDate(task.id, e.target.value)}
-                onBlur={() => setEditingUpdateDate(null)}
-                autoFocus
-                style={{ padding: '4px', fontSize: '12px', width: '120px' }}
-              />
-            ) : (
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span 
-                  onClick={() => setEditingUpdateDate(task.id)}
-                  style={{ cursor: 'pointer' }}
-                  title="Click to change date"
-                >
-                  📅
-                </span>
-                {formatDate(task.last_check_date || task.start_date || task.created_at)}
-              </span>
-            )}
+            <input
+              type="date"
+              value={task.last_check_date ? task.last_check_date.split('T')[0] : (task.start_date ? task.start_date.split('T')[0] : '')}
+              onChange={(e) => handleUpdateDate(task.id, e.target.value)}
+              style={{ 
+                padding: '4px 8px', 
+                fontSize: '13px', 
+                width: '130px',
+                border: '1px solid #e2e8f0',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            />
           </td>
           <td className="col-number" style={{ textAlign: 'center' }}>
             {task.ideal_gap_days}

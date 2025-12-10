@@ -17,7 +17,6 @@ import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import ImportantTasks from './ImportantTasks';
-import CustomDatePicker from '../components/CustomDatePicker';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -193,6 +192,9 @@ export default function Tasks() {
   // Yearly task modal state
   const [showAddYearlyTaskModal, setShowAddYearlyTaskModal] = useState(false);
   const [selectedDailyTaskForYearly, setSelectedDailyTaskForYearly] = useState<number | null>(null);
+
+  // Today tab - Month filter state
+  const [selectedTodayMonth, setSelectedTodayMonth] = useState<string | null>(null); // Format: "YYYY-MM" or null for all
 
   // One-time tasks state
   interface OneTimeTaskData {
@@ -754,7 +756,7 @@ export default function Tasks() {
   };
 
   // Load tasks function (needed by error UI)
-  const loadTasks = async () => {
+  const loadTasks = async (): Promise<Task[]> => {
     try {
       setLoading(true);
       setError(null);
@@ -762,9 +764,11 @@ export default function Tasks() {
       setTasks(data);
       // Load completion dates for daily tasks
       await loadDailyTaskCompletionDates();
+      return data;
     } catch (err: any) {
       console.error('Error loading tasks:', err);
       setError('Failed to load tasks');
+      return [];
     } finally {
       setLoading(false);
     }
@@ -3115,7 +3119,7 @@ export default function Tasks() {
     }
   }
 
-  async function loadTodaysOnlyTasks() {
+  async function loadTodaysOnlyTasks(tasksToFilter?: Task[]) {
     try {
       // Load tasks created specifically for today (follow_up_frequency = 'today')
       // Exclude NOW tasks (priority <= 3) to prevent duplicates
@@ -3125,7 +3129,9 @@ export default function Tasks() {
       const todayEnd = new Date(today);
       todayEnd.setHours(23, 59, 59, 999);
       
-      const todayTasks = tasks.filter(task => {
+      // Use provided tasks or fall back to state (for initial load)
+      const tasksData = tasksToFilter || tasks;
+      const todayTasks = tasksData.filter(task => {
         if (task.follow_up_frequency !== 'today') return false;
         if (!task.is_active) return false;
         if (task.priority && task.priority <= 3) return false; // Exclude NOW tasks
@@ -5225,15 +5231,28 @@ export default function Tasks() {
           </div>
           
           {task.due_date && (
-            <CustomDatePicker
-              selectedDate={task.due_date ? new Date(task.due_date) : null}
-              onChange={(date) => {
-                if (date) {
-                  const formattedDate = date.toISOString().split('T')[0];
-                  onUpdateDueDate(task.id, formattedDate);
-                }
-              }}
-            />
+            <div className="task-due-date">
+              <input 
+                type="date"
+                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  if (newDate) {
+                    onUpdateDueDate(task.id, newDate);
+                  }
+                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()}
+                onFocus={(e) => e.stopPropagation()}
+                style={{
+                  border: '1px solid #e2e8f0',
+                  padding: '4px 8px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '13px'
+                }}
+              />
+            </div>
           )}
           
           <div className="task-actions">
@@ -6144,11 +6163,12 @@ export default function Tasks() {
                           </td>
                           <td className="col-time" style={{ textAlign: 'center' }}>
                             {task.due_date ? (
-                              <CustomDatePicker
-                                selectedDate={new Date(task.due_date)}
-                                onChange={async (date) => {
-                                  if (!date) return;
-                                  const newDate = date.toISOString().split('T')[0];
+                              <input 
+                                type="date"
+                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                onChange={async (e) => {
+                                  const newDate = e.target.value;
+                                  if (!newDate) return;
                                   try {
                                     if (taskType === 'project') {
                                       await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
@@ -6166,16 +6186,22 @@ export default function Tasks() {
                                   }
                                 }}
                                 style={{
+                                  border: '1px solid #e2e8f0',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '13px',
                                   color: new Date(task.due_date) < new Date() ? '#dc2626' : '#6b7280',
                                   fontWeight: new Date(task.due_date) < new Date() ? '600' : '400'
                                 }}
                               />
                             ) : (
-                              <CustomDatePicker
-                                selectedDate={null}
-                                onChange={async (date) => {
-                                  if (!date) return;
-                                  const newDate = date.toISOString().split('T')[0];
+                              <input 
+                                type="date"
+                                value=""
+                                onChange={async (e) => {
+                                  const newDate = e.target.value;
+                                  if (!newDate) return;
                                   try {
                                     if (taskType === 'project') {
                                       await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
@@ -6190,7 +6216,13 @@ export default function Tasks() {
                                     alert('Failed to update due date');
                                   }
                                 }}
-                                placeholderText="Set due date"
+                                style={{
+                                  border: '1px solid #e2e8f0',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  fontSize: '13px'
+                                }}
                               />
                             )}
                           </td>
@@ -11270,6 +11302,452 @@ export default function Tasks() {
             </div>
           )}
 
+          {/* Task Breakdown Panel - Today Tab */}
+          {activeTab === 'today' && (() => {
+            // Count tasks from different sections ON TODAY TAB
+            const totalTasks = projectTasksDueToday.length + goalTasksDueToday.length + miscTasksDueToday.length + importantTasksDueToday.length;
+            const projectCount = projectTasksDueToday.length;
+            const goalCount = goalTasksDueToday.length;
+            const miscCount = miscTasksDueToday.length;
+            const importantCount = importantTasksDueToday.length;
+            
+            // Count today's habits and challenges
+            const habitsCount = todaysHabits.length + todaysChallenges.length;
+            
+            // Count upcoming tasks (next 7 days + this month)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const next7Days = new Date(today);
+            next7Days.setDate(next7Days.getDate() + 7);
+            const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            
+            const upcomingCount = tasks.filter(task => {
+              if (!task.is_active || task.is_completed || !task.due_date) return false;
+              const dueDate = new Date(task.due_date);
+              dueDate.setHours(0, 0, 0, 0);
+              return dueDate > today && dueDate <= monthEnd;
+            }).length;
+            
+            // Count Needs Attention tasks on Today tab
+            const weeklyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
+              item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
+            ).length;
+            const monthlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
+              item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
+            ).length;
+
+            // Scroll to section helper
+            const scrollToSection = (sectionId: string) => {
+              const element = document.getElementById(sectionId);
+              if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }
+            };
+
+            return (
+              <div id="today-tab-tasks" style={{
+                backgroundColor: '#ffffff',
+                padding: '16px',
+                borderRadius: '8px',
+                marginBottom: '16px',
+                marginTop: '20px',
+                border: '2px solid #e2e8f0',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                scrollMarginTop: '80px'
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
+                  📈 Task Breakdown - Today's Tab
+                </h4>
+                <div style={{
+                  display: 'flex',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                  fontSize: '13px'
+                }}>
+                  {/* Total */}
+                  <div style={{
+                    padding: '8px 14px',
+                    borderRadius: '6px',
+                    backgroundColor: '#3b82f6',
+                    color: '#ffffff',
+                    fontWeight: '600',
+                    border: '2px solid #2563eb'
+                  }}>
+                    Total: {totalTasks}
+                  </div>
+
+                  {/* Project Tasks */}
+                  <button
+                    onClick={() => scrollToSection('project-tasks-section')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#f0f9ff',
+                      color: '#0c4a6e',
+                      fontWeight: '500',
+                      border: '1px solid #bae6fd',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = '#e0f2fe';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '#f0f9ff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    📋 Projects: {projectCount}
+                  </button>
+
+                  {/* Goal Tasks */}
+                  <button
+                    onClick={() => scrollToSection('goal-tasks-section')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#f0fdf4',
+                      color: '#14532d',
+                      fontWeight: '500',
+                      border: '1px solid #bbf7d0',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = '#dcfce7';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '#f0fdf4';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    🎯 Goals: {goalCount}
+                  </button>
+
+                  {/* Misc Tasks */}
+                  <button
+                    onClick={() => scrollToSection('misc-tasks-section')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#faf5ff',
+                      color: '#581c87',
+                      fontWeight: '500',
+                      border: '1px solid #e9d5ff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = '#f3e8ff';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '#faf5ff';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    📝 Misc: {miscCount}
+                  </button>
+
+                  {/* Important Tasks */}
+                  <button
+                    onClick={() => scrollToSection('important-tasks-section')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#fffbeb',
+                      color: '#78350f',
+                      fontWeight: '500',
+                      border: '1px solid #fde68a',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = '#fef3c7';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '#fffbeb';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    ⚡ Important: {importantCount}
+                  </button>
+
+                  {/* Habits */}
+                  <button
+                    onClick={() => scrollToSection('habits-section')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#fef2f2',
+                      color: '#7f1d1d',
+                      fontWeight: '500',
+                      border: '1px solid #fecaca',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = '#fee2e2';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '#fef2f2';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    💪 Habits: {habitsCount}
+                  </button>
+                  
+                  {/* Weekly Needs Attention */}
+                  {weeklyNeedsAttentionCount > 0 && (
+                    <button
+                      onClick={() => scrollToSection('weekly-needs-attention-section')}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        backgroundColor: '#fee2e2',
+                        color: '#991b1b',
+                        fontWeight: '500',
+                        border: '1px solid #fca5a5',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.backgroundColor = '#fecaca';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.backgroundColor = '#fee2e2';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      ⚠️ Weekly: {weeklyNeedsAttentionCount}
+                    </button>
+                  )}
+                  
+                  {/* Monthly Needs Attention */}
+                  {monthlyNeedsAttentionCount > 0 && (
+                    <button
+                      onClick={() => scrollToSection('monthly-needs-attention-section')}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        backgroundColor: '#fed7aa',
+                        color: '#7c2d12',
+                        fontWeight: '500',
+                        border: '1px solid #fdba74',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.backgroundColor = '#fdba74';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.backgroundColor = '#fed7aa';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      📊 Monthly: {monthlyNeedsAttentionCount}
+                    </button>
+                  )}
+
+                  {/* Upcoming (not part of total) */}
+                  <button
+                    onClick={() => scrollToSection('upcoming-tasks-section')}
+                    style={{
+                      padding: '8px 14px',
+                      borderRadius: '6px',
+                      backgroundColor: '#f5f5f5',
+                      color: '#404040',
+                      fontWeight: '500',
+                      border: '1px solid #d4d4d4',
+                      opacity: 0.8,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.backgroundColor = '#e5e5e5';
+                      e.currentTarget.style.opacity = '1';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.backgroundColor = '#f5f5f5';
+                      e.currentTarget.style.opacity = '0.8';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
+                    📅 Upcoming: {upcomingCount}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Monthly Planning Overview Panel - Today Tab */}
+          {activeTab === 'today' && (() => {
+            // Gather all tasks from Today tab (excluding Upcoming Tasks section)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const allTodayTasks = [
+              ...projectTasksDueToday,
+              ...goalTasksDueToday,
+              ...miscTasksDueToday,
+              ...overdueOneTimeTasks.map(ot => tasks.find(t => t.id === ot.task_id)).filter(Boolean)
+            ];
+
+            // Group by due date month
+            const tasksByMonth: Record<string, typeof allTodayTasks> = {};
+            
+            allTodayTasks.forEach(task => {
+              if (task && task.due_date) {
+                const dueDate = new Date(task.due_date);
+                const key = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (!tasksByMonth[key]) {
+                  tasksByMonth[key] = [];
+                }
+                tasksByMonth[key].push(task);
+              }
+            });
+
+            // Sort months chronologically
+            const sortedMonths = Object.entries(tasksByMonth)
+              .sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+
+            if (sortedMonths.length === 0) return null;
+
+            const now = new Date();
+            const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+            return (
+              <div style={{
+                backgroundColor: '#f7fafc',
+                padding: '16px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                marginTop: '20px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
+                  📊 Monthly Planning Overview
+                </h4>
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  flexWrap: 'wrap',
+                  fontSize: '13px'
+                }}>
+                  {/* All Tasks badge */}
+                  <button
+                    onClick={() => setSelectedTodayMonth(null)}
+                    style={{
+                      padding: '8px 12px',
+                      borderRadius: '6px',
+                      border: selectedTodayMonth === null ? '2px solid #3b82f6' : '1px solid #cbd5e1',
+                      backgroundColor: selectedTodayMonth === null ? '#eff6ff' : '#ffffff',
+                      color: selectedTodayMonth === null ? '#1e40af' : '#64748b',
+                      cursor: 'pointer',
+                      fontWeight: selectedTodayMonth === null ? '600' : '500',
+                      fontSize: '13px',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      if (selectedTodayMonth !== null) {
+                        e.currentTarget.style.backgroundColor = '#f8fafc';
+                        e.currentTarget.style.borderColor = '#94a3b8';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (selectedTodayMonth !== null) {
+                        e.currentTarget.style.backgroundColor = '#ffffff';
+                        e.currentTarget.style.borderColor = '#cbd5e1';
+                      }
+                    }}
+                  >
+                    🗂️ All Tasks ({allTodayTasks.length})
+                  </button>
+
+                  {/* Month badges */}
+                  {sortedMonths.map(([monthKey, tasks]) => {
+                    const [year, month] = monthKey.split('-');
+                    const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+                    const label = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+                    const completed = tasks.filter(t => t.is_completed).length;
+                    const total = tasks.length;
+                    const isPast = monthKey < currentMonthKey;
+                    const isCurrent = monthKey === currentMonthKey;
+                    const isFuture = monthKey > currentMonthKey;
+                    const hasIncomplete = completed < total;
+
+                    let bgColor = '#ffffff';
+                    let borderColor = '#cbd5e1';
+                    let textColor = '#64748b';
+                    let statusEmoji = '';
+
+                    if (selectedTodayMonth === monthKey) {
+                      bgColor = '#eff6ff';
+                      borderColor = '#3b82f6';
+                      textColor = '#1e40af';
+                    } else if (isPast && hasIncomplete) {
+                      bgColor = '#fef2f2';
+                      borderColor = '#fca5a5';
+                      textColor = '#991b1b';
+                      statusEmoji = '⚠️ ';
+                    } else if (isCurrent) {
+                      bgColor = '#f0fdf4';
+                      borderColor = '#86efac';
+                      textColor = '#166534';
+                      statusEmoji = '📌 ';
+                    } else if (isFuture) {
+                      bgColor = '#fef9c3';
+                      borderColor = '#fde047';
+                      textColor = '#854d0e';
+                      statusEmoji = '📅 ';
+                    }
+
+                    return (
+                      <button
+                        key={monthKey}
+                        onClick={() => setSelectedTodayMonth(selectedTodayMonth === monthKey ? null : monthKey)}
+                        style={{
+                          padding: '8px 12px',
+                          borderRadius: '6px',
+                          border: selectedTodayMonth === monthKey ? '2px solid #3b82f6' : `1px solid ${borderColor}`,
+                          backgroundColor: bgColor,
+                          color: textColor,
+                          cursor: 'pointer',
+                          fontWeight: selectedTodayMonth === monthKey ? '600' : '500',
+                          fontSize: '13px',
+                          opacity: isPast && hasIncomplete ? 0.9 : 1,
+                          transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => {
+                          if (selectedTodayMonth !== monthKey) {
+                            e.currentTarget.style.opacity = '0.8';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                          }
+                        }}
+                        onMouseLeave={e => {
+                          if (selectedTodayMonth !== monthKey) {
+                            e.currentTarget.style.opacity = isPast && hasIncomplete ? '0.9' : '1';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                          }
+                        }}
+                      >
+                        {statusEmoji}{label} ({total})
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Overdue Tasks Section - Grouped by Project/Goal */}
           {activeTab === 'today' && (() => {
             const today = new Date();
@@ -12673,6 +13151,7 @@ export default function Tasks() {
                         <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#475569', borderRight: '2px solid #3b82f6' }}>Task Name</th>
                         <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#475569', borderRight: '2px solid #3b82f6' }}>Pillar - Category</th>
                         <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#475569', width: '120px', borderRight: '2px solid #3b82f6' }}>Time (min)</th>
+                        <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#475569', width: '150px', borderRight: '2px solid #3b82f6' }}>Due Date</th>
                         <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#475569', width: '200px' }}>Action</th>
                       </tr>
                     </thead>
@@ -12709,6 +13188,57 @@ export default function Tasks() {
                           </td>
                           <td style={{ padding: '12px', textAlign: 'center', fontSize: '13px', color: '#64748b', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
                             {task.allocated_minutes || 0}
+                          </td>
+                          <td style={{ padding: '8px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
+                            <input 
+                              type="date"
+                              value={task.due_date ? task.due_date.split('T')[0] : ''}
+                              onChange={async (e) => {
+                                const newDate = e.target.value;
+                                if (!newDate) return;
+                                
+                                console.log('=== Date Update Debug ===');
+                                console.log('Input value (what you selected):', newDate);
+                                console.log('Current task.due_date:', task.due_date);
+                                console.log('Task ID:', task.id, 'Name:', task.name);
+                                
+                                try {
+                                  // Use the correct endpoint based on task type
+                                  if (task.project_id) {
+                                    console.log('Using project endpoint');
+                                    await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
+                                  } else if (task.goal_id) {
+                                    console.log('Using goal endpoint');
+                                    await api.put(`/api/life-goals/tasks/${task.id}`, { due_date: newDate });
+                                  } else {
+                                    console.log('Using misc task endpoint, sending:', { due_date: newDate });
+                                    await api.put(`/api/tasks/${task.id}`, { due_date: newDate });
+                                  }
+                                  
+                                  console.log('Update successful, refreshing...');
+                                  // Refresh the tasks list and use fresh data
+                                  const freshTasks = await loadTasks();
+                                  await loadTodaysOnlyTasks(freshTasks);
+                                  const updatedTask = freshTasks.find(t => t.id === task.id);
+                                  console.log('Refresh complete - Task due_date now:', updatedTask?.due_date);
+                                } catch (err: any) {
+                                  console.error('Error updating due date:', err);
+                                  console.error('Error details:', err.response?.data);
+                                  alert('Failed to update due date: ' + (err.response?.data?.detail || err.message));
+                                }
+                              }}
+                              style={{
+                                border: '1px solid #cbd5e1',
+                                padding: '6px 10px',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                width: '130px',
+                                backgroundColor: '#fff',
+                                color: '#475569'
+                              }}
+                              title="Click to change due date"
+                            />
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center', background: 'inherit' }}>
                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
@@ -12796,9 +13326,30 @@ export default function Tasks() {
             </div>
           )}
 
+          {/* Helper function to filter tasks by selected month */}
+          {activeTab === 'today' && (() => {
+            // Create filter function
+            const filterByMonth = (task: any) => {
+              if (!selectedTodayMonth) return true; // Show all if no month selected
+              if (!task.due_date) return false; // Hide tasks without due dates
+              
+              const dueDate = new Date(task.due_date);
+              const taskMonthKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
+              return taskMonthKey === selectedTodayMonth;
+            };
+
+            // Store filter function in a variable accessible to sections below
+            (window as any).__todayTabMonthFilter = filterByMonth;
+            return null;
+          })()}
+
           {/* Project Tasks Due Today & Overdue Section */}
-          {projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
+          {(() => {
+            const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
+            const filteredTasks = projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3) && filterByMonth(t));
+            
+            return filteredTasks.length > 0 && (
+            <div id="project-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
                 onClick={() => setTodayTabSections(prev => ({ ...prev, projectTasksDueToday: !prev.projectTasksDueToday }))}
                 style={{
@@ -12814,7 +13365,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>📋</span>
-                  <span>Project Tasks Due Today & Overdue ({projectTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length})</span>
+                  <span>Project Tasks Due Today & Overdue ({filteredTasks.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.projectTasksDueToday ? '▼' : '▶'}
@@ -12833,7 +13384,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {projectTasksDueToday.filter(task => !task.is_completed && (!task.priority || task.priority > 3)).map((task) => {
+                      {filteredTasks.map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
                         const rowBgColor = isOverdue ? '#fee2e2' : '#fff';
@@ -12929,11 +13480,16 @@ export default function Tasks() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Goal Tasks Due Today & Overdue Section */}
-          {goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
+          {(() => {
+            const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
+            const filteredTasks = goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3) && filterByMonth(t));
+            
+            return filteredTasks.length > 0 && (
+            <div id="goal-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
                 onClick={() => setTodayTabSections(prev => ({ ...prev, goalTasksDueToday: !prev.goalTasksDueToday }))}
                 style={{
@@ -13071,11 +13627,16 @@ export default function Tasks() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Misc Tasks Due Today & Overdue Section */}
-          {miscTasksDueToday.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
+          {(() => {
+            const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
+            const filteredTasks = miscTasksDueToday.filter(t => filterByMonth(t));
+            
+            return filteredTasks.length > 0 && (
+            <div id="misc-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
                 onClick={() => setTodayTabSections(prev => ({ ...prev, miscTasksDueToday: !prev.miscTasksDueToday }))}
                 style={{
@@ -13091,7 +13652,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>📁</span>
-                  <span>Misc Tasks: Due Today & Overdue ({miscTasksDueToday.length})</span>
+                  <span>Misc Tasks: Due Today & Overdue ({filteredTasks.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.miscTasksDueToday ? '▼' : '▶'}
@@ -13129,7 +13690,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {miscTasksDueToday.map((task) => {
+                      {filteredTasks.map((task) => {
                         const isOverdue = (task.daysOverdue || 0) > 0;
                         
                         return (
@@ -13164,10 +13725,11 @@ export default function Tasks() {
                                 type="date"
                                 value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                                 onChange={async (e) => {
-                                  e.stopPropagation();
+                                  const newDate = e.target.value;
+                                  if (!newDate) return;
                                   try {
                                     await api.put(`/api/tasks/${task.id}`, { 
-                                      due_date: e.target.value ? e.target.value + 'T00:00:00' : null 
+                                      due_date: newDate + 'T00:00:00'
                                     });
                                     await loadMiscTaskGroups();
                                     await loadMiscTasksDueToday();
@@ -13176,7 +13738,6 @@ export default function Tasks() {
                                     alert('Failed to update due date');
                                   }
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                                 style={{
                                   padding: '4px 8px',
                                   fontSize: '12px',
@@ -13284,11 +13845,16 @@ export default function Tasks() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Important Tasks Due Today & Overdue Section */}
-          {importantTasksDueToday.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
+          {(() => {
+            const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
+            const filteredTasks = importantTasksDueToday.filter(t => filterByMonth(t));
+            
+            return filteredTasks.length > 0 && (
+            <div id="important-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
                 onClick={() => setTodayTabSections(prev => ({ ...prev, importantTasksDueToday: !prev.importantTasksDueToday }))}
                 style={{
@@ -13304,7 +13870,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>⚡</span>
-                  <span>Important Tasks: Due Today & Overdue ({importantTasksDueToday.length})</span>
+                  <span>Important Tasks: Due Today & Overdue ({filteredTasks.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.importantTasksDueToday ? '▼' : '▶'}
@@ -13313,7 +13879,7 @@ export default function Tasks() {
 
               {todayTabSections.importantTasksDueToday && (
                 <div style={{ marginTop: '12px' }}>
-                  {importantTasksDueToday.map((task) => {
+                  {filteredTasks.map((task) => {
                     const isRed = task.status === 'red';
                     
                     return (
@@ -13372,7 +13938,8 @@ export default function Tasks() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Needs Attention Section - Only show in Today tab */}
           {activeTab === 'today' && (() => {
@@ -13403,7 +13970,7 @@ export default function Tasks() {
               <>
                 {/* Weekly Tasks Needing Attention */}
                 {weeklyTasks.length > 0 && (
-                  <div style={{ marginTop: '30px', marginBottom: '20px' }}>
+                  <div id="weekly-needs-attention-section" style={{ marginTop: '30px', marginBottom: '20px', scrollMarginTop: '80px' }}>
                     {/* Motivational Quote */}
                     <div style={{
                       padding: '12px 20px',
@@ -13563,7 +14130,7 @@ export default function Tasks() {
 
                 {/* Monthly Tasks Needing Attention */}
                 {monthlyTasks.length > 0 && (
-                  <div style={{ marginBottom: '20px' }}>
+                  <div id="monthly-needs-attention-section" style={{ marginBottom: '20px', scrollMarginTop: '80px' }}>
                     <div 
                       style={{ 
                         display: 'flex', 
@@ -13785,7 +14352,7 @@ export default function Tasks() {
 
           {/* Compact Habits & Challenges - Bottom of Today Tab */}
       {activeTab === 'today' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
-        <div style={{ marginTop: '30px', marginBottom: '20px' }}>
+        <div id="habits-section" style={{ marginTop: '30px', marginBottom: '20px', scrollMarginTop: '80px' }}>
           {/* Compact Active Habits */}
           {todaysHabits.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
@@ -14444,7 +15011,7 @@ export default function Tasks() {
             if (!hasUpcomingTasks) return null;
 
             return (
-              <div style={{ marginTop: '24px' }}>
+              <div id="upcoming-tasks-section" style={{ marginTop: '24px', scrollMarginTop: '80px' }}>
                 <div
                   onClick={() => setTodayTabSections(prev => ({ ...prev, upcomingTasks: !prev.upcomingTasks }))}
                   style={{
@@ -14595,16 +15162,16 @@ export default function Tasks() {
                               type="date"
                               value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                               onChange={async (e) => {
-                                e.stopPropagation();
+                                const newDate = e.target.value;
+                                if (!newDate) return;
                                 try {
-                                  await api.patch(`/api/tasks/${task.id}`, { due_date: e.target.value });
+                                  await api.patch(`/api/tasks/${task.id}`, { due_date: newDate });
                                   await loadTasks();
                                 } catch (err: any) {
                                   console.error('Error updating due date:', err);
                                   alert('Failed to update due date');
                                 }
                               }}
-                              onClick={(e) => e.stopPropagation()}
                               style={{
                                 padding: '6px 10px',
                                 fontSize: '12px',
@@ -14800,16 +15367,16 @@ export default function Tasks() {
                               type="date"
                               value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
                               onChange={async (e) => {
-                                e.stopPropagation();
+                                const newDate = e.target.value;
+                                if (!newDate) return;
                                 try {
-                                  await api.patch(`/api/tasks/${task.id}`, { due_date: e.target.value });
+                                  await api.patch(`/api/tasks/${task.id}`, { due_date: newDate });
                                   await loadTasks();
                                 } catch (err: any) {
                                   console.error('Error updating due date:', err);
                                   alert('Failed to update due date');
                                 }
                               }}
-                              onClick={(e) => e.stopPropagation()}
                               style={{
                                 padding: '6px 10px',
                                 fontSize: '12px',
