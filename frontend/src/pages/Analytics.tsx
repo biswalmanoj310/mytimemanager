@@ -21,6 +21,65 @@ import {
 import apiClient from '../services/api';
 import './Analytics.css';
 
+// Custom multi-line label component for long task names
+const CustomMultilineLabel = ({ x, y, payload, index }: any) => {
+  const text = payload.value || '';
+  const maxCharsPerLine = 20;
+  const lines: string[] = [];
+  
+  // Split text into multiple lines
+  if (text.length <= maxCharsPerLine) {
+    lines.push(text);
+  } else {
+    const words = text.split(' ');
+    let currentLine = '';
+    
+    words.forEach((word) => {
+      if ((currentLine + ' ' + word).trim().length <= maxCharsPerLine) {
+        currentLine = (currentLine + ' ' + word).trim();
+      } else {
+        if (currentLine) lines.push(currentLine);
+        currentLine = word;
+      }
+    });
+    if (currentLine) lines.push(currentLine);
+  }
+  
+  // Alternate colors for visual distinction
+  const colors = ['#e6f2ff', '#fff0e6', '#e6ffe6', '#ffe6f0', '#f0e6ff', '#fffae6'];
+  const bgColor = colors[index % colors.length];
+  const borderColor = colors[index % colors.length].replace(/f/g, 'c'); // Slightly darker border
+  
+  return (
+    <g transform={`translate(${x},${y})`}>
+      {lines.map((line, i) => (
+        <g key={i}>
+          <rect
+            x={-maxCharsPerLine * 3.2}
+            y={i * 16 + 5}
+            width={maxCharsPerLine * 6.4}
+            height={14}
+            fill={bgColor}
+            stroke={borderColor}
+            strokeWidth={0.5}
+            rx={3}
+          />
+          <text
+            x={0}
+            y={i * 16 + 16}
+            textAnchor="middle"
+            fill="#333"
+            fontSize={11}
+            fontWeight={500}
+          >
+            {line}
+          </text>
+        </g>
+      ))}
+    </g>
+  );
+};
+
 interface PillarData {
   pillar_id: number;
   pillar_name: string;
@@ -122,9 +181,16 @@ export default function Analytics() {
   const [allOneTimeTasksData, setAllOneTimeTasksData] = useState<TaskData[]>([]); // Base one-time tasks
   
   const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Pillars)
+  const [showWeekColumn, setShowWeekColumn] = useState(false); // Toggle for week average column (Pillars)
   const [showCategoryMonth, setShowCategoryMonth] = useState(false); // Toggle for Categories
+  const [showCategoryWeek, setShowCategoryWeek] = useState(false); // Toggle for Categories weekly
   const [showTaskMonth, setShowTaskMonth] = useState(false); // Toggle for Tasks
+  const [showTaskWeek, setShowTaskWeek] = useState(false); // Toggle for Tasks weekly
   const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(false); // Toggle for One-Time Tasks
+  const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(false); // Toggle for One-Time Tasks weekly
+  const [showPillarWeek, setShowPillarWeek] = useState(false); // Toggle for Pillar weekly data
+  const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState(false); // Toggle for Category Breakdown weekly
+  const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState(false); // Toggle for Task Breakdown weekly
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -599,12 +665,22 @@ export default function Analytics() {
                 <h2>🎯 Pillar Time Comparison</h2>
                 <p className="chart-description">Ideal allocation vs actual time spent across your life pillars</p>
               </div>
-              <button 
-                className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-                onClick={() => setShowMonthColumn(!showMonthColumn)}
-              >
-                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showPillarWeek ? 'active' : ''}`}
+                  onClick={() => setShowPillarWeek(!showPillarWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showPillarWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+                  onClick={() => setShowMonthColumn(!showMonthColumn)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+              </div>
             </div>
             
             <div 
@@ -647,7 +723,7 @@ export default function Analytics() {
                     dataKey="name" 
                     angle={0}
                     textAnchor="middle"
-                    height={60}
+                    height={40}
                     interval={0}
                     style={{ fontSize: '14px', fontWeight: 600 }}
                   />
@@ -655,10 +731,6 @@ export default function Analytics() {
                     label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => `${value.toFixed(2)}h`}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '20px' }}
@@ -678,13 +750,15 @@ export default function Analytics() {
                     radius={[6, 6, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
-                  <Bar 
-                    dataKey="weekly" 
-                    name="Weekly Avg (Actual)" 
-                    fill="#48bb78" 
-                    radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
+                  {showPillarWeek && (
+                    <Bar 
+                      dataKey="weekly" 
+                      name="Weekly Avg (Actual)" 
+                      fill="#48bb78" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
                   {showMonthColumn && (
                     <Bar 
                       dataKey="monthly" 
@@ -706,12 +780,22 @@ export default function Analytics() {
                 <h2>📂 Category Time Comparison</h2>
                 <p className="chart-description">Ideal allocation vs actual time spent by category</p>
               </div>
-              <button 
-                className={`toggle-month-btn ${showCategoryMonth ? 'active' : ''}`}
-                onClick={() => setShowCategoryMonth(!showCategoryMonth)}
-              >
-                {showCategoryMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showCategoryWeek ? 'active' : ''}`}
+                  onClick={() => setShowCategoryWeek(!showCategoryWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showCategoryWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showCategoryMonth ? 'active' : ''}`}
+                  onClick={() => setShowCategoryMonth(!showCategoryMonth)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showCategoryMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+              </div>
             </div>
             
             <div 
@@ -722,7 +806,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={450}>
+              <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
                     console.log('=== Category Chart Data Mapping ===');
@@ -783,15 +867,16 @@ export default function Analytics() {
                     console.log('Final mapped data:', mappedData);
                     return mappedData;
                   })()}
-                  barSize={25}
+                  barSize={12}
+                  barCategoryGap={40}
                   margin={{ top: 30, right: 30, left: 20, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
                     dataKey="category_name" 
-                    angle={-20}
-                    textAnchor="end"
-                    height={100}
+                    angle={0}
+                    textAnchor="middle"
+                    height={40}
                     interval={0}
                     fontSize={12}
                   />
@@ -799,7 +884,6 @@ export default function Analytics() {
                     label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} 
                     domain={[0, 'auto']}
                   />
-                  <Tooltip />
                   <Legend />
                   <Bar 
                     dataKey="allocated" 
@@ -815,13 +899,15 @@ export default function Analytics() {
                     radius={[6, 6, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
-                  <Bar 
-                    dataKey="weekAvg" 
-                    name="Week Avg/Day" 
-                    fill="#48bb78" 
-                    radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
+                  {showCategoryWeek && (
+                    <Bar 
+                      dataKey="weekAvg" 
+                      name="Week Avg/Day" 
+                      fill="#48bb78" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
                   {showCategoryMonth && (
                     <Bar 
                       dataKey="monthAvg" 
@@ -843,12 +929,22 @@ export default function Analytics() {
                 <h2>⏰ Daily: Time-Based Tasks</h2>
                 <p className="chart-description">Ideal allocation vs actual time spent (tasks from Daily tab ⏰Time-Based Tasks section)</p>
               </div>
-              <button 
-                className={`toggle-month-btn ${showTaskMonth ? 'active' : ''}`}
-                onClick={() => setShowTaskMonth(!showTaskMonth)}
-              >
-                {showTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showTaskWeek ? 'active' : ''}`}
+                  onClick={() => setShowTaskWeek(!showTaskWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showTaskWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showTaskMonth ? 'active' : ''}`}
+                  onClick={() => setShowTaskMonth(!showTaskMonth)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+              </div>
             </div>
             
             <div 
@@ -859,7 +955,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={800}>
+              <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
                     // Calculate days for proper averaging
@@ -888,26 +984,21 @@ export default function Analytics() {
                       .filter(task => task.allocated > 0 || task.totalSpent > 0) // Only tasks with allocation or time spent
                       .sort((a, b) => (b.allocated + b.totalSpent) - (a.allocated + a.totalSpent)); // Sort by most important - ALL TASKS
                   })()}
-                  barSize={15}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                  barSize={10}
+                  barCategoryGap={25}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    angle={-60}
-                    textAnchor="end"
-                    height={150}
+                    height={60}
                     interval={0}
-                    style={{ fontSize: '9px' }}
+                    tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
                     label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => `${value.toFixed(2)}h`}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '10px' }}
@@ -927,13 +1018,15 @@ export default function Analytics() {
                     radius={[4, 4, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
-                  <Bar 
-                    dataKey="weekly" 
-                    name="Weekly Avg (Actual)" 
-                    fill="#48bb78" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
+                  {showTaskWeek && (
+                    <Bar 
+                      dataKey="weekly" 
+                      name="Weekly Avg (Actual)" 
+                      fill="#48bb78" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
                   {showTaskMonth && (
                     <Bar 
                       dataKey="monthly" 
@@ -955,12 +1048,22 @@ export default function Analytics() {
                 <h2>⏰ Daily: One-Time Tasks</h2>
                 <p className="chart-description">Ideal allocation vs actual time spent (tasks from Daily tab ⏰Daily: One Time Tasks section)</p>
               </div>
-              <button 
-                className={`toggle-month-btn ${showOneTimeTaskMonth ? 'active' : ''}`}
-                onClick={() => setShowOneTimeTaskMonth(!showOneTimeTaskMonth)}
-              >
-                {showOneTimeTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showOneTimeTaskWeek ? 'active' : ''}`}
+                  onClick={() => setShowOneTimeTaskWeek(!showOneTimeTaskWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showOneTimeTaskWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showOneTimeTaskMonth ? 'active' : ''}`}
+                  onClick={() => setShowOneTimeTaskMonth(!showOneTimeTaskMonth)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showOneTimeTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+              </div>
             </div>
             
             <div 
@@ -971,7 +1074,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={Math.max(400, allOneTimeTasksData.length * 40)}>
+              <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
                     // Calculate days for proper averaging
@@ -990,37 +1093,31 @@ export default function Analytics() {
                         return {
                           name: task.task_name,
                           category: task.category_name,
-                          allocated: task.allocated_minutes / 60, // Convert to hours (daily)
-                          today: (todayTask?.spent_minutes || 0) / 60,
-                          weekly: (weekTask?.spent_minutes || 0) / 60 / daysInWeek, // Weekly average per day
-                          monthly: (monthTask?.spent_minutes || 0) / 60 / daysInMonth, // Monthly average per day
+                          allocated: task.allocated_minutes, // Keep as minutes
+                          today: (todayTask?.spent_minutes || 0),
+                          weekly: (weekTask?.spent_minutes || 0) / daysInWeek, // Weekly average per day in minutes
+                          monthly: (monthTask?.spent_minutes || 0) / daysInMonth, // Monthly average per day in minutes
                           totalSpent: (todayTask?.spent_minutes || 0) + (weekTask?.spent_minutes || 0) + (monthTask?.spent_minutes || 0)
                         };
                       })
                       .filter(task => task.allocated > 0 || task.totalSpent > 0) // Only tasks with allocation or time spent
                       .sort((a, b) => (b.allocated + b.totalSpent) - (a.allocated + a.totalSpent)); // Sort by most important
                   })()}
-                  barSize={15}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                  barSize={10}
+                  barCategoryGap={25}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    angle={-60}
-                    textAnchor="end"
-                    height={150}
+                    height={60}
                     interval={0}
-                    style={{ fontSize: '9px' }}
+                    tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
-                    label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: 'Minutes (Daily Average)', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
-                  />
-                  <Tooltip 
-                    contentStyle={{ fontSize: '11px' }}
-                    formatter={(value: number) => `${value.toFixed(2)}h`}
-                    labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
                   />
                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                   <ReferenceLine y={0} stroke="#000" />
@@ -1031,7 +1128,7 @@ export default function Analytics() {
                     name="Allocated (Daily)" 
                     fill="#cbd5e0" 
                     radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
                   />
                   
                   {/* Today's Actual */}
@@ -1040,17 +1137,19 @@ export default function Analytics() {
                     name="Today (Actual)" 
                     fill="#4299e1" 
                     radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
                   />
                   
-                  {/* This Week Average */}
-                  <Bar 
-                    dataKey="weekly" 
-                    name="Weekly Avg (Actual)" 
-                    fill="#48bb78" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
+                  {/* This Week Average - Only show if toggle is ON */}
+                  {showOneTimeTaskWeek && (
+                    <Bar 
+                      dataKey="weekly" 
+                      name="Weekly Avg (Actual)" 
+                      fill="#48bb78" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
+                    />
+                  )}
                   
                   {/* This Month Average - Only show if toggle is ON */}
                   {showOneTimeTaskMonth && (
@@ -1059,7 +1158,7 @@ export default function Analytics() {
                       name="Monthly Avg (Actual)" 
                       fill="#ed8936" 
                       radius={[4, 4, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
                     />
                   )}
                 </BarChart>
@@ -1122,26 +1221,20 @@ export default function Analytics() {
                       .sort((a, b) => (b.today + b.weekly + b.monthly) - (a.today + a.weekly + a.monthly))
                       .slice(0, 20); // Show top 20 tasks by total utilization
                   })()}
-                  barSize={20}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                  barSize={15}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    angle={-60}
-                    textAnchor="end"
-                    height={150}
+                    height={60}
                     interval={0}
-                    style={{ fontSize: '9px' }}
+                    tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
                     label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
-                  />
-                  <Tooltip 
-                    formatter={(value: number) => `${value.toFixed(1)}%`}
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '10px' }}
@@ -1200,12 +1293,22 @@ export default function Analytics() {
                 <h2>📊 Category Breakdown by Pillar</h2>
                 <p className="chart-description">Time spent on categories within each pillar</p>
               </div>
-              <button 
-                className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-                onClick={() => setShowMonthColumn(!showMonthColumn)}
-              >
-                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showCategoryBreakdownWeek ? 'active' : ''}`}
+                  onClick={() => setShowCategoryBreakdownWeek(!showCategoryBreakdownWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showCategoryBreakdownWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+                  onClick={() => setShowMonthColumn(!showMonthColumn)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+              </div>
             </div>
             
             {dailyPillarData
@@ -1254,27 +1357,24 @@ export default function Analytics() {
                       title="Click to view enlarged chart"
                       style={{ cursor: 'pointer' }}
                     >
-                      <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height={500}>
                       <BarChart 
                         data={pillarCategories}
                         barSize={35}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 100 }}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                       >
                         <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                         <XAxis 
                           dataKey="category_name"
-                          angle={-45}
-                          textAnchor="end"
-                          height={100}
+                          height={60}
                           interval={0}
-                          style={{ fontSize: '12px' }}
+                          tick={<CustomMultilineLabel />}
                         />
                         <YAxis 
                           label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }}
                           style={{ fontSize: '12px' }}
                           domain={[0, 'auto']}
                         />
-                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
                         <Legend wrapperStyle={{ paddingTop: '10px' }} />
                         <Bar 
                           dataKey="allocated" 
@@ -1290,13 +1390,15 @@ export default function Analytics() {
                           radius={[6, 6, 0, 0]}
                           label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                         />
-                        <Bar 
-                          dataKey="weekAvg" 
-                          name="Weekly Avg" 
-                          fill="#48bb78" 
-                          radius={[6, 6, 0, 0]}
-                          label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                        />
+                        {showCategoryBreakdownWeek && (
+                          <Bar 
+                            dataKey="weekAvg" 
+                            name="Weekly Avg" 
+                            fill="#48bb78" 
+                            radius={[6, 6, 0, 0]}
+                            label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                          />
+                        )}
                         {showMonthColumn && (
                           <Bar 
                             dataKey="monthAvg" 
@@ -1321,12 +1423,22 @@ export default function Analytics() {
                 <h2>📋 Task Breakdown by Pillar</h2>
                 <p className="chart-description">Individual task performance within each pillar</p>
               </div>
-              <button 
-                className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-                onClick={() => setShowMonthColumn(!showMonthColumn)}
-              >
-                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showTaskBreakdownWeek ? 'active' : ''}`}
+                  onClick={() => setShowTaskBreakdownWeek(!showTaskBreakdownWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showTaskBreakdownWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+                  onClick={() => setShowMonthColumn(!showMonthColumn)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+              </div>
             </div>
             
             {dailyPillarData
@@ -1422,27 +1534,24 @@ export default function Analytics() {
                       title="Click to view enlarged chart"
                       style={{ cursor: 'pointer' }}
                     >
-                      <ResponsiveContainer width="100%" height={Math.max(500, pillarTasks.length * 40)}>
+                      <ResponsiveContainer width="100%" height={500}>
                       <BarChart 
                         data={pillarTasks}
                         barSize={20}
-                        margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
                       >
                         <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                         <XAxis 
                           dataKey="task_name"
-                          angle={-45}
-                          textAnchor="end"
-                          height={140}
+                          height={60}
                           interval={0}
-                          style={{ fontSize: '11px' }}
+                          tick={<CustomMultilineLabel />}
                         />
                         <YAxis 
                           label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }}
                           style={{ fontSize: '11px' }}
                           domain={[0, 'auto']}
                         />
-                        <Tooltip formatter={(value: number) => `${value.toFixed(2)}h`} />
                         <Legend wrapperStyle={{ paddingTop: '10px' }} />
                         <Bar 
                           dataKey="allocated" 
@@ -1458,13 +1567,15 @@ export default function Analytics() {
                           radius={[4, 4, 0, 0]}
                           label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                         />
-                        <Bar 
-                          dataKey="weekAvg" 
-                          name="Weekly Avg (Actual)" 
-                          fill="#48bb78" 
-                          radius={[4, 4, 0, 0]}
-                          label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                        />
+                        {showTaskBreakdownWeek && (
+                          <Bar 
+                            dataKey="weekAvg" 
+                            name="Weekly Avg (Actual)" 
+                            fill="#48bb78" 
+                            radius={[4, 4, 0, 0]}
+                            label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                          />
+                        )}
                         {showMonthColumn && (
                           <Bar 
                             dataKey="monthAvg" 
