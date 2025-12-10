@@ -113,11 +113,18 @@ export default function Analytics() {
   const [todayTaskData, setTodayTaskData] = useState<TaskData[]>([]);
   const [weekTaskData, setWeekTaskData] = useState<TaskData[]>([]);
   const [monthTaskData, setMonthTaskData] = useState<TaskData[]>([]);
-  const [allTasksData, setAllTasksData] = useState<TaskData[]>([]); // Base tasks with allocations
+  const [allTasksData, setAllTasksData] = useState<TaskData[]>([]); // Base tasks with allocations - TIME-BASED only
+  
+  // One-time tasks data
+  const [todayOneTimeTaskData, setTodayOneTimeTaskData] = useState<TaskData[]>([]);
+  const [weekOneTimeTaskData, setWeekOneTimeTaskData] = useState<TaskData[]>([]);
+  const [monthOneTimeTaskData, setMonthOneTimeTaskData] = useState<TaskData[]>([]);
+  const [allOneTimeTasksData, setAllOneTimeTasksData] = useState<TaskData[]>([]); // Base one-time tasks
   
   const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Pillars)
   const [showCategoryMonth, setShowCategoryMonth] = useState(false); // Toggle for Categories
   const [showTaskMonth, setShowTaskMonth] = useState(false); // Toggle for Tasks
+  const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(false); // Toggle for One-Time Tasks
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -253,9 +260,16 @@ export default function Analytics() {
       console.log('📥 Tasks API response:', allTasksResponse.data?.length, 'tasks received');
       const tasks = allTasksResponse.data || [];
       
-      // Create base tasks array with allocated minutes - FILTER FOR DAILY TASKS ONLY
+      // Create base tasks array - FILTER TO MATCH DAILY TAB
+      // Time-Based Tasks: daily frequency + task_type=TIME + NOT is_daily_one_time + is_active
       const baseTasks: TaskData[] = tasks
-        .filter((task: any) => task.follow_up_frequency === 'daily') // Only daily tasks match Daily tab
+        .filter((task: any) => 
+          task.follow_up_frequency === 'daily' && 
+          task.task_type?.toUpperCase() === 'TIME' && 
+          !task.is_daily_one_time &&
+          task.is_active &&
+          !task.is_completed
+        )
         .map((task: any) => ({
           task_id: task.id,
           task_name: task.name,
@@ -264,8 +278,26 @@ export default function Analytics() {
           spent_minutes: 0
         }));
       setAllTasksData(baseTasks);
-      console.log('✅ Base tasks (daily only):', baseTasks.length, 'tasks');
-      console.log('📋 Sample base task IDs:', baseTasks.slice(0, 5).map(t => ({ id: t.task_id, name: t.task_name })));
+      console.log('✅ Base time-based tasks:', baseTasks.length, 'tasks');
+      
+      // One-Time Tasks: daily frequency + task_type=TIME + is_daily_one_time + is_active
+      const baseOneTimeTasks: TaskData[] = tasks
+        .filter((task: any) => 
+          task.follow_up_frequency === 'daily' && 
+          task.task_type?.toUpperCase() === 'TIME' && 
+          task.is_daily_one_time === true &&
+          task.is_active &&
+          !task.is_completed
+        )
+        .map((task: any) => ({
+          task_id: task.id,
+          task_name: task.name,
+          category_name: task.category_name || 'Uncategorized',
+          allocated_minutes: task.allocated_minutes || 0,
+          spent_minutes: 0
+        }));
+      setAllOneTimeTasksData(baseOneTimeTasks);
+      console.log('✅ Base one-time tasks:', baseOneTimeTasks.length, 'tasks');
       
       // Load Today's task time entries
       const todayEntries = await apiClient.get(`/api/daily-time?date=${todayStr}`);
@@ -278,6 +310,16 @@ export default function Analytics() {
         };
       });
       setTodayTaskData(todayTasks);
+      
+      // Load Today's one-time task entries
+      const todayOneTimeTasks = baseOneTimeTasks.map(task => {
+        const entry = (todayEntries.data || []).find((e: any) => e.task_id === task.task_id);
+        return {
+          ...task,
+          spent_minutes: entry?.minutes || 0
+        };
+      });
+      setTodayOneTimeTaskData(todayOneTimeTasks);
       console.log('Today tasks with spent time:', todayTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
       
       // Load This Week's task time entries (Monday to today)
@@ -295,6 +337,13 @@ export default function Analytics() {
         spent_minutes: weekTaskMap.get(task.task_id) || 0
       }));
       setWeekTaskData(weekTasks);
+      
+      // Week one-time tasks
+      const weekOneTimeTasks = baseOneTimeTasks.map(task => ({
+        ...task,
+        spent_minutes: weekTaskMap.get(task.task_id) || 0
+      }));
+      setWeekOneTimeTaskData(weekOneTimeTasks);
       console.log('Week tasks with spent time:', weekTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
       
       // Load This Month's task time entries
@@ -313,6 +362,13 @@ export default function Analytics() {
         spent_minutes: monthTaskMap.get(task.task_id) || 0
       }));
       setMonthTaskData(monthTasks);
+      
+      // Month one-time tasks
+      const monthOneTimeTasks = baseOneTimeTasks.map(task => ({
+        ...task,
+        spent_minutes: monthTaskMap.get(task.task_id) || 0
+      }));
+      setMonthOneTimeTaskData(monthOneTimeTasks);
       console.log('Month tasks with spent time:', monthTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
       
       console.log('Tasks data loaded:', { today: todayTasks.length, week: weekTasks.length, month: monthTasks.length });
@@ -780,12 +836,12 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* TASKS TIME COMPARISON */}
+          {/* DAILY TIME-BASED TASKS COMPARISON */}
           <div className="comparative-charts-section">
             <div className="section-header-with-toggle">
               <div>
-                <h2>✓ Tasks Time Comparison</h2>
-                <p className="chart-description">Ideal allocation vs actual time spent by task (all tasks)</p>
+                <h2>⏰ Daily: Time-Based Tasks</h2>
+                <p className="chart-description">Ideal allocation vs actual time spent (tasks from Daily tab ⏰Time-Based Tasks section)</p>
               </div>
               <button 
                 className={`toggle-month-btn ${showTaskMonth ? 'active' : ''}`}
@@ -879,6 +935,125 @@ export default function Analytics() {
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
                   {showTaskMonth && (
+                    <Bar 
+                      dataKey="monthly" 
+                      name="Monthly Avg (Actual)" 
+                      fill="#ed8936" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* DAILY ONE-TIME TASKS COMPARISON */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>⏰ Daily: One-Time Tasks</h2>
+                <p className="chart-description">Ideal allocation vs actual time spent (tasks from Daily tab ⏰Daily: One Time Tasks section)</p>
+              </div>
+              <button 
+                className={`toggle-month-btn ${showOneTimeTaskMonth ? 'active' : ''}`}
+                onClick={() => setShowOneTimeTaskMonth(!showOneTimeTaskMonth)}
+              >
+                {showOneTimeTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+              </button>
+            </div>
+            
+            <div 
+              className="unified-comparison-chart clickable-chart"
+              onClick={() => {
+                setModalChartType('onetime-task');
+                setShowDetailModal(true);
+              }}
+              title="Click to view enlarged chart"
+            >
+              <ResponsiveContainer width="100%" height={Math.max(400, allOneTimeTasksData.length * 40)}>
+                <BarChart 
+                  data={(() => {
+                    // Calculate days for proper averaging
+                    const today = new Date();
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    // Map ONE-TIME tasks with all time periods
+                    return allOneTimeTasksData
+                      .map((task) => {
+                        const todayTask = todayOneTimeTaskData.find(t => t.task_id === task.task_id);
+                        const weekTask = weekOneTimeTaskData.find(t => t.task_id === task.task_id);
+                        const monthTask = monthOneTimeTaskData.find(t => t.task_id === task.task_id);
+                        
+                        return {
+                          name: task.task_name,
+                          category: task.category_name,
+                          allocated: task.allocated_minutes / 60, // Convert to hours (daily)
+                          today: (todayTask?.spent_minutes || 0) / 60,
+                          weekly: (weekTask?.spent_minutes || 0) / 60 / daysInWeek, // Weekly average per day
+                          monthly: (monthTask?.spent_minutes || 0) / 60 / daysInMonth, // Monthly average per day
+                          totalSpent: (todayTask?.spent_minutes || 0) + (weekTask?.spent_minutes || 0) + (monthTask?.spent_minutes || 0)
+                        };
+                      })
+                      .filter(task => task.allocated > 0 || task.totalSpent > 0) // Only tasks with allocation or time spent
+                      .sort((a, b) => (b.allocated + b.totalSpent) - (a.allocated + a.totalSpent)); // Sort by most important
+                  })()}
+                  barSize={15}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 150 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    angle={-60}
+                    textAnchor="end"
+                    height={150}
+                    interval={0}
+                    style={{ fontSize: '9px' }}
+                  />
+                  <YAxis 
+                    label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Tooltip 
+                    contentStyle={{ fontSize: '11px' }}
+                    formatter={(value: number) => `${value.toFixed(2)}h`}
+                    labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
+                  <ReferenceLine y={0} stroke="#000" />
+                  
+                  {/* Allocated - Target line */}
+                  <Bar 
+                    dataKey="allocated" 
+                    name="Allocated (Daily)" 
+                    fill="#cbd5e0" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  
+                  {/* Today's Actual */}
+                  <Bar 
+                    dataKey="today" 
+                    name="Today (Actual)" 
+                    fill="#4299e1" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  
+                  {/* This Week Average */}
+                  <Bar 
+                    dataKey="weekly" 
+                    name="Weekly Avg (Actual)" 
+                    fill="#48bb78" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                  />
+                  
+                  {/* This Month Average - Only show if toggle is ON */}
+                  {showOneTimeTaskMonth && (
                     <Bar 
                       dataKey="monthly" 
                       name="Monthly Avg (Actual)" 
