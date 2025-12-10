@@ -702,6 +702,12 @@ export default function Tasks() {
     return `${year}-${month}-${day}`;
   };
 
+  // Helper to parse YYYY-MM-DD string as local date (not UTC)
+  const parseDateString = (dateStr: string): Date => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  };
+
   const isToday = (date: Date): boolean => {
     const today = new Date();
     return date.getFullYear() === today.getFullYear() &&
@@ -782,19 +788,19 @@ export default function Tasks() {
     const nowTasks = tasks.filter(task => 
       task.priority && task.priority >= 1 && task.priority <= 3 && 
       task.is_active && !task.is_completed &&
-      task.due_date && new Date(task.due_date) <= today
+      task.due_date && parseDateString(task.due_date) <= today
     );
     
     const nowProjectTasks = projectTasksDueToday.filter(task => 
       task.priority && task.priority >= 1 && task.priority <= 3 && 
       !task.is_completed &&
-      task.due_date && new Date(task.due_date) <= today
+      task.due_date && parseDateString(task.due_date) <= today
     );
     
     const nowGoalTasks = goalTasksDueToday.filter(task => 
       task.priority && task.priority >= 1 && task.priority <= 3 && 
       !task.is_completed &&
-      task.due_date && new Date(task.due_date) <= today
+      task.due_date && parseDateString(task.due_date) <= today
     );
     
     return nowTasks.length + nowProjectTasks.length + nowGoalTasks.length;
@@ -1050,7 +1056,7 @@ export default function Tasks() {
       
       // Get habit details to check start_date
       const habit = habits.find(h => h.id === habitId);
-      const habitStartDate = habit?.start_date ? new Date(habit.start_date) : null;
+      const habitStartDate = habit?.start_date ? parseDateString(habit.start_date) : null;
       
       // Create map of date -> entry for all days in target month
       const monthDays: Array<{
@@ -1164,12 +1170,66 @@ export default function Tasks() {
     }
   }, []);
 
+  // Load project tasks and milestones (must be defined before handleSelectProject)
+  const loadProjectTasks = async (projectId: number) => {
+    try {
+      const response: any = await api.get(`/api/projects/${projectId}/tasks`);
+      const data = response.data || response;
+      
+      // Keep all existing tasks but update/add tasks for this project
+      setProjectTasks(prevTasks => {
+        const otherProjectTasks = prevTasks.filter(t => t.project_id !== projectId);
+        const newTasks = Array.isArray(data) ? data : [];
+        return [...otherProjectTasks, ...newTasks];
+      });
+    } catch (err: any) {
+      console.error('Error loading project tasks:', err);
+    }
+  };
+
+  const loadProjectMilestones = async (projectId: number) => {
+    try {
+      const response = await api.get(`/api/projects/${projectId}/milestones`);
+      const data = response.data || response;
+      const milestonesArray = Array.isArray(data) ? data : [];
+      console.log('Loaded milestones for project', projectId, ':', milestonesArray);
+      setProjectMilestones(milestonesArray);
+    } catch (error) {
+      console.error('Error loading project milestones:', error);
+      setProjectMilestones([]);
+    }
+  };
+
+  // Handle selecting a project (moved here to avoid "before initialization" error)
+  const handleSelectProject = async (project: ProjectData) => {
+    setSelectedProject(project);
+    await loadProjectTasks(project.id);
+    await loadProjectMilestones(project.id);
+    
+    // Load challenges related to this project
+    try {
+      const challenges = await api.get<{direct_challenges: any[], goal_challenges: any[]}>(`/api/projects/${project.id}/challenges`);
+      setProjectChallenges(challenges);
+      console.log('Project challenges loaded:', challenges);
+    } catch (challengesError) {
+      console.warn('Could not load project challenges:', challengesError);
+      setProjectChallenges(null);
+    }
+    
+    // Update URL to include project ID for refresh persistence
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set('project', project.id.toString());
+    navigate(`?${searchParams.toString()}`, { replace: true });
+  };
+
   // Handle URL parameters on mount and when location changes
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const tabParam = searchParams.get('tab');
     const projectParam = searchParams.get('project');
     const dateParam = searchParams.get('date');
+    
+    console.log('🔍 URL params changed:', { tab: tabParam, project: projectParam, date: dateParam });
 
     // Set active tab if provided (when URL changes)
     if (tabParam) {
@@ -1186,8 +1246,10 @@ export default function Tasks() {
         const [year, month, day] = dateParam.split('-').map(Number);
         const date = new Date(year, month - 1, day, 12, 0, 0, 0); // Use noon to avoid DST issues
         date.setHours(0, 0, 0, 0); // Then set to midnight
+        console.log('📅 URL date param:', dateParam, '→ Parsed date:', date.toLocaleDateString(), 'ISO:', date.toISOString(), 'getDate():', date.getDate());
         if (!isNaN(date.getTime())) {
           setSelectedDate(date);
+          console.log('✅ Set selectedDate to:', date);
         }
       } catch (e) {
         console.error('Invalid date parameter:', dateParam);
@@ -1749,9 +1811,9 @@ export default function Tasks() {
         today.setHours(0, 0, 0, 0);
         
         const allTasks = [
-          ...tasks.filter(t => t.is_active && !t.is_completed && t.due_date && new Date(t.due_date) <= today).map(t => ({ ...t, type: 'task' })),
-          ...projectTasksDueToday.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) <= today).map(t => ({ ...t, type: 'project' })),
-          ...goalTasksDueToday.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) <= today).map(t => ({ ...t, type: 'goal' }))
+          ...tasks.filter(t => t.is_active && !t.is_completed && t.due_date && parseDateString(t.due_date) <= today).map(t => ({ ...t, type: 'task' })),
+          ...projectTasksDueToday.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date) <= today).map(t => ({ ...t, type: 'project' })),
+          ...goalTasksDueToday.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date) <= today).map(t => ({ ...t, type: 'goal' }))
         ];
         
         // Count how many P1-P3 tasks remain
@@ -1766,7 +1828,7 @@ export default function Tasks() {
               // Sort by priority (lower number = higher priority)
               if (a.priority !== b.priority) return a.priority - b.priority;
               // Tie-breaker: oldest due_date first
-              return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+              return parseDateString(a.due_date).getTime() - parseDateString(b.due_date).getTime();
             });
           
           if (eligibleTasks.length > 0) {
@@ -3166,7 +3228,7 @@ export default function Tasks() {
       for (const task of miscTasks) {
         if (task.is_completed || !task.due_date) continue;
         
-        const dueDate = new Date(task.due_date);
+        const dueDate = parseDateString(task.due_date);
         dueDate.setHours(0, 0, 0, 0);
         
         if (dueDate <= today) {
@@ -3262,7 +3324,7 @@ export default function Tasks() {
       const upcoming = tasks.filter(task => {
         if (!task.due_date || task.is_completed || !task.is_active) return false;
         
-        const dueDate = new Date(task.due_date);
+        const dueDate = parseDateString(task.due_date);
         dueDate.setHours(0, 0, 0, 0);
         
         return dueDate > today && dueDate <= nextWeek;
@@ -3278,56 +3340,6 @@ export default function Tasks() {
       setUpcomingTasks([]);
     }
   }
-
-  const loadProjectTasks = async (projectId: number) => {
-    try {
-      const response: any = await api.get(`/api/projects/${projectId}/tasks`);
-      const data = response.data || response;
-      
-      // Keep all existing tasks but update/add tasks for this project
-      setProjectTasks(prevTasks => {
-        const otherProjectTasks = prevTasks.filter(t => t.project_id !== projectId);
-        const newTasks = Array.isArray(data) ? data : [];
-        return [...otherProjectTasks, ...newTasks];
-      });
-    } catch (err: any) {
-      console.error('Error loading project tasks:', err);
-    }
-  };
-
-  const handleSelectProject = async (project: ProjectData) => {
-    setSelectedProject(project);
-    await loadProjectTasks(project.id);
-    await loadProjectMilestones(project.id);
-    
-    // Load challenges related to this project
-    try {
-      const challenges = await api.get<{direct_challenges: any[], goal_challenges: any[]}>(`/api/projects/${project.id}/challenges`);
-      setProjectChallenges(challenges);
-      console.log('Project challenges loaded:', challenges);
-    } catch (challengesError) {
-      console.warn('Could not load project challenges:', challengesError);
-      setProjectChallenges(null);
-    }
-    
-    // Update URL to include project ID for refresh persistence
-    const searchParams = new URLSearchParams(location.search);
-    searchParams.set('project', project.id.toString());
-    navigate(`?${searchParams.toString()}`, { replace: true });
-  };
-
-  const loadProjectMilestones = async (projectId: number) => {
-    try {
-      const response = await api.get(`/api/projects/${projectId}/milestones`);
-      const data = response.data || response;
-      const milestonesArray = Array.isArray(data) ? data : [];
-      console.log('Loaded milestones for project', projectId, ':', milestonesArray);
-      setProjectMilestones(milestonesArray);
-    } catch (error) {
-      console.error('Error loading project milestones:', error);
-      setProjectMilestones([]);
-    }
-  };
 
   const handleCreateProjectMilestone = async (milestoneData: any) => {
     if (!selectedProject) return;
@@ -3432,7 +3444,10 @@ export default function Tasks() {
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate);
+    
+    // Parse due date as local time to avoid timezone shift
+    const [year, month, day] = dueDate.split('-').map(Number);
+    const due = new Date(year, month - 1, day);
     due.setHours(0, 0, 0, 0);
     
     const diffTime = due.getTime() - today.getTime();
@@ -3483,7 +3498,7 @@ export default function Tasks() {
       if (task.project_id !== projectId || task.is_completed || !task.due_date) {
         return false;
       }
-      const due = new Date(task.due_date);
+      const due = parseDateString(task.due_date);
       due.setHours(0, 0, 0, 0);
       return due < today;
     });
@@ -5226,7 +5241,7 @@ export default function Tasks() {
                 return milestone ? (
                   <span 
                     className="milestone-badge"
-                    title={`Milestone: ${milestone.name} (Target: ${new Date(milestone.target_date).toLocaleDateString()})`}
+                    title={`Milestone: ${milestone.name} (Target: ${parseDateString(milestone.target_date).toLocaleDateString()})`}
                     style={{
                       display: 'inline-block',
                       padding: '2px 8px',
@@ -5252,7 +5267,7 @@ export default function Tasks() {
             <div className="task-due-date">
               <input 
                 type="date"
-                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                 onChange={(e) => {
                   const newDate = e.target.value;
                   if (newDate) {
@@ -5977,7 +5992,7 @@ export default function Tasks() {
               
               // For tasks with due dates, must be today or earlier
               if (task.due_date) {
-                const taskDueDate = new Date(task.due_date);
+                const taskDueDate = parseDateString(task.due_date);
                 taskDueDate.setHours(0, 0, 0, 0);
                 return taskDueDate <= today;
               }
@@ -5994,13 +6009,13 @@ export default function Tasks() {
             const nowProjectTasks = projectTasksDueToday.filter(task => 
               task.priority && task.priority >= 1 && task.priority <= 3 && 
               !task.is_completed &&
-              task.due_date && new Date(task.due_date) <= today
+              task.due_date && parseDateString(task.due_date) <= today
             );
             
             const nowGoalTasks = goalTasksDueToday.filter(task => 
               task.priority && task.priority >= 1 && task.priority <= 3 && 
               !task.is_completed &&
-              task.due_date && new Date(task.due_date) <= today
+              task.due_date && parseDateString(task.due_date) <= today
             );
             
             // Combine and sort by priority (1 first), then by due_date (oldest first)
@@ -6011,7 +6026,7 @@ export default function Tasks() {
                   return a.priority - b.priority; // Lower priority number = higher urgency
                 }
                 // Same priority - oldest due_date first
-                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+                return parseDateString(a.due_date).getTime() - parseDateString(b.due_date).getTime();
               })
               .slice(0, 3); // Show top 3 only
             
@@ -6183,7 +6198,7 @@ export default function Tasks() {
                             {task.due_date ? (
                               <input 
                                 type="date"
-                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={async (e) => {
                                   const newDate = e.target.value;
                                   if (!newDate) return;
@@ -6209,8 +6224,8 @@ export default function Tasks() {
                                   borderRadius: '4px',
                                   cursor: 'pointer',
                                   fontSize: '13px',
-                                  color: new Date(task.due_date) < new Date() ? '#dc2626' : '#6b7280',
-                                  fontWeight: new Date(task.due_date) < new Date() ? '600' : '400'
+                                  color: parseDateString(task.due_date) < new Date() ? '#dc2626' : '#6b7280',
+                                  fontWeight: parseDateString(task.due_date) < new Date() ? '600' : '400'
                                 }}
                               />
                             ) : (
@@ -6768,10 +6783,10 @@ export default function Tasks() {
                           {(() => {
                             // Find next incomplete milestone
                             const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                              .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                              .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
                             
                             if (nextMilestone) {
-                              const milestoneDate = new Date(nextMilestone.target_date);
+                              const milestoneDate = parseDateString(nextMilestone.target_date);
                               const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                               const isOverdue = milestoneDaysLeft < 0;
                               const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -7004,10 +7019,10 @@ export default function Tasks() {
                                       
                                       {(() => {
                                         const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                                          .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                                          .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
                                         
                                         if (nextMilestone) {
-                                          const milestoneDate = new Date(nextMilestone.target_date);
+                                          const milestoneDate = parseDateString(nextMilestone.target_date);
                                           const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                                           const isOverdue = milestoneDaysLeft < 0;
                                           const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -7239,10 +7254,10 @@ export default function Tasks() {
                                       
                                       {(() => {
                                         const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                                          .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                                          .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
                                         
                                         if (nextMilestone) {
-                                          const milestoneDate = new Date(nextMilestone.target_date);
+                                          const milestoneDate = parseDateString(nextMilestone.target_date);
                                           const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                                           const isOverdue = milestoneDaysLeft < 0;
                                           const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -7473,10 +7488,10 @@ export default function Tasks() {
                                       
                                       {(() => {
                                         const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                                          .sort((a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime())[0];
+                                          .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
                                         
                                         if (nextMilestone) {
-                                          const milestoneDate = new Date(nextMilestone.target_date);
+                                          const milestoneDate = parseDateString(nextMilestone.target_date);
                                           const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                                           const isOverdue = milestoneDaysLeft < 0;
                                           const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -7760,13 +7775,13 @@ export default function Tasks() {
                             </span>
                             <span style={{ color: '#805ad5', fontWeight: '500', minWidth: '80px' }}>Tasks: {completedTasks}/{totalTasks}</span>
                             <span style={{ color: '#666', minWidth: '100px' }}>
-                              {new Date(milestone.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {parseDateString(milestone.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </span>
                           </div>
                           
                           {/* Right side: Overdue badge + Action Buttons */}
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            {new Date(milestone.target_date) < new Date() && !milestone.is_completed && (
+                            {parseDateString(milestone.target_date) < new Date() && !milestone.is_completed && (
                               <span style={{ 
                                 color: '#fff',
                                 background: '#f56565',
@@ -8071,7 +8086,7 @@ export default function Tasks() {
                 color: projectTaskFilter === 'overdue' ? 'white' : '#2d3748'
               }}
             >
-              ⏰ Overdue ({miscTasks.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) < new Date()).length})
+              ⏰ Overdue ({miscTasks.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date) < new Date()).length})
             </button>
           </div>
 
@@ -8098,7 +8113,7 @@ export default function Tasks() {
                 
                 miscTasks.forEach(task => {
                   if (task.due_date) {
-                    const dueDate = new Date(task.due_date);
+                    const dueDate = parseDateString(task.due_date);
                     const year = dueDate.getFullYear();
                     const month = dueDate.getMonth();
                     const key = `${year}-${month}`;
@@ -8205,7 +8220,7 @@ export default function Tasks() {
                   if (projectTaskFilter === 'all') return true;
                   if (projectTaskFilter === 'in-progress') return !task.is_completed;
                   if (projectTaskFilter === 'overdue') {
-                    return !task.is_completed && task.due_date && new Date(task.due_date) < new Date();
+                    return !task.is_completed && task.due_date && parseDateString(task.due_date) < new Date();
                   }
                   return true;
                 }).map((task) => (
@@ -8440,8 +8455,8 @@ export default function Tasks() {
                 const selectedMonthEnd = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth() + 1, 0);
                 selectedMonthEnd.setHours(23, 59, 59, 999);
                 
-                const habitStart = habit.start_date ? new Date(habit.start_date) : null;
-                const habitEnd = habit.end_date ? new Date(habit.end_date) : null;
+                const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
+                const habitEnd = habit.end_date ? parseDateString(habit.end_date) : null;
                 
                 // Exclude habits that ended BEFORE the selected month (only exclude past habits)
                 if (habitEnd && habitEnd < selectedMonthStart) return false;
@@ -8755,8 +8770,8 @@ export default function Tasks() {
                           gap: '12px',
                           whiteSpace: 'nowrap'
                         }}>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> 📅 {new Date(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> 📊 {Math.floor((new Date().getTime() - new Date(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> 📅 {parseDateString(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> 📊 {Math.floor((new Date().getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))}</div>
                           <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Entries:</span> ⚡ {habit.stats?.total_entries || 0}</div>
                         </div>
 
@@ -9056,7 +9071,7 @@ export default function Tasks() {
                               whiteSpace: 'nowrap',
                               fontWeight: '600'
                             }}>
-                              ✅ Completed: {new Date(habit.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              ✅ Completed: {parseDateString(habit.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                             </div>
 
                             {/* Final stats */}
@@ -9084,7 +9099,7 @@ export default function Tasks() {
                               whiteSpace: 'nowrap',
                               fontWeight: '600'
                             }}>
-                              📊 {Math.floor((new Date(habit.end_date).getTime() - new Date(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))} days total
+                              📊 {Math.floor((parseDateString(habit.end_date).getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))} days total
                             </div>
 
                             {/* Reactivate button */}
@@ -11341,7 +11356,7 @@ export default function Tasks() {
             
             const upcomingCount = tasks.filter(task => {
               if (!task.is_active || task.is_completed || !task.due_date) return false;
-              const dueDate = new Date(task.due_date);
+              const dueDate = parseDateString(task.due_date);
               dueDate.setHours(0, 0, 0, 0);
               return dueDate > today && dueDate <= monthEnd;
             }).length;
@@ -11635,7 +11650,7 @@ export default function Tasks() {
             
             allTodayTasks.forEach(task => {
               if (task && task.due_date) {
-                const dueDate = new Date(task.due_date);
+                const dueDate = parseDateString(task.due_date);
                 const key = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
                 
                 if (!tasksByMonth[key]) {
@@ -12804,7 +12819,7 @@ export default function Tasks() {
                       </td>
                       {activeTab !== 'today' && (
                         <td className="col-due">
-                          {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                          {task.due_date ? parseDateString(task.due_date).toLocaleDateString() : '-'}
                         </td>
                       )}
                     </>
@@ -13093,7 +13108,7 @@ export default function Tasks() {
               if (!selectedTodayMonth) return true; // Show all if no month selected
               if (!task.due_date) return false; // Hide tasks without due dates
               
-              const dueDate = new Date(task.due_date);
+              const dueDate = parseDateString(task.due_date);
               const taskMonthKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
               return taskMonthKey === selectedTodayMonth;
             };
@@ -13147,7 +13162,7 @@ export default function Tasks() {
                     <tbody>
                       {filteredTasks.map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
-                        const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
+                        const isOverdue = dueDateClass.includes('overdue'); // Only 'overdue', not 'urgent'
                         const isCompleted = task.is_completed;
                         const rowBgColor = isCompleted ? 'repeating-linear-gradient(45deg, #d1fae5, #d1fae5 10px, #a7f3d0 10px, #a7f3d0 20px)' : (isOverdue ? '#fee2e2' : '#fff');
                         const rowHoverColor = isCompleted ? 'repeating-linear-gradient(45deg, #a7f3d0, #a7f3d0 10px, #6ee7b7 10px, #6ee7b7 20px)' : (isOverdue ? '#fecaca' : '#f1f5f9');
@@ -13172,7 +13187,7 @@ export default function Tasks() {
                             <td style={{ padding: '8px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
                               <input 
                                 type="date"
-                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={(e) => handleUpdateTaskDueDate(task.id, e.target.value)}
                                 style={{
                                   border: '1px solid #cbd5e1',
@@ -13297,7 +13312,7 @@ export default function Tasks() {
                     <tbody>
                       {filteredTasks.map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
-                        const isOverdue = dueDateClass.includes('overdue') || dueDateClass.includes('urgent');
+                        const isOverdue = dueDateClass.includes('overdue'); // Only 'overdue', not 'urgent'
                         const isCompleted = task.is_completed;
                         const rowBgColor = isCompleted ? 'repeating-linear-gradient(45deg, #d1fae5, #d1fae5 10px, #a7f3d0 10px, #a7f3d0 20px)' : (isOverdue ? '#fee2e2' : '#fff');
                         const rowHoverColor = isCompleted ? 'repeating-linear-gradient(45deg, #a7f3d0, #a7f3d0 10px, #6ee7b7 10px, #6ee7b7 20px)' : (isOverdue ? '#fecaca' : '#f1f5f9');
@@ -13322,7 +13337,7 @@ export default function Tasks() {
                             <td style={{ padding: '12px 16px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
                               <input 
                                 type="date"
-                                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
+                                value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={(e) => handleUpdateGoalTaskDueDate(task.id, e.target.value)}
                                 style={{
                                   border: '1px solid #cbd5e1',
@@ -13487,7 +13502,7 @@ export default function Tasks() {
                             <td style={{ padding: '12px 16px', border: '1px solid #e2e8f0' }}>
                               <input
                                 type="date"
-                                value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                                value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={async (e) => {
                                   const newDate = e.target.value;
                                   if (!newDate) return;
@@ -14743,7 +14758,7 @@ export default function Tasks() {
             // Filter tasks with due dates in the next 7 days (excluding today)
             const upcomingWeekTasks = tasks.filter(task => {
               if (!task.due_date || !task.is_active || task.is_completed) return false;
-              const dueDate = new Date(task.due_date);
+              const dueDate = parseDateString(task.due_date);
               dueDate.setHours(0, 0, 0, 0);
               return dueDate > today && dueDate <= oneWeekFromNow;
             }).sort((a, b) => {
@@ -14758,7 +14773,7 @@ export default function Tasks() {
             // Filter tasks due this month (beyond next 7 days)
             const upcomingMonthTasks = tasks.filter(task => {
               if (!task.due_date || !task.is_active || task.is_completed) return false;
-              const dueDate = new Date(task.due_date);
+              const dueDate = parseDateString(task.due_date);
               dueDate.setHours(0, 0, 0, 0);
               return dueDate > oneWeekFromNow && dueDate <= endOfMonth;
             }).sort((a, b) => {
@@ -14924,7 +14939,7 @@ export default function Tasks() {
                             {/* Due date picker */}
                             <input
                               type="date"
-                              value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                              value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                               onChange={async (e) => {
                                 const newDate = e.target.value;
                                 if (!newDate) return;
@@ -15129,7 +15144,7 @@ export default function Tasks() {
                             {/* Due date picker */}
                             <input
                               type="date"
-                              value={task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''}
+                              value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                               onChange={async (e) => {
                                 const newDate = e.target.value;
                                 if (!newDate) return;
@@ -16253,7 +16268,7 @@ export default function Tasks() {
                 )}
                 <div style={{ display: 'flex', gap: '16px', marginTop: '12px', fontSize: '14px' }}>
                   <span style={{ color: '#666' }}>
-                    <strong>Target Date:</strong> {new Date(selectedMilestone.target_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                    <strong>Target Date:</strong> {parseDateString(selectedMilestone.target_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
                   </span>
                   <span style={{ 
                     color: selectedMilestone.is_completed ? '#48bb78' : '#ed8936',
@@ -16338,9 +16353,9 @@ export default function Tasks() {
                                 <div style={{ display: 'flex', gap: '12px', marginTop: '4px', fontSize: '12px' }}>
                                   {t.due_date && (
                                     <span style={{ 
-                                      color: new Date(t.due_date) < new Date() && !t.is_completed ? '#f56565' : '#666'
+                                      color: parseDateString(t.due_date) < new Date() && !t.is_completed ? '#f56565' : '#666'
                                     }}>
-                                      📅 Due: {new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                      📅 Due: {parseDateString(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                     </span>
                                   )}
                                   <span style={{ 
