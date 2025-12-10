@@ -1,5 +1,50 @@
 /* Tasks Page Styles - Excel-like Table View */
 
+/* React DatePicker Custom Styles */
+.react-datepicker-wrapper {
+  display: inline-block;
+}
+
+.react-datepicker__input-container input {
+  border: none !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  padding: 2px 4px !important;
+  border-radius: 3px !important;
+  fontSize: 13px !important;
+  outline: none !important;
+}
+
+.react-datepicker__input-container input:hover {
+  background: #f7fafc !important;
+}
+
+.react-datepicker {
+  font-family: inherit !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+.react-datepicker__header {
+  background-color: #f7fafc !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name {
+  color: #2d3748 !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: #3182ce !important;
+  color: white !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: #bee3f8 !important;
+}
+
 .tasks-page {
   padding: 24px;
   max-width: 1600px;

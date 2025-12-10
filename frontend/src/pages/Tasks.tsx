@@ -17,6 +17,7 @@ import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import ImportantTasks from './ImportantTasks';
+import CustomDatePicker from '../components/CustomDatePicker';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -374,6 +375,7 @@ export default function Tasks() {
   const [miscSubtaskParentId, setMiscSubtaskParentId] = useState<number | null>(null);
   const [showAddMiscTaskModal, setShowAddMiscTaskModal] = useState(false);
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
+  const [showCompletedMiscTasks, setShowCompletedMiscTasks] = useState(false);
   const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean }>({ milestones: true, allTasks: true });
   const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone'>('all');
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
@@ -5223,23 +5225,16 @@ export default function Tasks() {
           </div>
           
           {task.due_date && (
-            <div className="task-due-date">
-              📅 <input 
-                type="date"
-                value={task.due_date ? formatDateForInput(new Date(task.due_date)) : ''}
-                onChange={(e) => onUpdateDueDate(task.id, e.target.value)}
-                style={{
-                  border: 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  padding: '2px 4px',
-                  borderRadius: '3px'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = '#f7fafc'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                title="Click to change due date"
-              />
-            </div>
+            <CustomDatePicker
+              selectedDate={task.due_date ? new Date(task.due_date) : null}
+              onChange={(date) => {
+                if (date) {
+                  const formattedDate = date.toISOString().split('T')[0];
+                  onUpdateDueDate(task.id, formattedDate);
+                }
+              }}
+              showIcon={true}
+            />
           )}
           
           <div className="task-actions">
@@ -5259,7 +5254,7 @@ export default function Tasks() {
               }}
               title={task.is_completed ? 'Mark as incomplete' : 'Mark as done'}
             >
-              {task.is_completed ? '✓ Done' : 'Done'}
+              {task.is_completed ? '↶ UNDO' : 'Done'}
             </button>
             <button 
               className="btn btn-sm"
@@ -8010,7 +8005,7 @@ export default function Tasks() {
                 color: projectTaskFilter === 'all' ? 'white' : '#2d3748'
               }}
             >
-              🎯 Show All ({miscTasks.length})
+              🎯 Show All ({miscTasks.filter(t => !t.is_completed).length})
             </button>
             <button
               className={`btn ${projectTaskFilter === 'in-progress' ? 'btn-primary' : 'btn-secondary'}`}
@@ -8044,39 +8039,126 @@ export default function Tasks() {
             >
               ⏰ Overdue ({miscTasks.filter(t => !t.is_completed && t.due_date && new Date(t.due_date) < new Date()).length})
             </button>
-            <button
-              className={`btn ${projectTaskFilter === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setProjectTaskFilter('completed')}
-              style={{
-                padding: '8px 16px',
-                fontSize: '14px',
-                borderRadius: '6px',
-                border: 'none',
-                cursor: 'pointer',
-                fontWeight: '500',
-                backgroundColor: projectTaskFilter === 'completed' ? '#4299e1' : '#e2e8f0',
-                color: projectTaskFilter === 'completed' ? 'white' : '#2d3748'
-              }}
-            >
-              ✅ Completed ({miscTasks.filter(t => t.is_completed).length})
-            </button>
+          </div>
+
+          {/* Monthly Planning Summary */}
+          <div style={{
+            backgroundColor: '#f7fafc',
+            padding: '16px',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            border: '1px solid #e2e8f0'
+          }}>
+            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
+              📊 Monthly Planning Overview
+            </h4>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              flexWrap: 'wrap',
+              fontSize: '13px'
+            }}>
+              {(() => {
+                // Get last 12 months including current month
+                const months: { year: number; month: number; label: string }[] = [];
+                const now = new Date();
+                for (let i = 11; i >= 0; i--) {
+                  const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                  months.push({
+                    year: d.getFullYear(),
+                    month: d.getMonth(),
+                    label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                  });
+                }
+                
+                return months.map(({ year, month, label }) => {
+                  // Filter tasks created in this month
+                  const tasksInMonth = miscTasks.filter(t => {
+                    if (!t.created_at) return false;
+                    const taskDate = new Date(t.created_at);
+                    return taskDate.getFullYear() === year && taskDate.getMonth() === month;
+                  });
+                  
+                  const completed = tasksInMonth.filter(t => t.is_completed).length;
+                  const total = tasksInMonth.length;
+                  
+                  if (total === 0) return null; // Don't show months with no tasks
+                  
+                  const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+                  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month;
+                  
+                  // Color coding based on completion rate
+                  let bgColor = '#e2e8f0'; // gray - low completion
+                  let textColor = '#2d3748';
+                  if (completionRate >= 80) {
+                    bgColor = '#c6f6d5'; // green - high completion
+                    textColor = '#22543d';
+                  } else if (completionRate >= 50) {
+                    bgColor = '#fef5e7'; // yellow - medium completion
+                    textColor = '#744210';
+                  } else if (completionRate > 0) {
+                    bgColor = '#fed7d7'; // red - low completion
+                    textColor = '#742a2a';
+                  }
+                  
+                  return (
+                    <div
+                      key={`${year}-${month}`}
+                      style={{
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        backgroundColor: bgColor,
+                        color: textColor,
+                        fontWeight: isCurrentMonth ? '700' : '500',
+                        border: isCurrentMonth ? '2px solid #3182ce' : '1px solid transparent',
+                        boxShadow: isCurrentMonth ? '0 0 0 3px rgba(49, 130, 206, 0.1)' : 'none',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        minWidth: '140px'
+                      }}
+                      title={`${completed} completed out of ${total} tasks planned in ${label}`}
+                    >
+                      <div style={{ fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>
+                        {label} {isCurrentMonth && '(Current)'}
+                      </div>
+                      <div style={{ fontSize: '13px', fontWeight: '700' }}>
+                        {completed}/{total} tasks ({completionRate}%)
+                      </div>
+                      <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '2px' }}>
+                        {total - completed > 0 && !isCurrentMonth && `${total - completed} incomplete`}
+                        {isCurrentMonth && total - completed > 0 && `${total - completed} in progress`}
+                        {total - completed === 0 && '✓ All done'}
+                      </div>
+                    </div>
+                  );
+                }).filter(Boolean);
+              })()}
+            </div>
+            <p style={{ 
+              fontSize: '11px', 
+              color: '#718096', 
+              marginTop: '12px', 
+              marginBottom: '0',
+              fontStyle: 'italic'
+            }}>
+              💡 Tip: Use this overview to avoid overplanning. If you see low completion rates, consider planning fewer tasks next month.
+            </p>
           </div>
           
-          {/* Misc Tasks View - Simple list of tasks */}
+          {/* Active Misc Tasks View */}
           <div className="project-tasks-tree" style={{ marginTop: '20px' }}>
-            {miscTasks.length === 0 ? (
+            {miscTasks.filter(t => !t.is_completed).length === 0 ? (
               <div className="empty-state">
-                <p>No misc tasks yet. Click "Add Task" and select "Misc Task" to get started.</p>
+                <p>No active misc tasks. Click "Add Task" and select "Misc Task" to get started.</p>
                 <p style={{ fontSize: '14px', color: '#666', marginTop: '10px' }}>
                   Misc tasks are perfect for one-off items that don't fit into daily/weekly schedules.
                 </p>
               </div>
             ) : (
               <div className="task-list">
-                {miscTasks.filter(t => !t.parent_task_id).filter(task => {
+                {miscTasks.filter(t => !t.parent_task_id && !t.is_completed).filter(task => {
                   if (projectTaskFilter === 'all') return true;
                   if (projectTaskFilter === 'in-progress') return !task.is_completed;
-                  if (projectTaskFilter === 'completed') return task.is_completed;
                   if (projectTaskFilter === 'overdue') {
                     return !task.is_completed && task.due_date && new Date(task.due_date) < new Date();
                   }
@@ -8171,6 +8253,106 @@ export default function Tasks() {
               </div>
             )}
           </div>
+
+          {/* Completed Misc Tasks Section */}
+          {miscTasks.filter(t => t.is_completed && !t.parent_task_id).length > 0 && (
+            <div style={{ marginTop: '40px' }}>
+              <h3 
+                onClick={() => setShowCompletedMiscTasks(!showCompletedMiscTasks)}
+                style={{ 
+                  marginBottom: '15px', 
+                  color: '#666', 
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  userSelect: 'none',
+                  fontSize: '18px',
+                  fontWeight: '600'
+                }}
+              >
+                {showCompletedMiscTasks ? '▼' : '▶'} ✅ Completed Tasks ({miscTasks.filter(t => t.is_completed && !t.parent_task_id).length})
+              </h3>
+              {showCompletedMiscTasks && (
+                <div className="project-tasks-tree" style={{ 
+                  marginTop: '20px',
+                  opacity: 0.8,
+                  backgroundColor: '#f9fafb',
+                  padding: '20px',
+                  borderRadius: '8px'
+                }}>
+                  <div className="task-list">
+                    {miscTasks.filter(t => !t.parent_task_id && t.is_completed).map((task) => (
+                      <TaskNode 
+                        key={task.id} 
+                        task={task} 
+                        level={0}
+                        allTasks={miscTasks}
+                        expandedTasks={expandedMiscTasks}
+                        onToggleExpand={(taskId: number) => {
+                          const newExpanded = new Set(expandedMiscTasks);
+                          if (newExpanded.has(taskId)) {
+                            newExpanded.delete(taskId);
+                          } else {
+                            newExpanded.add(taskId);
+                          }
+                          setExpandedMiscTasks(newExpanded);
+                          localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
+                        }}
+                        onToggleComplete={async (taskId: number, currentStatus: boolean) => {
+                          // Allow uncompleting tasks
+                          try {
+                            await api.put(`/api/tasks/${taskId}`, {
+                              is_completed: !currentStatus
+                            });
+                            await loadMiscTaskGroups();
+                          } catch (err: any) {
+                            console.error('Error toggling task:', err);
+                          }
+                        }}
+                        onEdit={(task: ProjectTaskData) => {
+                          setSelectedTaskId(task.id);
+                          setIsTaskFormOpen(true);
+                        }}
+                        onDelete={async (taskId: number) => {
+                          if (confirm('Are you sure you want to permanently delete this completed task? This will also delete all subtasks.')) {
+                            try {
+                              await api.delete(`/api/tasks/${taskId}`);
+                              await loadMiscTaskGroups();
+                            } catch (err: any) {
+                              console.error('Error deleting task:', err);
+                              console.error('Delete error response:', err.response);
+                              const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+                              alert('Failed to delete task: ' + errorMsg);
+                            }
+                          }
+                        }}
+                        onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                          try {
+                            // Convert date to datetime format
+                            const dateTimeValue = newDueDate ? newDueDate + 'T00:00:00' : null;
+                            await api.put(`/api/tasks/${taskId}`, {
+                              due_date: dateTimeValue
+                            });
+                            await loadMiscTaskGroups();
+                          } catch (err: any) {
+                            console.error('Error updating due date:', err);
+                            alert('Failed to update due date. Please try again.');
+                          }
+                        }}
+                        getDueDateColorClass={getDueDateColorClass}
+                        getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
+                        onAddSubtask={(parentTask: ProjectTaskData) => {
+                          setEditingMiscTask(parentTask);
+                          setShowAddMiscTaskModal(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : activeTab === 'habits' ? (
         <div className="habits-container">
