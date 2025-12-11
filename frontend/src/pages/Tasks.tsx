@@ -3087,13 +3087,7 @@ export default function Tasks() {
           return true;
         }
         
-        // If completed today, don't show (they're on track)
-        if (habit.completed_today) {
-          console.log(`❌ Habit ${habit.id} (${habit.name}) - Completed today, excluded`);
-          return false;
-        }
-        
-        // Check monthly_completion array for consecutive misses
+        // Check monthly_completion array for consecutive misses and completion rate
         // The array represents [day1, day2, ..., today] where:
         // - true = completed
         // - false = missed
@@ -3161,7 +3155,7 @@ export default function Tasks() {
           return shouldShow;
         }
         
-        // Fallback: if no monthly_completion data and not completed today, show it
+        // Fallback: if no monthly_completion data, don't show if completed today
         console.log(`⚠️ Habit ${habit.id} (${habit.name}) - No monthly_completion data, using fallback`);
         return !habit.completed_today;
       });
@@ -11141,40 +11135,18 @@ export default function Tasks() {
                           e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                         }}
                       >
-                        {/* Header with checkbox */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                          <div style={{ flex: 1 }}>
-                            <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2d3748', marginBottom: '4px' }}>
-                              {habit.name}
-                            </h4>
-                            {habit.pillar_name && (
-                              <div style={{ fontSize: '12px', color: '#718096', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: habit.pillar_color || '#cbd5e0', display: 'inline-block' }}></span>
-                                {habit.pillar_name}
-                                {habit.category_name && ` • ${habit.category_name}`}
-                              </div>
-                            )}
-                          </div>
-                          <input
-                            type="checkbox"
-                            checked={habit.completed_today}
-                            onChange={async (e) => {
-                              const isChecked = e.target.checked;
-                              try {
-                                await api.post(`/api/habits/${habit.id}/mark-today?is_successful=${isChecked}`);
-                                // Reload habits
-                                loadTodaysHabits();
-                              } catch (err) {
-                                console.error('Error marking habit:', err);
-                              }
-                            }}
-                            style={{
-                              width: '24px',
-                              height: '24px',
-                              cursor: 'pointer',
-                              accentColor: habit.pillar_color || '#4299e1'
-                            }}
-                          />
+                        {/* Header */}
+                        <div style={{ marginBottom: '10px' }}>
+                          <h4 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2d3748', marginBottom: '4px' }}>
+                            {habit.name}
+                          </h4>
+                          {habit.pillar_name && (
+                            <div style={{ fontSize: '12px', color: '#718096', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: habit.pillar_color || '#cbd5e0', display: 'inline-block' }}></span>
+                              {habit.pillar_name}
+                              {habit.category_name && ` • ${habit.category_name}`}
+                            </div>
+                          )}
                         </div>
 
                         {/* Streak Info */}
@@ -14241,31 +14213,8 @@ export default function Tasks() {
                       e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.08)';
                     }}
                   >
-                    {/* Checkbox */}
-                    <input
-                      type="checkbox"
-                      checked={habit.completed_today}
-                      onChange={async (e) => {
-                        e.stopPropagation();
-                        try {
-                          await api.post(`/api/habits/${habit.id}/mark-today?is_completed=${!habit.completed_today}`);
-                          loadTodaysHabits();
-                        } catch (err) {
-                          console.error('Error toggling habit:', err);
-                        }
-                      }}
-                      style={{
-                        width: '20px',
-                        height: '20px',
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        accentColor: habit.pillar_color,
-                        marginTop: '2px'
-                      }}
-                    />
-
                     {/* Name and progress info */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ flex: 1, minWidth: 0, paddingLeft: '12px' }}>
                       <div style={{ 
                         display: 'flex',
                         alignItems: 'center',

@@ -135,16 +135,44 @@ def get_all_habits(active_only: bool = True, db: Session = Depends(get_db)):
         # Get monthly completion data based on linked task or habit entries
         if habit.linked_task_id:
             # Get completion data from daily time entries
-            daily_entries = db.query(DailyTimeEntry).filter(
+            # Sum minutes per day (across all 24 hours) and check against target
+            daily_totals = db.query(
+                func.date(DailyTimeEntry.entry_date).label('date'),
+                func.sum(DailyTimeEntry.minutes).label('total_minutes')
+            ).filter(
                 and_(
                     DailyTimeEntry.task_id == habit.linked_task_id,
                     func.date(DailyTimeEntry.entry_date) >= first_day_of_month,
                     func.date(DailyTimeEntry.entry_date) <= today
                 )
-            ).all()
+            ).group_by(func.date(DailyTimeEntry.entry_date)).all()
             
-            # Create a map of dates with entries (minutes > 0)
-            completed_dates = {entry.entry_date.date() for entry in daily_entries if entry.minutes and entry.minutes > 0}
+            # Check each day against the habit's target
+            completed_dates = set()
+            for date_entry, total_minutes in daily_totals:
+                if total_minutes and total_minutes > 0:
+                    target_met = False
+                    if habit.target_value:
+                        if habit.target_comparison == 'at_least':
+                            target_met = total_minutes >= habit.target_value
+                        elif habit.target_comparison == 'at_most':
+                            target_met = total_minutes <= habit.target_value
+                        elif habit.target_comparison == 'exactly':
+                            target_met = total_minutes == habit.target_value
+                        else:
+                            target_met = total_minutes >= habit.target_value
+                    else:
+                        # No target, any minutes counts
+                        target_met = True
+                    
+                    if target_met:
+                        # Convert to date object if it's a string
+                        if isinstance(date_entry, str):
+                            from datetime import datetime as dt
+                            date_obj = dt.strptime(date_entry, '%Y-%m-%d').date()
+                        else:
+                            date_obj = date_entry if isinstance(date_entry, date) else date_entry.date()
+                        completed_dates.add(date_obj)
         else:
             # Get from HabitEntry
             monthly_entries = db.query(HabitEntry).filter(
@@ -492,27 +520,75 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
         # If habit has a linked task, get completion data from DailyTimeEntry
         if habit.linked_task_id:
             # Get monthly completion data from daily time entries
-            daily_entries = db.query(DailyTimeEntry).filter(
+            # Group by date and sum minutes across all hours
+            daily_totals = db.query(
+                func.date(DailyTimeEntry.entry_date).label('date'),
+                func.sum(DailyTimeEntry.minutes).label('total_minutes')
+            ).filter(
                 and_(
                     DailyTimeEntry.task_id == habit.linked_task_id,
                     func.date(DailyTimeEntry.entry_date) >= first_day_of_month,
                     func.date(DailyTimeEntry.entry_date) <= today
                 )
-            ).all()
+            ).group_by(func.date(DailyTimeEntry.entry_date)).all()
             
-            # Create a map of dates with entries (minutes > 0)
-            # Note: If no entry exists or minutes = 0, that date is considered incomplete
-            completed_dates = {entry.entry_date.date() for entry in daily_entries if entry.minutes and entry.minutes > 0}
+            # Create a map of dates where target is met
+            completed_dates = set()
+            for date_entry, total_minutes in daily_totals:
+                if total_minutes and total_minutes > 0:
+                    target_met = False
+                    if habit.target_value:
+                        if habit.target_comparison == 'at_least':
+                            target_met = total_minutes >= habit.target_value
+                        elif habit.target_comparison == 'at_most':
+                            target_met = total_minutes <= habit.target_value
+                        elif habit.target_comparison == 'exactly':
+                            target_met = total_minutes == habit.target_value
+                        else:
+                            # Default to at_least
+                            target_met = total_minutes >= habit.target_value
+                    else:
+                        # No target specified, any minutes counts
+                        target_met = True
+                    
+                    if target_met:
+                        # SQLite's func.date() returns a string, convert to date object
+                        if isinstance(date_entry, str):
+                            from datetime import datetime as dt
+                            date_obj = dt.strptime(date_entry, '%Y-%m-%d').date()
+                        elif isinstance(date_entry, date):
+                            date_obj = date_entry
+                        else:
+                            date_obj = date_entry.date()
+                        completed_dates.add(date_obj)
             
-            # Check today's entry from daily time entries
-            today_entry_from_task = db.query(DailyTimeEntry).filter(
+            # Sum all minutes for today from daily time entries (across all 24 hours)
+            today_total_minutes = db.query(func.sum(DailyTimeEntry.minutes)).filter(
                 and_(
                     DailyTimeEntry.task_id == habit.linked_task_id,
                     func.date(DailyTimeEntry.entry_date) == today
                 )
-            ).first()
-            completed_today = bool(today_entry_from_task and today_entry_from_task.minutes and today_entry_from_task.minutes > 0)
-            today_value = today_entry_from_task.minutes if today_entry_from_task else None
+            ).scalar() or 0
+            
+            # Check if target is met based on target_comparison
+            target_met = False
+            if today_total_minutes > 0:
+                if habit.target_value:
+                    if habit.target_comparison == 'at_least':
+                        target_met = today_total_minutes >= habit.target_value
+                    elif habit.target_comparison == 'at_most':
+                        target_met = today_total_minutes <= habit.target_value
+                    elif habit.target_comparison == 'exactly':
+                        target_met = today_total_minutes == habit.target_value
+                    else:
+                        # Default to at_least if no comparison specified
+                        target_met = today_total_minutes >= habit.target_value
+                else:
+                    # No target specified, any minutes counts as complete
+                    target_met = True
+            
+            completed_today = target_met
+            today_value = today_total_minutes
             
         else:
             # Original logic - get from HabitEntry
@@ -545,7 +621,6 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
         days_in_month_so_far = (today - first_day_of_month).days + 1
         
         # Build array of daily completion status for this month
-        # Note: Dates with no entry OR minutes=0 are marked as False (incomplete)
         monthly_completion = []
         current_date = first_day_of_month
         while current_date <= today:
@@ -553,9 +628,9 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
             if current_date < habit.start_date.date():
                 monthly_completion.append(None)  # Not applicable
             else:
-                # If date is in completed_dates (has entry with minutes > 0), mark as True
-                # Otherwise mark as False (no entry or minutes = 0)
-                monthly_completion.append(current_date in completed_dates)
+                # If date is in completed_dates (has entry with target met), mark as True
+                is_completed = current_date in completed_dates
+                monthly_completion.append(is_completed)
             current_date += timedelta(days=1)
         
         # Calculate completion rate
