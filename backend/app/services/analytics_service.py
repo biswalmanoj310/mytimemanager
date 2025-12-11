@@ -33,10 +33,40 @@ class AnalyticsService:
         """
         pillars = self.db.query(Pillar).all()
         
-        # Get ONLY DAILY tasks (matching Daily tab source of truth)
-        daily_tasks = self.db.query(Task).filter(
-            Task.follow_up_frequency == 'daily'
-        ).all()
+        # Get tasks exactly as Daily tab shows them for this date
+        tasks_query = self.db.query(Task).filter(
+            Task.follow_up_frequency == 'daily',
+            Task.is_active == True
+        )
+        
+        if start_date or end_date:
+            if start_date and end_date and start_date == end_date:
+                # Single date - match Daily tab exactly
+                tasks_query = tasks_query.filter(
+                    or_(
+                        and_(Task.is_completed == False, Task.na_marked_at.is_(None)),
+                        func.date(Task.completed_at) == start_date,
+                        func.date(Task.na_marked_at) == start_date
+                    )
+                )
+            else:
+                # Multi-date range
+                conditions = [and_(Task.is_completed == False, Task.na_marked_at.is_(None))]
+                if start_date:
+                    conditions.append(func.date(Task.completed_at) >= start_date)
+                    conditions.append(func.date(Task.na_marked_at) >= start_date)
+                if end_date:
+                    conditions.append(func.date(Task.completed_at) <= end_date)
+                    conditions.append(func.date(Task.na_marked_at) <= end_date)
+                tasks_query = tasks_query.filter(or_(*conditions))
+        else:
+            # No date filter - only currently active tasks
+            tasks_query = tasks_query.filter(
+                Task.is_completed == False,
+                Task.na_marked_at.is_(None)
+            )
+        
+        daily_tasks = tasks_query.all()
         task_pillar_map = {task.id: task.pillar_id for task in daily_tasks}
         task_allocated_map = {task.id: task.allocated_minutes for task in daily_tasks}
         
@@ -58,10 +88,10 @@ class AnalyticsService:
         total_spent = 0
         
         for pillar in pillars:
-            # Calculate spent time
+            # Calculate spent time - ONLY count time for tasks currently in Daily tab (active daily tasks)
             spent_minutes = sum(
                 minutes for task_id, minutes in time_by_task
-                if task_pillar_map.get(task_id) == pillar.id
+                if task_id in task_pillar_map and task_pillar_map.get(task_id) == pillar.id
             )
             spent_hours = spent_minutes / 60 if spent_minutes else 0
             
@@ -110,26 +140,46 @@ class AnalyticsService:
         
         categories = query.all()
         
-        # Get ONLY DAILY ACTIVE tasks with allocated time (source of truth is Daily tab)
-        active_tasks = self.db.query(Task).filter(
-            Task.is_active == True,
-            Task.is_completed == False,
-            Task.na_marked_at.is_(None),
-            Task.allocated_minutes > 0,
-            Task.follow_up_frequency == 'daily'  # Only daily tasks appear in Daily tab
-        ).order_by(Task.updated_at.desc()).all()  # Most recently updated first
+        # Get tasks exactly as Daily tab shows them for this date
+        # Daily tab shows: active daily tasks + tasks completed/NA on the same date (they remain visible until day ends)
+        tasks_query = self.db.query(Task).filter(
+            Task.follow_up_frequency == 'daily',
+            Task.is_active == True
+        )
         
-        # Remove duplicates: keep only the most recent task per (name, category)
-        seen_task_names = {}
-        unique_tasks = []
-        for task in active_tasks:
-            key = (task.name, task.category_id)
-            if key not in seen_task_names:
-                seen_task_names[key] = task
-                unique_tasks.append(task)
+        # If querying for a specific date, include tasks that are either:
+        # 1. Not completed/NA (currently active)
+        # 2. Completed/NA on that specific date (were visible on that date)
+        if start_date or end_date:
+            if start_date and end_date and start_date == end_date:
+                # Single date query - match Daily tab logic exactly
+                tasks_query = tasks_query.filter(
+                    or_(
+                        and_(Task.is_completed == False, Task.na_marked_at.is_(None)),
+                        func.date(Task.completed_at) == start_date,
+                        func.date(Task.na_marked_at) == start_date
+                    )
+                )
+            else:
+                # Multi-date range - include all that were visible anytime in range
+                conditions = [and_(Task.is_completed == False, Task.na_marked_at.is_(None))]
+                if start_date:
+                    conditions.append(func.date(Task.completed_at) >= start_date)
+                    conditions.append(func.date(Task.na_marked_at) >= start_date)
+                if end_date:
+                    conditions.append(func.date(Task.completed_at) <= end_date)
+                    conditions.append(func.date(Task.na_marked_at) <= end_date)
+                tasks_query = tasks_query.filter(or_(*conditions))
+        else:
+            # No date filter - only get currently active tasks (not completed, not NA)
+            tasks_query = tasks_query.filter(
+                Task.is_completed == False,
+                Task.na_marked_at.is_(None)
+            )
         
-        task_category_map = {task.id: task.category_id for task in unique_tasks}
-        task_allocated_map = {task.id: task.allocated_minutes for task in unique_tasks}
+        daily_tab_tasks = tasks_query.all()
+        task_category_map = {task.id: task.category_id for task in daily_tab_tasks}
+        task_allocated_map = {task.id: task.allocated_minutes for task in daily_tab_tasks}
         
         # Build time entry query from DailyTimeEntry table for SPENT time
         time_query = self.db.query(
@@ -144,14 +194,33 @@ class AnalyticsService:
         
         time_by_task = time_query.group_by(DailyTimeEntry.task_id).all()
         
+        # Debug: Check if there are entries for tasks not in task_category_map
+        print(f"\n=== TIME ENTRY DEBUG ===")
+        print(f"Total task IDs with time entries: {len(time_by_task)}")
+        print(f"Task IDs in category map (unique active daily tasks): {len(task_category_map)}")
+        orphaned_entries = [
+            (task_id, minutes) for task_id, minutes in time_by_task
+            if task_id not in task_category_map
+        ]
+        if orphaned_entries:
+            print(f"WARNING: {len(orphaned_entries)} time entries for tasks NOT in category map:")
+            for task_id, minutes in orphaned_entries[:5]:  # Show first 5
+                task = self.db.query(Task).filter(Task.id == task_id).first()
+                if task:
+                    print(f"  Task ID {task_id}: '{task.name}', category_id={task.category_id}, "
+                          f"frequency={task.follow_up_frequency}, active={task.is_active}, "
+                          f"completed={task.is_completed}, minutes={minutes}")
+        
         category_data = []
         
         for category in categories:
-            # Calculate spent time
-            spent_minutes = sum(
-                minutes for task_id, minutes in time_by_task
-                if task_category_map.get(task_id) == category.id
-            )
+            # Calculate spent time - ONLY count time for tasks currently in Daily tab (active daily tasks)
+            category_time_entries = [(task_id, minutes) for task_id, minutes in time_by_task
+                if task_id in task_category_map and task_category_map.get(task_id) == category.id]
+            spent_minutes = sum(minutes for _, minutes in category_time_entries)
+            
+            if category_time_entries and category.name in ['Office-Tasks', 'Learning', 'Yoga']:
+                print(f"\n{category.name}: {len(category_time_entries)} tasks, {spent_minutes} mins total")
             spent_hours = spent_minutes / 60 if spent_minutes else 0
             
             # Calculate allocated time from ACTIVE tasks in this category
@@ -170,7 +239,7 @@ class AnalyticsService:
                 print(f"\n=== {category.name} Category Debug ===")
                 print(f"Active tasks in {category.name}: {len(category_tasks)}")
                 for task_id, alloc in category_tasks:
-                    task = next((t for t in active_tasks if t.id == task_id), None)
+                    task = next((t for t in daily_tab_tasks if t.id == task_id), None)
                     if task:
                         print(f"  Task: {task.name}, Allocated: {alloc} min")
                 print(f"Total allocated: {allocated_minutes} min = {allocated_hours} hours")

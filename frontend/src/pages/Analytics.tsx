@@ -21,6 +21,55 @@ import {
 import apiClient from '../services/api';
 import './Analytics.css';
 
+// Shared ordering configuration (matches Daily tab hierarchy)
+const PILLAR_ORDER = ['Hard Work', 'Calmness', 'Family'];
+
+const CATEGORY_ORDER = [
+  'Office-Tasks',  // Hard Work
+  'Learning',      // Hard Work
+  'Confidence',    // Hard Work
+  'Yoga',          // Calmness
+  'Sleep',         // Calmness
+  'My Tasks',      // Family
+  'Home Tasks',    // Family
+  'Time Waste'     // Family
+];
+
+const TASK_NAME_ORDER: { [key: string]: number } = {
+  'cd-Mails-Tickets': 1,
+  'Code Coverage': 2,
+  'Code - Scripts': 3,
+  'Cloud': 4,
+  'LLM GenAI': 5,
+  'Git Jenkin Tools': 6,
+  'Interview Q/A': 7,
+  'Interview Talk': 8,
+  'Life Coach & NLP': 9,
+  'Toastmaster Task': 10,
+  'Yoga - Dhyan': 11,
+  'Sleep': 12,
+  'Planning': 13,
+  'Stocks': 14,
+  'Task (Bank/ mail)': 15,
+  'Commute': 16,
+  'Nature Needs': 17,
+  'Eating': 18,
+  'My Games': 19,
+  'Parent Talk': 20,
+  'Home Task': 21,
+  'Task Trishna': 22,
+  'Task Divyanshi': 23,
+  'Daughter Sports': 24,
+  'Shopping': 25,
+  'Family Friends': 26,
+  'Youtube': 27,
+  'TV': 28,
+  'Facebook': 29,
+  'Nextdoor': 30,
+  'News': 31,
+  'Dark Future': 32,
+};
+
 // Custom multi-line label component for long task names
 const CustomMultilineLabel = ({ x, y, payload, index }: any) => {
   const text = payload.value || '';
@@ -102,6 +151,7 @@ interface CategoryData {
 interface TaskData {
   task_id: number;
   task_name: string;
+  pillar_name: string;
   category_name: string;
   allocated_minutes: number;
   spent_minutes: number;
@@ -339,6 +389,7 @@ export default function Analytics() {
         .map((task: any) => ({
           task_id: task.id,
           task_name: task.name,
+          pillar_name: task.pillar_name || 'Unknown',
           category_name: task.category_name || 'Uncategorized',
           allocated_minutes: task.allocated_minutes || 0,
           spent_minutes: 0
@@ -365,24 +416,33 @@ export default function Analytics() {
       setAllOneTimeTasksData(baseOneTimeTasks);
       console.log('✅ Base one-time tasks:', baseOneTimeTasks.length, 'tasks');
       
-      // Load Today's task time entries
-      const todayEntries = await apiClient.get(`/api/daily-time?date=${todayStr}`);
-      console.log('Today entries API response:', todayEntries.data);
+      // Load Today's task time entries - Use the entries endpoint which has hourly breakdown
+      const todayEntriesResponse = await apiClient.get(`/api/daily-time/entries/${todayStr}`);
+      console.log('Today entries API response:', todayEntriesResponse.data);
+      
+      // Aggregate time spent per task from hourly entries
+      const todaySpentMap = new Map<number, number>();
+      (todayEntriesResponse.data || []).forEach((entry: any) => {
+        const currentSpent = todaySpentMap.get(entry.task_id) || 0;
+        todaySpentMap.set(entry.task_id, currentSpent + (entry.minutes || 0));
+      });
+      console.log('Today spent time aggregated:', Array.from(todaySpentMap.entries()).slice(0, 5));
+      
       const todayTasks = baseTasks.map(task => {
-        const entry = (todayEntries.data || []).find((e: any) => e.task_id === task.task_id);
+        const spent = todaySpentMap.get(task.task_id) || 0;
         return {
           ...task,
-          spent_minutes: entry?.minutes || 0
+          spent_minutes: spent
         };
       });
       setTodayTaskData(todayTasks);
       
       // Load Today's one-time task entries
       const todayOneTimeTasks = baseOneTimeTasks.map(task => {
-        const entry = (todayEntries.data || []).find((e: any) => e.task_id === task.task_id);
+        const spent = todaySpentMap.get(task.task_id) || 0;
         return {
           ...task,
-          spent_minutes: entry?.minutes || 0
+          spent_minutes: spent
         };
       });
       setTodayOneTimeTaskData(todayOneTimeTasks);
@@ -694,8 +754,8 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height={400}>
                 <BarChart 
                   data={(() => {
-                    // Map all 3 pillars with Allocated, Today, Weekly, Monthly data
-                    return dailyPillarData.map((pillar) => {
+                    // Map all pillars with data
+                    const pillarDataWithValues = dailyPillarData.map((pillar) => {
                       const weekData = weeklyPillarData.find(w => w.pillar_id === pillar.pillar_id);
                       const monthData = monthlyPillarData.find(m => m.pillar_id === pillar.pillar_id);
                       
@@ -709,10 +769,17 @@ export default function Analytics() {
                         name: pillar.pillar_name,
                         allocated: pillar.allocated_hours, // Daily allocation
                         today: pillar.spent_hours,
-                        weekly: weekData ? (weekData.spent_hours / daysInWeek) : 0, // Weekly average per day
-                        monthly: monthData ? (monthData.spent_hours / daysInMonth) : 0, // Monthly average per day
+                        weekly: weekData ? (weekData.spent_hours / daysInWeek) : 0,
+                        monthly: monthData ? (monthData.spent_hours / daysInMonth) : 0,
                         color: pillar.color_code
                       };
+                    });
+                    
+                    // Sort by Daily tab order
+                    return pillarDataWithValues.sort((a, b) => {
+                      const orderA = PILLAR_ORDER.indexOf(a.name);
+                      const orderB = PILLAR_ORDER.indexOf(b.name);
+                      return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
                     });
                   })()}
                   barSize={35}
@@ -825,18 +892,6 @@ export default function Analytics() {
                     console.log('Days in week so far:', daysInWeek);
                     console.log('Days in month so far:', daysInMonth);
                     
-                    // Fixed category order
-                    const categoryOrder = [
-                      'Office-Tasks',
-                      'Learning',
-                      'Confidence',
-                      'Sleep',
-                      'Yoga',
-                      'My Tasks',
-                      'Home Tasks',
-                      'Time Waste'
-                    ];
-                    
                     const mappedData = allCategoriesData
                       .map((category) => {
                         // Find matching today, week, and month data
@@ -851,7 +906,7 @@ export default function Analytics() {
                           today: todayData?.spent_hours || 0,
                           weekAvg: weekData ? (weekData.spent_hours / daysInWeek) : 0,
                           monthAvg: monthData ? (monthData.spent_hours / daysInMonth) : 0,
-                          sortOrder: categoryOrder.indexOf(category.category_name)
+                          sortOrder: CATEGORY_ORDER.indexOf(category.category_name)
                         };
                         
                         console.log(`Category: ${category.category_name} (ID: ${category.category_id})`, result);
@@ -864,7 +919,17 @@ export default function Analytics() {
                         return orderA - orderB;
                       });
                     
+                    // Calculate total today time for validation
+                    const totalTodayHours = mappedData.reduce((sum, cat) => sum + cat.today, 0);
                     console.log('Final mapped data:', mappedData);
+                    console.log('⚠️ TOTAL TODAY TIME ACROSS ALL CATEGORIES:', totalTodayHours.toFixed(2), 'hours');
+                    if (totalTodayHours > 24) {
+                      console.error('❌ ERROR: Total time exceeds 24 hours! Possible double counting.');
+                      console.error('Categories with time spent:');
+                      mappedData
+                        .filter(cat => cat.today > 0)
+                        .forEach(cat => console.error(`  ${cat.category_name}: ${cat.today.toFixed(2)} hours`));
+                    }
                     return mappedData;
                   })()}
                   barSize={12}
@@ -965,7 +1030,7 @@ export default function Analytics() {
                     const daysInMonth = today.getDate();
                     
                     // Map ALL tasks with all time periods
-                    return allTasksData
+                    const mappedTaskData = allTasksData
                       .map((task) => {
                         const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
                         const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
@@ -973,6 +1038,7 @@ export default function Analytics() {
                         
                         return {
                           name: task.task_name,
+                          pillar: task.pillar_name,
                           category: task.category_name,
                           allocated: task.allocated_minutes / 60, // Convert to hours (daily)
                           today: (todayTask?.spent_minutes || 0) / 60,
@@ -982,7 +1048,36 @@ export default function Analytics() {
                         };
                       })
                       .filter(task => task.allocated > 0 || task.totalSpent > 0) // Only tasks with allocation or time spent
-                      .sort((a, b) => (b.allocated + b.totalSpent) - (a.allocated + a.totalSpent)); // Sort by most important - ALL TASKS
+                      .sort((a, b) => {
+                        // Sort by Daily tab order: category first (which groups by pillar), then task name
+                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
+                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
+                        
+                        // Compare categories first
+                        if (categoryOrderA !== categoryOrderB) {
+                          return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                        }
+                        
+                        // Within same category, sort by task name order, or alphabetically if not in list
+                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
+                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
+                        
+                        if (taskOrderA !== taskOrderB) {
+                          return taskOrderA - taskOrderB;
+                        }
+                        
+                        // If both not in order list, sort alphabetically
+                        return a.name.localeCompare(b.name);
+                      });
+                    
+                    // Debug logging for Time-Based Tasks chart
+                    const totalTaskTodayHours = mappedTaskData.reduce((sum, task) => sum + task.today, 0);
+                    console.log('📊 TIME-BASED TASKS - Total Today Hours:', totalTaskTodayHours.toFixed(2), 'hours');
+                    if (totalTaskTodayHours > 24) {
+                      console.error('❌ TIME-BASED TASKS ERROR: Total time exceeds 24 hours!');
+                    }
+                    
+                    return mappedTaskData;
                   })()}
                   barSize={10}
                   barCategoryGap={25}
