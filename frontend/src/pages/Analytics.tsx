@@ -376,16 +376,36 @@ export default function Analytics() {
       console.log('📥 Tasks API response:', allTasksResponse.data?.length, 'tasks received');
       const tasks = allTasksResponse.data || [];
       
-      // Create base tasks array - FILTER TO MATCH DAILY TAB
+      // Create base tasks array - FILTER TO MATCH DAILY TAB EXACTLY
       // Time-Based Tasks: daily frequency + task_type=TIME + NOT is_daily_one_time + is_active
+      // Include tasks that are:
+      // 1. Not completed/NA (currently active)
+      // 2. Completed today (still visible with green background)
+      // 3. NA marked today (still visible with gray background)
       const baseTasks: TaskData[] = tasks
-        .filter((task: any) => 
-          task.follow_up_frequency === 'daily' && 
-          task.task_type?.toUpperCase() === 'TIME' && 
-          !task.is_daily_one_time &&
-          task.is_active &&
-          !task.is_completed
-        )
+        .filter((task: any) => {
+          if (task.follow_up_frequency !== 'daily') return false;
+          if (task.task_type?.toUpperCase() !== 'TIME') return false;
+          if (task.is_daily_one_time) return false;
+          if (!task.is_active) return false;
+          
+          // Include if not completed/NA
+          if (!task.is_completed && !task.na_marked_at) return true;
+          
+          // Include if completed today
+          if (task.is_completed && task.completed_at) {
+            const completedDate = new Date(task.completed_at);
+            return completedDate.toDateString() === today.toDateString();
+          }
+          
+          // Include if NA marked today
+          if (task.na_marked_at) {
+            const naDate = new Date(task.na_marked_at);
+            return naDate.toDateString() === today.toDateString();
+          }
+          
+          return false;
+        })
         .map((task: any) => ({
           task_id: task.id,
           task_name: task.name,
@@ -398,14 +418,31 @@ export default function Analytics() {
       console.log('✅ Base time-based tasks:', baseTasks.length, 'tasks');
       
       // One-Time Tasks: daily frequency + task_type=TIME + is_daily_one_time + is_active
+      // Same logic: include tasks completed/NA today
       const baseOneTimeTasks: TaskData[] = tasks
-        .filter((task: any) => 
-          task.follow_up_frequency === 'daily' && 
-          task.task_type?.toUpperCase() === 'TIME' && 
-          task.is_daily_one_time === true &&
-          task.is_active &&
-          !task.is_completed
-        )
+        .filter((task: any) => {
+          if (task.follow_up_frequency !== 'daily') return false;
+          if (task.task_type?.toUpperCase() !== 'TIME') return false;
+          if (task.is_daily_one_time !== true) return false;
+          if (!task.is_active) return false;
+          
+          // Include if not completed/NA
+          if (!task.is_completed && !task.na_marked_at) return true;
+          
+          // Include if completed today
+          if (task.is_completed && task.completed_at) {
+            const completedDate = new Date(task.completed_at);
+            return completedDate.toDateString() === today.toDateString();
+          }
+          
+          // Include if NA marked today
+          if (task.na_marked_at) {
+            const naDate = new Date(task.na_marked_at);
+            return naDate.toDateString() === today.toDateString();
+          }
+          
+          return false;
+        })
         .map((task: any) => ({
           task_id: task.id,
           task_name: task.name,
@@ -1306,6 +1343,7 @@ export default function Analytics() {
                         
                         return {
                           name: task.task_name,
+                          category: task.category_name,
                           today: todayUtil,
                           weekly: weekUtil,
                           monthly: monthUtil,
@@ -1313,8 +1351,26 @@ export default function Analytics() {
                         };
                       })
                       .filter(task => task.hasData)
-                      .sort((a, b) => (b.today + b.weekly + b.monthly) - (a.today + a.weekly + a.monthly))
-                      .slice(0, 20); // Show top 20 tasks by total utilization
+                      .sort((a, b) => {
+                        // Sort by Daily tab order: category first
+                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
+                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
+                        
+                        if (categoryOrderA !== categoryOrderB) {
+                          return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                        }
+                        
+                        // Within same category, sort by task name order
+                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
+                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
+                        
+                        if (taskOrderA !== taskOrderB) {
+                          return taskOrderA - taskOrderB;
+                        }
+                        
+                        return a.name.localeCompare(b.name);
+                      })
+                      .slice(0, 20); // Show top 20 tasks
                   })()}
                   barSize={15}
                   margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
@@ -1407,6 +1463,12 @@ export default function Analytics() {
             </div>
             
             {dailyPillarData
+              .sort((a, b) => {
+                // Sort by Daily tab pillar order
+                const orderA = PILLAR_ORDER.indexOf(a.pillar_name);
+                const orderB = PILLAR_ORDER.indexOf(b.pillar_name);
+                return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+              })
               .filter(pillar => pillar.spent_hours > 0)
               .map((pillar) => {
                 // Get categories for this pillar
@@ -1431,7 +1493,12 @@ export default function Analytics() {
                     };
                   })
                   .filter(cat => cat.totalSpent > 0 || cat.allocated > 0)
-                  .sort((a, b) => b.totalSpent - a.totalSpent);
+                  .sort((a, b) => {
+                    // Sort by Daily tab category order
+                    const orderA = CATEGORY_ORDER.indexOf(a.category_name);
+                    const orderB = CATEGORY_ORDER.indexOf(b.category_name);
+                    return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+                  });
 
                 if (pillarCategories.length === 0) return null;
 
