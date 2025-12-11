@@ -865,27 +865,28 @@ export default function Tasks() {
       // Set priority to 1 and due_date to today
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString(); // Full ISO string with time: 2025-12-09T00:00:00.000Z
+      const todayDateOnly = formatDateForInput(today); // YYYY-MM-DD format
+      const todayISO = today.toISOString(); // Full ISO string with time: 2025-12-09T00:00:00.000Z
       
-      console.log('Updating task with:', { priority: 1, due_date: todayStr });
+      console.log('Updating task with:', { priority: 1, due_date: taskType === 'project' ? todayDateOnly : todayISO });
       
       if (taskType === 'goal') {
         await api.put(`/api/life-goals/tasks/${taskId}`, { 
           priority: 'high',
-          due_date: todayStr
+          due_date: todayDateOnly
         });
         await loadGoalTasksDueToday();
       } else if (taskType === 'project') {
         await api.put(`/api/projects/tasks/${taskId}`, { 
           priority_new: 1,
-          due_date: todayStr
+          due_date: todayDateOnly
         });
         await loadProjectTasksDueToday();
       } else {
         console.log('Making API call to /api/tasks/' + taskId);
         const response = await api.put(`/api/tasks/${taskId}`, { 
           priority: 1,
-          due_date: todayStr
+          due_date: todayISO
         });
         console.log('API response:', response);
       }
@@ -5989,22 +5990,6 @@ export default function Tasks() {
         </div>
 
         <div style={{ padding: '20px' }}>
-          <div style={{
-            marginBottom: '20px',
-            padding: '20px',
-            backgroundColor: '#fee2e2',
-            borderRadius: '8px',
-            border: '2px solid #dc2626'
-          }}>
-            <h2 style={{ margin: '0 0 10px 0', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '24px' }}>🔥</span>
-              NOW - Focus Tasks (Max 3)
-            </h2>
-            <p style={{ margin: 0, color: '#7f1d1d' }}>
-              These are your top 3 focus tasks for right now. Move tasks here from other tabs using the NOW button.
-            </p>
-          </div>
-
           {(() => {
             // NOW tab logic: Shows top 3 tasks with priority 1-3 due today or earlier
             // ANY priority can be set to 1-3 to appear here
