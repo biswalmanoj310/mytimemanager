@@ -51,6 +51,7 @@ class HabitCreate(BaseModel):
 class HabitUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    habit_type: Optional[str] = None  # 'boolean', 'time_based', 'count_based'
     target_value: Optional[int] = None
     target_comparison: Optional[str] = None
     why_reason: Optional[str] = None
@@ -341,6 +342,110 @@ def mark_habit_entry(habit_id: int, entry_data: HabitEntryCreate, db: Session = 
         }
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/{habit_id}/month-data")
+def get_habit_month_data(
+    habit_id: int,
+    year: int,
+    month: int,
+    db: Session = Depends(get_db)
+):
+    """Get habit completion data for a specific month (works with linked tasks too)"""
+    from app.models.models import Habit, HabitEntry, DailyTimeEntry
+    from datetime import timedelta
+    from calendar import monthrange
+    
+    habit = HabitService.get_habit_by_id(db, habit_id)
+    if not habit:
+        raise HTTPException(status_code=404, detail="Habit not found")
+    
+    first_day = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+    
+    # Get completion data based on linked task or habit entries
+    if habit.linked_task_id:
+        # Get completion data from daily time entries
+        daily_totals = db.query(
+            func.date(DailyTimeEntry.entry_date).label('date'),
+            func.sum(DailyTimeEntry.minutes).label('total_minutes')
+        ).filter(
+            and_(
+                DailyTimeEntry.task_id == habit.linked_task_id,
+                func.date(DailyTimeEntry.entry_date) >= first_day,
+                func.date(DailyTimeEntry.entry_date) <= last_day
+            )
+        ).group_by(func.date(DailyTimeEntry.entry_date)).all()
+        
+        completed_dates = set()
+        for date_entry, total_minutes in daily_totals:
+            if total_minutes and total_minutes > 0:
+                target_met = False
+                if habit.target_value:
+                    if habit.target_comparison == 'at_least':
+                        target_met = total_minutes >= habit.target_value
+                    elif habit.target_comparison == 'at_most':
+                        target_met = total_minutes <= habit.target_value
+                    elif habit.target_comparison == 'exactly':
+                        target_met = total_minutes == habit.target_value
+                    else:
+                        target_met = total_minutes >= habit.target_value
+                else:
+                    target_met = True
+                
+                if target_met:
+                    if isinstance(date_entry, str):
+                        from datetime import datetime as dt
+                        date_obj = dt.strptime(date_entry, '%Y-%m-%d').date()
+                    else:
+                        date_obj = date_entry if isinstance(date_entry, date) else date_entry.date()
+                    completed_dates.add(date_obj)
+    else:
+        # Get from HabitEntry
+        entries = db.query(HabitEntry).filter(
+            and_(
+                HabitEntry.habit_id == habit_id,
+                func.date(HabitEntry.entry_date) >= first_day,
+                func.date(HabitEntry.entry_date) <= last_day
+            )
+        ).all()
+        completed_dates = {entry.entry_date.date() for entry in entries if entry.is_successful}
+    
+    # Build day-by-day data
+    month_days = []
+    current_date = first_day
+    today = date.today()
+    
+    while current_date <= last_day:
+        before_start = current_date < habit.start_date.date() if habit.start_date else False
+        in_future = current_date > today
+        
+        # Only check completion status for dates between habit start and today
+        if before_start:
+            # Before habit started - show as null
+            is_successful = None
+            exists = False
+        elif in_future:
+            # Future date - don't show anything
+            is_successful = None
+            exists = False
+        else:
+            # Between start date and today - check if completed
+            is_successful = current_date in completed_dates
+            # If not completed and date is in the past, mark as failed
+            exists = True
+        
+        month_days.append({
+            "date": current_date.isoformat(),
+            "dayNum": current_date.day,
+            "dayName": current_date.strftime('%a'),
+            "isSuccessful": is_successful,
+            "exists": exists,
+            "beforeStart": before_start
+        })
+        current_date += timedelta(days=1)
+    
+    return month_days
 
 
 @router.get("/{habit_id}/entries")

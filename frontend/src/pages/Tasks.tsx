@@ -539,7 +539,7 @@ export default function Tasks() {
   const [editingHabit, setEditingHabit] = useState<HabitData | null>(null);
   const [habitMarkDate, setHabitMarkDate] = useState<Record<number, string>>({});
   const [habitMonthDays, setHabitMonthDays] = useState<Record<number, any[]>>({});
-  const [habitSelectedMonth, setHabitSelectedMonth] = useState<Date>(new Date()); // For month navigation
+  const [habitSelectedMonth, setHabitSelectedMonth] = useState<Record<number, Date>>({}); // Per-habit month navigation
 
   // Today's habits and challenges
   interface TodaysHabit {
@@ -1043,68 +1043,15 @@ export default function Tasks() {
   // Load last 7 days of habit entries
   const loadHabitMonthDays = async (habitId: number, monthDate?: Date) => {
     try {
-      const targetMonth = monthDate || habitSelectedMonth;
+      const targetMonth = monthDate || habitSelectedMonth[habitId] || new Date();
       const year = targetMonth.getFullYear();
-      const month = targetMonth.getMonth();
+      const month = targetMonth.getMonth() + 1; // API expects 1-12
       
-      // First day of target month
-      const startDate = new Date(year, month, 1);
-      // Last day of target month
-      const endDate = new Date(year, month + 1, 0);
+      // Use new month-data endpoint that works with linked tasks
+      const monthDays: any = await api.get(`/api/habits/${habitId}/month-data?year=${year}&month=${month}`);
+      const monthDaysData = monthDays.data || monthDays;
       
-      const start = formatDateForInput(startDate);
-      const end = formatDateForInput(endDate);
-      
-      const entries: any = await api.get(`/api/habits/${habitId}/entries?start_date=${start}&end_date=${end}`);
-      const entriesData = entries.data || entries;
-      
-      // Get habit details to check start_date
-      const habit = habits.find(h => h.id === habitId);
-      const habitStartDate = habit?.start_date ? parseDateString(habit.start_date) : null;
-      
-      // Create map of date -> entry for all days in target month
-      const monthDays: Array<{
-        date: string;
-        dayName: string;
-        dayNum: number;
-        isSuccessful?: boolean;
-        exists: boolean;
-        beforeStart?: boolean; // Date is before habit start date
-      }> = [];
-      const daysInMonth = endDate.getDate();
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      for (let day = 1; day <= daysInMonth; day++) {
-        const date = new Date(year, month, day);
-        date.setHours(0, 0, 0, 0);
-        const dateStr = formatDateForInput(date);
-        const entry = entriesData.find((e: any) => e.entry_date === dateStr);
-        
-        // Check if date is before habit start date
-        const beforeStart = habitStartDate && date < habitStartDate;
-        
-        // For dates in the past (before today) and after habit start, if no entry exists, consider it as failed (is_successful = false)
-        let isSuccessful = entry?.is_successful;
-        let exists = !!entry;
-        
-        // Auto-mark as failed for past dates without entries (but after habit start date)
-        if (!beforeStart && date < today && !entry) {
-          isSuccessful = false;
-          exists = true; // Show as cross
-        }
-        
-        monthDays.push({
-          date: dateStr,
-          dayName: date.toLocaleDateString('en-US', { weekday: 'short' }),
-          dayNum: date.getDate(),
-          isSuccessful,
-          exists,
-          beforeStart
-        });
-      }
-      
-      setHabitMonthDays(prev => ({ ...prev, [habitId]: monthDays }));
+      setHabitMonthDays(prev => ({ ...prev, [habitId]: monthDaysData }));
     } catch (err) {
       console.error(`Error loading month days for habit ${habitId}:`, err);
     }
@@ -8454,10 +8401,11 @@ export default function Tasks() {
               }}
             >
               {habits.filter((habit) => {
-                // Filter habits: only show ACTIVE habits that were active during the selected month
-                const selectedMonthStart = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth(), 1);
+                // Filter habits: only show ACTIVE habits that were active during the currently viewed month for this habit
+                const habitMonth = habitSelectedMonth[habit.id] || new Date();
+                const selectedMonthStart = new Date(habitMonth.getFullYear(), habitMonth.getMonth(), 1);
                 selectedMonthStart.setHours(0, 0, 0, 0);
-                const selectedMonthEnd = new Date(habitSelectedMonth.getFullYear(), habitSelectedMonth.getMonth() + 1, 0);
+                const selectedMonthEnd = new Date(habitMonth.getFullYear(), habitMonth.getMonth() + 1, 0);
                 selectedMonthEnd.setHours(23, 59, 59, 999);
                 
                 const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
@@ -8539,20 +8487,64 @@ export default function Tasks() {
                               className="btn btn-sm"
                               onClick={async (e) => {
                                 e.stopPropagation();
-                                const newMonth = new Date(habitSelectedMonth);
+                                const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                const newMonth = new Date(currentMonth);
                                 newMonth.setMonth(newMonth.getMonth() - 1);
-                                setHabitSelectedMonth(newMonth);
-                                await loadHabitMonthDays(habit.id, newMonth);
+                                // Check if new month is before habit start month
+                                const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                if (habitStart) {
+                                  const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
+                                  if (newMonth >= startMonth) {
+                                    setHabitSelectedMonth(prev => ({ ...prev, [habit.id]: newMonth }));
+                                    await loadHabitMonthDays(habit.id, newMonth);
+                                  }
+                                } else {
+                                  setHabitSelectedMonth(prev => ({ ...prev, [habit.id]: newMonth }));
+                                  await loadHabitMonthDays(habit.id, newMonth);
+                                }
                               }}
+                              disabled={(() => {
+                                const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                if (!habitStart) return false;
+                                const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
+                                const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                const prevMonth = new Date(currentMonth);
+                                prevMonth.setMonth(prevMonth.getMonth() - 1);
+                                return prevMonth < startMonth;
+                              })()}
                               style={{ 
                                 padding: '6px 12px', 
                                 fontSize: '12px',
-                                backgroundColor: '#4299e1',
-                                color: 'white',
+                                backgroundColor: (() => {
+                                  const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                  if (!habitStart) return '#4299e1';
+                                  const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
+                                  const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const prevMonth = new Date(currentMonth);
+                                  prevMonth.setMonth(prevMonth.getMonth() - 1);
+                                  return prevMonth < startMonth ? '#e2e8f0' : '#4299e1';
+                                })(),
+                                color: (() => {
+                                  const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                  if (!habitStart) return 'white';
+                                  const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
+                                  const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const prevMonth = new Date(currentMonth);
+                                  prevMonth.setMonth(prevMonth.getMonth() - 1);
+                                  return prevMonth < startMonth ? '#a0aec0' : 'white';
+                                })(),
                                 border: 'none',
                                 borderRadius: '6px',
                                 fontWeight: '600',
-                                cursor: 'pointer'
+                                cursor: (() => {
+                                  const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                  if (!habitStart) return 'pointer';
+                                  const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
+                                  const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const prevMonth = new Date(currentMonth);
+                                  prevMonth.setMonth(prevMonth.getMonth() - 1);
+                                  return prevMonth < startMonth ? 'not-allowed' : 'pointer';
+                                })()
                               }}
                             >
                               ← Previous
@@ -8567,7 +8559,7 @@ export default function Tasks() {
                               borderRadius: '6px',
                               border: '2px solid #cbd5e0'
                             }}>
-                              {habitSelectedMonth.toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                              {(habitSelectedMonth[habit.id] || new Date()).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
                             </div>
                             
                             <button
@@ -8575,17 +8567,19 @@ export default function Tasks() {
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const today = new Date();
-                                const newMonth = new Date(habitSelectedMonth);
+                                const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                const newMonth = new Date(currentMonth);
                                 newMonth.setMonth(newMonth.getMonth() + 1);
                                 // Don't allow navigating beyond current month
                                 if (newMonth <= today) {
-                                  setHabitSelectedMonth(newMonth);
+                                  setHabitSelectedMonth(prev => ({ ...prev, [habit.id]: newMonth }));
                                   await loadHabitMonthDays(habit.id, newMonth);
                                 }
                               }}
                               disabled={(() => {
                                 const today = new Date();
-                                const nextMonth = new Date(habitSelectedMonth);
+                                const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                const nextMonth = new Date(currentMonth);
                                 nextMonth.setMonth(nextMonth.getMonth() + 1);
                                 return nextMonth.getFullYear() > today.getFullYear() || 
                                        (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
@@ -8595,19 +8589,29 @@ export default function Tasks() {
                                 fontSize: '12px',
                                 backgroundColor: (() => {
                                   const today = new Date();
-                                  const nextMonth = new Date(habitSelectedMonth);
+                                  const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const nextMonth = new Date(currentMonth);
                                   nextMonth.setMonth(nextMonth.getMonth() + 1);
                                   const disabled = nextMonth.getFullYear() > today.getFullYear() || 
                                          (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
-                                  return disabled ? '#cbd5e0' : '#4299e1';
+                                  return disabled ? '#e2e8f0' : '#4299e1';
                                 })(),
-                                color: 'white',
+                                color: (() => {
+                                  const today = new Date();
+                                  const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const nextMonth = new Date(currentMonth);
+                                  nextMonth.setMonth(nextMonth.getMonth() + 1);
+                                  const disabled = nextMonth.getFullYear() > today.getFullYear() || 
+                                         (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
+                                  return disabled ? '#a0aec0' : 'white';
+                                })(),
                                 border: 'none',
                                 borderRadius: '6px',
                                 fontWeight: '600',
                                 cursor: (() => {
                                   const today = new Date();
-                                  const nextMonth = new Date(habitSelectedMonth);
+                                  const currentMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const nextMonth = new Date(currentMonth);
                                   nextMonth.setMonth(nextMonth.getMonth() + 1);
                                   const disabled = nextMonth.getFullYear() > today.getFullYear() || 
                                          (nextMonth.getFullYear() === today.getFullYear() && nextMonth.getMonth() > today.getMonth());
@@ -8628,8 +8632,9 @@ export default function Tasks() {
                             paddingBottom: '4px'
                           }}>
                             {(() => {
-                              const year = habitSelectedMonth.getFullYear();
-                              const month = habitSelectedMonth.getMonth();
+                              const habitMonth = habitSelectedMonth[habit.id] || new Date();
+                              const year = habitMonth.getFullYear();
+                              const month = habitMonth.getMonth();
                               const today = new Date();
                               today.setHours(0, 0, 0, 0);
                               
@@ -8639,6 +8644,13 @@ export default function Tasks() {
                               // Add cells for each day of the month (1-31)
                               for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
                                 const dayData = habitMonthDays[habit.id].find((d: any) => d.dayNum === dayNum);
+                                
+                                // Check if this is the habit start date
+                                const habitStartDate = habit.start_date ? new Date(habit.start_date) : null;
+                                const isStartDate = habitStartDate && 
+                                  habitStartDate.getDate() === dayNum && 
+                                  habitStartDate.getMonth() === habitMonth.getMonth() && 
+                                  habitStartDate.getFullYear() === habitMonth.getFullYear();
                                 
                                 // Determine color and symbol
                                 let bgColor = '#e2e8f0'; // Gray - not entered or future date
@@ -8660,7 +8672,7 @@ export default function Tasks() {
                                 cellDate.setHours(0, 0, 0, 0);
                                 const isToday = cellDate.getTime() === today.getTime();
                                 
-                                let tooltip = `${dayData?.dayName || ''}, ${habitSelectedMonth.toLocaleString('en-US', { month: 'short' })} ${dayNum}`;
+                                let tooltip = `${dayData?.dayName || ''}, ${habitMonth.toLocaleString('en-US', { month: 'short' })} ${dayNum}`;
                                 if (dayData?.beforeStart) {
                                   tooltip += ': Before habit start';
                                 } else if (dayData?.exists) {
@@ -8682,12 +8694,12 @@ export default function Tasks() {
                                     title={tooltip}
                                   >
                                     <div style={{ 
-                                      fontSize: '9px', 
-                                      color: '#718096',
-                                      fontWeight: isToday ? '700' : '500',
+                                      fontSize: isStartDate ? '8px' : '9px', 
+                                      color: isStartDate ? '#2b6cb0' : '#718096',
+                                      fontWeight: isToday || isStartDate ? '700' : '500',
                                       height: '12px'
                                     }}>
-                                      {dayNum}
+                                      {isStartDate ? 'Start' : dayNum}
                                     </div>
                                     <div style={{
                                       width: '32px',
@@ -14275,19 +14287,32 @@ export default function Tasks() {
                           let bgColor = '#e2e8f0'; // Default gray (not applicable or not done)
                           let borderColor = '#cbd5e0';
                           let tooltip = 'Not completed';
+                          let displayText = String(index + 1); // Default: day number
+                          
+                          // Check if this day is the habit start date
+                          const habitStartDate = habit.start_date ? new Date(habit.start_date) : null;
+                          const isStartDate = habitStartDate && (index + 1) === habitStartDate.getDate();
                           
                           if (completed === null) {
                             bgColor = '#f3f4f6'; // Light gray for not applicable
                             borderColor = '#d1d5db';
                             tooltip = 'Before habit started';
+                            if (isStartDate) {
+                              displayText = 'Start';
+                              tooltip = 'Habit started';
+                              bgColor = '#3b82f6'; // Blue for start date
+                              borderColor = '#2563eb';
+                            }
                           } else if (completed === true) {
                             bgColor = '#10b981'; // Green for completed
                             borderColor = '#059669';
                             tooltip = 'Completed ✓';
+                            if (isStartDate) displayText = 'Start';
                           } else if (completed === false) {
                             bgColor = '#ef4444'; // Red for missed
                             borderColor = '#dc2626';
                             tooltip = 'Missed ✗';
+                            if (isStartDate) displayText = 'Start';
                           }
                           
                           const today = new Date();
@@ -14308,15 +14333,15 @@ export default function Tasks() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                fontSize: '8px',
+                                fontSize: isStartDate ? '6px' : '8px',
                                 fontWeight: '600',
-                                color: completed !== null ? 'white' : '#9ca3af',
+                                color: completed !== null || isStartDate ? 'white' : '#9ca3af',
                                 boxShadow: isToday ? '0 0 0 2px #4299e1' : 'none',
                                 position: 'relative'
                               }}
                               title={`Day ${index + 1}: ${tooltip}`}
                             >
-                              {index + 1}
+                              {displayText}
                             </div>
                           );
                         })}
