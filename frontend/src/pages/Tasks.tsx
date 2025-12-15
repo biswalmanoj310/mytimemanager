@@ -284,6 +284,7 @@ export default function Tasks() {
     order: number;
     created_at: string;
     updated_at: string;
+    pillar_name?: string;
   };
 
   // Life Goals state
@@ -3811,12 +3812,15 @@ export default function Tasks() {
         name: task.name,
         description: task.description || '',
         due_date: task.due_date || null,
-        priority: task.priority,
+        priority: task.priority?.toString() || '5',
         is_completed: task.is_completed,
-        parent_task_id: task.parent_task_id || null, // Preserve parent_task_id for hierarchy
-        project_id: null,
+        parent_task_id: null, // Misc tasks don't have hierarchy
+        project_id: 0, // Not a project task
         milestone_id: null,
         created_at: task.created_at,
+        completed_at: task.completed_at || null,
+        order: 0,
+        updated_at: task.updated_at || task.created_at,
         pillar_name: task.pillar_name // Include pillar_name for pillar grouping
       }));
       
