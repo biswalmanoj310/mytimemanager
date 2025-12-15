@@ -5120,7 +5120,9 @@ export default function Tasks() {
     const subTasks = getTasksByParentId(task.id);
     const hasSubTasks = subTasks.length > 0;
     const isExpanded = expandedTasks.has(task.id);
-    const dueDateClass = getDueDateColorClass(task.due_date);
+    // Strip time component from due_date before getting color class
+    const dueDateOnly = task.due_date ? task.due_date.split('T')[0] : null;
+    const dueDateClass = getDueDateColorClass(dueDateOnly);
 
     return (
       <div className={`task-node level-${level}`} style={{ marginLeft: `${level * 20}px` }} data-task-id={task.id}>
@@ -11334,7 +11336,6 @@ export default function Tasks() {
           {/* Task Breakdown Panel - Today Tab */}
           {activeTab === 'today' && (() => {
             // Count tasks from different sections ON TODAY TAB
-            const totalTasks = projectTasksDueToday.length + goalTasksDueToday.length + miscTasksDueToday.length + importantTasksDueToday.length;
             const projectCount = projectTasksDueToday.length;
             const goalCount = goalTasksDueToday.length;
             const miscCount = miscTasksDueToday.length;
@@ -11364,6 +11365,9 @@ export default function Tasks() {
             const monthlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
               item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
             ).length;
+            
+            // Calculate total using the same filtered counts as displayed
+            const totalTasks = projectCount + goalCount + miscCount + importantCount + habitsCount + weeklyNeedsAttentionCount + monthlyNeedsAttentionCount;
 
             // Scroll to section helper
             const scrollToSection = (sectionId: string) => {
