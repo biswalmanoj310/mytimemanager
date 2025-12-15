@@ -52,7 +52,6 @@ const ImportantTasks: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
   const [filterStatus, setFilterStatus] = useState<'all' | 'green' | 'gray' | 'red'>('all');
-  const [filterPillar, setFilterPillar] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<ImportantTask | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [addingSubTaskFor, setAddingSubTaskFor] = useState<number | null>(null);
@@ -530,108 +529,113 @@ const ImportantTasks: React.FC = () => {
         </div>
       </div>
 
-      {/* Pillar Filter Tabs */}
-      <div style={{ 
-        display: 'flex', 
-        gap: '10px', 
-        marginBottom: '20px',
-        padding: '10px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px'
-      }}>
-        <button
-          onClick={() => setFilterPillar(null)}
-          style={{
-            flex: 1,
-            padding: '10px',
-            backgroundColor: filterPillar === null ? '#3b82f6' : 'white',
-            color: filterPillar === null ? 'white' : '#1a202c',
-            border: '1px solid #e5e7eb',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}
-        >
-          All Pillars
-        </button>
-        <button
-          onClick={() => setFilterPillar('Hard Work')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            backgroundColor: filterPillar === 'Hard Work' ? '#2563eb' : 'white',
-            color: filterPillar === 'Hard Work' ? 'white' : '#1a202c',
-            border: '2px solid #3b82f6',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}
-        >
-          💼 Hard Work
-        </button>
-        <button
-          onClick={() => setFilterPillar('Calmness')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            backgroundColor: filterPillar === 'Calmness' ? '#16a34a' : 'white',
-            color: filterPillar === 'Calmness' ? 'white' : '#1a202c',
-            border: '2px solid #22c55e',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}
-        >
-          🧘 Calmness
-        </button>
-        <button
-          onClick={() => setFilterPillar('Family')}
-          style={{
-            flex: 1,
-            padding: '10px',
-            backgroundColor: filterPillar === 'Family' ? '#9333ea' : 'white',
-            color: filterPillar === 'Family' ? 'white' : '#1a202c',
-            border: '2px solid #a855f7',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '600'
-          }}
-        >
-          👨‍👩‍👦 Family
-        </button>
-      </div>
+      {/* Hard Work Pillar Section */}
+      {(() => {
+        const pillarTasks = getFilteredTasks().filter(t => t.pillar_name === 'Hard Work');
+        if (pillarTasks.length === 0) return null;
+        
+        return (
+          <div style={{ marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#2563eb', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #3b82f6' }}>
+              💼 Hard Work ({pillarTasks.length})
+            </h3>
+            <div className="tasks-table-container">
+              <table className="tasks-table important-tasks-table">
+                <thead>
+                  <tr>
+                    <th className="col-number">#</th>
+                    <th className="col-date">Start Date</th>
+                    <th className="col-task-name">Task Name</th>
+                    <th className="col-date">Updated Date</th>
+                    <th className="col-number">Target Gap</th>
+                    <th className="col-number">Days</th>
+                    <th className="col-number">Diff</th>
+                    <th className="col-action">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const counter = { count: 0 };
+                    return pillarTasks.map(task => renderTask(task, 0, counter));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
-      {/* Tasks Table */}
-      <div className="tasks-table-container">
-        <table className="tasks-table important-tasks-table">
-          <thead>
-            <tr>
-              <th className="col-number">#</th>
-              <th className="col-date">Start Date</th>
-              <th className="col-task-name">Task Name</th>
-              <th className="col-date">Updated Date</th>
-              <th className="col-number">Target Gap</th>
-              <th className="col-number">Days</th>
-              <th className="col-number">Diff</th>
-              <th className="col-action">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {getFilteredTasks().length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '20px', color: '#999' }}>
-                  {filterStatus === 'all' ? 'No important tasks yet. Click "Add Task" to get started.' : `No ${filterStatus} tasks found.`}
-                </td>
-              </tr>
-            ) : (
-              (() => {
-                const counter = { count: 0 };
-                return getFilteredTasks().map(task => renderTask(task, 0, counter));
-              })()
-            )}
-          </tbody>
-        </table>
-      </div>
+      {/* Calmness Pillar Section */}
+      {(() => {
+        const pillarTasks = getFilteredTasks().filter(t => t.pillar_name === 'Calmness');
+        if (pillarTasks.length === 0) return null;
+        
+        return (
+          <div style={{ marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#16a34a', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #22c55e' }}>
+              🧘 Calmness ({pillarTasks.length})
+            </h3>
+            <div className="tasks-table-container">
+              <table className="tasks-table important-tasks-table">
+                <thead>
+                  <tr>
+                    <th className="col-number">#</th>
+                    <th className="col-date">Start Date</th>
+                    <th className="col-task-name">Task Name</th>
+                    <th className="col-date">Updated Date</th>
+                    <th className="col-number">Target Gap</th>
+                    <th className="col-number">Days</th>
+                    <th className="col-number">Diff</th>
+                    <th className="col-action">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const counter = { count: 0 };
+                    return pillarTasks.map(task => renderTask(task, 0, counter));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Family Pillar Section */}
+      {(() => {
+        const pillarTasks = getFilteredTasks().filter(t => t.pillar_name === 'Family');
+        if (pillarTasks.length === 0) return null;
+        
+        return (
+          <div style={{ marginBottom: '30px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#9333ea', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #a855f7' }}>
+              👨‍👩‍👦 Family ({pillarTasks.length})
+            </h3>
+            <div className="tasks-table-container">
+              <table className="tasks-table important-tasks-table">
+                <thead>
+                  <tr>
+                    <th className="col-number">#</th>
+                    <th className="col-date">Start Date</th>
+                    <th className="col-task-name">Task Name</th>
+                    <th className="col-date">Updated Date</th>
+                    <th className="col-number">Target Gap</th>
+                    <th className="col-number">Days</th>
+                    <th className="col-number">Diff</th>
+                    <th className="col-action">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const counter = { count: 0 };
+                    return pillarTasks.map(task => renderTask(task, 0, counter));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Completed Tasks Section */}
       {completedTasks.length > 0 && (
