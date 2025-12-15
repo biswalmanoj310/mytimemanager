@@ -36,8 +36,12 @@ def get_current_streaks(db: Session = Depends(get_db)) -> Dict[str, Any]:
             "streak_status": "inactive"
         }
     
-    # Convert to list of dates
-    tracked_dates = [row[0] for row in dates_with_entries]
+    # Convert to list of date objects (SQLite returns strings from func.date())
+    from datetime import datetime
+    tracked_dates = [
+        datetime.strptime(row[0], '%Y-%m-%d').date() if isinstance(row[0], str) else row[0]
+        for row in dates_with_entries
+    ]
     
     # Calculate current streak
     current_streak = 0
