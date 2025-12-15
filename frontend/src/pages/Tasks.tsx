@@ -4818,11 +4818,12 @@ export default function Tasks() {
   const getPillarTimeAllocations = () => {
     const pillarTotals: Record<string, number> = {}
     
-    // Only count time-based daily tasks that are active
-    tasks.forEach(task => {
-      if (task.task_type === TaskType.TIME && task.follow_up_frequency === 'daily' && task.is_active && !task.is_completed) {
+    // Only count ALLOCATED time for tasks in the Time-Based Tasks table
+    // (same filtering as timeBasedTasks: time-based daily tasks, excluding one-time tasks)
+    filteredTasks.forEach(task => {
+      if (task.task_type === TaskType.TIME && !task.is_daily_one_time) {
         const pillarName = task.pillar_name || 'Other';
-        pillarTotals[pillarName] = (pillarTotals[pillarName] || 0) + task.allocated_minutes;
+        pillarTotals[pillarName] = (pillarTotals[pillarName] || 0) + (task.allocated_minutes || 0);
       }
     });
 
