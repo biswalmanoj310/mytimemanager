@@ -3816,7 +3816,8 @@ export default function Tasks() {
         parent_task_id: task.parent_task_id || null, // Preserve parent_task_id for hierarchy
         project_id: null,
         milestone_id: null,
-        created_at: task.created_at
+        created_at: task.created_at,
+        pillar_name: task.pillar_name // Include pillar_name for pillar grouping
       }));
       
       setMiscTasks(convertedTasks);
@@ -8174,15 +8175,27 @@ export default function Tasks() {
                 </p>
               </div>
             ) : (
-              <div className="task-list">
-                {miscTasks.filter(t => !t.parent_task_id && !t.is_completed).filter(task => {
-                  if (projectTaskFilter === 'all') return true;
-                  if (projectTaskFilter === 'in-progress') return !task.is_completed;
-                  if (projectTaskFilter === 'overdue') {
-                    return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
-                  }
-                  return true;
-                }).map((task) => (
+              <>
+                {/* Hard Work Pillar Section */}
+                {(() => {
+                  const pillarTasks = miscTasks.filter(t => !t.parent_task_id && !t.is_completed && t.pillar_name === 'Hard Work').filter(task => {
+                    if (projectTaskFilter === 'all') return true;
+                    if (projectTaskFilter === 'in-progress') return !task.is_completed;
+                    if (projectTaskFilter === 'overdue') {
+                      return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
+                    }
+                    return true;
+                  });
+                  
+                  if (pillarTasks.length === 0) return null;
+                  
+                  return (
+                    <div style={{ marginBottom: '30px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#2563eb', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #3b82f6' }}>
+                        💼 Hard Work ({pillarTasks.length})
+                      </h3>
+                      <div className="task-list">
+                        {pillarTasks.map((task) => (
                   <TaskNode 
                     key={`${task.id}-${task.is_completed}`} 
                     task={task} 
@@ -8269,7 +8282,227 @@ export default function Tasks() {
                     }}
                   />
                 ))}
-              </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Calmness Pillar Section */}
+                {(() => {
+                  const pillarTasks = miscTasks.filter(t => !t.parent_task_id && !t.is_completed && t.pillar_name === 'Calmness').filter(task => {
+                    if (projectTaskFilter === 'all') return true;
+                    if (projectTaskFilter === 'in-progress') return !task.is_completed;
+                    if (projectTaskFilter === 'overdue') {
+                      return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
+                    }
+                    return true;
+                  });
+                  
+                  if (pillarTasks.length === 0) return null;
+                  
+                  return (
+                    <div style={{ marginBottom: '30px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#16a34a', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #22c55e' }}>
+                        🧘 Calmness ({pillarTasks.length})
+                      </h3>
+                      <div className="task-list">
+                        {pillarTasks.map((task) => (
+                          <TaskNode 
+                            key={`${task.id}-${task.is_completed}`} 
+                            task={task} 
+                            level={0}
+                            allTasks={miscTasks}
+                            expandedTasks={expandedMiscTasks}
+                            onToggleExpand={(taskId: number) => {
+                              const newExpanded = new Set(expandedMiscTasks);
+                              if (newExpanded.has(taskId)) {
+                                newExpanded.delete(taskId);
+                              } else {
+                                newExpanded.add(taskId);
+                              }
+                              setExpandedMiscTasks(newExpanded);
+                              localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
+                            }}
+                            onToggleComplete={async (taskId: number, currentStatus: boolean) => {
+                              if (!currentStatus) {
+                                const hasIncompleteSubtasks = miscTasks.some(t => 
+                                  t.parent_task_id === taskId && !t.is_completed
+                                );
+                                
+                                if (hasIncompleteSubtasks) {
+                                  alert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.');
+                                  return;
+                                }
+                              }
+                              
+                              try {
+                                await api.put(`/api/tasks/${taskId}`, {
+                                  is_completed: !currentStatus
+                                });
+                                setMiscTasks([]);
+                                await loadMiscTaskGroups();
+                              } catch (err: any) {
+                                console.error('Error toggling task:', err);
+                              }
+                            }}
+                            onEdit={(task: ProjectTaskData) => {
+                              setSelectedTaskId(task.id);
+                              setIsTaskFormOpen(true);
+                            }}
+                            onDelete={async (taskId: number) => {
+                              const hasIncompleteSubtasks = miscTasks.some(t => 
+                                t.parent_task_id === taskId && !t.is_completed
+                              );
+                              
+                              if (hasIncompleteSubtasks) {
+                                alert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.');
+                                return;
+                              }
+                              
+                              if (confirm('Are you sure you want to delete this task? This will also delete all subtasks.')) {
+                                try {
+                                  await api.delete(`/api/tasks/${taskId}`);
+                                  await loadMiscTaskGroups();
+                                } catch (err: any) {
+                                  console.error('Error deleting task:', err);
+                                  console.error('Delete error response:', err.response);
+                                  const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+                                  alert('Failed to delete task: ' + errorMsg);
+                                }
+                              }
+                            }}
+                            onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                              try {
+                                await api.put(`/api/tasks/${taskId}`, {
+                                  due_date: newDueDate
+                                });
+                                await loadMiscTaskGroups();
+                              } catch (err: any) {
+                                console.error('Error updating due date:', err);
+                                alert('Failed to update due date. Please try again.');
+                              }
+                            }}
+                            getDueDateColorClass={getDueDateColorClass}
+                            getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
+                            onAddSubtask={(parentTask: ProjectTaskData) => {
+                              setEditingMiscTask(parentTask);
+                              setShowAddMiscTaskModal(true);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Family Pillar Section */}
+                {(() => {
+                  const pillarTasks = miscTasks.filter(t => !t.parent_task_id && !t.is_completed && t.pillar_name === 'Family').filter(task => {
+                    if (projectTaskFilter === 'all') return true;
+                    if (projectTaskFilter === 'in-progress') return !task.is_completed;
+                    if (projectTaskFilter === 'overdue') {
+                      return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
+                    }
+                    return true;
+                  });
+                  
+                  if (pillarTasks.length === 0) return null;
+                  
+                  return (
+                    <div style={{ marginBottom: '30px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#9333ea', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #a855f7' }}>
+                        👨‍👩‍👦 Family ({pillarTasks.length})
+                      </h3>
+                      <div className="task-list">
+                        {pillarTasks.map((task) => (
+                          <TaskNode 
+                            key={`${task.id}-${task.is_completed}`} 
+                            task={task} 
+                            level={0}
+                            allTasks={miscTasks}
+                            expandedTasks={expandedMiscTasks}
+                            onToggleExpand={(taskId: number) => {
+                              const newExpanded = new Set(expandedMiscTasks);
+                              if (newExpanded.has(taskId)) {
+                                newExpanded.delete(taskId);
+                              } else {
+                                newExpanded.add(taskId);
+                              }
+                              setExpandedMiscTasks(newExpanded);
+                              localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
+                            }}
+                            onToggleComplete={async (taskId: number, currentStatus: boolean) => {
+                              if (!currentStatus) {
+                                const hasIncompleteSubtasks = miscTasks.some(t => 
+                                  t.parent_task_id === taskId && !t.is_completed
+                                );
+                                
+                                if (hasIncompleteSubtasks) {
+                                  alert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.');
+                                  return;
+                                }
+                              }
+                              
+                              try {
+                                await api.put(`/api/tasks/${taskId}`, {
+                                  is_completed: !currentStatus
+                                });
+                                setMiscTasks([]);
+                                await loadMiscTaskGroups();
+                              } catch (err: any) {
+                                console.error('Error toggling task:', err);
+                              }
+                            }}
+                            onEdit={(task: ProjectTaskData) => {
+                              setSelectedTaskId(task.id);
+                              setIsTaskFormOpen(true);
+                            }}
+                            onDelete={async (taskId: number) => {
+                              const hasIncompleteSubtasks = miscTasks.some(t => 
+                                t.parent_task_id === taskId && !t.is_completed
+                              );
+                              
+                              if (hasIncompleteSubtasks) {
+                                alert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.');
+                                return;
+                              }
+                              
+                              if (confirm('Are you sure you want to delete this task? This will also delete all subtasks.')) {
+                                try {
+                                  await api.delete(`/api/tasks/${taskId}`);
+                                  await loadMiscTaskGroups();
+                                } catch (err: any) {
+                                  console.error('Error deleting task:', err);
+                                  console.error('Delete error response:', err.response);
+                                  const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+                                  alert('Failed to delete task: ' + errorMsg);
+                                }
+                              }
+                            }}
+                            onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                              try {
+                                await api.put(`/api/tasks/${taskId}`, {
+                                  due_date: newDueDate
+                                });
+                                await loadMiscTaskGroups();
+                              } catch (err: any) {
+                                console.error('Error updating due date:', err);
+                                alert('Failed to update due date. Please try again.');
+                              }
+                            }}
+                            getDueDateColorClass={getDueDateColorClass}
+                            getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
+                            onAddSubtask={(parentTask: ProjectTaskData) => {
+                              setEditingMiscTask(parentTask);
+                              setShowAddMiscTaskModal(true);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </>
             )}
           </div>
 
