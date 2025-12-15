@@ -25,6 +25,8 @@ export type TabType =
   | 'goals';
 
 // Hierarchy order type
+import { DEFAULT_HIERARCHY_ORDER, DEFAULT_TASK_NAME_ORDER } from '../utils/taskHelpers';
+
 export interface HierarchyOrder {
   [key: string]: number; // e.g., "Hard Work|Office-Tasks": 1
 }
@@ -113,8 +115,8 @@ export const UserPreferencesProvider: React.FC<UserPreferencesProviderProps> = (
   const [showInactive, setShowInactiveState] = useState<boolean>(false);
   
   // Hierarchy and sorting preferences
-  const [hierarchyOrder, setHierarchyOrderState] = useState<HierarchyOrder>({});
-  const [taskNameOrder, setTaskNameOrderState] = useState<TaskNameOrder>({});
+  const [hierarchyOrder, setHierarchyOrderState] = useState<HierarchyOrder>(DEFAULT_HIERARCHY_ORDER);
+  const [taskNameOrder, setTaskNameOrderState] = useState<TaskNameOrder>(DEFAULT_TASK_NAME_ORDER);
   
   // View preferences
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());

@@ -10391,9 +10391,6 @@ export default function Tasks() {
                         <tr key={task.id} className={rowClassName}>
                           <td className={`col-task sticky-col sticky-col-1 ${colorClass}`}>
                             <div className="task-name">
-                              {task.pillar_name && <span style={{ color: '#2563eb', fontWeight: '600', marginRight: '4px' }}>{task.pillar_name}</span>}
-                              {task.category_name && <span style={{ color: '#64748b', marginRight: '4px' }}>→ {task.category_name}</span>}
-                              {(task.pillar_name || task.category_name) && <span style={{ color: '#cbd5e1', marginRight: '4px' }}>→</span>}
                               {task.name}
                               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                             </div>
@@ -10582,9 +10579,6 @@ export default function Tasks() {
                         >
                           <td className="col-task sticky-col sticky-col-1" style={bgColor ? { backgroundColor: bgColor } : undefined}>
                             <div className="task-name">
-                              {task.pillar_name && <span style={{ color: '#2563eb', fontWeight: '600', marginRight: '4px' }}>{task.pillar_name}</span>}
-                              {task.category_name && <span style={{ color: '#64748b', marginRight: '4px' }}>→ {task.category_name}</span>}
-                              {(task.pillar_name || task.category_name) && <span style={{ color: '#cbd5e1', marginRight: '4px' }}>→</span>}
                               {task.name}
                               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                             </div>
@@ -10924,9 +10918,6 @@ export default function Tasks() {
                         <tr key={task.id} className={rowClassName}>
                           <td className={`col-task sticky-col sticky-col-1 ${colorClass}`}>
                             <div className="task-name">
-                              {task.pillar_name && <span style={{ color: '#2563eb', fontWeight: '600', marginRight: '4px' }}>{task.pillar_name}</span>}
-                              {task.category_name && <span style={{ color: '#64748b', marginRight: '4px' }}>→ {task.category_name}</span>}
-                              {(task.pillar_name || task.category_name) && <span style={{ color: '#cbd5e1', marginRight: '4px' }}>→</span>}
                               {task.name}
                               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                             </div>
@@ -11133,10 +11124,12 @@ export default function Tasks() {
                               className="task-name task-link"
                               onClick={() => handleTaskClick(task.id)}
                               style={{ cursor: 'pointer' }}
+                              title={
+                                task.pillar_name 
+                                  ? `${task.pillar_name}${task.category_name ? ` - ${task.category_name}` : ''}\nClick to edit`
+                                  : 'Click to edit'
+                              }
                             >
-                              {task.pillar_name && <span style={{ color: '#2563eb', fontWeight: '600', marginRight: '4px' }}>{task.pillar_name}</span>}
-                              {task.category_name && <span style={{ color: '#64748b', marginRight: '4px' }}>→ {task.category_name}</span>}
-                              {(task.pillar_name || task.category_name) && <span style={{ color: '#cbd5e1', marginRight: '4px' }}>→</span>}
                               {task.name}
                             </div>
                           </td>
