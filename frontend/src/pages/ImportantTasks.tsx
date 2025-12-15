@@ -160,15 +160,16 @@ const ImportantTasks: React.FC = () => {
     const totalGap = allTasks.reduce((sum, t) => sum + (t.ideal_gap_days || 0), 0);
     const idealAverage = allTasks.length > 0 ? Math.round(totalGap / allTasks.length) : 0;
     
-    // Find task with highest gap (for active/in progress tasks only)
+    // Find task with highest negative diff (most overdue task)
     let highestGapDays = 0;
     let highestGapTaskId = null;
     if (allTasks.length > 0) {
-      const highestTask = allTasks.reduce((max, t) => 
-        (t.ideal_gap_days || 0) > (max.ideal_gap_days || 0) ? t : max
+      const mostOverdueTask = allTasks.reduce((worst, t) => 
+        t.diff < worst.diff ? t : worst
       );
-      highestGapDays = highestTask.ideal_gap_days || 0;
-      highestGapTaskId = highestTask.id;
+      // Show as positive number (absolute value of most negative diff)
+      highestGapDays = Math.abs(Math.min(0, mostOverdueTask.diff));
+      highestGapTaskId = highestGapDays > 0 ? mostOverdueTask.id : null;
     }
 
     return {
@@ -518,13 +519,13 @@ const ImportantTasks: React.FC = () => {
             setFilterStatus('all');
             setHighestGapTaskId(metrics.highest_gap_task_id);
           }}
-          title="Click to highlight the task with highest gap"
+          title="Click to highlight the most overdue task (highest negative diff)"
         >
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ffc107' }}>
             {metrics.highest_gap_days}
           </div>
           <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-            Highest Gap (days)
+            Most Overdue (days)
           </div>
         </div>
       </div>
