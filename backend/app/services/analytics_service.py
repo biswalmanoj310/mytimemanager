@@ -33,10 +33,13 @@ class AnalyticsService:
         """
         pillars = self.db.query(Pillar).all()
         
-        # Get tasks exactly as Daily tab shows them for this date
+        # Get tasks exactly as Daily tab Time-Based Task Table shows them
+        # Filter: task_type = time AND is_daily_one_time = False/NULL
         tasks_query = self.db.query(Task).filter(
             Task.follow_up_frequency == 'daily',
-            Task.is_active == True
+            Task.task_type == 'time',
+            Task.is_active == True,
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None))
         )
         
         if start_date or end_date:
@@ -71,9 +74,13 @@ class AnalyticsService:
         task_allocated_map = {task.id: task.allocated_minutes for task in daily_tasks}
         
         # Build time entry query from DailyTimeEntry table for SPENT time
+        # JOIN with Task to filter only Time-Based Task Table entries
         spent_query = self.db.query(
             DailyTimeEntry.task_id,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')
+        ).join(Task, DailyTimeEntry.task_id == Task.id).filter(
+            Task.task_type == 'time',
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None))
         )
         
         if start_date:
@@ -140,11 +147,14 @@ class AnalyticsService:
         
         categories = query.all()
         
-        # Get tasks exactly as Daily tab shows them for this date
-        # Daily tab shows: active daily tasks + tasks completed/NA on the same date (they remain visible until day ends)
+        # Get tasks exactly as Daily tab Time-Based Task Table shows them
+        # Time-Based table filter: task_type = time AND is_daily_one_time = False/NULL
+        # Plus tasks completed/NA on the same date (they remain visible until day ends)
         tasks_query = self.db.query(Task).filter(
             Task.follow_up_frequency == 'daily',
-            Task.is_active == True
+            Task.task_type == 'time',
+            Task.is_active == True,
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None))
         )
         
         # If querying for a specific date, include tasks that are either:
@@ -182,9 +192,14 @@ class AnalyticsService:
         task_allocated_map = {task.id: task.allocated_minutes for task in daily_tab_tasks}
         
         # Build time entry query from DailyTimeEntry table for SPENT time
+        # JOIN with Task table to ensure we only get entries for Time-Based Task Table
+        # This matches Daily Tab filter: task_type = time AND is_daily_one_time = False/NULL
         time_query = self.db.query(
             DailyTimeEntry.task_id,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')
+        ).join(Task, DailyTimeEntry.task_id == Task.id).filter(
+            Task.task_type == 'time',
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None))
         )
         
         if start_date:
