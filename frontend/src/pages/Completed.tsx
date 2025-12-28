@@ -23,21 +23,39 @@ interface GroupedTasks {
 function Completed() {
   const [completedTasks, setCompletedTasks] = useState<CompletedTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterPeriod, setFilterPeriod] = useState<'today' | 'week' | 'month' | 'all'>('today');
+  const [filterPeriod, setFilterPeriod] = useState<'today' | 'week' | 'month' | 'year' | 'all' | 'custom'>('today');
   const [searchQuery, setSearchQuery] = useState('');
-  const [stats, setStats] = useState({ today: 0, week: 0, month: 0, all: 0 });
+  const [stats, setStats] = useState({ today: 0, week: 0, month: 0, year: 0, all: 0 });
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
 
   useEffect(() => {
     loadCompletedTasks();
-  }, [filterPeriod]);
+  }, [filterPeriod, startDate, endDate, selectedMonth]);
 
   const loadCompletedTasks = async () => {
     setLoading(true);
     try {
-      // Load completed tasks based on period
-      const response = await apiClient.get(`/api/completed-tasks?period=${filterPeriod}`);
+      let url = `/api/completed-tasks?period=${filterPeriod}`;
+      
+      // Add date range for custom period
+      if (filterPeriod === 'custom' && startDate && endDate) {
+        url += `&start_date_str=${startDate}&end_date_str=${endDate}`;
+      }
+      
+      // Handle month selection (convert to custom date range)
+      if (selectedMonth && filterPeriod === 'custom') {
+        const [year, month] = selectedMonth.split('-');
+        const monthStart = `${year}-${month}-01`;
+        const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
+        const monthEnd = `${year}-${month}-${lastDay.toString().padStart(2, '0')}`;
+        url = `/api/completed-tasks?period=custom&start_date_str=${monthStart}&end_date_str=${monthEnd}`;
+      }
+      
+      const response = await apiClient.get(url);
       setCompletedTasks(response.data.tasks || []);
-      setStats(response.data.stats || { today: 0, week: 0, month: 0, all: 0 });
+      setStats(response.data.stats || { today: 0, week: 0, month: 0, year: 0, all: 0 });
     } catch (error) {
       console.error('Error loading completed tasks:', error);
       setCompletedTasks([]);
@@ -105,26 +123,6 @@ function Completed() {
           <h1>✅ Completed Tasks</h1>
           <p>Your accomplishment journal - track what you've achieved!</p>
         </div>
-
-        {/* Stats Cards */}
-        <div className="stats-cards">
-          <div className="stat-card">
-            <div className="stat-number">{stats.today}</div>
-            <div className="stat-label">Today</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-number">{stats.week}</div>
-            <div className="stat-label">This Week</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-number">{stats.month}</div>
-            <div className="stat-label">This Month</div>
-          </div>
-          <div className="stat-card highlight">
-            <div className="stat-number">{stats.all}</div>
-            <div className="stat-label">All Time</div>
-          </div>
-        </div>
       </div>
 
       {/* Filters and Search */}
@@ -132,37 +130,151 @@ function Completed() {
         <div className="filter-buttons">
           <button 
             className={`filter-btn ${filterPeriod === 'today' ? 'active' : ''}`}
-            onClick={() => setFilterPeriod('today')}
+            onClick={() => {
+              setFilterPeriod('today');
+              setSelectedMonth('');
+            }}
           >
-            Today
+            Today ({stats.today})
           </button>
           <button 
             className={`filter-btn ${filterPeriod === 'week' ? 'active' : ''}`}
-            onClick={() => setFilterPeriod('week')}
+            onClick={() => {
+              setFilterPeriod('week');
+              setSelectedMonth('');
+            }}
           >
-            This Week
+            This Week ({stats.week})
           </button>
           <button 
             className={`filter-btn ${filterPeriod === 'month' ? 'active' : ''}`}
-            onClick={() => setFilterPeriod('month')}
+            onClick={() => {
+              setFilterPeriod('month');
+              setSelectedMonth('');
+            }}
           >
-            This Month
+            This Month ({stats.month})
+          </button>
+          <button 
+            className={`filter-btn ${filterPeriod === 'year' ? 'active' : ''}`}
+            onClick={() => {
+              setFilterPeriod('year');
+              setSelectedMonth('');
+            }}
+          >
+            This Year ({stats.year})
           </button>
           <button 
             className={`filter-btn ${filterPeriod === 'all' ? 'active' : ''}`}
-            onClick={() => setFilterPeriod('all')}
+            onClick={() => {
+              setFilterPeriod('all');
+              setSelectedMonth('');
+            }}
           >
-            All Time
+            All Time ({stats.all})
           </button>
         </div>
 
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="🔍 Search completed tasks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="custom-filters">
+          {/* Month Selector */}
+          <div className="month-selector">
+            <label>📅 Month:</label>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value);
+                setFilterPeriod('custom');
+                setStartDate('');
+                setEndDate('');
+              }}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            />
+            {selectedMonth && (
+              <span style={{ 
+                marginLeft: '8px', 
+                fontSize: '14px', 
+                fontWeight: '600',
+                color: '#4a5568',
+                backgroundColor: '#e2e8f0',
+                padding: '4px 12px',
+                borderRadius: '6px'
+              }}>
+                {completedTasks.length} tasks
+              </span>
+            )}
+          </div>
+
+          {/* Date Range Selector */}
+          <div className="date-range-selector">
+            <label>📆 Date Range:</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                if (e.target.value && endDate) {
+                  setFilterPeriod('custom');
+                  setSelectedMonth('');
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                marginRight: '8px'
+              }}
+            />
+            <span style={{ margin: '0 4px' }}>to</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                if (startDate && e.target.value) {
+                  setFilterPeriod('custom');
+                  setSelectedMonth('');
+                }
+              }}
+              style={{
+                padding: '8px 12px',
+                fontSize: '14px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                marginLeft: '8px'
+              }}
+            />
+            {startDate && endDate && (
+              <span style={{ 
+                marginLeft: '12px', 
+                fontSize: '14px', 
+                fontWeight: '600',
+                color: '#4a5568',
+                backgroundColor: '#e2e8f0',
+                padding: '4px 12px',
+                borderRadius: '6px'
+              }}>
+                {completedTasks.length} tasks
+              </span>
+            )}
+          </div>
+
+          {/* Search Box */}
+          <div className="search-box">
+            <input
+              type="text"
+              placeholder="🔍 Search completed tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
