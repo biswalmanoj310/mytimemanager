@@ -3083,21 +3083,55 @@ export default function Tasks() {
             }
           }
           
-          // 3. Check if behind on average (< 80% completion rate this month)
-          const isBehindOnAverage = habit.completion_rate !== undefined && habit.completion_rate < 80;
+          // 3. Calculate weekly average (Monday to today)
+          // monthly_completion array goes from 1st of month to today
+          // We need to find Monday of current week
+          const today = new Date();
+          const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+          const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday-based (0=Monday)
+          const dayOfMonth = today.getDate(); // 1-31
+          const mondayDate = dayOfMonth - daysFromMonday; // Date number of this week's Monday
           
-          console.log(`📊 Habit ${habit.id} (${habit.name}) - Consecutive missed now: ${consecutiveMissedDays}, Recent max streak: ${maxRecentMissStreak}, Completion rate: ${habit.completion_rate}%, Behind: ${isBehindOnAverage}, Completed today: ${habit.completed_today}`);
+          let weeklyCompletedDays = 0;
+          let weeklyApplicableDays = 0;
+          
+          // If Monday is in current month (mondayDate >= 1), calculate from Monday to today
+          // Otherwise, start from 1st of month
+          const weekStartDay = Math.max(1, mondayDate);
+          const weekStartIndex = weekStartDay - 1; // Array is 0-indexed, days are 1-indexed
+          
+          for (let i = weekStartIndex; i <= todayIndex; i++) {
+            const dayStatus = completionArray[i];
+            if (dayStatus !== null) {
+              weeklyApplicableDays++;
+              if (dayStatus === true) {
+                weeklyCompletedDays++;
+              }
+            }
+          }
+          
+          const weeklyCompletionRate = weeklyApplicableDays > 0 
+            ? (weeklyCompletedDays / weeklyApplicableDays * 100) 
+            : 100;
+          
+          // 4. Check if behind on averages
+          const isBehindOnWeekly = weeklyCompletionRate < 60;
+          const isBehindOnMonthly = habit.completion_rate !== undefined && habit.completion_rate < 40;
+          
+          console.log(`📊 Habit ${habit.id} (${habit.name}) - Consecutive missed: ${consecutiveMissedDays}, Recent streak: ${maxRecentMissStreak}, Weekly: ${weeklyCompletionRate.toFixed(0)}%, Monthly: ${habit.completion_rate}%, Behind weekly: ${isBehindOnWeekly}, Behind monthly: ${isBehindOnMonthly}, Completed today: ${habit.completed_today}`);
           
           // Show habit if ANY of these conditions are met:
           // 1. Currently missing 2+ consecutive days, OR
           // 2. Had a 2+ day miss streak in last 7 days (recent warning), OR
-          // 3. Behind on average (< 80% completion rate this month)
-          const shouldShow = consecutiveMissedDays >= 2 || maxRecentMissStreak >= 2 || isBehindOnAverage;
+          // 3. Weekly average < 60%, OR
+          // 4. Monthly average < 40%
+          const shouldShow = consecutiveMissedDays >= 2 || maxRecentMissStreak >= 2 || isBehindOnWeekly || isBehindOnMonthly;
           
           const reasons = [];
           if (consecutiveMissedDays >= 2) reasons.push(`${consecutiveMissedDays} consecutive now`);
           if (maxRecentMissStreak >= 2 && consecutiveMissedDays < 2) reasons.push(`${maxRecentMissStreak} miss streak recently`);
-          if (isBehindOnAverage) reasons.push(`${habit.completion_rate}% completion`);
+          if (isBehindOnWeekly) reasons.push(`${weeklyCompletionRate.toFixed(0)}% weekly`);
+          if (isBehindOnMonthly) reasons.push(`${habit.completion_rate}% monthly`);
           
           console.log(`${shouldShow ? '✅' : '❌'} Habit ${habit.id} (${habit.name}) - ${shouldShow ? 'INCLUDED' : 'EXCLUDED'} (${reasons.join(', ') || 'on track'})`);
           return shouldShow;
@@ -14429,7 +14463,7 @@ export default function Tasks() {
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', fontWeight: '400', opacity: 0.85, color: '#ffffff' }}>
-                      2+ consecutive days missed or monthly average below 80%
+                      2+ consecutive days missed, weekly avg &lt;60%, or monthly avg &lt;40%
                     </div>
                   </div>
                 </div>
