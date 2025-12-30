@@ -6727,57 +6727,68 @@ export default function Tasks() {
                           if (target.closest('button, input')) return;
                           handleSelectProject(project);
                         }}
-                        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px 24px', minHeight: '140px' }}
+                        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 24px', minHeight: '110px' }}
                       >
                         {/* Top Row */}
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
-                          {/* Left: Icon, Title & Description */}
-                          <div style={{ display: 'flex', gap: '12px', minWidth: '320px', maxWidth: '320px' }}>
-                            <span style={{ fontSize: '36px', lineHeight: 1 }}>📊</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                          {/* Left: Icon & Title */}
+                          <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
                             <div style={{ flex: 1 }}>
-                              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
-                              <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                              <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
                                 {project.is_completed ? '✅ Completed' : '▶️ ' + project.status.replace('_', ' ')}
                               </div>
-                              {project.description && (
-                                <div style={{ fontSize: '11px', color: '#a0aec0', marginTop: '6px', lineHeight: 1.4, maxHeight: '32px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                                  {project.description}
-                                </div>
-                              )}
                             </div>
                           </div>
 
-                          {/* Center: Progress Bars */}
-                          <div style={{ flex: 1, minWidth: '250px' }}>
-                            {/* Task Progress */}
-                            <div style={{ marginBottom: '12px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px', fontWeight: '500' }}>
-                                <span style={{ color: '#4a5568' }}>📋 Tasks</span>
-                                <span style={{ color: '#2d3748' }}>{project.progress.completed_tasks}/{project.progress.total_tasks} ({project.progress.progress_percentage}%)</span>
+                          {/* Center: Circular Progress (Tasks & Milestones side by side) */}
+                          <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+                            {/* Task Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
                               </div>
-                              <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{ width: `${project.progress.progress_percentage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s' }} />
-                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#10b981" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - project.progress.progress_percentage / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
                             </div>
-                            {/* Milestone Progress */}
-                            <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px', fontWeight: '500' }}>
-                                <span style={{ color: '#4a5568' }}>🎯 Milestones</span>
-                                <span style={{ color: '#2d3748' }}>
+                            {/* Milestone Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
                                   {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
-                                  {project.milestone_progress && project.milestone_progress.total_milestones > 0 && (
-                                    <> ({Math.round((project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100)}%)</>
-                                  )}
                                 </span>
                               </div>
-                              <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
-                                <div style={{ 
-                                  width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : '0%',
-                                  height: '100%',
-                                  backgroundColor: '#3b82f6',
-                                  transition: 'width 0.3s'
-                                }} />
-                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#3b82f6" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (project.milestone_progress && project.milestone_progress.total_milestones > 0 ? (project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100 : 0) / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
                             </div>
                           </div>
 
@@ -6855,7 +6866,7 @@ export default function Tasks() {
                             <button 
                               className="btn btn-primary"
                               onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
                               👁️ View
                             </button>
@@ -6863,7 +6874,7 @@ export default function Tasks() {
                               className="btn btn-secondary"
                               onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
                               title="Edit Project"
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
                               ✏️ Edit
                             </button>
@@ -6871,23 +6882,23 @@ export default function Tasks() {
                               className="btn btn-info"
                               onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
                               title="Duplicate"
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
-                              📋
+                              📋 Duplicate
                             </button>
                             <button 
                               className="btn btn-danger"
                               onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
-                              🗑️
+                              🗑️ Delete
                             </button>
                             {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
                               <button 
                                 className="btn btn-success"
                                 onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
                                 title="Complete"
-                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
                                 ✓ Complete
                               </button>
@@ -6897,7 +6908,7 @@ export default function Tasks() {
                                 className="btn btn-warning"
                                 onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
                                 title="Reopen"
-                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
                                 ↺ Reopen
                               </button>
@@ -6966,34 +6977,53 @@ export default function Tasks() {
                             </div>
                           </div>
 
-                          {/* Center: Progress Bars Side by Side */}
-                          <div style={{ flex: 1, display: 'flex', gap: '16px', alignItems: 'center' }}>
-                            {/* Task Progress */}
-                            <div style={{ flex: 1, minWidth: '160px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
-                                <span style={{ color: '#4a5568' }}>📋 Tasks</span>
-                                <span style={{ color: '#2d3748' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
+                          {/* Center: Circular Progress (Tasks & Milestones side by side) */}
+                          <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+                            {/* Task Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
                               </div>
-                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${project.progress.progress_percentage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s' }} />
-                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#10b981" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - project.progress.progress_percentage / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
                             </div>
-                            {/* Milestone Progress */}
-                            <div style={{ flex: 1, minWidth: '160px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
-                                <span style={{ color: '#4a5568' }}>🎯 Milestones</span>
-                                <span style={{ color: '#2d3748' }}>
+                            {/* Milestone Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
                                   {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
                                 </span>
                               </div>
-                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ 
-                                  width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : '0%',
-                                  height: '100%',
-                                  backgroundColor: '#3b82f6',
-                                  transition: 'width 0.3s'
-                                }} />
-                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#3b82f6" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (project.milestone_progress && project.milestone_progress.total_milestones > 0 ? (project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100 : 0) / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
                             </div>
                           </div>
 
@@ -7071,7 +7101,7 @@ export default function Tasks() {
                             <button 
                               className="btn btn-primary"
                               onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
                               👁️ View
                             </button>
@@ -7079,7 +7109,7 @@ export default function Tasks() {
                               className="btn btn-secondary"
                               onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
                               title="Edit Project"
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
                               ✏️ Edit
                             </button>
@@ -7087,23 +7117,23 @@ export default function Tasks() {
                               className="btn btn-info"
                               onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
                               title="Duplicate"
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
-                              📋
+                              📋 Duplicate
                             </button>
                             <button 
                               className="btn btn-danger"
                               onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
-                              🗑️
+                              🗑️ Delete
                             </button>
                             {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
                               <button 
                                 className="btn btn-success"
                                 onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
                                 title="Complete"
-                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
                                 ✓ Complete
                               </button>
@@ -7113,7 +7143,7 @@ export default function Tasks() {
                                 className="btn btn-warning"
                                 onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
                                 title="Reopen"
-                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
                                 ↺ Reopen
                               </button>
@@ -7182,34 +7212,53 @@ export default function Tasks() {
                             </div>
                           </div>
 
-                          {/* Center: Progress Bars Side by Side */}
-                          <div style={{ flex: 1, display: 'flex', gap: '16px', alignItems: 'center' }}>
-                            {/* Task Progress */}
-                            <div style={{ flex: 1, minWidth: '160px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
-                                <span style={{ color: '#4a5568' }}>📋 Tasks</span>
-                                <span style={{ color: '#2d3748' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
+                          {/* Center: Circular Progress (Tasks & Milestones side by side) */}
+                          <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+                            {/* Task Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
                               </div>
-                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ width: `${project.progress.progress_percentage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s' }} />
-                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#10b981" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - project.progress.progress_percentage / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
                             </div>
-                            {/* Milestone Progress */}
-                            <div style={{ flex: 1, minWidth: '160px' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
-                                <span style={{ color: '#4a5568' }}>🎯 Milestones</span>
-                                <span style={{ color: '#2d3748' }}>
+                            {/* Milestone Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
                                   {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
                                 </span>
                               </div>
-                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
-                                <div style={{ 
-                                  width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : '0%',
-                                  height: '100%',
-                                  backgroundColor: '#3b82f6',
-                                  transition: 'width 0.3s'
-                                }} />
-                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#3b82f6" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (project.milestone_progress && project.milestone_progress.total_milestones > 0 ? (project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100 : 0) / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
                             </div>
                           </div>
 
@@ -7287,7 +7336,7 @@ export default function Tasks() {
                             <button 
                               className="btn btn-primary"
                               onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
                               👁️ View
                             </button>
@@ -7295,7 +7344,7 @@ export default function Tasks() {
                               className="btn btn-secondary"
                               onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
                               title="Edit Project"
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
                               ✏️ Edit
                             </button>
@@ -7303,23 +7352,23 @@ export default function Tasks() {
                               className="btn btn-info"
                               onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
                               title="Duplicate"
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
-                              📋
+                              📋 Duplicate
                             </button>
                             <button 
                               className="btn btn-danger"
                               onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
-                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                             >
-                              🗑️
+                              🗑️ Delete
                             </button>
                             {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
                               <button 
                                 className="btn btn-success"
                                 onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
                                 title="Complete"
-                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
                                 ✓ Complete
                               </button>
@@ -7329,7 +7378,7 @@ export default function Tasks() {
                                 className="btn btn-warning"
                                 onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
                                 title="Reopen"
-                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
                                 ↺ Reopen
                               </button>
