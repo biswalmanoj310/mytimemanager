@@ -1,0 +1,485 @@
+/**
+ * Upcoming Tasks Tab
+ * Shows future tasks across all categories (projects, goals, important, misc)
+ * Excludes daily tasks, habits, and challenges
+ */
+
+import { useState, useEffect } from 'react';
+import { api } from '../services/api';
+import { useTaskContext } from '../contexts/TaskContext';
+
+interface UpcomingTask {
+  id: number;
+  name: string;
+  description?: string;
+  due_date: string;
+  priority?: number | string;
+  category_name?: string;
+  frequency?: string;
+  allocated_minutes?: number;
+  task_type?: string;
+  project_name?: string;
+  goal_name?: string;
+  group_name?: string;
+}
+
+interface PillarData {
+  id: number;
+  name: string;
+  project_tasks: UpcomingTask[];
+  goal_tasks: UpcomingTask[];
+  important_tasks: UpcomingTask[];
+  misc_tasks: UpcomingTask[];
+}
+
+interface UpcomingResponse {
+  view: string;
+  start_date: string;
+  end_date: string;
+  pillars: Record<string, PillarData>;
+  available_months: Array<{
+    year: number;
+    month: number;
+    label: string;
+  }>;
+}
+
+const PILLAR_COLORS: Record<string, string> = {
+  'Hard Work': '#3b82f6',
+  'Calmness': '#10b981',
+  'Family': '#8b5cf6'
+};
+
+export default function UpcomingTasks() {
+  const { refreshAll } = useTaskContext();
+  const [data, setData] = useState<UpcomingResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<'week' | 'month'>('month');
+  const [selectedMonth, setSelectedMonth] = useState<{ year: number; month: number } | null>(null);
+  const [editingTask, setEditingTask] = useState<{ id: number; type: string } | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+
+  useEffect(() => {
+    loadData();
+  }, [view, selectedMonth]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const params: Record<string, any> = { view };
+      
+      if (view === 'month' && selectedMonth) {
+        params.month = selectedMonth.month;
+        params.year = selectedMonth.year;
+      }
+      
+      console.log('🔍 Loading upcoming tasks with params:', params);
+      const response = await api.get<UpcomingResponse>('/api/upcoming-tasks/', { params });
+      console.log('✅ Upcoming tasks response:', response);
+      setData(response);
+    } catch (error) {
+      console.error('❌ Error loading upcoming tasks:', error);
+      console.error('❌ Error details:', error instanceof Error ? error.message : error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const getDaysUntil = (dateStr: string) => {
+    const due = new Date(dateStr);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const getDateBadgeColor = (dateStr: string) => {
+    const days = getDaysUntil(dateStr);
+    if (days <= 3) return '#ef4444'; // red - urgent
+    if (days <= 7) return '#f59e0b'; // orange - soon
+    if (days <= 14) return '#3b82f6'; // blue - upcoming
+    return '#6b7280'; // gray - future
+  };
+
+  const startEdit = (task: UpcomingTask, type: string) => {
+    setEditingTask({ id: task.id, type });
+    setEditName(task.name);
+    setEditDueDate(task.due_date.split('T')[0]);
+  };
+
+  const saveEdit = async () => {
+    if (!editingTask) return;
+    
+    try {
+      const endpoint = editingTask.type === 'project' 
+        ? `/api/projects/tasks/${editingTask.id}`
+        : editingTask.type === 'misc'
+        ? `/api/misc-tasks/items/${editingTask.id}`
+        : `/api/tasks/${editingTask.id}`;
+      
+      await api.patch(endpoint, {
+        name: editName,
+        due_date: editDueDate
+      });
+      
+      setEditingTask(null);
+      await loadData();
+      await refreshAll();
+    } catch (error) {
+      console.error('Error updating task:', error);
+      alert('Failed to update task');
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingTask(null);
+    setEditName('');
+    setEditDueDate('');
+  };
+
+  const renderTaskSection = (
+    title: string,
+    tasks: UpcomingTask[],
+    icon: string,
+    pillarColor: string
+  ) => {
+    if (tasks.length === 0) return null;
+
+    const sortedTasks = [...tasks].sort((a, b) => 
+      new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+    );
+
+    return (
+      <div style={{ marginBottom: '20px' }}>
+        <h4 style={{
+          fontSize: '14px',
+          fontWeight: '600',
+          color: '#374151',
+          marginBottom: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span>{icon}</span>
+          <span>{title} ({tasks.length})</span>
+        </h4>
+        {sortedTasks.map(task => {
+          const taskType = title.includes('Project') ? 'project' : title.includes('Misc') ? 'misc' : 'important';
+          const isEditing = editingTask?.id === task.id && editingTask?.type === taskType;
+          
+          return (
+            <div
+              key={`${title}-${task.id}`}
+              style={{
+                padding: '10px 14px',
+                marginBottom: '6px',
+                backgroundColor: '#fff',
+                border: `1px solid ${pillarColor}20`,
+                borderLeft: `4px solid ${pillarColor}`,
+                borderRadius: '6px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+              }}
+            >
+              {isEditing ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    style={{
+                      padding: '6px 8px',
+                      fontSize: '14px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '4px',
+                      fontWeight: '600'
+                    }}
+                    autoFocus
+                  />
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      value={editDueDate}
+                      onChange={(e) => setEditDueDate(e.target.value)}
+                      style={{
+                        padding: '6px 8px',
+                        fontSize: '12px',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '4px'
+                      }}
+                    />
+                    <button
+                      onClick={saveEdit}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        backgroundColor: '#10b981',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      💾 Save
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '12px',
+                        backgroundColor: '#6b7280',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ❌ Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                    <span style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#1f2937',
+                      flex: 1
+                    }}>
+                      {task.name}
+                    </span>
+                    <button
+                      onClick={() => startEdit(task, taskType)}
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: '11px',
+                        backgroundColor: '#f3f4f6',
+                        color: '#374151',
+                        border: '1px solid #d1d5db',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      padding: '4px 10px',
+                      borderRadius: '12px',
+                backgroundColor: getDateBadgeColor(task.due_date),
+                color: '#fff'
+              }}>
+                {formatDate(task.due_date)}
+              </span>
+              <span style={{
+                fontSize: '11px',
+                color: '#6b7280',
+                fontWeight: '500'
+              }}>
+                {getDaysUntil(task.due_date)} days
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '12px', color: '#6b7280' }}>
+              {task.project_name && <span>📂 {task.project_name}</span>}
+              {task.goal_name && <span>🎯 {task.goal_name}</span>}
+              {task.group_name && <span>📋 {task.group_name}</span>}
+              {task.category_name && <span>• {task.category_name}</span>}
+              {task.allocated_minutes && <span>• {task.allocated_minutes} min</span>}
+            </div>
+                </>
+              )}
+          </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  if (loading) {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>Loading upcoming tasks...</div>;
+  }
+
+  if (!data) {
+    return <div style={{ padding: '20px', textAlign: 'center' }}>No data available</div>;
+  }
+
+  const totalTasks = Object.values(data.pillars).reduce((sum, pillar) => 
+    sum + pillar.project_tasks.length + pillar.goal_tasks.length + 
+    pillar.important_tasks.length + pillar.misc_tasks.length, 0
+  );
+
+  return (
+    <div style={{ padding: '20px' }}>
+      {/* Header with View Toggle */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '20px',
+        padding: '16px',
+        backgroundColor: '#f3f4f6',
+        borderRadius: '8px'
+      }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#1f2937' }}>
+            📅 Upcoming Tasks
+          </h2>
+          <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
+            {formatDate(data.start_date)} - {formatDate(data.end_date)} • {totalTasks} tasks
+          </p>
+        </div>
+        
+        {data.available_months.length > 0 && (
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              onClick={() => {
+                setView('week');
+                setSelectedMonth(null);
+              }}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                backgroundColor: view === 'week' ? '#3b82f6' : '#e5e7eb',
+                color: view === 'week' ? '#fff' : '#374151',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              📆 Next Week
+            </button>
+            <button
+              onClick={() => {
+                setView('month');
+                setSelectedMonth(null);
+              }}
+              style={{
+                padding: '8px 16px',
+                fontSize: '14px',
+                backgroundColor: view === 'month' ? '#3b82f6' : '#e5e7eb',
+                color: view === 'month' ? '#fff' : '#374151',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontWeight: '500'
+              }}
+            >
+              📅 Next Month
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Month Selector (only show in month view) */}
+      {view === 'month' && data.available_months.length > 0 && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '12px',
+          backgroundColor: '#f9fafb',
+          borderRadius: '8px',
+          border: '1px solid #e5e7eb'
+        }}>
+          <h4 style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '600', color: '#374151' }}>
+            📊 Available Months
+          </h4>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {data.available_months.map(month => (
+              <button
+                key={`${month.year}-${month.month}`}
+                onClick={() => setSelectedMonth({ year: month.year, month: month.month })}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '13px',
+                  backgroundColor: 
+                    selectedMonth?.year === month.year && selectedMonth?.month === month.month
+                      ? '#3b82f6'
+                      : '#fff',
+                  color:
+                    selectedMonth?.year === month.year && selectedMonth?.month === month.month
+                      ? '#fff'
+                      : '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                {month.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {totalTasks === 0 && (
+        <div style={{
+          padding: '40px',
+          textAlign: 'center',
+          backgroundColor: '#f9fafb',
+          borderRadius: '8px',
+          border: '2px dashed #d1d5db'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
+          <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600', color: '#374151' }}>
+            No Upcoming Tasks
+          </h3>
+          <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>
+            You're all caught up for this period!
+          </p>
+        </div>
+      )}
+
+      {/* Tasks by Pillar */}
+      {Object.entries(data.pillars).map(([pillarName, pillarData]) => {
+        const pillarColor = PILLAR_COLORS[pillarName] || '#6b7280';
+        const pillarTotal = 
+          pillarData.project_tasks.length +
+          pillarData.goal_tasks.length +
+          pillarData.important_tasks.length +
+          pillarData.misc_tasks.length;
+
+        return (
+          <div
+            key={pillarName}
+            style={{
+              marginBottom: '24px',
+              border: `2px solid ${pillarColor}`,
+              borderRadius: '8px',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Pillar Header */}
+            <div style={{
+              padding: '14px 16px',
+              backgroundColor: pillarColor,
+              color: '#fff'
+            }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
+                {pillarName} ({pillarTotal} {pillarTotal === 1 ? 'task' : 'tasks'})
+              </h3>
+            </div>
+
+            {/* Task Sections */}
+            <div style={{ padding: '16px' }}>
+              {renderTaskSection('Project Tasks', pillarData.project_tasks, '📂', pillarColor)}
+              {renderTaskSection('Goal Tasks', pillarData.goal_tasks, '🎯', pillarColor)}
+              {renderTaskSection('Important Tasks', pillarData.important_tasks, '⭐', pillarColor)}
+              {renderTaskSection('Misc Tasks', pillarData.misc_tasks, '📝', pillarColor)}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

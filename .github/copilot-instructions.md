@@ -7,19 +7,21 @@ MyTimeManager is a time and task management application built on the **CANI (Con
 ## Architecture
 
 ### Tech Stack
-- **Backend**: FastAPI 0.104.1 + SQLAlchemy 2.0.23 + SQLite at `backend/database/mytimemanager.db`
+- **Backend**: FastAPI 0.104.1 + SQLAlchemy 2.0.23 + SQLite
 - **Frontend**: React 18.2 + TypeScript 5.3.3 + Vite 5.0.8
-- **Ports**: Backend on 8000, Frontend on 3000
-- **Database**: SQLite (easily migrates to PostgreSQL/MySQL via `backend/app/database/config.py`)
+- **Ports**: Backend 8000, Frontend 3000
+- **Database**: SQLite at `backend/database/mytimemanager.db` (easily migrates to PostgreSQL/MySQL via `backend/app/database/config.py`)
 
 ### Critical File Locations
 ```
-backend/app/main.py              # Router registration - ALL routes must be added here
-backend/app/database/config.py   # DB session factory (get_db dependency)
-backend/app/services/            # Business logic (habit_service.py has streak calculations)
+backend/app/main.py              # Router registration - ALL routes must be added here (lines 70-105)
+backend/app/database/config.py   # DB session factory (get_db dependency injection)
+backend/app/services/            # Business logic layer (25 service files - stateless @staticmethod pattern)
+backend/app/routes/              # API endpoints (30+ routers - import models for relationship resolution)
+backend/app/models/models.py     # SQLAlchemy models (must import in main.py before routes)
 frontend/src/contexts/           # Global state (TaskContext, TimeEntriesContext, UserPreferencesProvider)
-frontend/src/App.tsx             # Context providers wrap all routes
-backend/migrations/              # SQL migrations (numbered .sql/.py, sequential execution)
+frontend/src/App.tsx             # Context providers wrap all routes (order matters!)
+backend/migrations/              # Database migrations (NNN_*.sql or add_*.py)
 backend/database/mytimemanager.db # SQLite database (backup at ~/mytimemanager_backups/)
 ```
 
@@ -83,7 +85,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Frontend
+# Frontend  
 cd frontend
 npm install
 ```
@@ -95,8 +97,8 @@ python recalculate_summaries.py  # Recalculates daily summaries (run after bulk 
 
 # Apply migrations (ALWAYS backup first)
 cd backend/migrations
-python add_*.py             # Python migrations
-sqlite3 ../database/mytimemanager.db < 001_*.sql  # SQL migrations
+python 019_add_priority_to_tasks.py     # Python migrations (numbered NNN_*.py)
+sqlite3 ../database/mytimemanager.db < 001_add_na_marked_at.sql  # SQL migrations (numbered NNN_*.sql)
 
 # Restore from backup
 ./restore_database.sh       # Interactive restore from ~/mytimemanager_backups/
@@ -104,9 +106,19 @@ sqlite3 ../database/mytimemanager.db < 001_*.sql  # SQL migrations
 
 ### Testing
 - **Backend**: `cd backend && pytest` (tests in `backend/tests/`)
-- **API**: http://localhost:8000/docs (Swagger UI - test endpoints live)
-- **Quick validation**: See `QUICK_TEST_CHECKLIST.md` for regression tests
-- **No frontend tests yet** - manual testing via DevTools console
+- **API**: http://localhost:8000/docs (Swagger UI - interactive testing)
+- **Quick validation**: `QUICK_TEST_CHECKLIST.md` for regression tests
+- **No frontend tests** - manual testing via DevTools console
+
+### Project Scripts
+```bash
+# Root directory contains many helper scripts
+./backup_database.sh, ./restore_database.sh   # Database management
+./start_*.sh                                  # App startup scripts
+./recalculate_summaries.py                   # Recalc daily summaries
+./add_daily_tasks.py, ./add_missing_tasks.py # Data utilities
+./apply_migration_*.py                       # Migration helpers
+```
 
 ## Critical Implementation Patterns
 
@@ -181,14 +193,15 @@ Business logic lives in `backend/app/services/` NOT in route handlers. Each enti
 
 ## Common Pitfalls
 
-1. **Missing Router Registration**: New routes in `app/routes/` won't work until added to `main.py` includes (see lines 70-95 for all router imports/registrations)
+1. **Missing Router Registration**: New routes in `app/routes/` won't work until added to `main.py` includes - check lines 70-105 in `backend/app/main.py` for pattern
 2. **Context Bypass**: Don't call API directly from components - use `useTaskContext()` or `useTimeEntriesContext()` to leverage caching/state sync
-3. **Incomplete Multi-Tab Completion**: When completing tasks in monitoring tabs, must call BOTH task endpoint + status endpoint
-4. **Migration Without Backup**: Database has no WAL mode - corruption requires restore from backup
+3. **Incomplete Multi-Tab Completion**: When completing tasks in monitoring tabs, must call BOTH task endpoint + status endpoint (see TASK_LIFECYCLE_DOCUMENTATION.md)
+4. **Migration Without Backup**: SQLite has no WAL mode - corruption requires restore from `~/mytimemanager_backups/`
 5. **Hardcoded 24-Hour Logic**: System assumes three 8-hour pillars (never hardcode 24 hours)
 6. **Task Without Frequency**: `follow_up_frequency` is required - determines home tab visibility
-7. **Service Layer Bypass**: Don't put business logic in routes - use existing service classes or create new ones in `backend/app/services/`
+7. **Service Layer Bypass**: Don't put business logic in routes - use existing service classes in `backend/app/services/` (25 service files with @staticmethod pattern)
 8. **Direct Session Creation**: Never `Session()` - always use `db: Session = Depends(get_db)` for automatic transaction management
+9. **Forgetting to Import Models**: Must import all models in `main.py` before routes to prevent relationship resolution errors (see lines 22-23)
 
 ## UI/UX Standards
 
@@ -220,7 +233,7 @@ Business logic lives in `backend/app/services/` NOT in route handlers. Each enti
 
 When creating database migrations:
 1. **Always backup first**: `./backup_database.sh`
-2. **Name consistently**: Python migrations use `add_*.py` (e.g., `add_priority_to_tasks.py`), SQL uses `NNN_description.sql` (e.g., `001_add_na_marked_at.sql`)
+2. **Name consistently**: Python migrations use numbered format `NNN_description.py` (e.g., `019_add_priority_to_tasks.py`), SQL uses `NNN_description.sql` (e.g., `001_add_na_marked_at.sql`)
 3. **Migration pattern** (Python):
 ```python
 import sqlite3
@@ -246,8 +259,9 @@ def run_migration():
 if __name__ == "__main__":
     run_migration()
 ```
-4. **Apply**: `cd backend/migrations && python add_new_field.py`
+4. **Apply**: `cd backend/migrations && python 019_add_priority_to_tasks.py`
 5. **Verify**: Check http://localhost:8000/docs that new fields appear in schemas
 6. **Run tests**: `cd backend && pytest`
+7. **Update models**: Add new fields to `backend/app/models/models.py` and corresponding Pydantic schemas
 
 When adding features, mimic existing patterns (e.g., new time tab → copy `backend/app/routes/daily_time.py` structure).

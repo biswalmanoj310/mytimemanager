@@ -17,8 +17,9 @@ import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import ImportantTasks from './ImportantTasks';
+import UpcomingTasks from './UpcomingTasks';
 
-type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
+type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'upcoming' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
 // Helper functions for task type display
 const formatTaskTarget = (task: Task, showPeriod: boolean = false, showAvgPerDay: boolean = false): React.ReactNode => {
@@ -100,7 +101,7 @@ export default function Tasks() {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
     if (tabParam) {
-      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
+      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'upcoming', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
       if (validTabs.includes(tabParam as TabType)) {
         return tabParam as TabType;
       }
@@ -1185,7 +1186,7 @@ export default function Tasks() {
 
     // Set active tab if provided (when URL changes)
     if (tabParam) {
-      const validTabs: TabType[] = ['now', 'today', 'daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
+      const validTabs: TabType[] = ['now', 'today', 'daily', 'weekly', 'monthly', 'upcoming', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
       if (validTabs.includes(tabParam as TabType)) {
         setActiveTab(tabParam as TabType);
       }
@@ -5118,6 +5119,7 @@ export default function Tasks() {
     { key: 'daily', label: 'Daily' },
     { key: 'weekly', label: 'Weekly' },
     { key: 'monthly', label: 'Monthly' },
+    { key: 'upcoming', label: 'Upcoming' },
     { key: 'quarterly', label: 'Quarterly' },
     { key: 'yearly', label: 'Yearly' },
     { key: 'onetime', label: 'Important Tasks' },
@@ -5867,6 +5869,48 @@ export default function Tasks() {
     );
   };
 
+  // Upcoming tab - separate component
+  if (activeTab === 'upcoming') {
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
+            ➕ Add Task
+          </button>
+        </header>
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="container-fluid">
+          <UpcomingTasks />
+        </div>
+        <TaskForm
+          isOpen={isTaskFormOpen}
+          taskId={selectedTaskId || undefined}
+          onClose={() => setIsTaskFormOpen(false)}
+          onSuccess={async () => {
+            await loadTasks();
+            setIsTaskFormOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (activeTab === 'yearly') {
     return (
       <div className="tasks-page">
@@ -5937,6 +5981,11 @@ export default function Tasks() {
       </div>
     );
   };
+
+  // Upcoming tab - Shows future tasks grouped by pillar
+  if (activeTab === 'upcoming') {
+    return <UpcomingTasks />;
+  }
 
   // NOW tab - First tab showing what needs attention right now
   if (activeTab === 'now') {
