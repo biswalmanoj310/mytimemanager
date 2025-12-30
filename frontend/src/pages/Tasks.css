@@ -1745,25 +1745,30 @@ input[type="number"].hour-input {
 }
 
 .projects-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--spacing-xl);
-  margin-top: var(--spacing-xl);
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px;
+  margin-top: var(--spacing-md);
+  width: 100% !important;
+  max-width: none !important;
 }
 
 .project-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-xl);
-  padding: var(--spacing-xl);
-  box-shadow: var(--shadow-card);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: #fffef0;
+  border: 1px solid #e5e3d0;
+  border-radius: 8px;
+  padding: 16px 24px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  transition: all 0.2s;
   cursor: pointer;
   position: relative;
-  overflow: hidden;
-  min-height: 280px;
-  display: flex;
-  flex-direction: column;
+  overflow: visible;
+  min-height: 110px !important;
+  max-height: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px;
+  width: 100% !important;
 }
 
 .project-card::before {
@@ -1788,36 +1793,16 @@ input[type="number"].hour-input {
   opacity: 1;
 }
 
-/* Colorful Project Cards - Cycle through colors */
-.project-card:nth-child(6n+1) {
-  background: linear-gradient(135deg, var(--card-blue-light) 0%, var(--bg-primary) 100%);
-}
-
-.project-card:nth-child(6n+2) {
-  background: linear-gradient(135deg, var(--card-green-light) 0%, var(--bg-primary) 100%);
-}
-
-.project-card:nth-child(6n+3) {
-  background: linear-gradient(135deg, var(--card-orange-light) 0%, var(--bg-primary) 100%);
-}
-
-.project-card:nth-child(6n+4) {
-  background: linear-gradient(135deg, var(--card-purple-light) 0%, var(--bg-primary) 100%);
-}
-
-.project-card:nth-child(6n+5) {
-  background: linear-gradient(135deg, var(--card-pink-light) 0%, var(--bg-primary) 100%);
-}
-
-.project-card:nth-child(6n+6) {
-  background: linear-gradient(135deg, var(--card-yellow-light) 0%, var(--bg-primary) 100%);
+/* Uniform light yellow background for all project cards */
+.project-card {
+  background: #fffef0 !important;
 }
 
 /* Overdue project styling */
 .project-card.project-overdue,
 .project-card.project-has-overdue {
   border-left: 6px solid var(--color-danger);
-  background: linear-gradient(135deg, #FFF5F5 0%, var(--bg-primary) 100%) !important;
+  background: #fff5f5 !important;
   box-shadow: 0 4px 20px rgba(209, 52, 56, 0.15);
 }
 

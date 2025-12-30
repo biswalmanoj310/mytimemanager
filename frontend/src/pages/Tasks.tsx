@@ -6717,218 +6717,194 @@ export default function Tasks() {
                               {inProgressProjects.map((project, index) => {
                     const hasOverdue = hasOverdueTasks(project.id);
                     const cardClass = getProjectCardClass(project);
-                    const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
                     
                     return (
                       <div 
                         key={project.id} 
-                        className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                        className={`project-card ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
                         onClick={(e) => {
-                          // Don't navigate if clicking on buttons or inputs
                           const target = e.target as HTMLElement;
-                          if (target.closest('button, input')) {
-                            return;
-                          }
+                          if (target.closest('button, input')) return;
                           handleSelectProject(project);
                         }}
-                        style={{ cursor: 'pointer' }}
+                        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '16px', padding: '20px 24px', minHeight: '140px' }}
                       >
-                        {/* Vibrant Header with Icon and Status */}
-                        <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
-                          <div className="project-icon-box">
-                            <span className="project-icon">📊</span>
-                          </div>
-                          <div className="project-title-section">
-                            <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
-                            <div className="project-status-indicator">
-                              <span className="status-dot"></span>
-                              <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress Box with Task and Milestone Progress */}
-                        <div className="progress-box-large">
-                          <div className="progress-box-header">
-                            <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
-                            <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
-                          </div>
-                          <div className="progress-bar-thick">
-                            <div 
-                              className="progress-fill-thick"
-                              style={{ width: `${project.progress.progress_percentage}%` }}
-                            ></div>
-                          </div>
-                          
-                          {/* Milestone Progress Bar - Always show for alignment */}
-                          <div className="milestone-progress-section">
-                            <div className="milestone-progress-header">
-                              <span className="milestone-progress-label">Milestones</span>
-                              <span className="milestone-progress-count">
-                                {project.milestone_progress ? 
-                                  `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
-                                  '0/0'}
-                              </span>
-                            </div>
-                            <div className="milestone-progress-bar">
-                              <div 
-                                className="milestone-progress-bar-fill"
-                                style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
-                                  `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
-                                  '0%' }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Date Section with Editable Calendars */}
-                        <div className="date-section-vibrant">
-                          <div className="date-row">
-                            <div className="date-box">
-                              <label className="date-label-yellow">Start Date</label>
-                              <input
-                                type="date"
-                                className="date-input-styled"
-                                value={project.start_date || ''}
-                                onChange={(e) => {
-                                  // Update start date
-                                  handleUpdateProject(project.id, { start_date: e.target.value });
-                                }}
-                              />
-                            </div>
-                            <div className="date-box">
-                              <label className="date-label-yellow">End Date</label>
-                              <input
-                                type="date"
-                                className="date-input-styled"
-                                value={project.target_completion_date || ''}
-                                onChange={(e) => {
-                                  // Update end date
-                                  handleUpdateProject(project.id, { target_completion_date: e.target.value });
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Days Left for Project & Next Milestone */}
-                        <div className="info-row-split">
-                          {project.target_completion_date && (() => {
-                            const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                            const isOverdue = daysLeft < 0;
-                            return (
-                              <div className="days-left-box">
-                                <div className="days-left-number">{Math.abs(daysLeft)}</div>
-                                <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
-                                <div className="days-left-sublabel">for project</div>
+                        {/* Top Row */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '20px' }}>
+                          {/* Left: Icon, Title & Description */}
+                          <div style={{ display: 'flex', gap: '12px', minWidth: '320px', maxWidth: '320px' }}>
+                            <span style={{ fontSize: '36px', lineHeight: 1 }}>📊</span>
+                            <div style={{ flex: 1 }}>
+                              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                              <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
+                                {project.is_completed ? '✅ Completed' : '▶️ ' + project.status.replace('_', ' ')}
                               </div>
-                            );
-                          })()}
-                          
-                          {/* Next Milestone Days Left - Always show for alignment */}
-                          {(() => {
-                            // Find next incomplete milestone
-                            const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                              .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
-                            
-                            if (nextMilestone) {
-                              const milestoneDate = parseDateString(nextMilestone.target_date);
-                              const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                              const isOverdue = milestoneDaysLeft < 0;
-                              const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                              
+                              {project.description && (
+                                <div style={{ fontSize: '11px', color: '#a0aec0', marginTop: '6px', lineHeight: 1.4, maxHeight: '32px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                                  {project.description}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Center: Progress Bars */}
+                          <div style={{ flex: 1, minWidth: '250px' }}>
+                            {/* Task Progress */}
+                            <div style={{ marginBottom: '12px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px', fontWeight: '500' }}>
+                                <span style={{ color: '#4a5568' }}>📋 Tasks</span>
+                                <span style={{ color: '#2d3748' }}>{project.progress.completed_tasks}/{project.progress.total_tasks} ({project.progress.progress_percentage}%)</span>
+                              </div>
+                              <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ width: `${project.progress.progress_percentage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s' }} />
+                              </div>
+                            </div>
+                            {/* Milestone Progress */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px', fontWeight: '500' }}>
+                                <span style={{ color: '#4a5568' }}>🎯 Milestones</span>
+                                <span style={{ color: '#2d3748' }}>
+                                  {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
+                                  {project.milestone_progress && project.milestone_progress.total_milestones > 0 && (
+                                    <> ({Math.round((project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100)}%)</>
+                                  )}
+                                </span>
+                              </div>
+                              <div style={{ width: '100%', height: '8px', backgroundColor: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                                <div style={{ 
+                                  width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : '0%',
+                                  height: '100%',
+                                  backgroundColor: '#3b82f6',
+                                  transition: 'width 0.3s'
+                                }} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right: Dates & Days Left */}
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '12px' }}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
+                                <input
+                                  type="date"
+                                  value={project.start_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { start_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
+                                <input
+                                  type="date"
+                                  value={project.target_completion_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { target_completion_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                            </div>
+                            {project.target_completion_date && (() => {
+                              const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                              const isOverdue = daysLeft < 0;
                               return (
-                                <div className="milestone-deadline-box" title={nextMilestone.name}>
-                                  <div className="milestone-deadline-icon">🎯</div>
-                                  <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
-                                  <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
-                                  <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
-                                  <div className="milestone-deadline-name">{nextMilestone.name}</div>
+                                <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                  <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
                                 </div>
                               );
-                            } else {
-                              // No milestones - show placeholder for alignment
-                              return (
-                                <div className="milestone-deadline-box" title="No milestones set">
-                                  <div className="milestone-deadline-icon">🎯</div>
-                                  <div className="milestone-deadline-number">-</div>
-                                  <div className="milestone-deadline-label">NO MILESTONE</div>
-                                  <div className="milestone-deadline-date">set milestones below</div>
-                                </div>
-                              );
-                            }
-                          })()}
+                            })()}
+                          </div>
                         </div>
-                      
-                      <div className="project-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {/* First Row: View Tasks + Edit */}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            className="btn btn-primary btn-view-tasks"
-                            onClick={() => handleSelectProject(project)}
-                            style={{ flex: 1 }}
-                          >
-                            View Tasks
-                          </button>
-                          <button 
-                            className="btn btn-secondary"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingProject(project);
-                              setShowAddProjectModal(true);
-                            }}
-                            title="Edit Project"
-                            style={{ flex: 1 }}
-                          >
-                            ✏️ Edit
-                          </button>
+
+                        {/* Bottom Row: Stats & Next Milestone */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+                          {/* Left: Quick Stats */}
+                          <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>⏳</span>
+                              <span style={{ color: '#718096' }}>Active Tasks:</span>
+                              <span style={{ fontWeight: '600', color: '#2d3748' }}>{project.progress.total_tasks - project.progress.completed_tasks}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>✅</span>
+                              <span style={{ color: '#718096' }}>Completed:</span>
+                              <span style={{ fontWeight: '600', color: '#10b981' }}>{project.progress.completed_tasks}</span>
+                            </div>
+                            {(() => {
+                              const nextMilestone = project.milestones?.filter(m => !m.is_completed).sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
+                              if (nextMilestone) {
+                                const milestoneDate = parseDateString(nextMilestone.target_date);
+                                const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                const isOverdue = milestoneDaysLeft < 0;
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '14px' }}>🎯</span>
+                                    <span style={{ color: '#718096' }}>Next Milestone:</span>
+                                    <span style={{ fontWeight: '600', color: isOverdue ? '#dc2626' : '#3b82f6', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nextMilestone.name}>
+                                      {nextMilestone.name} ({Math.abs(milestoneDaysLeft)}d {isOverdue ? 'overdue' : 'left'})
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+
+                          {/* Right: Action Buttons */}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              className="btn btn-primary"
+                              onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              👁️ View
+                            </button>
+                            <button 
+                              className="btn btn-secondary"
+                              onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
+                              title="Edit Project"
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button 
+                              className="btn btn-info"
+                              onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
+                              title="Duplicate"
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              📋
+                            </button>
+                            <button 
+                              className="btn btn-danger"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              🗑️
+                            </button>
+                            {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
+                              <button 
+                                className="btn btn-success"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
+                                title="Complete"
+                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                              >
+                                ✓ Complete
+                              </button>
+                            )}
+                            {project.is_completed && (
+                              <button 
+                                className="btn btn-warning"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
+                                title="Reopen"
+                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                              >
+                                ↺ Reopen
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        
-                        {/* Second Row: Duplicate + Delete (with Complete/Reopen if needed) */}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            className="btn btn-info"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDuplicateProject(project.id);
-                            }}
-                            title="Duplicate this project with all its tasks and milestones"
-                            style={{ flex: 1 }}
-                          >
-                            📋 Duplicate
-                          </button>
-                          <button 
-                            className="btn btn-danger"
-                            onClick={() => handleDeleteProject(project.id)}
-                            style={{ flex: 1 }}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                        
-                        {/* Third Row: Complete/Reopen button (if applicable) */}
-                        {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
-                          <button 
-                            className="btn btn-success"
-                            onClick={() => handleToggleProjectComplete(project.id, true)}
-                            title="Mark project as completed"
-                            style={{ width: '100%' }}
-                          >
-                            ✓ Complete
-                          </button>
-                        )}
-                        {project.is_completed && (
-                          <button 
-                            className="btn btn-warning"
-                            onClick={() => handleToggleProjectComplete(project.id, false)}
-                            title="Reopen project"
-                            style={{ width: '100%' }}
-                          >
-                            ↺ Reopen
-                          </button>
-                        )}
                       </div>
-                    </div>
                     );
                   })}
                             </div>
@@ -6963,209 +6939,190 @@ export default function Tasks() {
                             </div>
                             <div className="projects-grid">
                               {notStartedProjects.map((project, index) => {
-                                const hasOverdue = hasOverdueTasks(project.id);
-                                const cardClass = getProjectCardClass(project);
-                                const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
-                                
-                                return (
-                                  <div 
-                                    key={project.id} 
-                                    className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
-                                    onClick={(e) => {
-                                      if ((e.target as HTMLElement).closest('button, input')) return;
-                                      handleSelectProject(project);
-                                    }}
-                                    style={{ cursor: 'pointer' }}
-                                  >
-                                    {/* Same card content as above */}
-                                    <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
-                                      <div className="project-icon-box">
-                                        <span className="project-icon">📊</span>
-                                      </div>
-                                      <div className="project-title-section">
-                                        <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
-                                        <div className="project-status-indicator">
-                                          <span className="status-dot"></span>
-                                          <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
-                                        </div>
-                                      </div>
-                                    </div>
+                    const hasOverdue = hasOverdueTasks(project.id);
+                    const cardClass = getProjectCardClass(project);
+                    
+                    return (
+                      <div 
+                        key={project.id} 
+                        className={`project-card ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest('button, input')) return;
+                          handleSelectProject(project);
+                        }}
+                        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 24px', minHeight: '110px' }}
+                      >
+                        {/* Top Row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                          {/* Left: Icon & Title */}
+                          <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
+                            <div style={{ flex: 1 }}>
+                              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                              <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
+                                {project.is_completed ? '✅ Completed' : '▶️ ' + project.status.replace('_', ' ')}
+                              </div>
+                            </div>
+                          </div>
 
-                                    <div className="progress-box-large">
-                                      <div className="progress-box-header">
-                                        <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
-                                        <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
-                                      </div>
-                                      <div className="progress-bar-thick">
-                                        <div 
-                                          className="progress-fill-thick"
-                                          style={{ width: `${project.progress.progress_percentage}%` }}
-                                        ></div>
-                                      </div>
-                                      
-                                      <div className="milestone-progress-section">
-                                        <div className="milestone-progress-header">
-                                          <span className="milestone-progress-label">Milestones</span>
-                                          <span className="milestone-progress-count">
-                                            {project.milestone_progress ? 
-                                              `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
-                                              '0/0'}
-                                          </span>
-                                        </div>
-                                        <div className="milestone-progress-bar">
-                                          <div 
-                                            className="milestone-progress-bar-fill"
-                                            style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
-                                              `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
-                                              '0%' }}
-                                          ></div>
-                                        </div>
-                                      </div>
-                                    </div>
+                          {/* Center: Progress Bars Side by Side */}
+                          <div style={{ flex: 1, display: 'flex', gap: '16px', alignItems: 'center' }}>
+                            {/* Task Progress */}
+                            <div style={{ flex: 1, minWidth: '160px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
+                                <span style={{ color: '#4a5568' }}>📋 Tasks</span>
+                                <span style={{ color: '#2d3748' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
+                              </div>
+                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${project.progress.progress_percentage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s' }} />
+                              </div>
+                            </div>
+                            {/* Milestone Progress */}
+                            <div style={{ flex: 1, minWidth: '160px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
+                                <span style={{ color: '#4a5568' }}>🎯 Milestones</span>
+                                <span style={{ color: '#2d3748' }}>
+                                  {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
+                                </span>
+                              </div>
+                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ 
+                                  width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : '0%',
+                                  height: '100%',
+                                  backgroundColor: '#3b82f6',
+                                  transition: 'width 0.3s'
+                                }} />
+                              </div>
+                            </div>
+                          </div>
 
-                                    <div className="date-section-vibrant">
-                                      <div className="date-row">
-                                        <div className="date-box">
-                                          <label className="date-label-yellow">Start Date</label>
-                                          <input
-                                            type="date"
-                                            className="date-input-styled"
-                                            value={project.start_date || ''}
-                                            onChange={(e) => {
-                                              handleUpdateProject(project.id, { start_date: e.target.value });
-                                            }}
-                                          />
-                                        </div>
-                                        <div className="date-box">
-                                          <label className="date-label-yellow">End Date</label>
-                                          <input
-                                            type="date"
-                                            className="date-input-styled"
-                                            value={project.target_completion_date || ''}
-                                            onChange={(e) => {
-                                              handleUpdateProject(project.id, { target_completion_date: e.target.value });
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div className="info-row-split">
-                                      {project.target_completion_date && (() => {
-                                        const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                        const isOverdue = daysLeft < 0;
-                                        return (
-                                          <div className="days-left-box">
-                                            <div className="days-left-number">{Math.abs(daysLeft)}</div>
-                                            <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
-                                            <div className="days-left-sublabel">for project</div>
-                                          </div>
-                                        );
-                                      })()}
-                                      
-                                      {(() => {
-                                        const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                                          .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
-                                        
-                                        if (nextMilestone) {
-                                          const milestoneDate = parseDateString(nextMilestone.target_date);
-                                          const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                          const isOverdue = milestoneDaysLeft < 0;
-                                          const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                                          
-                                          return (
-                                            <div className="milestone-deadline-box" title={nextMilestone.name}>
-                                              <div className="milestone-deadline-icon">🎯</div>
-                                              <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
-                                              <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
-                                              <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
-                                              <div className="milestone-deadline-name">{nextMilestone.name}</div>
-                                            </div>
-                                          );
-                                        } else {
-                                          return (
-                                            <div className="milestone-deadline-box" title="No milestones set">
-                                              <div className="milestone-deadline-icon">🎯</div>
-                                              <div className="milestone-deadline-number">-</div>
-                                              <div className="milestone-deadline-label">NO MILESTONE</div>
-                                              <div className="milestone-deadline-date">set milestones below</div>
-                                            </div>
-                                          );
-                                        }
-                                      })()}
-                                    </div>
-                                  
-                                  <div className="project-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {/* First Row: View Tasks + Edit */}
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                      <button 
-                                        className="btn btn-primary btn-view-tasks"
-                                        onClick={() => handleSelectProject(project)}
-                                        style={{ flex: 1 }}
-                                      >
-                                        View Tasks
-                                      </button>
-                                      <button 
-                                        className="btn btn-secondary"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingProject(project);
-                                          setShowAddProjectModal(true);
-                                        }}
-                                        title="Edit Project"
-                                        style={{ flex: 1 }}
-                                      >
-                                        ✏️ Edit
-                                      </button>
-                                    </div>
-                                    
-                                    {/* Second Row: Duplicate + Delete */}
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                      <button 
-                                        className="btn btn-info"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDuplicateProject(project.id);
-                                        }}
-                                        title="Duplicate this project with all its tasks and milestones"
-                                        style={{ flex: 1 }}
-                                      >
-                                        📋 Duplicate
-                                      </button>
-                                      <button 
-                                        className="btn btn-danger"
-                                        onClick={() => handleDeleteProject(project.id)}
-                                        style={{ flex: 1 }}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                    
-                                    {/* Third Row: Complete/Reopen button (if applicable) */}
-                                    {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
-                                      <button 
-                                        className="btn btn-success"
-                                        onClick={() => handleToggleProjectComplete(project.id, true)}
-                                        title="Mark project as completed"
-                                        style={{ width: '100%' }}
-                                      >
-                                        ✓ Complete
-                                      </button>
-                                    )}
-                                    {project.is_completed && (
-                                      <button 
-                                        className="btn btn-warning"
-                                        onClick={() => handleToggleProjectComplete(project.id, false)}
-                                        title="Reopen project"
-                                        style={{ width: '100%' }}
-                                      >
-                                        ↺ Reopen
-                                      </button>
-                                    )}
-                                  </div>
+                          {/* Right: Dates & Days Left */}
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '12px' }}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
+                                <input
+                                  type="date"
+                                  value={project.start_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { start_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
+                                <input
+                                  type="date"
+                                  value={project.target_completion_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { target_completion_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                            </div>
+                            {project.target_completion_date && (() => {
+                              const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                              const isOverdue = daysLeft < 0;
+                              return (
+                                <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                  <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
                                 </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Bottom Row: Stats & Next Milestone */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+                          {/* Left: Quick Stats */}
+                          <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>⏳</span>
+                              <span style={{ color: '#718096' }}>Active Tasks:</span>
+                              <span style={{ fontWeight: '600', color: '#2d3748' }}>{project.progress.total_tasks - project.progress.completed_tasks}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>✅</span>
+                              <span style={{ color: '#718096' }}>Completed:</span>
+                              <span style={{ fontWeight: '600', color: '#10b981' }}>{project.progress.completed_tasks}</span>
+                            </div>
+                            {(() => {
+                              const nextMilestone = project.milestones?.filter(m => !m.is_completed).sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
+                              if (nextMilestone) {
+                                const milestoneDate = parseDateString(nextMilestone.target_date);
+                                const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                const isOverdue = milestoneDaysLeft < 0;
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '14px' }}>🎯</span>
+                                    <span style={{ color: '#718096' }}>Next Milestone:</span>
+                                    <span style={{ fontWeight: '600', color: isOverdue ? '#dc2626' : '#3b82f6', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nextMilestone.name}>
+                                      {nextMilestone.name} ({Math.abs(milestoneDaysLeft)}d {isOverdue ? 'overdue' : 'left'})
+                                    </span>
+                                  </div>
                                 );
-                              })}
+                              }
+                              return null;
+                            })()}
+                          </div>
+
+                          {/* Right: Action Buttons */}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              className="btn btn-primary"
+                              onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              👁️ View
+                            </button>
+                            <button 
+                              className="btn btn-secondary"
+                              onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
+                              title="Edit Project"
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button 
+                              className="btn btn-info"
+                              onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
+                              title="Duplicate"
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              📋
+                            </button>
+                            <button 
+                              className="btn btn-danger"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              🗑️
+                            </button>
+                            {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
+                              <button 
+                                className="btn btn-success"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
+                                title="Complete"
+                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                              >
+                                ✓ Complete
+                              </button>
+                            )}
+                            {project.is_completed && (
+                              <button 
+                                className="btn btn-warning"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
+                                title="Reopen"
+                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                              >
+                                ↺ Reopen
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                             </div>
                           </div>
                         )}
@@ -7198,209 +7155,190 @@ export default function Tasks() {
                             </div>
                             <div className="projects-grid">
                               {completedProjects.map((project, index) => {
-                                const hasOverdue = hasOverdueTasks(project.id);
-                                const cardClass = getProjectCardClass(project);
-                                const colorClass = ['color-1', 'color-2', 'color-3', 'color-4', 'color-5', 'color-6', 'color-7'][index % 7];
-                                
-                                return (
-                                  <div 
-                                    key={project.id} 
-                                    className={`project-card widget-colorful ${colorClass} ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
-                                    onClick={(e) => {
-                                      if ((e.target as HTMLElement).closest('button, input')) return;
-                                      handleSelectProject(project);
-                                    }}
-                                    style={{ cursor: 'pointer' }}
-                                  >
-                                    {/* Same card content */}
-                                    <div className={`project-header-vibrant ${project.is_completed ? 'completed' : hasOverdue ? 'overdue' : 'active'}`}>
-                                      <div className="project-icon-box">
-                                        <span className="project-icon">📊</span>
-                                      </div>
-                                      <div className="project-title-section">
-                                        <h3 className="project-title-bold" title={project.name}>{project.name}</h3>
-                                        <div className="project-status-indicator">
-                                          <span className="status-dot"></span>
-                                          <span className="status-text">{project.is_completed ? 'Completed' : project.status.replace('_', ' ')}</span>
-                                        </div>
-                                      </div>
-                                    </div>
+                    const hasOverdue = hasOverdueTasks(project.id);
+                    const cardClass = getProjectCardClass(project);
+                    
+                    return (
+                      <div 
+                        key={project.id} 
+                        className={`project-card ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest('button, input')) return;
+                          handleSelectProject(project);
+                        }}
+                        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 24px', minHeight: '110px' }}
+                      >
+                        {/* Top Row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                          {/* Left: Icon & Title */}
+                          <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
+                            <div style={{ flex: 1 }}>
+                              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                              <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
+                                {project.is_completed ? '✅ Completed' : '▶️ ' + project.status.replace('_', ' ')}
+                              </div>
+                            </div>
+                          </div>
 
-                                    <div className="progress-box-large">
-                                      <div className="progress-box-header">
-                                        <span className="progress-task-count">{project.progress.completed_tasks} / {project.progress.total_tasks} Tasks</span>
-                                        <span className="progress-percentage-large">{project.progress.progress_percentage}%</span>
-                                      </div>
-                                      <div className="progress-bar-thick">
-                                        <div 
-                                          className="progress-fill-thick"
-                                          style={{ width: `${project.progress.progress_percentage}%` }}
-                                        ></div>
-                                      </div>
-                                      
-                                      <div className="milestone-progress-section">
-                                        <div className="milestone-progress-header">
-                                          <span className="milestone-progress-label">Milestones</span>
-                                          <span className="milestone-progress-count">
-                                            {project.milestone_progress ? 
-                                              `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : 
-                                              '0/0'}
-                                          </span>
-                                        </div>
-                                        <div className="milestone-progress-bar">
-                                          <div 
-                                            className="milestone-progress-bar-fill"
-                                            style={{ width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? 
-                                              `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : 
-                                              '0%' }}
-                                          ></div>
-                                        </div>
-                                      </div>
-                                    </div>
+                          {/* Center: Progress Bars Side by Side */}
+                          <div style={{ flex: 1, display: 'flex', gap: '16px', alignItems: 'center' }}>
+                            {/* Task Progress */}
+                            <div style={{ flex: 1, minWidth: '160px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
+                                <span style={{ color: '#4a5568' }}>📋 Tasks</span>
+                                <span style={{ color: '#2d3748' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
+                              </div>
+                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${project.progress.progress_percentage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s' }} />
+                              </div>
+                            </div>
+                            {/* Milestone Progress */}
+                            <div style={{ flex: 1, minWidth: '160px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '11px', fontWeight: '500' }}>
+                                <span style={{ color: '#4a5568' }}>🎯 Milestones</span>
+                                <span style={{ color: '#2d3748' }}>
+                                  {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
+                                </span>
+                              </div>
+                              <div style={{ width: '100%', height: '6px', backgroundColor: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ 
+                                  width: project.milestone_progress && project.milestone_progress.total_milestones > 0 ? `${(project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100}%` : '0%',
+                                  height: '100%',
+                                  backgroundColor: '#3b82f6',
+                                  transition: 'width 0.3s'
+                                }} />
+                              </div>
+                            </div>
+                          </div>
 
-                                    <div className="date-section-vibrant">
-                                      <div className="date-row">
-                                        <div className="date-box">
-                                          <label className="date-label-yellow">Start Date</label>
-                                          <input
-                                            type="date"
-                                            className="date-input-styled"
-                                            value={project.start_date || ''}
-                                            onChange={(e) => {
-                                              handleUpdateProject(project.id, { start_date: e.target.value });
-                                            }}
-                                          />
-                                        </div>
-                                        <div className="date-box">
-                                          <label className="date-label-yellow">End Date</label>
-                                          <input
-                                            type="date"
-                                            className="date-input-styled"
-                                            value={project.target_completion_date || ''}
-                                            onChange={(e) => {
-                                              handleUpdateProject(project.id, { target_completion_date: e.target.value });
-                                            }}
-                                          />
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div className="info-row-split">
-                                      {project.target_completion_date && (() => {
-                                        const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                        const isOverdue = daysLeft < 0;
-                                        return (
-                                          <div className="days-left-box">
-                                            <div className="days-left-number">{Math.abs(daysLeft)}</div>
-                                            <div className="days-left-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
-                                            <div className="days-left-sublabel">for project</div>
-                                          </div>
-                                        );
-                                      })()}
-                                      
-                                      {(() => {
-                                        const nextMilestone = project.milestones?.filter(m => !m.is_completed)
-                                          .sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
-                                        
-                                        if (nextMilestone) {
-                                          const milestoneDate = parseDateString(nextMilestone.target_date);
-                                          const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                          const isOverdue = milestoneDaysLeft < 0;
-                                          const formattedDate = milestoneDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                                          
-                                          return (
-                                            <div className="milestone-deadline-box" title={nextMilestone.name}>
-                                              <div className="milestone-deadline-icon">🎯</div>
-                                              <div className="milestone-deadline-number">{Math.abs(milestoneDaysLeft)}</div>
-                                              <div className="milestone-deadline-label">{isOverdue ? 'OVERDUE' : 'DAYS LEFT'}</div>
-                                              <div className="milestone-deadline-date">next milestone: {formattedDate}</div>
-                                              <div className="milestone-deadline-name">{nextMilestone.name}</div>
-                                            </div>
-                                          );
-                                        } else {
-                                          return (
-                                            <div className="milestone-deadline-box" title="No milestones set">
-                                              <div className="milestone-deadline-icon">🎯</div>
-                                              <div className="milestone-deadline-number">-</div>
-                                              <div className="milestone-deadline-label">NO MILESTONE</div>
-                                              <div className="milestone-deadline-date">set milestones below</div>
-                                            </div>
-                                          );
-                                        }
-                                      })()}
-                                    </div>
-                                  
-                                  <div className="project-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    {/* First Row: View Tasks + Edit */}
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                      <button 
-                                        className="btn btn-primary btn-view-tasks"
-                                        onClick={() => handleSelectProject(project)}
-                                        style={{ flex: 1 }}
-                                      >
-                                        View Tasks
-                                      </button>
-                                      <button 
-                                        className="btn btn-secondary"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setEditingProject(project);
-                                          setShowAddProjectModal(true);
-                                        }}
-                                        title="Edit Project"
-                                        style={{ flex: 1 }}
-                                      >
-                                        ✏️ Edit
-                                      </button>
-                                    </div>
-                                    
-                                    {/* Second Row: Duplicate + Delete */}
-                                    <div style={{ display: 'flex', gap: '8px' }}>
-                                      <button 
-                                        className="btn btn-info"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDuplicateProject(project.id);
-                                        }}
-                                        title="Duplicate this project with all its tasks and milestones"
-                                        style={{ flex: 1 }}
-                                      >
-                                        📋 Duplicate
-                                      </button>
-                                      <button 
-                                        className="btn btn-danger"
-                                        onClick={() => handleDeleteProject(project.id)}
-                                        style={{ flex: 1 }}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                    
-                                    {/* Third Row: Complete/Reopen button (if applicable) */}
-                                    {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
-                                      <button 
-                                        className="btn btn-success"
-                                        onClick={() => handleToggleProjectComplete(project.id, true)}
-                                        title="Mark project as completed"
-                                        style={{ width: '100%' }}
-                                      >
-                                        ✓ Complete
-                                      </button>
-                                    )}
-                                    {project.is_completed && (
-                                      <button 
-                                        className="btn btn-warning"
-                                        onClick={() => handleToggleProjectComplete(project.id, false)}
-                                        title="Reopen project"
-                                        style={{ width: '100%' }}
-                                      >
-                                        ↺ Reopen
-                                      </button>
-                                    )}
-                                  </div>
+                          {/* Right: Dates & Days Left */}
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '12px' }}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
+                                <input
+                                  type="date"
+                                  value={project.start_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { start_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
+                                <input
+                                  type="date"
+                                  value={project.target_completion_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { target_completion_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                            </div>
+                            {project.target_completion_date && (() => {
+                              const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                              const isOverdue = daysLeft < 0;
+                              return (
+                                <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                  <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
                                 </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Bottom Row: Stats & Next Milestone */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+                          {/* Left: Quick Stats */}
+                          <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>⏳</span>
+                              <span style={{ color: '#718096' }}>Active Tasks:</span>
+                              <span style={{ fontWeight: '600', color: '#2d3748' }}>{project.progress.total_tasks - project.progress.completed_tasks}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>✅</span>
+                              <span style={{ color: '#718096' }}>Completed:</span>
+                              <span style={{ fontWeight: '600', color: '#10b981' }}>{project.progress.completed_tasks}</span>
+                            </div>
+                            {(() => {
+                              const nextMilestone = project.milestones?.filter(m => !m.is_completed).sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
+                              if (nextMilestone) {
+                                const milestoneDate = parseDateString(nextMilestone.target_date);
+                                const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                const isOverdue = milestoneDaysLeft < 0;
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '14px' }}>🎯</span>
+                                    <span style={{ color: '#718096' }}>Next Milestone:</span>
+                                    <span style={{ fontWeight: '600', color: isOverdue ? '#dc2626' : '#3b82f6', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nextMilestone.name}>
+                                      {nextMilestone.name} ({Math.abs(milestoneDaysLeft)}d {isOverdue ? 'overdue' : 'left'})
+                                    </span>
+                                  </div>
                                 );
-                              })}
+                              }
+                              return null;
+                            })()}
+                          </div>
+
+                          {/* Right: Action Buttons */}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              className="btn btn-primary"
+                              onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              👁️ View
+                            </button>
+                            <button 
+                              className="btn btn-secondary"
+                              onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
+                              title="Edit Project"
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button 
+                              className="btn btn-info"
+                              onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
+                              title="Duplicate"
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              📋
+                            </button>
+                            <button 
+                              className="btn btn-danger"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                              style={{ padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              🗑️
+                            </button>
+                            {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
+                              <button 
+                                className="btn btn-success"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
+                                title="Complete"
+                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                              >
+                                ✓ Complete
+                              </button>
+                            )}
+                            {project.is_completed && (
+                              <button 
+                                className="btn btn-warning"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
+                                title="Reopen"
+                                style={{ padding: '8px 14px', fontSize: '13px' }}
+                              >
+                                ↺ Reopen
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                             </div>
                           </div>
                         )}
