@@ -1042,495 +1042,185 @@ export default function Goals() {
     
     const linkedTasksTotal = goal.stats?.linked_tasks?.total || 0;
     
-    // Dynamic background colors for each card
-    const cardColors = [
-      { bg: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)', border: '#ec4899' }, // Pink
-      { bg: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', border: '#8b5cf6' }, // Purple
-      { bg: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', border: '#10b981' }, // Green
-      { bg: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', border: '#f59e0b' }, // Yellow
-      { bg: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', border: '#6366f1' }, // Indigo
-      { bg: 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)', border: '#f97316' }, // Orange
-      { bg: 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)', border: '#14b8a6' }, // Teal
-    ];
-    const cardColor = cardColors[cardIndex % cardColors.length];
+    const handleViewGoalDetails = (goal: LifeGoalData) => {
+      setSelectedGoal(goal);
+      loadGoalDetails(goal.id);
+      navigate(`/goals?goal=${goal.id}`);
+    };
+
+    const handleEditGoal = (goal: LifeGoalData) => {
+      setEditingGoal(goal);
+      setShowAddGoalModal(true);
+    };
+
+    const handleDeleteGoal = async (goalId: number) => {
+      if (window.confirm(`Are you sure you want to delete "${goal.name}"?`)) {
+        try {
+          await api.delete(`/api/life-goals/${goalId}`);
+          await loadLifeGoals();
+        } catch (err) {
+          console.error('Error deleting goal:', err);
+        }
+      }
+    };
 
     return (
       <div
         key={goal.id}
         className={`goal-card status-${goal.status.replace('_', '-')}`}
-        style={{ 
-          position: 'relative',
-          width: '360px',
-          flexShrink: 0,
-          border: `4px solid ${cardColor.border}`,
-          background: cardColor.bg,
-          padding: '16px',
-          boxShadow: '0 8px 16px rgba(0,0,0,0.15)',
-          borderRadius: '16px'
-        }}
+        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 24px', minHeight: '110px' }}
+        onClick={() => handleViewGoalDetails(goal)}
       >
-        {/* Inner container with light background */}
-        <div style={{
-          background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
-          padding: '12px',
-          borderRadius: '12px',
-          marginBottom: '12px',
-          border: '2px solid #bae6fd'
-        }}>
-          {/* Goal Name Row with Icon */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            padding: '14px 16px',
-            background: '#1e40af',
-            borderRadius: '10px',
-            marginBottom: '10px'
-          }}>
-            <span style={{ fontSize: '28px' }}>🎯</span>
+        {/* Top Row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          {/* Left: Icon & Title */}
+          <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+            <span style={{ fontSize: '32px', lineHeight: 1 }}>🎯</span>
             <div style={{ flex: 1 }}>
-              <span style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: 'rgba(255, 255, 255, 0.7)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                display: 'block',
-                marginBottom: '4px'
-              }}>Goal:</span>
-              <span 
-                style={{
-                  fontSize: '16px',
-                  fontWeight: '800',
-                  color: '#ffffff',
-                  display: 'block',
-                  lineHeight: '1.3',
-                  cursor: 'text',
-                  userSelect: 'text'
-                }}
-                title={goal.name}
-              >{goal.name}</span>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div style={{
-            background: '#374151',
-            padding: '14px',
-            borderRadius: '10px',
-            marginBottom: '12px',
-            border: '2px solid rgba(0,0,0,0.4)'
-          }}>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: '700',
-              color: '#d1d5db',
-              marginBottom: '10px',
-              textAlign: 'center',
-              textTransform: 'uppercase',
-              letterSpacing: '1px'
-            }}>Progress</div>
-            <div style={{
-              height: '24px',
-              background: '#1f2937',
-              borderRadius: '12px',
-              overflow: 'hidden',
-              border: '2px solid rgba(0, 0, 0, 0.5)'
-            }}>
-              <div style={{
-                height: '100%',
-                width: `${goal.progress_percentage || 0}%`,
-                background: goal.status === 'on_track' || goal.status === 'completed' ? 
-                  'linear-gradient(90deg, #10b981, #059669)' :
-                  goal.status === 'at_risk' ? 'linear-gradient(90deg, #f59e0b, #d97706)' :
-                  goal.status === 'behind' ? 'linear-gradient(90deg, #ef4444, #dc2626)' :
-                  'linear-gradient(90deg, #60a5fa, #3b82f6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                paddingRight: '10px',
-                fontSize: '12px',
-                fontWeight: '900',
-                color: 'white',
-                transition: 'width 0.5s ease',
-                textShadow: '0 1px 2px rgba(0,0,0,0.3)'
-              }}>
-                {goal.progress_percentage > 10 && `${goal.progress_percentage?.toFixed(0)}%`}
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{goal.name}</h3>
+              <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
+                {goal.timeframe || 'Long-term'}
               </div>
             </div>
           </div>
 
-          {/* Milestones, Projects, Tasks Row */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr',
-            gap: '10px',
-            marginBottom: '12px'
-          }}>
-            <div style={{
-              background: '#be185d',
-              padding: '18px 10px',
-              borderRadius: '10px',
-              textAlign: 'center',
-              border: '2px solid rgba(0,0,0,0.3)',
-              minHeight: '90px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: '#fce7f3',
-                marginBottom: '8px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>Milestones</div>
-              <div style={{
-                fontSize: '22px',
-                fontWeight: '900',
-                color: '#ffffff',
-                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-              }}>{milestonesCompleted}/{milestonesTotal}</div>
+          {/* Center: Circular Progress (Milestones & Tasks) */}
+          <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+            {/* Milestones Circle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🏁 Milestones</span>
+                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{milestonesCompleted}/{milestonesTotal}</span>
+              </div>
+              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                <circle 
+                  cx="40" cy="40" r="32" fill="none" stroke="#ec4899" strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 32}`}
+                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (milestonesTotal > 0 ? milestonesCompleted / milestonesTotal : 0))}`}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                />
+              </svg>
             </div>
-            <div style={{
-              background: '#047857',
-              padding: '18px 10px',
-              borderRadius: '10px',
-              textAlign: 'center',
-              border: '2px solid rgba(0,0,0,0.3)',
-              minHeight: '90px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: '#d1fae5',
-                marginBottom: '8px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>Projects</div>
-              <div style={{
-                fontSize: '22px',
-                fontWeight: '900',
-                color: '#ffffff',
-                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-              }}>{linkedTasksTotal}</div>
+            {/* Goal Tasks Circle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>✅ Goal Tasks</span>
+                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
+                  {goal.stats?.linked_tasks?.completed || 0}/{goal.stats?.linked_tasks?.total || 0}
+                </span>
+              </div>
+              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                <circle 
+                  cx="40" cy="40" r="32" fill="none" stroke="#8b5cf6" strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 32}`}
+                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.linked_tasks?.total || 0) > 0 ? (goal.stats?.linked_tasks?.completed || 0) / (goal.stats?.linked_tasks?.total || 0) : 0))}`}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                />
+              </svg>
             </div>
-            <div style={{
-              background: '#1e40af',
-              padding: '18px 10px',
-              borderRadius: '10px',
-              textAlign: 'center',
-              border: '2px solid rgba(0,0,0,0.3)',
-              minHeight: '90px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center'
-            }}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: '#dbeafe',
-                marginBottom: '8px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>Tasks</div>
-              <div style={{
-                fontSize: '22px',
-                fontWeight: '900',
-                color: '#ffffff',
-                textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-              }}>{allTasksCompleted}/{allTasksTotal}</div>
+            {/* Project Tasks Circle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📊 Project Tasks</span>
+                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{allTasksCompleted}/{allTasksTotal}</span>
+              </div>
+              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                <circle 
+                  cx="40" cy="40" r="32" fill="none" stroke="#10b981" strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 32}`}
+                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (allTasksTotal > 0 ? allTasksCompleted / allTasksTotal : 0))}`}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                />
+              </svg>
+            </div>
+            {/* Projects Circle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📁 Projects</span>
+                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
+                  {goal.stats?.goal_projects?.completed || 0}/{goal.stats?.goal_projects?.total || 0}
+                </span>
+              </div>
+              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                <circle 
+                  cx="40" cy="40" r="32" fill="none" stroke="#3b82f6" strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 32}`}
+                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.goal_projects?.total || 0) > 0 ? (goal.stats?.goal_projects?.completed || 0) / (goal.stats?.goal_projects?.total || 0) : 0))}`}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                />
+              </svg>
             </div>
           </div>
 
-          {/* Dates Section - Editable */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '10px',
-            marginBottom: '12px'
-          }}>
-            <div style={{
-              background: '#4b5563',
-              padding: '12px',
-              borderRadius: '8px',
-              border: '2px solid rgba(0,0,0,0.3)',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: '#d1d5db',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>Start Date</div>
+          {/* Right: Dates in one compact box */}
+          <div style={{ background: '#f8f9fa', padding: '10px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontSize: '12px', marginBottom: '6px' }}>
+              <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '10px' }}>Start</label>
               <input
                 type="date"
                 value={goal.start_date || ''}
-                onChange={async (e) => {
-                  e.stopPropagation();
-                  try {
-                    await api.put(`/api/life-goals/${goal.id}`, {
-                      ...goal,
-                      start_date: e.target.value
-                    });
-                    await loadLifeGoals();
-                  } catch (err) {
-                    console.error('Error updating start date:', err);
-                  }
-                }}
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  color: '#ffffff',
-                  background: 'transparent',
-                  border: 'none',
-                  width: '100%',
-                  maxWidth: '100%',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box'
-                }}
+                onChange={(e) => { e.stopPropagation(); handleUpdateLifeGoal(goal.id, { start_date: e.target.value }); }}
+                style={{ padding: '3px 6px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
               />
             </div>
-            <div style={{
-              background: '#4b5563',
-              padding: '12px',
-              borderRadius: '8px',
-              border: '2px solid rgba(0,0,0,0.3)',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                fontSize: '10px',
-                fontWeight: '700',
-                color: '#d1d5db',
-                marginBottom: '6px',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px'
-              }}>End Date</div>
+            <div style={{ fontSize: '12px' }}>
+              <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '10px' }}>Target</label>
               <input
                 type="date"
                 value={goal.target_date || ''}
-                onChange={async (e) => {
-                  e.stopPropagation();
-                  try {
-                    await api.put(`/api/life-goals/${goal.id}`, {
-                      ...goal,
-                      target_date: e.target.value
-                    });
-                    await loadLifeGoals();
-                  } catch (err) {
-                    console.error('Error updating target date:', err);
-                  }
-                }}
                 onClick={(e) => e.stopPropagation()}
-                style={{
-                  fontSize: '12px',
-                  fontWeight: '800',
-                  color: '#ffffff',
-                  background: 'transparent',
-                  border: 'none',
-                  width: '100%',
-                  maxWidth: '100%',
-                  cursor: 'pointer',
-                  boxSizing: 'border-box'
-                }}
+                onChange={(e) => { e.stopPropagation(); handleUpdateLifeGoal(goal.id, { target_date: e.target.value }); }}
+                style={{ padding: '3px 6px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
               />
             </div>
           </div>
         </div>
-        {/* Close inner light container */}
 
-        {/* Action Buttons - Two Rows */}
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '8px',
-          marginTop: '12px'
-        }}>
-          {/* First Row: View + Edit */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '8px'
-          }}>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedGoal(goal);
-                loadGoalDetails(goal.id);
-                navigate(`/goals?goal=${goal.id}`);
-              }}
-              style={{
-                background: '#2563eb',
-                border: '2px solid rgba(0,0,0,0.3)',
-                padding: '10px 8px',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#1d4ed8'}
-              onMouseLeave={(e) => e.currentTarget.style.background = '#2563eb'}
+        {/* Bottom Row: Stats & Actions */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+          {/* Left: Quick Stats */}
+          <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '14px' }}>📊</span>
+              <span style={{ color: '#718096' }}>Progress:</span>
+              <span style={{ fontWeight: '600', color: '#2d3748' }}>{goal.progress_percentage?.toFixed(0) || 0}%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ fontSize: '14px' }}>📁</span>
+              <span style={{ color: '#718096' }}>Projects:</span>
+              <span style={{ fontWeight: '600', color: '#2d3748' }}>{goal.stats?.goal_projects?.total || 0}</span>
+            </div>
+          </div>
+
+          {/* Right: Action Buttons */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button 
+              className="btn btn-primary"
+              onClick={(e) => { e.stopPropagation(); handleViewGoalDetails(goal); }}
+              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
             >
               👁️ View
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditingGoal(goal);
-                setShowAddGoalModal(true);
-              }}
-              style={{
-                background: '#f59e0b',
-                border: '2px solid rgba(0,0,0,0.3)',
-                padding: '10px 8px',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#d97706'}
-              onMouseLeave={(e) => e.currentTarget.style.background = '#f59e0b'}
+            <button 
+              className="btn btn-secondary"
+              onClick={(e) => { e.stopPropagation(); handleEditGoal(goal); }}
+              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
             >
               ✏️ Edit
             </button>
-          </div>
-          
-          {/* Second Row: Duplicate + Delete */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '8px'
-          }}>
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                const newName = prompt('Enter name for the duplicated goal:', `${goal.name} (Copy)`);
-                if (!newName) return;
-
-                try {
-                  // Create new goal
-                  const newGoalResponse = await api.post('/api/life-goals/', {
-                    name: newName,
-                    description: goal.description,
-                    pillar_id: goal.pillar_id,
-                    category_id: goal.category_id,
-                    time_period: goal.time_period,
-                    start_date: new Date().toISOString().split('T')[0],
-                    target_date: goal.target_date,
-                    target_value: goal.target_value,
-                    current_value: 0,
-                    unit: goal.unit,
-                    parent_goal_id: goal.parent_goal_id
-                  });
-                  const newGoalId = newGoalResponse.data.id;
-
-                  // Copy milestones
-                  const milestonesResponse = await api.get(`/api/life-goals/${goal.id}/milestones`);
-                  for (const m of milestonesResponse.data) {
-                    await api.post(`/api/life-goals/${newGoalId}/milestones`, {
-                      name: m.name,
-                      description: m.description,
-                      target_date: m.target_date,
-                      target_value: m.target_value,
-                      unit: m.unit
-                    });
-                  }
-
-                  // Copy tasks
-                  const tasksResponse = await api.get(`/api/life-goals/${goal.id}/tasks`);
-                  const tasks = tasksResponse.data;
-                  if (tasks.length > 0) {
-                    const taskIdMap = new Map();
-                    const parentTasks = tasks.filter((t: any) => !t.parent_task_id);
-                    for (const t of parentTasks) {
-                      const r = await api.post(`/api/life-goals/${newGoalId}/tasks`, {
-                        name: t.name, description: t.description, start_date: t.start_date,
-                        due_date: t.due_date, priority: t.priority, parent_task_id: null
-                      });
-                      taskIdMap.set(t.id, r.data.id);
-                    }
-                    const subTasks = tasks.filter((t: any) => t.parent_task_id && !tasks.find((st: any) => st.id === t.parent_task_id && st.parent_task_id));
-                    for (const t of subTasks) {
-                      const pid = taskIdMap.get(t.parent_task_id);
-                      if (pid) {
-                        const r = await api.post(`/api/life-goals/${newGoalId}/tasks`, {
-                          name: t.name, description: t.description, start_date: t.start_date,
-                          due_date: t.due_date, priority: t.priority, parent_task_id: pid
-                        });
-                        taskIdMap.set(t.id, r.data.id);
-                      }
-                    }
-                    const subSubTasks = tasks.filter((t: any) => t.parent_task_id && tasks.find((st: any) => st.id === t.parent_task_id && st.parent_task_id));
-                    for (const t of subSubTasks) {
-                      const pid = taskIdMap.get(t.parent_task_id);
-                      if (pid) {
-                        await api.post(`/api/life-goals/${newGoalId}/tasks`, {
-                          name: t.name, description: t.description, start_date: t.start_date,
-                          due_date: t.due_date, priority: t.priority, parent_task_id: pid
-                        });
-                      }
-                    }
-                  }
-
-                  alert(`Goal duplicated as "${newName}"!`);
-                  await loadLifeGoals();
-                } catch (err) {
-                  console.error('Error duplicating goal:', err);
-                  alert('Failed to duplicate goal');
-                }
-              }}
-              style={{
-                background: '#0891b2',
-                border: '2px solid rgba(0,0,0,0.3)',
-                padding: '10px 8px',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#0e7490'}
-              onMouseLeave={(e) => e.currentTarget.style.background = '#0891b2'}
-            >
-              📋 Duplicate
-            </button>
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (window.confirm(`Are you sure you want to delete "${goal.name}"?`)) {
-                  try {
-                    await api.delete(`/api/life-goals/${goal.id}`);
-                    await loadLifeGoals();
-                  } catch (err) {
-                    console.error('Error deleting goal:', err);
-                  }
-                }
-              }}
-              style={{
-                background: '#dc2626',
-                border: '2px solid rgba(0,0,0,0.3)',
-                padding: '10px 8px',
-                borderRadius: '8px',
-                color: 'white',
-                fontSize: '12px',
-                fontWeight: '700',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.background = '#b91c1c'}
-              onMouseLeave={(e) => e.currentTarget.style.background = '#dc2626'}
+            <button 
+              className="btn btn-danger"
+              onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }}
+              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
             >
               🗑️ Delete
             </button>
