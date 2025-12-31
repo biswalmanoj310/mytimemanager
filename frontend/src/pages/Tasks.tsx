@@ -9848,11 +9848,12 @@ export default function Tasks() {
                             <input
                               type="number"
                               min="0"
-                              value={spentTime}
+                              value={spentTime || ''}
                               onChange={(e) => {
                                 // Store in first hour slot (0) for simplicity
                                 handleHourlyTimeChange(task.id, 0, e.target.value);
                               }}
+                              onFocus={(e) => e.target.select()}
                               disabled={isDailyCompleted || isDailyNA || isFutureDate(selectedDate)}
                               className="hour-input"
                               style={{
