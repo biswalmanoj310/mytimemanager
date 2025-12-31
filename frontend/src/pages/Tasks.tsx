@@ -5920,12 +5920,8 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <button 
-            className="btn btn-primary"
-            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
-            style={{ backgroundColor: '#10b981', color: 'white' }}
-          >
-            ➕ Add Quarterly Task
+          <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
+            ➕ Add Task
           </button>
         </header>
         
@@ -5944,6 +5940,20 @@ export default function Tasks() {
               {tab.label}
             </button>
           ))}
+        </div>
+
+        {/* Date Navigator with Add Quarterly Task button */}
+        <div className="date-navigator">
+          <button 
+            className="btn-nav btn-add-quarterly"
+            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
+            style={{ marginLeft: 'auto', backgroundColor: '#10b981', color: 'white' }}
+          >
+            ➕ Add Quarterly Task
+          </button>
+          <span className="date-display">
+            Quarter {Math.ceil((new Date().getMonth() + 1) / 3)} - {new Date().getFullYear()}
+          </span>
         </div>
 
         <div className="container-fluid" style={{ padding: '20px' }}>
