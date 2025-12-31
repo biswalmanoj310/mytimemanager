@@ -1323,8 +1323,7 @@ export default function Tasks() {
       loadMonthlyEntries(selectedMonthStart);
     } else if (activeTab === 'quarterly') {
       // Load yearly aggregates for quarterly display (sum quarters from months)
-      const yearNumber = selectedYearStart.getFullYear();
-      loadMonthlyAggregatesForYear(yearNumber);
+      loadYearlyEntries(selectedYearStart);
     } else if (activeTab === 'yearly') {
       loadYearlyEntries(selectedYearStart);
     } else if (activeTab === 'onetime') {
@@ -5939,6 +5938,15 @@ export default function Tasks() {
   }
 
   if (activeTab === 'quarterly') {
+    // Debug logging
+    console.log('🔍 Quarterly Tab Debug:', {
+      totalTasks: tasks.length,
+      yearlyMonthlyAggregatesKeys: Object.keys(yearlyMonthlyAggregates).length,
+      sampleKeys: Object.keys(yearlyMonthlyAggregates).slice(0, 5),
+      selectedYearStart,
+      yearNumber: selectedYearStart.getFullYear()
+    });
+    
     // Show tasks that have quarterly data (from any frequency: daily, weekly, monthly, quarterly)
     // Similar to yearly tab which shows tasks with yearly data regardless of home frequency
     const quarterlyTasks = tasks.filter(t => {
@@ -5946,8 +5954,14 @@ export default function Tasks() {
       const hasQuarterlyData = Object.keys(yearlyMonthlyAggregates).some(key => 
         key.startsWith(`${t.id}-`) && yearlyMonthlyAggregates[key] > 0
       );
-      return hasQuarterlyData && t.is_active;
+      const result = hasQuarterlyData && t.is_active;
+      if (hasQuarterlyData) {
+        console.log(`✅ Task ${t.id} "${t.name}" has quarterly data`);
+      }
+      return result;
     });
+    
+    console.log('📊 Filtered quarterly tasks:', quarterlyTasks.length, quarterlyTasks.map(t => t.name));
     
     // Helper to get quarterly time from monthly aggregates
     const getQuarterlyTime = (taskId: number, quarter: number): number => {
