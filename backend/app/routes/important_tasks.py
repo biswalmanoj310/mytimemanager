@@ -224,3 +224,42 @@ def delete_important_task(
     db.commit()
     
     return {"message": "Task deleted"}
+
+
+@router.get("/due-today")
+def get_important_tasks_due_today(
+    db: Session = Depends(get_db)
+):
+    """Get important tasks that are due today (overdue or due soon)"""
+    query = db.query(ImportantTask).filter(ImportantTask.is_active == True)
+    tasks = query.all()
+    
+    result = []
+    for task in tasks:
+        status_info = calculate_status(task)
+        
+        # Include red (overdue) and gray (due soon) tasks
+        if status_info["status"] in ["red", "gray"]:
+            result.append({
+                "id": task.id,
+                "name": task.name,
+                "description": task.description,
+                "pillar_id": task.pillar_id,
+                "category_id": task.category_id,
+                "sub_category_id": task.sub_category_id,
+                "ideal_gap_days": task.ideal_gap_days,
+                "last_check_date": task.last_check_date.isoformat() if task.last_check_date else None,
+                "priority": task.priority,
+                "is_active": task.is_active,
+                "start_date": task.start_date.isoformat() if task.start_date else None,
+                "parent_id": task.parent_id,
+                "status": status_info["status"],
+                "days_since_check": status_info["days_since_check"],
+                "diff": status_info["diff"],
+                "message": status_info["message"]
+            })
+    
+    # Sort by priority (high to low) and then by diff (most overdue first)
+    result.sort(key=lambda x: (-x["priority"], x["diff"]))
+    
+    return result

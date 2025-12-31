@@ -1328,6 +1328,7 @@ export default function Tasks() {
     } else if (activeTab === 'habits') {
       loadHabits();
     } else if (activeTab === 'today') {
+      console.log('🚀 TODAY TAB LOADING - Starting all data loads...');
       loadTodaysHabits();
       loadTodaysChallenges();
       loadProjectTasksDueToday();
@@ -1358,6 +1359,7 @@ export default function Tasks() {
     if (activeTab === 'today') {
       loadTodaysOnlyTasks();
       loadMiscTasksDueToday();
+      loadImportantTasksDueToday();
       loadWeeklyTasksNeedingAttention();
       loadMonthlyTasksNeedingAttention();
       loadUpcomingTasks();
@@ -3246,18 +3248,15 @@ export default function Tasks() {
 
   async function loadImportantTasksDueToday() {
     try {
-      // Get important tasks that are red or yellow status (due or overdue)
-      const response: any = await api.get('/api/important-tasks/');
-      const allTasks = Array.isArray(response.data || response) ? (response.data || response) : [];
+      console.log('🔍 Loading important tasks due today...');
+      // Get important tasks that are red or gray status (due or overdue)
+      const response: any = await api.get('/api/important-tasks/due-today');
+      const dueTasks = Array.isArray(response.data || response) ? (response.data || response) : [];
       
-      // Filter for red (overdue) or yellow (due soon) tasks
-      const dueTasks = allTasks.filter((task: any) => 
-        task.status === 'red' || task.status === 'yellow'
-      );
-      
+      console.log('✅ Important tasks loaded:', dueTasks.length, dueTasks);
       setImportantTasksDueToday(dueTasks);
     } catch (err: any) {
-      console.error('Error loading important tasks due today:', err);
+      console.error('❌ Error loading important tasks due today:', err);
       setImportantTasksDueToday([]);
     }
   }
@@ -13415,7 +13414,11 @@ export default function Tasks() {
             // Create filter function
             const filterByMonth = (task: any) => {
               if (!selectedTodayMonth) return true; // Show all if no month selected
-              if (!task.due_date) return false; // Hide tasks without due dates
+              
+              // Important tasks don't have due_date, always show them (they have their own overdue logic)
+              if (task.ideal_gap_days !== undefined) return true;
+              
+              if (!task.due_date) return false; // Hide other tasks without due dates
               
               const dueDate = parseDateString(task.due_date);
               const taskMonthKey = `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`;
@@ -13971,7 +13974,8 @@ export default function Tasks() {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const filteredTasks = importantTasksDueToday.filter(t => filterByMonth(t));
             
-            return filteredTasks.length > 0 && (
+            // Always show section on Today tab, even if empty (will show after data loads)
+            return (
             <div id="important-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
                 onClick={() => setTodayTabSections(prev => ({ ...prev, importantTasksDueToday: !prev.importantTasksDueToday }))}
@@ -13997,62 +14001,118 @@ export default function Tasks() {
 
               {todayTabSections.importantTasksDueToday && (
                 <div style={{ marginTop: '12px' }}>
-                  {filteredTasks.map((task) => {
-                    const isRed = task.status === 'red';
-                    
-                    return (
-                      <div 
-                        key={task.id}
-                        style={{
-                          marginBottom: '8px',
-                          padding: '12px 16px',
-                          backgroundColor: '#fff',
-                          border: isRed ? '1px solid #fca5a5' : '1px solid #fde68a',
-                          borderLeft: isRed ? '4px solid #dc2626' : '4px solid #f59e0b',
-                          borderRadius: '6px',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '15px', fontWeight: '600', color: '#2d3748', flex: 1 }}>
-                            {task.name}
-                          </span>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              onClick={async () => {
-                                if (confirm('Mark this check as done today?')) {
-                                  try {
-                                    await api.post(`/api/important-tasks/${task.id}/check`, {
-                                      check_date: new Date().toISOString().split('T')[0]
-                                    });
-                                    await loadImportantTasksDueToday();
-                                  } catch (err) {
-                                    alert('Failed to mark task as checked');
-                                  }
-                                }
-                              }}
-                              style={{
-                                padding: '6px 12px',
-                                fontSize: '12px',
-                                backgroundColor: '#10b981',
-                                color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontWeight: '600'
-                              }}
-                            >
-                              Done
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ fontSize: '12px', color: '#718096' }}>
-                          ⚡ Check every {task.ideal_gap_days} days | 
-                          <span style={{ color: isRed ? '#dc2626' : '#f59e0b', fontWeight: '600' }}> {task.message}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {filteredTasks.length === 0 ? (
+                    <div style={{
+                      padding: '20px',
+                      textAlign: 'center',
+                      color: '#718096',
+                      backgroundColor: '#f7fafc',
+                      borderRadius: '6px',
+                      border: '1px dashed #cbd5e0'
+                    }}>
+                      ✅ All important tasks are up to date!
+                    </div>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ 
+                        width: '100%', 
+                        borderCollapse: 'collapse',
+                        backgroundColor: '#fff',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                      }}>
+                        <thead>
+                          <tr style={{ backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', fontSize: '13px', color: '#4a5568' }}>Task Name</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '120px' }}>Check Every</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '150px' }}>Status</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '140px' }}>Last Check</th>
+                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '180px' }}>Mark as Done</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredTasks.map((task) => {
+                            const isRed = task.status === 'red';
+                            const isGray = task.status === 'gray';
+                            
+                            return (
+                              <tr 
+                                key={task.id}
+                                style={{
+                                  borderBottom: '1px solid #e2e8f0',
+                                  backgroundColor: isRed ? '#fef2f2' : isGray ? '#f9fafb' : '#fff'
+                                }}
+                              >
+                                <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: '500', color: '#2d3748' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ 
+                                      fontSize: '16px',
+                                      color: isRed ? '#dc2626' : isGray ? '#f59e0b' : '#10b981'
+                                    }}>
+                                      {isRed ? '🔴' : isGray ? '🟡' : '🟢'}
+                                    </span>
+                                    <span>{task.name}</span>
+                                  </div>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#4a5568' }}>
+                                  <span style={{ 
+                                    display: 'inline-block',
+                                    padding: '4px 8px',
+                                    backgroundColor: '#edf2f7',
+                                    borderRadius: '4px',
+                                    fontWeight: '600'
+                                  }}>
+                                    {task.ideal_gap_days} days
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px' }}>
+                                  <span style={{ 
+                                    color: isRed ? '#dc2626' : isGray ? '#f59e0b' : '#10b981',
+                                    fontWeight: '600'
+                                  }}>
+                                    {task.message}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center', fontSize: '13px', color: '#718096' }}>
+                                  {task.last_check_date ? new Date(task.last_check_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Never'}
+                                </td>
+                                <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                  <input
+                                    type="date"
+                                    defaultValue={new Date().toISOString().split('T')[0]}
+                                    max={new Date().toISOString().split('T')[0]}
+                                    onChange={async (e) => {
+                                      if (e.target.value && confirm(`Mark "${task.name}" as checked on ${new Date(e.target.value).toLocaleDateString()}?`)) {
+                                        try {
+                                          await api.post(`/api/important-tasks/${task.id}/check`, {
+                                            check_date: e.target.value
+                                          });
+                                          await loadImportantTasksDueToday();
+                                          // Reset the date input
+                                          e.target.value = new Date().toISOString().split('T')[0];
+                                        } catch (err) {
+                                          alert('Failed to mark task as checked');
+                                        }
+                                      }
+                                    }}
+                                    style={{
+                                      padding: '6px 10px',
+                                      fontSize: '13px',
+                                      border: '1px solid #cbd5e0',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      backgroundColor: '#fff'
+                                    }}
+                                  />
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
