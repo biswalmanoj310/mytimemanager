@@ -2782,7 +2782,9 @@ export default function Tasks() {
 
   // Handle add yearly task
   const handleAddYearlyTask = async () => {
+    console.log('🎯 handleAddYearlyTask called with selectedDailyTaskForYearly:', selectedDailyTaskForYearly);
     if (!selectedDailyTaskForYearly) {
+      console.log('⚠️ No task selected - opening full TaskForm');
       setIsCreatingNewTask(true);
       setAddToTrackingAfterCreate('yearly' as any);
       setIsTaskFormOpen(true);
@@ -2790,6 +2792,7 @@ export default function Tasks() {
       return;
     }
 
+    console.log('✅ Task selected - creating yearly status entry');
     try {
       const task = tasks.find(t => t.id === selectedDailyTaskForYearly);
       if (!task) return;
@@ -5956,7 +5959,11 @@ export default function Tasks() {
           </button>
           <button 
             className="btn-nav btn-add-yearly"
-            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
+            onClick={() => {
+              console.log('🔘 Add Yearly Task button clicked (OLD section) - opening selection modal');
+              setShowAddYearlyTaskModal(true);
+            }}
+            style={{ backgroundColor: '#10b981', color: 'white' }}
           >
             ➕ Add Yearly Task
           </button>
@@ -5977,6 +5984,138 @@ export default function Tasks() {
             setIsTaskFormOpen(false);
           }}
         />
+        
+        {/* Add Yearly Task Modal - Selection modal for OLD yearly tab */}
+        {showAddYearlyTaskModal && (
+          <div className="modal-overlay" onClick={() => setShowAddYearlyTaskModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              {console.log('📋 Add Yearly Task SELECTION MODAL is rendering (OLD section)')}
+              <div className="modal-header">
+                <h2>Add Yearly Task</h2>
+                <button className="btn-close" onClick={() => setShowAddYearlyTaskModal(false)}>×</button>
+              </div>
+              <div className="modal-body">
+                <p style={{ marginBottom: '15px', color: '#666' }}>
+                  Select an existing task to track for this year:
+                </p>
+                
+                <div className="form-group">
+                  <label htmlFor="dailyTaskSelectYearly">Select from Daily Tasks:</label>
+                  <select 
+                    id="dailyTaskSelectYearly"
+                    className="form-control"
+                    value={selectedDailyTaskForYearly || ''}
+                    onChange={(e) => setSelectedDailyTaskForYearly(e.target.value ? Number(e.target.value) : null)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      marginTop: '5px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e0'
+                    }}
+                  >
+                    <option value="">-- Select a daily task --</option>
+                    {tasks
+                      .filter(task => task.follow_up_frequency === 'daily' && task.is_active)
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '20px' }}>
+                  <label htmlFor="weeklyTaskSelectYearly">Select from Weekly Tasks:</label>
+                  <select 
+                    id="weeklyTaskSelectYearly"
+                    className="form-control"
+                    value={selectedDailyTaskForYearly || ''}
+                    onChange={(e) => setSelectedDailyTaskForYearly(e.target.value ? Number(e.target.value) : null)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      marginTop: '5px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e0'
+                    }}
+                  >
+                    <option value="">-- Select a weekly task --</option>
+                    {tasks
+                      .filter(task => task.follow_up_frequency === 'weekly' && task.is_active)
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '20px' }}>
+                  <label htmlFor="monthlyTaskSelectYearly">Select from Monthly Tasks:</label>
+                  <select 
+                    id="monthlyTaskSelectYearly"
+                    className="form-control"
+                    value={selectedDailyTaskForYearly || ''}
+                    onChange={(e) => setSelectedDailyTaskForYearly(e.target.value ? Number(e.target.value) : null)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      marginTop: '5px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e0'
+                    }}
+                  >
+                    <option value="">-- Select a monthly task --</option>
+                    {tasks
+                      .filter(task => task.follow_up_frequency === 'monthly' && task.is_active)
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
+                  OR
+                </div>
+
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setSelectedDailyTaskForYearly(null);
+                    handleAddYearlyTask();
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  Create New Task
+                </button>
+              </div>
+              <div className="modal-footer">
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    setShowAddYearlyTaskModal(false);
+                    setSelectedDailyTaskForYearly(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleAddYearlyTask}
+                  disabled={!selectedDailyTaskForYearly}
+                >
+                  Add to Yearly
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -6642,7 +6781,10 @@ export default function Tasks() {
           </button>
           <button 
             className="btn-nav btn-add-yearly" 
-            onClick={() => setShowAddYearlyTaskModal(true)}
+            onClick={() => {
+              console.log('🔘 Add Yearly Task button clicked - opening selection modal');
+              setShowAddYearlyTaskModal(true);
+            }}
             style={{ marginLeft: 'auto', backgroundColor: '#10b981', color: 'white' }}
           >
             ➕ Add Yearly Task
@@ -17148,6 +17290,7 @@ export default function Tasks() {
       {showAddYearlyTaskModal && (
         <div className="modal-overlay" onClick={() => setShowAddYearlyTaskModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            {console.log('📋 Add Yearly Task SELECTION MODAL is rendering')}
             <div className="modal-header">
               <h2>Add Yearly Task</h2>
               <button className="btn-close" onClick={() => setShowAddYearlyTaskModal(false)}>×</button>
