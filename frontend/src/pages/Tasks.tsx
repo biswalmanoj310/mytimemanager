@@ -13974,7 +13974,9 @@ export default function Tasks() {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const filteredTasks = importantTasksDueToday.filter(t => filterByMonth(t));
             
-            // Always show section on Today tab, even if empty (will show after data loads)
+            // Only show section if there are tasks
+            if (filteredTasks.length === 0) return null;
+            
             return (
             <div id="important-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
@@ -14001,38 +14003,26 @@ export default function Tasks() {
 
               {todayTabSections.importantTasksDueToday && (
                 <div style={{ marginTop: '12px' }}>
-                  {filteredTasks.length === 0 ? (
-                    <div style={{
-                      padding: '20px',
-                      textAlign: 'center',
-                      color: '#718096',
-                      backgroundColor: '#f7fafc',
-                      borderRadius: '6px',
-                      border: '1px dashed #cbd5e0'
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ 
+                      width: '100%', 
+                      borderCollapse: 'collapse',
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      overflow: 'hidden',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
                     }}>
-                      ✅ All important tasks are up to date!
-                    </div>
-                  ) : (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ 
-                        width: '100%', 
-                        borderCollapse: 'collapse',
-                        backgroundColor: '#fff',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                      }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
-                            <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', fontSize: '13px', color: '#4a5568' }}>Task Name</th>
-                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '120px' }}>Check Every</th>
-                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '150px' }}>Status</th>
-                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '140px' }}>Last Check</th>
-                            <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '180px' }}>Mark as Done</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredTasks.map((task) => {
+                      <thead>
+                        <tr style={{ backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
+                          <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', fontSize: '13px', color: '#4a5568' }}>Task Name</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '120px' }}>Check Every</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '150px' }}>Status</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '140px' }}>Last Check</th>
+                          <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', fontSize: '13px', color: '#4a5568', width: '180px' }}>Mark as Done</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredTasks.map((task) => {
                             const isRed = task.status === 'red';
                             const isGray = task.status === 'gray';
                             
@@ -14112,7 +14102,6 @@ export default function Tasks() {
                         </tbody>
                       </table>
                     </div>
-                  )}
                 </div>
               )}
             </div>

@@ -501,7 +501,8 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
   const loadYearlyTaskStatuses = useCallback(async (year: number) => {
     try {
       setError(null);
-      const response: any = await api.get(`/api/yearly-time/status/${year}`);
+      const yearStartDate = `${year}-01-01`;
+      const response: any = await api.get(`/api/yearly-time/status/${yearStartDate}`);
       const statusData = Array.isArray(response) ? response : (response.data || []);
       
       const statusMap: Record<number, TaskStatus> = {};
@@ -525,7 +526,8 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
 
   const updateYearlyTaskStatus = useCallback(async (taskId: number, year: number, status: Partial<TaskStatus>) => {
     try {
-      await api.post(`/api/yearly-time/status/${taskId}/${year}`, status);
+      const yearStartDate = `${year}-01-01`;
+      await api.post(`/api/yearly-time/status/${taskId}/${yearStartDate}`, status);
       // Reload statuses after update
       await loadYearlyTaskStatuses(year);
     } catch (err: any) {
@@ -538,7 +540,8 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
   const loadMonthlyAggregatesForYear = useCallback(async (year: number) => {
     try {
       setError(null);
-      const response: any = await api.get(`/api/yearly-time/aggregates/${year}`);
+      const yearStartDate = `${year}-01-01`;
+      const response: any = await api.get(`/api/yearly-time/aggregates/${yearStartDate}`);
       const aggregatesData = response.data || response;
       
       // Convert aggregates to same format: "taskId-month"
