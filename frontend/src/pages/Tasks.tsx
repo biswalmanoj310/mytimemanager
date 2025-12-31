@@ -5939,7 +5939,15 @@ export default function Tasks() {
   }
 
   if (activeTab === 'quarterly') {
-    const quarterlyTasks = tasks.filter(t => t.follow_up_frequency === 'quarterly');
+    // Show tasks that have quarterly data (from any frequency: daily, weekly, monthly, quarterly)
+    // Similar to yearly tab which shows tasks with yearly data regardless of home frequency
+    const quarterlyTasks = tasks.filter(t => {
+      // Check if task has any data in yearlyMonthlyAggregates for current year
+      const hasQuarterlyData = Object.keys(yearlyMonthlyAggregates).some(key => 
+        key.startsWith(`${t.id}-`) && yearlyMonthlyAggregates[key] > 0
+      );
+      return hasQuarterlyData && t.is_active;
+    });
     
     // Helper to get quarterly time from monthly aggregates
     const getQuarterlyTime = (taskId: number, quarter: number): number => {
