@@ -2642,100 +2642,298 @@ return (
                   border: '2px solid #6b7280',
                   padding: '8px 16px',
                   borderRadius: '8px',
-                  fontWeight: '600'
+                  fontWeight: '600',
+                  marginBottom: '16px'
                 }}
               >
                 ← Back to All Goals
               </button>
-              <div className="goal-header-info">
-                <h2 style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', marginTop: '12px' }}>{selectedGoal.name}</h2>
-                <div className="goal-header-meta" style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
-                  <span className={`status-badge status-${selectedGoal.status}`} style={{
+              
+              {/* Goal Name, Dates, and Progress in one row */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '16px' }}>
+                {/* Goal Name */}
+                <div style={{ flex: 1 }}>
+                  <h2 style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', margin: 0 }}>{selectedGoal.name}</h2>
+                </div>
+                
+                {/* Dates - editable */}
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>Start Date</div>
+                    <input
+                      type="date"
+                      value={selectedGoal.start_date || ''}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleUpdateGoal(selectedGoal.id, { start_date: e.target.value });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '4px',
+                        padding: '4px 8px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        background: 'rgba(255,255,255,0.15)',
+                        color: 'white'
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px' }}>Target Date</div>
+                    <input
+                      type="date"
+                      value={selectedGoal.target_date || ''}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        handleUpdateGoal(selectedGoal.id, { target_date: e.target.value });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        borderRadius: '4px',
+                        padding: '4px 8px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        background: 'rgba(255,255,255,0.15)',
+                        color: 'white'
+                      }}
+                    />
+                  </div>
+                </div>
+                
+                {/* Progress Bar */}
+                <div style={{ minWidth: '200px' }}>
+                  <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.7)', marginBottom: '4px', textAlign: 'center' }}>
+                    Progress: {selectedGoal.progress_percentage?.toFixed(0) || 0}%
+                  </div>
+                  <div style={{
+                    height: '20px',
+                    background: 'rgba(0,0,0,0.3)',
+                    borderRadius: '10px',
+                    overflow: 'hidden',
+                    border: '2px solid rgba(255,255,255,0.2)'
+                  }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${selectedGoal.progress_percentage || 0}%`,
+                      background: selectedGoal.status === 'on_track' || selectedGoal.status === 'completed' ? 
+                        'linear-gradient(90deg, #10b981, #059669)' :
+                        selectedGoal.status === 'at_risk' ? 'linear-gradient(90deg, #f59e0b, #d97706)' :
+                        selectedGoal.status === 'behind' ? 'linear-gradient(90deg, #ef4444, #dc2626)' :
+                        'linear-gradient(90deg, #60a5fa, #3b82f6)',
+                      transition: 'width 0.5s ease'
+                    }} />
+                  </div>
+                </div>
+              </div>
+              
+              {/* Status badges row */}
+              <div className="goal-header-meta" style={{ display: 'flex', gap: '12px' }}>
+                <span className={`status-badge status-${selectedGoal.status}`} style={{
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  background: selectedGoal.status === 'on_track' || selectedGoal.status === 'completed' ? '#047857' :
+                             selectedGoal.status === 'in_progress' ? '#1e40af' : '#4b5563',
+                  color: 'white'
+                }}>
+                  {selectedGoal.status.replace('_', ' ').toUpperCase()}
+                </span>
+                {selectedGoal.category && (
+                  <span className="category-badge" style={{
                     padding: '6px 12px',
                     borderRadius: '8px',
                     fontWeight: '600',
                     fontSize: '13px',
-                    background: selectedGoal.status === 'on_track' || selectedGoal.status === 'completed' ? '#047857' :
-                               selectedGoal.status === 'in_progress' ? '#1e40af' : '#4b5563',
+                    background: '#7c3aed',
+                    color: 'white'
+                  }}>{selectedGoal.category}</span>
+                )}
+                {selectedGoal.priority && (
+                  <span className={`priority-badge priority-${selectedGoal.priority}`} style={{
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    background: selectedGoal.priority === 'high' ? '#dc2626' : 
+                               selectedGoal.priority === 'medium' ? '#ea580c' : '#65a30d',
                     color: 'white'
                   }}>
-                    {selectedGoal.status.replace('_', ' ').toUpperCase()}
+                    {selectedGoal.priority.toUpperCase()}
                   </span>
-                  {selectedGoal.category && (
-                    <span className="category-badge" style={{
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      fontWeight: '600',
-                      fontSize: '13px',
-                      background: '#7c3aed',
-                      color: 'white'
-                    }}>{selectedGoal.category}</span>
-                  )}
-                  {selectedGoal.priority && (
-                    <span className={`priority-badge priority-${selectedGoal.priority}`} style={{
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      fontWeight: '600',
-                      fontSize: '13px',
-                      background: selectedGoal.priority === 'high' ? '#dc2626' : 
-                                 selectedGoal.priority === 'medium' ? '#ea580c' : '#65a30d',
-                      color: 'white'
-                    }}>
-                      {selectedGoal.priority.toUpperCase()}
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
             </div>
 
             <div className="goal-detail-body">
-              {/* Goal Summary Card */}
-              <div className="goal-summary-card" style={{
-                background: 'linear-gradient(135deg, #f0f9ff 0%, #dbeafe 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #3b82f6',
-                marginBottom: '20px'
-              }}>
-                <div className="summary-row">
-                  <div className="summary-item">
-                    <label>Start Date</label>
-                    <span>{selectedGoal.start_date ? new Date(selectedGoal.start_date).toLocaleDateString() : 'Not set'}</span>
+              {/* Projects Section - Moved to top */}
+              {goalProjects.length > 0 && (
+                <div className="goal-section projects-section" style={{
+                  background: '#fffef0',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  marginBottom: '20px'
+                }}>
+                  <div className="section-header" style={{ marginBottom: '16px' }}>
+                    <h3 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>📁 Projects</h3>
                   </div>
-                  <div className="summary-item">
-                    <label>Target Date</label>
-                    <span>
-                      {selectedGoal.target_date ? new Date(selectedGoal.target_date).toLocaleDateString() : 'Not set'}
-                      {selectedGoal.days_remaining !== null && (
-                        <small className={selectedGoal.days_remaining < 0 ? 'text-danger' : 'text-muted'}>
-                          {' '}({selectedGoal.days_remaining > 0 
-                            ? `${selectedGoal.days_remaining} days left`
-                            : `${Math.abs(selectedGoal.days_remaining)} days overdue`})
-                        </small>
-                      )}
-                    </span>
-                  </div>
-                  <div className="summary-item">
-                    <label>Progress</label>
-                    <div className="progress-inline">
-                      <div className="progress-bar-container">
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {goalProjects.map((project: any) => {
+                      const taskProgress = project.completed_tasks || 0;
+                      const totalTasks = project.total_tasks || 0;
+                      const taskPercentage = totalTasks > 0 ? (taskProgress / totalTasks) * 100 : 0;
+                      
+                      const milestoneProgress = project.milestones?.filter((m: any) => m.is_completed).length || 0;
+                      const totalMilestones = project.milestones?.length || 0;
+                      const milestonePercentage = totalMilestones > 0 ? (milestoneProgress / totalMilestones) * 100 : 0;
+                      
+                      return (
                         <div 
-                          className="progress-bar-fill"
+                          key={project.id} 
                           style={{ 
-                            width: `${selectedGoal.progress_percentage || 0}%`,
-                            backgroundColor: 
-                              selectedGoal.status === 'on_track' ? '#48bb78' :
-                              selectedGoal.status === 'at_risk' ? '#ed8936' :
-                              selectedGoal.status === 'behind' ? '#f56565' :
-                              '#cbd5e0'
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '12px', 
+                            padding: '16px 24px', 
+                            minHeight: '110px',
+                            background: '#fffef0',
+                            borderRadius: '8px',
+                            border: '1px solid #e5e3d0',
+                            cursor: 'pointer'
                           }}
-                        />
-                      </div>
-                      <span className="progress-text">{selectedGoal.progress_percentage?.toFixed(0) || 0}%</span>
-                    </div>
+                          onClick={() => navigate(`/tasks?tab=projects&project=${project.id}`)}
+                        >
+                          {/* Top Row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                            {/* Left: Icon & Title */}
+                            <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
+                              <div style={{ flex: 1 }}>
+                                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                                <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
+                                  {project.is_completed ? '✅ Completed' : '▶️ ' + (project.status || 'not_started').replace('_', ' ')}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Center: Circular Progress (Tasks & Milestones side by side) */}
+                            <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+                              {/* Task Progress Circle */}
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
+                                  <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{taskProgress}/{totalTasks}</span>
+                                </div>
+                                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                  <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                  <circle 
+                                    cx="40" 
+                                    cy="40" 
+                                    r="32" 
+                                    fill="none" 
+                                    stroke="#10b981" 
+                                    strokeWidth="8"
+                                    strokeDasharray={`${2 * Math.PI * 32}`}
+                                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - taskPercentage / 100)}`}
+                                    strokeLinecap="round"
+                                    style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                  />
+                                </svg>
+                              </div>
+                              {/* Milestone Progress Circle */}
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
+                                  <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{milestoneProgress}/{totalMilestones}</span>
+                                </div>
+                                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                  <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                  <circle 
+                                    cx="40" 
+                                    cy="40" 
+                                    r="32" 
+                                    fill="none" 
+                                    stroke="#3b82f6" 
+                                    strokeWidth="8"
+                                    strokeDasharray={`${2 * Math.PI * 32}`}
+                                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - milestonePercentage / 100)}`}
+                                    strokeLinecap="round"
+                                    style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                  />
+                                </svg>
+                              </div>
+                            </div>
+
+                            {/* Right: Dates & Days Left */}
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                              <div style={{ fontSize: '12px' }}>
+                                <div style={{ marginBottom: '8px' }}>
+                                  <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
+                                  <input
+                                    type="date"
+                                    value={project.start_date || ''}
+                                    onChange={(e) => { e.stopPropagation(); /* Add update handler if needed */ }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
+                                  <input
+                                    type="date"
+                                    value={project.target_completion_date || ''}
+                                    onChange={(e) => { e.stopPropagation(); /* Add update handler if needed */ }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                  />
+                                </div>
+                              </div>
+                              {project.target_completion_date && (() => {
+                                const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                const isOverdue = daysLeft < 0;
+                                return (
+                                  <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
+                                    <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                    <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Stats */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+                            <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '14px' }}>⏳</span>
+                                <span style={{ color: '#718096' }}>Active Tasks:</span>
+                                <span style={{ fontWeight: '600', color: '#2d3748' }}>{totalTasks - taskProgress}</span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '14px' }}>✅</span>
+                                <span style={{ color: '#718096' }}>Completed:</span>
+                                <span style={{ fontWeight: '600', color: '#10b981' }}>{taskProgress}</span>
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/tasks?tab=projects&project=${project.id}`);
+                              }}
+                              style={{ minWidth: '100px', padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* Why Statements */}
               {selectedGoal.why_statements && selectedGoal.why_statements.length > 0 && (
@@ -3195,163 +3393,6 @@ return (
                               );
                             })}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Projects Section */}
-              <div className="goal-section projects-section">
-                <div className="section-header">
-                  <h3>📁 Projects</h3>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setShowAddProjectToGoalModal(true)}
-                  >
-                    ➕ Add Project
-                  </button>
-                </div>
-                <p style={{ color: '#718096', fontSize: '14px', marginBottom: '16px' }}>
-                  Complex tasks created as projects appear here. Click to view full project details with sub-tasks.
-                </p>
-                {goalProjects.length === 0 ? (
-                  <div className="empty-section">
-                    <p>No projects yet. Create a task as a project when it needs sub-tasks or detailed management!</p>
-                  </div>
-                ) : (
-                  <div className="goal-projects-list">
-                    {goalProjects.map((project: any) => {
-                      const completionPercentage = project.completion_percentage || 0;
-                      const progressColor = completionPercentage >= 80 ? '#48bb78' : 
-                                           completionPercentage >= 50 ? '#ed8936' : '#e53e3e';
-                      const isExpanded = expandedProjects.has(project.id);
-                      const tasks = projectTasks.filter(t => t.project_id === project.id);
-                      
-                      return (
-                        <div key={project.id} className="project-card">
-                          <div className="project-card-header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <button
-                                className="btn-expand"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleProjectExpansion(project.id);
-                                }}
-                                style={{ 
-                                  background: 'none',
-                                  border: 'none',
-                                  fontSize: '16px',
-                                  cursor: 'pointer',
-                                  padding: '4px 8px'
-                                }}
-                              >
-                                {isExpanded ? '▼' : '▶'}
-                              </button>
-                              <strong>{project.name}</strong>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span className={`status-badge status-${project.status}`}>
-                                {project.status.replace('_', ' ').toUpperCase()}
-                              </span>
-                              <button
-                                className="btn btn-sm btn-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  console.log('Navigating to project:', project.id, project.name);
-                                  navigate(`/tasks?tab=projects&project=${project.id}`);
-                                }}
-                                title="Open in Tasks page"
-                              >
-                                Open Full View →
-                              </button>
-                            </div>
-                          </div>
-                          
-                          {project.description && (
-                            <p className="project-description">{project.description}</p>
-                          )}
-                          
-                          <div className="project-stats">
-                            <div className="stat-row">
-                              <span className="stat-label">Tasks:</span>
-                              <span className="stat-value">
-                                {project.completed_tasks}/{project.total_tasks} completed
-                              </span>
-                            </div>
-                            
-                            <div className="stat-row progress-row">
-                              <span className="stat-label">Progress:</span>
-                              <div className="stat-progress">
-                                <div className="progress-bar-container">
-                                  <div 
-                                    className="progress-bar-fill" 
-                                    style={{ 
-                                      width: `${completionPercentage}%`,
-                                      backgroundColor: progressColor
-                                    }} 
-                                  />
-                                </div>
-                                <span className="progress-text">{completionPercentage.toFixed(1)}%</span>
-                              </div>
-                            </div>
-                            
-                            {project.target_completion_date && (
-                              <div className="stat-row">
-                                <span className="stat-label">Target:</span>
-                                <span className="stat-value">
-                                  {new Date(project.target_completion_date).toLocaleDateString()}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Expanded Tasks Section */}
-                          {isExpanded && (
-                            <div className="project-tasks-section" style={{ 
-                              marginTop: '16px', 
-                              paddingTop: '16px', 
-                              borderTop: '1px solid #e2e8f0' 
-                            }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600 }}>Tasks</h4>
-                                <button
-                                  className="btn btn-sm btn-primary"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedProjectForTask(project.id);
-                                    setShowAddProjectTaskModal(true);
-                                  }}
-                                >
-                                  ➕ Add Task
-                                </button>
-                              </div>
-                              
-                              {tasks.length === 0 ? (
-                                <p style={{ color: '#718096', fontSize: '14px', fontStyle: 'italic' }}>
-                                  No tasks yet. Click "Add Task" to create one.
-                                </p>
-                              ) : (
-                                <div className="project-tasks-tree">
-                                  {getProjectTasksByParentId(null, project.id).map((task) => (
-                                    <ProjectTaskNode
-                                      key={task.id}
-                                      task={task}
-                                      level={0}
-                                      projectId={project.id}
-                                      allTasks={tasks}
-                                      expandedTasks={expandedProjectTasks}
-                                      onToggleExpand={toggleProjectTaskExpansion}
-                                      onToggleComplete={handleToggleProjectTaskCompletion}
-                                      onDelete={handleDeleteProjectTask}
-                                      onEdit={handleEditProjectTask}
-                                    />
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
                         </div>
                       );
                     })}
