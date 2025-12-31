@@ -194,6 +194,10 @@ export default function Tasks() {
   const [showAddYearlyTaskModal, setShowAddYearlyTaskModal] = useState(false);
   const [selectedDailyTaskForYearly, setSelectedDailyTaskForYearly] = useState<number | null>(null);
 
+  // Quarterly task modal state
+  const [showAddQuarterlyTaskModal, setShowAddQuarterlyTaskModal] = useState(false);
+  const [selectedDailyTaskForQuarterly, setSelectedDailyTaskForQuarterly] = useState<number | null>(null);
+
   // Today tab - Month filter state
   const [selectedTodayMonth, setSelectedTodayMonth] = useState<string | null>(null); // Format: "YYYY-MM" or null for all
 
@@ -2813,6 +2817,23 @@ export default function Tasks() {
       console.error('Error adding yearly task:', err);
       alert('Failed to add yearly task: ' + (err.response?.data?.detail || err.message));
     }
+  };
+
+  // Handle add quarterly task
+  const handleAddQuarterlyTask = async () => {
+    if (!selectedDailyTaskForQuarterly) {
+      setIsCreatingNewTask(true);
+      setAddToTrackingAfterCreate('quarterly' as any);
+      setIsTaskFormOpen(true);
+      setShowAddQuarterlyTaskModal(false);
+      return;
+    }
+
+    // For now, just close modal and reload - no quarterly status table yet
+    // User can track quarterly tasks in daily/weekly/monthly tabs
+    setShowAddQuarterlyTaskModal(false);
+    setSelectedDailyTaskForQuarterly(null);
+    await loadTasks();
   };
 
   // Change selected year
@@ -5946,7 +5967,7 @@ export default function Tasks() {
         <div className="date-navigator">
           <button 
             className="btn-nav btn-add-quarterly"
-            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
+            onClick={() => setShowAddQuarterlyTaskModal(true)}
             style={{ marginLeft: 'auto', backgroundColor: '#10b981', color: 'white' }}
           >
             ➕ Add Quarterly Task
@@ -6028,6 +6049,137 @@ export default function Tasks() {
             </div>
           )}
         </div>
+
+        {/* Add Quarterly Task Modal - Selection modal */}
+        {showAddQuarterlyTaskModal && (
+          <div className="modal-overlay" onClick={() => setShowAddQuarterlyTaskModal(false)}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Add Quarterly Task</h2>
+                <button className="btn-close" onClick={() => setShowAddQuarterlyTaskModal(false)}>×</button>
+              </div>
+              <div className="modal-body">
+                <p style={{ marginBottom: '15px', color: '#666' }}>
+                  Select an existing task to track for this quarter:
+                </p>
+                
+                <div className="form-group">
+                  <label htmlFor="dailyTaskSelectQuarterly">Select from Daily Tasks:</label>
+                  <select 
+                    id="dailyTaskSelectQuarterly"
+                    className="form-control"
+                    value={selectedDailyTaskForQuarterly || ''}
+                    onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      marginTop: '5px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e0'
+                    }}
+                  >
+                    <option value="">-- Select a daily task --</option>
+                    {tasks
+                      .filter(task => task.follow_up_frequency === 'daily' && task.is_active)
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '20px' }}>
+                  <label htmlFor="weeklyTaskSelectQuarterly">Select from Weekly Tasks:</label>
+                  <select 
+                    id="weeklyTaskSelectQuarterly"
+                    className="form-control"
+                    value={selectedDailyTaskForQuarterly || ''}
+                    onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      marginTop: '5px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e0'
+                    }}
+                  >
+                    <option value="">-- Select a weekly task --</option>
+                    {tasks
+                      .filter(task => task.follow_up_frequency === 'weekly' && task.is_active)
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginTop: '20px' }}>
+                  <label htmlFor="monthlyTaskSelectQuarterly">Select from Monthly Tasks:</label>
+                  <select 
+                    id="monthlyTaskSelectQuarterly"
+                    className="form-control"
+                    value={selectedDailyTaskForQuarterly || ''}
+                    onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      marginTop: '5px',
+                      borderRadius: '4px',
+                      border: '1px solid #cbd5e0'
+                    }}
+                  >
+                    <option value="">-- Select a monthly task --</option>
+                    {tasks
+                      .filter(task => task.follow_up_frequency === 'monthly' && task.is_active)
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                </div>
+
+                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
+                  OR
+                </div>
+
+                <button 
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setSelectedDailyTaskForQuarterly(null);
+                    handleAddQuarterlyTask();
+                  }}
+                  style={{ width: '100%' }}
+                >
+                  Create New Task
+                </button>
+              </div>
+              <div className="modal-footer">
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => {
+                    setShowAddQuarterlyTaskModal(false);
+                    setSelectedDailyTaskForQuarterly(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleAddQuarterlyTask}
+                  disabled={!selectedDailyTaskForQuarterly}
+                >
+                  Add to Quarterly
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <TaskForm
           isOpen={isTaskFormOpen}
