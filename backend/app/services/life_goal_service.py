@@ -463,21 +463,37 @@ def _recalculate_goal_progress(db: Session, goal_id: int):
         completed_tasks = sum(1 for t in goal_tasks if t.is_completed)
         task_progress = (completed_tasks / len(goal_tasks)) * 100
     
-    # Calculate weighted average (goal milestones = 40%, project milestones = 30%, tasks = 30%)
+    # Get project tasks from linked projects
+    from app.models.models import ProjectTask
+    project_tasks = []
+    for project in linked_projects:
+        tasks = db.query(ProjectTask).filter(ProjectTask.project_id == project.id).all()
+        project_tasks.extend(tasks)
+    
+    project_task_progress = 0.0
+    if project_tasks:
+        completed_project_tasks = sum(1 for t in project_tasks if t.is_completed)
+        project_task_progress = (completed_project_tasks / len(project_tasks)) * 100
+    
+    # Calculate weighted average (goal milestones = 30%, project milestones = 25%, goal tasks = 20%, project tasks = 25%)
     total_progress = 0.0
     weight_sum = 0.0
     
     if goal_milestones:
-        total_progress += goal_milestone_progress * 0.4
-        weight_sum += 0.4
+        total_progress += goal_milestone_progress * 0.3
+        weight_sum += 0.3
     
     if project_milestones:
-        total_progress += project_milestone_progress * 0.3
-        weight_sum += 0.3
+        total_progress += project_milestone_progress * 0.25
+        weight_sum += 0.25
     
     if goal_tasks:
-        total_progress += task_progress * 0.3
-        weight_sum += 0.3
+        total_progress += task_progress * 0.2
+        weight_sum += 0.2
+    
+    if project_tasks:
+        total_progress += project_task_progress * 0.25
+        weight_sum += 0.25
     
     # Normalize to actual weights present
     if weight_sum > 0:
@@ -497,7 +513,24 @@ def _recalculate_goal_progress(db: Session, goal_id: int):
         if not goal.actual_completion_date:
             goal.actual_completion_date = today
     elif goal.progress_percentage == 0:
-        goal.status = 'not_started'
+        # Check if any project has completed tasks or active work
+        has_project_activity = False
+        for project in linked_projects:
+            project_task_count = db.query(ProjectTask).filter(ProjectTask.project_id == project.id).count()
+            if project_task_count > 0:
+                completed_count = db.query(ProjectTask).filter(
+                    ProjectTask.project_id == project.id,
+                    ProjectTask.is_completed == True
+                ).count()
+                if completed_count > 0:
+                    has_project_activity = True
+                    break
+        
+        # If there's project activity, consider it in progress, otherwise not started
+        if has_project_activity:
+            goal.status = 'on_track'
+        else:
+            goal.status = 'not_started'
     elif goal.progress_percentage >= expected_progress - 10:
         goal.status = 'on_track'
     elif goal.progress_percentage >= expected_progress - 25:

@@ -258,6 +258,11 @@ def _update_project_status(db: Session, project_id: int):
         project.updated_at = datetime.now()
     
     db.commit()
+    
+    # If project is linked to a goal, recalculate goal progress
+    if project.goal_id:
+        from app.services.life_goal_service import _recalculate_goal_progress
+        _recalculate_goal_progress(db, project.goal_id)
 
 
 def delete_project_task(db: Session, task_id: int) -> bool:
