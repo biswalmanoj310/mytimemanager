@@ -5913,6 +5913,125 @@ export default function Tasks() {
     );
   }
 
+  if (activeTab === 'quarterly') {
+    const quarterlyTasks = tasks.filter(t => t.follow_up_frequency === 'quarterly');
+    
+    return (
+      <div className="tasks-page">
+        <header className="tasks-header">
+          <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <button 
+            className="btn btn-primary"
+            onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}
+            style={{ backgroundColor: '#10b981', color: 'white' }}
+          >
+            ➕ Add Quarterly Task
+          </button>
+        </header>
+        
+        <div className="tasks-tabs">
+          {tabs.map(tab => (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="container-fluid" style={{ padding: '20px' }}>
+          <div className="alert alert-info" style={{ marginBottom: '20px' }}>
+            <strong>📊 Quarterly Tasks:</strong> Track tasks that need to be completed every quarter (Q1: Jan-Mar, Q2: Apr-Jun, Q3: Jul-Sep, Q4: Oct-Dec).
+            Enter time in Daily/Weekly/Monthly tabs based on the task's follow-up frequency.
+          </div>
+
+          {quarterlyTasks.length === 0 ? (
+            <div className="alert alert-warning">
+              <i className="fas fa-exclamation-triangle me-2"></i>
+              No quarterly tasks found. Click "Add Quarterly Task" to create one.
+            </div>
+          ) : (
+            <div className="tasks-table-container">
+              <table className="tasks-table">
+                <thead>
+                  <tr>
+                    <th>Task</th>
+                    <th>Allocated</th>
+                    <th>Spent</th>
+                    <th>Remaining</th>
+                    <th>Actions</th>
+                    <th>Due Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {quarterlyTasks.map(task => {
+                    const spent = 0; // Would aggregate from daily/weekly/monthly
+                    const allocated = task.task_type === TaskType.TIME ? task.allocated_minutes : task.target_value || 0;
+                    const remaining = allocated - spent;
+
+                    return (
+                      <tr key={task.id} style={{ backgroundColor: task.is_completed ? '#c6f6d5' : task.is_active ? 'white' : '#e2e8f0' }}>
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{task.name}</div>
+                          <div style={{ fontSize: '12px', color: '#666' }}>
+                            {task.pillar_name} - {task.category_name}
+                          </div>
+                        </td>
+                        <td>{allocated} {task.task_type === TaskType.TIME ? 'min' : task.unit || ''}</td>
+                        <td>{spent} {task.task_type === TaskType.TIME ? 'min' : task.unit || ''}</td>
+                        <td>{remaining} {task.task_type === TaskType.TIME ? 'min' : task.unit || ''}</td>
+                        <td>
+                          <button
+                            className={`btn-complete ${task.is_completed ? 'active' : ''}`}
+                            onClick={async () => {
+                              await completeTask(task.id);
+                              await loadTasks();
+                            }}
+                            title="Mark as completed"
+                          >
+                            COMPLETED
+                          </button>
+                          <button
+                            className={`btn-na ${!task.is_active ? 'active' : ''}`}
+                            onClick={async () => {
+                              await markTaskNA(task.id);
+                              await loadTasks();
+                            }}
+                            title="Mark as NA"
+                          >
+                            NA
+                          </button>
+                        </td>
+                        <td>{task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <TaskForm
+          isOpen={isTaskFormOpen}
+          taskId={selectedTaskId || undefined}
+          onClose={() => setIsTaskFormOpen(false)}
+          onSuccess={async () => {
+            await loadTasks();
+            setIsTaskFormOpen(false);
+          }}
+        />
+      </div>
+    );
+  }
+
   if (activeTab === 'yearly') {
     return (
       <div className="tasks-page">
