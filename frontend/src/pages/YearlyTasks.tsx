@@ -288,15 +288,25 @@ const YearlyTasks: React.FC = () => {
       }
     }
     
+    // Find first month with data to calculate accurate average
+    const firstMonthWithData = months.find(m => getYearlyTime(task.id, m.month) > 0);
+    const firstDataMonth = firstMonthWithData ? firstMonthWithData.month : 1;
+    
     const today = new Date();
     const yearStart = new Date(yearStartDate);
+    
+    // Calculate months elapsed from first data entry (not from January)
     let monthsElapsed = 1;
     if (today.getFullYear() === yearStart.getFullYear()) {
-      monthsElapsed = today.getMonth() + 1;
+      // Current year: from first data month to current month
+      const currentMonth = today.getMonth() + 1;
+      monthsElapsed = Math.max(1, currentMonth - firstDataMonth + 1);
     } else if (today.getFullYear() > yearStart.getFullYear()) {
-      monthsElapsed = 12;
+      // Past year: from first data month to December
+      monthsElapsed = Math.max(1, 12 - firstDataMonth + 1);
     }
-    const monthsRemaining = 12 - monthsElapsed;
+    
+    const monthsRemaining = 12 - (today.getMonth() + 1); // Remaining in the year
     
     const avgSpentPerMonth = Math.round(totalSpent / monthsElapsed);
     const remaining = yearlyTarget - totalSpent;
@@ -381,7 +391,7 @@ const YearlyTasks: React.FC = () => {
               <tr>
                 <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
                 <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Month</th>
-                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual<br/>Average/Month</th>
+                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }} title="Calculated from first month with data">Actual Avg<br/>(Since Start)</th>
                 <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Month</th>
                 {months.map(m => <th key={m.month} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{m.name}</th>)}
                 <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
@@ -416,7 +426,11 @@ const YearlyTasks: React.FC = () => {
             <strong>{filteredTasks.length}</strong> tasks tracked this year
             {selectedPillar && <span> in <strong>{selectedPillar}</strong></span>}
             {selectedCategory && <span> / <strong>{selectedCategory}</strong></span>}
-            <div className="mt-2 small"><em>Note: Tasks shown here aggregate data from daily, weekly, and monthly tracking. Values are read-only and calculated automatically.</em></div>
+            <div className="mt-2 small">
+              <strong>📊 Read-Only Dashboard:</strong> Monthly values are auto-aggregated from Daily/Weekly/Monthly tabs. 
+              To update data, enter time in the task's home tab (Daily/Weekly/Monthly based on follow-up frequency). 
+              <strong>Average calculation starts from first month with data.</strong>
+            </div>
           </div>
         </div>
       </div>
