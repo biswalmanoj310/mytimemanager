@@ -2832,11 +2832,26 @@ export default function Tasks() {
       return;
     }
 
-    // For now, just close modal and reload - no quarterly status table yet
-    // User can track quarterly tasks in daily/weekly/monthly tabs
-    setShowAddQuarterlyTaskModal(false);
-    setSelectedDailyTaskForQuarterly(null);
-    await loadTasks();
+    try {
+      // Add to yearly tracking (quarterly shares yearly status)
+      const yearNumber = selectedYearStart.getFullYear();
+      const dateStr = `${yearNumber}-01-01`;
+      
+      await api.post(`/api/yearly-time/status/${selectedDailyTaskForQuarterly}`, {
+        year_start_date: dateStr,
+        is_completed: false,
+        is_na: false
+      });
+
+      setShowAddQuarterlyTaskModal(false);
+      setSelectedDailyTaskForQuarterly(null);
+      
+      // Reload yearly data to get updated statuses
+      await loadYearlyEntries(selectedYearStart);
+    } catch (err: any) {
+      console.error('Error adding task to quarterly:', err);
+      alert('Failed to add task to quarterly tracking');
+    }
   };
 
   // Change selected year
@@ -5938,30 +5953,24 @@ export default function Tasks() {
   }
 
   if (activeTab === 'quarterly') {
-    // Debug logging
+    // Show tasks that have been added to yearly tracking (shares yearlyTaskStatuses)
+    // Quarterly is a different view of yearly data (4 quarters vs 12 months)
+    const quarterlyTasks = tasks.filter(t => {
+      const hasBeenAddedToYearly = yearlyTaskStatuses[t.id] !== undefined;
+      return hasBeenAddedToYearly && t.is_active;
+    });
+    
     console.log('🔍 Quarterly Tab Debug:', {
       totalTasks: tasks.length,
+      tasksWithYearlyStatus: Object.keys(yearlyTaskStatuses).length,
+      yearlyTaskStatusIds: Object.keys(yearlyTaskStatuses),
+      quarterlyTasks: quarterlyTasks.length,
+      quarterlyTaskNames: quarterlyTasks.map(t => t.name),
       yearlyMonthlyAggregatesKeys: Object.keys(yearlyMonthlyAggregates).length,
-      sampleKeys: Object.keys(yearlyMonthlyAggregates).slice(0, 5),
+      sampleAggregateKeys: Object.keys(yearlyMonthlyAggregates).slice(0, 10),
       selectedYearStart,
       yearNumber: selectedYearStart.getFullYear()
     });
-    
-    // Show tasks that have quarterly data (from any frequency: daily, weekly, monthly, quarterly)
-    // Similar to yearly tab which shows tasks with yearly data regardless of home frequency
-    const quarterlyTasks = tasks.filter(t => {
-      // Check if task has any data in yearlyMonthlyAggregates for current year
-      const hasQuarterlyData = Object.keys(yearlyMonthlyAggregates).some(key => 
-        key.startsWith(`${t.id}-`) && yearlyMonthlyAggregates[key] > 0
-      );
-      const result = hasQuarterlyData && t.is_active;
-      if (hasQuarterlyData) {
-        console.log(`✅ Task ${t.id} "${t.name}" has quarterly data`);
-      }
-      return result;
-    });
-    
-    console.log('📊 Filtered quarterly tasks:', quarterlyTasks.length, quarterlyTasks.map(t => t.name));
     
     // Helper to get quarterly time from monthly aggregates
     const getQuarterlyTime = (taskId: number, quarter: number): number => {
@@ -6211,11 +6220,15 @@ export default function Tasks() {
                     <option value="">-- Select a daily task --</option>
                     {tasks
                       .filter(task => task.follow_up_frequency === 'daily' && task.is_active)
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .map(task => {
+                        const alreadyTracked = yearlyTaskStatuses[task.id] !== undefined;
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}
+                            {alreadyTracked ? ' ✓' : ''}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -6238,11 +6251,15 @@ export default function Tasks() {
                     <option value="">-- Select a weekly task --</option>
                     {tasks
                       .filter(task => task.follow_up_frequency === 'weekly' && task.is_active)
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .map(task => {
+                        const alreadyTracked = yearlyTaskStatuses[task.id] !== undefined;
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}
+                            {alreadyTracked ? ' ✓' : ''}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -6265,11 +6282,15 @@ export default function Tasks() {
                     <option value="">-- Select a monthly task --</option>
                     {tasks
                       .filter(task => task.follow_up_frequency === 'monthly' && task.is_active)
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .map(task => {
+                        const alreadyTracked = yearlyTaskStatuses[task.id] !== undefined;
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}
+                            {alreadyTracked ? ' ✓' : ''}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
