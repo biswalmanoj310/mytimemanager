@@ -126,17 +126,21 @@ const YearlyTasks: React.FC = () => {
     return yearlyMonthlyAggregates[key] || 0;
   };
 
-  const getYearlyRowColorClass = (task: Task, totalSpent: number): string => {
+  const getYearlyRowColorClass = (task: Task, totalSpent: number, firstDataMonth: number): string => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const yearStart = new Date(yearStartDate);
     yearStart.setHours(0, 0, 0, 0);
     
+    // Calculate months elapsed from first data entry (not from January)
     let monthsElapsed = 1;
     if (today.getFullYear() === yearStart.getFullYear()) {
-      monthsElapsed = today.getMonth() + 1;
+      // Current year: from first data month to current month
+      const currentMonth = today.getMonth() + 1;
+      monthsElapsed = Math.max(1, currentMonth - firstDataMonth + 1);
     } else if (today.getFullYear() > yearStart.getFullYear()) {
-      monthsElapsed = 12;
+      // Past year: from first data month to December
+      monthsElapsed = Math.max(1, 12 - firstDataMonth + 1);
     }
     
     let expectedTarget = 0;
@@ -312,7 +316,7 @@ const YearlyTasks: React.FC = () => {
     const remaining = yearlyTarget - totalSpent;
     const avgRemainingPerMonth = monthsRemaining > 0 ? Math.round(remaining / monthsRemaining) : 0;
     
-    const rowColorClass = getYearlyRowColorClass(task, totalSpent);
+    const rowColorClass = getYearlyRowColorClass(task, totalSpent, firstDataMonth);
     const yearlyStatus = yearlyTaskStatuses[task.id];
     const isYearlyCompleted = yearlyStatus?.is_completed || false;
     const isYearlyNA = yearlyStatus?.is_na || false;
