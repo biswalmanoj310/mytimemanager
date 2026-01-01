@@ -4919,6 +4919,122 @@ export default function Tasks() {
     return ''; // No color if no progress yet
   };
 
+  // Get cell-level color for yearly tab - determines if specific month meets target
+  function getYearlyMonthColorClass(task: Task, month: number): string {
+    // Debug for task 65 (Dhyan)
+    if (task.id === 65 && month === 1) {
+      console.log('🎨 Task 65 month coloring:', {
+        taskName: task.name,
+        month,
+        activeTab,
+        allocated_minutes: task.allocated_minutes,
+        task_type: task.task_type,
+        follow_up_frequency: task.follow_up_frequency
+      });
+    }
+    
+    if (activeTab !== 'yearly') {
+      if (task.id === 65 && month === 1) {
+        console.log('  ❌ Returning empty - activeTab is not yearly:', activeTab);
+      }
+      return '';
+    }
+    
+    const today = new Date();
+    const yearStart = new Date(selectedYearStart);
+    const currentYear = yearStart.getFullYear();
+    const currentMonth = today.getMonth() + 1; // 1-12
+    
+    // If viewing a future year or future month, no color
+    if (today.getFullYear() < currentYear || (today.getFullYear() === currentYear && today.getMonth() + 1 < month)) {
+      return '';
+    }
+    
+    // Get actual value for this month
+    const actualValue = getYearlyTime(task.id, month);
+    
+    // Calculate days elapsed in this month
+    let daysElapsed = 0;
+    if (today.getFullYear() === currentYear && today.getMonth() + 1 === month) {
+      // Current month: use today's date
+      daysElapsed = today.getDate();
+    } else {
+      // Past month: use full month days
+      const daysInMonth = new Date(currentYear, month, 0).getDate();
+      daysElapsed = daysInMonth;
+    }
+    
+    // Calculate expected value for this month based on task type and frequency
+    let expectedValue = 0;
+    if (task.task_type === TaskType.COUNT) {
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: target per day * days elapsed
+        expectedValue = (task.target_value || 0) * daysElapsed;
+      } else if (task.follow_up_frequency === 'weekly') {
+        // Weekly task: target per week * weeks elapsed in month
+        const weeksElapsed = daysElapsed / 7;
+        expectedValue = (task.target_value || 0) * weeksElapsed;
+      } else if (task.follow_up_frequency === 'monthly') {
+        // Monthly task: if month fully elapsed, expect full target; otherwise pro-rata
+        const daysInMonth = new Date(currentYear, month, 0).getDate();
+        expectedValue = (task.target_value || 0) * (daysElapsed / daysInMonth);
+      } else {
+        // Yearly task: pro-rata for this month
+        expectedValue = (task.target_value || 0) / 12;
+      }
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      // Boolean: 1 if done, 0 if not
+      if (task.follow_up_frequency === 'daily') {
+        expectedValue = daysElapsed; // Expect done every day
+      } else if (task.follow_up_frequency === 'weekly') {
+        const weeksElapsed = daysElapsed / 7;
+        expectedValue = weeksElapsed;
+      } else if (task.follow_up_frequency === 'monthly') {
+        const daysInMonth = new Date(currentYear, month, 0).getDate();
+        expectedValue = daysElapsed / daysInMonth; // Pro-rata
+      } else {
+        expectedValue = 1 / 12; // Yearly: 1/12 per month
+      }
+    } else {
+      // TIME task
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: allocated minutes per day * days elapsed
+        expectedValue = task.allocated_minutes * daysElapsed;
+        
+        // Debug for Dhyan task
+        if (task.name.includes('Dhyan')) {
+          console.log('🔍 Dhyan month color calculation:', {
+            month,
+            actualValue,
+            expectedValue,
+            allocated_minutes: task.allocated_minutes,
+            daysElapsed,
+            isOnTrack: actualValue >= expectedValue
+          });
+        }
+      } else if (task.follow_up_frequency === 'weekly') {
+        // Weekly task: allocated minutes per week * weeks elapsed
+        const weeksElapsed = daysElapsed / 7;
+        expectedValue = task.allocated_minutes * weeksElapsed;
+      } else if (task.follow_up_frequency === 'monthly') {
+        // Monthly task: allocated minutes * (days elapsed / days in month)
+        const daysInMonth = new Date(currentYear, month, 0).getDate();
+        expectedValue = task.allocated_minutes * (daysElapsed / daysInMonth);
+      } else {
+        // Yearly task: allocated minutes / 12
+        expectedValue = task.allocated_minutes / 12;
+      }
+    }
+    
+    // Return color class based on comparison
+    if (actualValue >= expectedValue) {
+      return 'weekly-on-track'; // Green - meeting or exceeding target
+    } else if (actualValue > 0) {
+      return 'weekly-below-target'; // Light red - below target but has some progress
+    }
+    return ''; // No color if no progress yet
+  };
+
   // Get cell-level color for weekly tab - determines if specific day meets target
   function getWeeklyCellColorClass(task: Task, dayIndex: number): string {
     // Allow checking from today tab for "Needs Attention" feature
@@ -5687,15 +5803,15 @@ export default function Tasks() {
                         if (task.follow_up_frequency !== 'daily') return false;
                         if (weeklyTaskStatuses[task.id]) return false;
                         
+                        // Exclude ALL completed tasks (global or daily)
+                        if (task.is_completed) return false;
+                        
+                        // Check if completed in daily status
+                        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+                        if (completionDateStr) return false;
+                        
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
-                        
-                        if (task.is_completed && task.completed_at) {
-                          const completedDate = new Date(task.completed_at);
-                          completedDate.setHours(0, 0, 0, 0);
-                          if (completedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
                         
                         if (!task.is_active && task.na_marked_at) {
                           const naMarkedDate = new Date(task.na_marked_at);
@@ -5894,15 +6010,15 @@ export default function Tasks() {
                         if (task.follow_up_frequency !== 'daily') return false;
                         if (monthlyTaskStatuses[task.id]) return false;
                         
+                        // Exclude ALL completed tasks (global or daily)
+                        if (task.is_completed) return false;
+                        
+                        // Check if completed in daily status
+                        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+                        if (completionDateStr) return false;
+                        
                         const today = new Date();
                         today.setHours(0, 0, 0, 0);
-                        
-                        if (task.is_completed && task.completed_at) {
-                          const completedDate = new Date(task.completed_at);
-                          completedDate.setHours(0, 0, 0, 0);
-                          if (completedDate.getTime() === today.getTime()) return true;
-                          return false;
-                        }
                         
                         if (!task.is_active && task.na_marked_at) {
                           const naMarkedDate = new Date(task.na_marked_at);
@@ -6168,7 +6284,31 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a daily task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'daily' && task.is_active)
+                      .filter(task => {
+                        if (task.follow_up_frequency !== 'daily') return false;
+                        
+                        // Exclude ALL completed tasks (global or daily)
+                        if (task.is_completed) return false;
+                        
+                        // Check if completed in daily status
+                        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+                        if (completionDateStr) return false;
+                        
+                        // Check NA status
+                        const today = new Date();
+                        if (!task.is_active && task.na_marked_at) {
+                          const naMarkedDate = new Date(task.na_marked_at);
+                          return naMarkedDate.getTime() === today.getTime();
+                        }
+                        return task.is_active;
+                      })
+                      .sort((a, b) => {
+                        const pillarCompare = (a.pillar_name || '').localeCompare(b.pillar_name || '');
+                        if (pillarCompare !== 0) return pillarCompare;
+                        const categoryCompare = (a.category_name || '').localeCompare(b.category_name || '');
+                        if (categoryCompare !== 0) return categoryCompare;
+                        return (a.name || '').localeCompare(b.name || '');
+                      })
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6195,7 +6335,7 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a weekly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'weekly' && task.is_active)
+                      .filter(task => task.follow_up_frequency === 'weekly' && task.is_active && !task.is_completed)
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6222,7 +6362,7 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a monthly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'monthly' && task.is_active)
+                      .filter(task => task.follow_up_frequency === 'monthly' && task.is_active && !task.is_completed)
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6385,7 +6525,19 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a daily task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'daily' && task.is_active)
+                      .filter(task => {
+                        if (task.follow_up_frequency !== 'daily') return false;
+                        if (!task.is_active) return false;
+                        
+                        // Exclude ALL completed tasks (global or daily)
+                        if (task.is_completed) return false;
+                        
+                        // Check if completed in daily status
+                        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+                        if (completionDateStr) return false;
+                        
+                        return true;
+                      })
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6412,7 +6564,12 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a weekly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'weekly' && task.is_active)
+                      .filter(task => {
+                        if (task.follow_up_frequency !== 'weekly') return false;
+                        if (!task.is_active) return false;
+                        if (task.is_completed) return false;
+                        return true;
+                      })
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6439,7 +6596,12 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a monthly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'monthly' && task.is_active)
+                      .filter(task => {
+                        if (task.follow_up_frequency !== 'monthly') return false;
+                        if (!task.is_active) return false;
+                        if (task.is_completed) return false;
+                        return true;
+                      })
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -13265,6 +13427,10 @@ export default function Tasks() {
               </tr>
             </thead>
             <tbody>
+              {(() => {
+                console.log('📊 Rendering yearly table tbody. filteredTasks.length:', filteredTasks.length, 'activeTab:', activeTab);
+                return null;
+              })()}
               {filteredTasks.map((task, taskIndex) => {
                 // Check if this task has any daily/monthly aggregates (meaning it came from daily/monthly tab)
                 const hasWeeklyDailyAggregates = activeTab === 'weekly' && weekDays.some(day => isFromDailyAggregate(task.id, day.index));
@@ -14083,6 +14249,7 @@ export default function Tasks() {
                       </td>
                       {/* 12 month columns (Jan - Dec) */}
                       {(() => {
+                        console.log('🔵 Rendering yearly months for task:', task.name);
                         const months = [];
                         const isBoolean = task.task_type === TaskType.BOOLEAN;
                         // If task has ANY monthly aggregates, disable ALL months for this task
@@ -14090,8 +14257,10 @@ export default function Tasks() {
                         
                         for (let month = 1; month <= 12; month++) {
                           const timeValue = getYearlyTime(task.id, month);
+                          const monthColorClass = getYearlyMonthColorClass(task, month);
+                          console.log('  Month', month, 'colorClass:', monthColorClass);
                           months.push(
-                            <td key={month} className={`col-hour ${colorClass}`}>
+                            <td key={month} className={`col-hour ${monthColorClass}`}>
                               {isBoolean ? (
                                 <input
                                   type="checkbox"

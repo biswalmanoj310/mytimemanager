@@ -175,59 +175,59 @@ const YearlyTasks: React.FC = () => {
   };
 
   const getYearlyRowColorClass = (task: Task, totalSpent: number, trackingStartMonth: number | null): string => {
-    // If trackingStartMonth is null, task was added before this year - no special handling needed
-    if (trackingStartMonth === null) {
-      trackingStartMonth = 1; // Track from beginning of year
-    }
-
+    // Row color based on YEAR-TO-DATE progress (days elapsed from Jan 1)
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
     const yearStart = new Date(yearStartDate);
-    yearStart.setHours(0, 0, 0, 0);
+    const currentYear = today.getFullYear();
+    const selectedYear = yearStart.getFullYear();
     
-    // Calculate months elapsed from tracking start (not from January)
-    let monthsElapsed = 1;
-    if (today.getFullYear() === yearStart.getFullYear()) {
-      // Current year: from tracking start month to current month
-      const currentMonth = today.getMonth() + 1;
-      monthsElapsed = Math.max(1, currentMonth - trackingStartMonth + 1);
-    } else if (today.getFullYear() > yearStart.getFullYear()) {
-      // Past year: from tracking start month to December
-      monthsElapsed = Math.max(1, 12 - trackingStartMonth + 1);
+    // Don't color future years
+    if (selectedYear > currentYear) return '';
+    
+    // Calculate days elapsed in the year so far
+    let daysElapsed = 0;
+    if (selectedYear === currentYear) {
+      // Current year: calculate days from Jan 1 to today
+      const startOfYear = new Date(currentYear, 0, 1);
+      daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    } else {
+      // Past year: 365 days
+      daysElapsed = 365;
     }
     
+    // Calculate expected based on days elapsed
     let expectedTarget = 0;
     if (task.task_type === TaskType.COUNT) {
       if (task.follow_up_frequency === 'daily') {
-        const daysPerMonth = 365 / 12;
-        expectedTarget = (task.target_value || 0) * daysPerMonth * monthsElapsed;
+        expectedTarget = (task.target_value || 0) * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        const weeksPerMonth = 52 / 12;
-        expectedTarget = (task.target_value || 0) * weeksPerMonth * monthsElapsed;
+        expectedTarget = (task.target_value || 0) * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
+        const monthsElapsed = today.getMonth() + 1;
         expectedTarget = (task.target_value || 0) * monthsElapsed;
       } else {
-        expectedTarget = (task.target_value || 0) * (monthsElapsed / 12);
+        expectedTarget = (task.target_value || 0) * (daysElapsed / 365);
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
       if (task.follow_up_frequency === 'daily') {
-        expectedTarget = (365 / 12) * monthsElapsed;
+        expectedTarget = daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        expectedTarget = (52 / 12) * monthsElapsed;
+        expectedTarget = daysElapsed / 7;
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedTarget = monthsElapsed;
+        expectedTarget = today.getMonth() + 1;
       } else {
-        expectedTarget = monthsElapsed / 12;
+        expectedTarget = daysElapsed / 365;
       }
     } else {
+      // TIME task
       if (task.follow_up_frequency === 'daily') {
-        expectedTarget = task.allocated_minutes * (365 / 12) * monthsElapsed;
+        expectedTarget = task.allocated_minutes * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        expectedTarget = task.allocated_minutes * (52 / 12) * monthsElapsed;
+        expectedTarget = task.allocated_minutes * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedTarget = task.allocated_minutes * monthsElapsed;
+        expectedTarget = task.allocated_minutes * (today.getMonth() + 1);
       } else {
-        expectedTarget = task.allocated_minutes * (monthsElapsed / 12);
+        expectedTarget = task.allocated_minutes * (daysElapsed / 365);
       }
     }
     
@@ -242,44 +242,61 @@ const YearlyTasks: React.FC = () => {
     const currentMonth = today.getMonth() + 1;
     const selectedYear = yearStartDate.getFullYear();
     
+    // Don't color future months
     if (selectedYear > currentYear) return '';
     if (selectedYear === currentYear && month > currentMonth) return '';
     
+    // Calculate days elapsed in this specific month
+    let daysElapsed = 0;
+    if (selectedYear === currentYear && month === currentMonth) {
+      // Current month: use today's date (1 day on Jan 1)
+      daysElapsed = today.getDate();
+    } else {
+      // Past month: use full month days
+      const daysInMonth = new Date(selectedYear, month, 0).getDate();
+      daysElapsed = daysInMonth;
+    }
+    
+    // Calculate expected value based on days elapsed in THIS month
     let expectedValue = 0;
     if (task.task_type === TaskType.COUNT) {
       if (task.follow_up_frequency === 'daily') {
-        expectedValue = (task.target_value || 0) * (365 / 12);
+        expectedValue = (task.target_value || 0) * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        expectedValue = (task.target_value || 0) * (52 / 12);
+        expectedValue = (task.target_value || 0) * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedValue = task.target_value || 0;
+        const daysInMonth = new Date(selectedYear, month, 0).getDate();
+        expectedValue = (task.target_value || 0) * (daysElapsed / daysInMonth);
       } else {
         expectedValue = (task.target_value || 0) / 12;
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
       if (task.follow_up_frequency === 'daily') {
-        expectedValue = 365 / 12;
+        expectedValue = daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        expectedValue = 52 / 12;
+        expectedValue = daysElapsed / 7;
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedValue = 1;
+        const daysInMonth = new Date(selectedYear, month, 0).getDate();
+        expectedValue = daysElapsed / daysInMonth;
       } else {
         expectedValue = 1 / 12;
       }
     } else {
+      // TIME task
       if (task.follow_up_frequency === 'daily') {
-        expectedValue = task.allocated_minutes * (365 / 12);
+        expectedValue = task.allocated_minutes * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        expectedValue = task.allocated_minutes * (52 / 12);
+        expectedValue = task.allocated_minutes * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedValue = task.allocated_minutes;
+        const daysInMonth = new Date(selectedYear, month, 0).getDate();
+        expectedValue = task.allocated_minutes * (daysElapsed / daysInMonth);
       } else {
         expectedValue = task.allocated_minutes / 12;
       }
     }
     
     if (actualValue >= expectedValue) return 'cell-achieved';
-    else if (expectedValue > 0) return 'cell-below-target';
+    else if (actualValue > 0) return 'cell-below-target';
     return '';
   };
 

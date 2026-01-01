@@ -156,63 +156,122 @@ const QuarterlyTasks: React.FC = () => {
   };
 
   const getQuarterlyRowColorClass = (task: Task, totalSpent: number, trackingStartQuarter: number | null): string => {
-    // If trackingStartQuarter is null, task was added before this year - no special handling needed
-    if (trackingStartQuarter === null) {
-      trackingStartQuarter = 1; // Track from beginning of year
-    }
-
-    const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
+    // Row color based on YEAR-TO-DATE progress (days elapsed from Jan 1)
+    const currentYear = today.getFullYear();
+    const selectedYear = yearStartDate.getFullYear();
     
-    // Calculate yearly target based on task type
-    let yearlyTarget = 0;
+    // Don't color future years
+    if (selectedYear > currentYear) return '';
+    
+    // Calculate days elapsed in the year so far
+    let daysElapsed = 0;
+    if (selectedYear === currentYear) {
+      const startOfYear = new Date(currentYear, 0, 1);
+      daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    } else {
+      daysElapsed = 365;
+    }
+    
+    // Calculate expected based on days elapsed
+    let expectedTarget = 0;
     if (task.task_type === TaskType.COUNT) {
       if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = (task.target_value || 0) * 365;
+        expectedTarget = (task.target_value || 0) * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = Math.round((task.target_value || 0) * 52);
+        expectedTarget = (task.target_value || 0) * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = (task.target_value || 0) * 12;
+        const monthsElapsed = today.getMonth() + 1;
+        expectedTarget = (task.target_value || 0) * monthsElapsed;
       } else {
-        yearlyTarget = task.target_value || 0;
+        expectedTarget = (task.target_value || 0) * (daysElapsed / 365);
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
       if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = 365;
+        expectedTarget = daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = 52;
+        expectedTarget = daysElapsed / 7;
       } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = 12;
+        expectedTarget = today.getMonth() + 1;
       } else {
-        yearlyTarget = 1;
+        expectedTarget = daysElapsed / 365;
       }
     } else {
+      // TIME task
       if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = task.allocated_minutes * 365;
+        expectedTarget = task.allocated_minutes * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = task.allocated_minutes * 52;
+        expectedTarget = task.allocated_minutes * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = task.allocated_minutes * 12;
+        expectedTarget = task.allocated_minutes * (today.getMonth() + 1);
       } else {
-        yearlyTarget = task.allocated_minutes;
+        expectedTarget = task.allocated_minutes * (daysElapsed / 365);
       }
     }
+    
+    if (totalSpent >= expectedTarget) return 'weekly-on-track';
+    else if (totalSpent > 0) return 'weekly-below-target';
+    return '';
+  };
 
-    // Calculate quarters elapsed from tracking start
-    let quartersElapsed = 1;
-    if (today.getFullYear() === yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, currentQuarter - trackingStartQuarter + 1);
-    } else if (today.getFullYear() > yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, 4 - trackingStartQuarter + 1);
+  const getQuarterlyCellColorClass = (task: Task, actualValue: number, quarter: number): string => {
+    const currentYear = today.getFullYear();
+    const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
+    const selectedYear = yearStartDate.getFullYear();
+    
+    // Don't color future quarters
+    if (selectedYear > currentYear) return '';
+    if (selectedYear === currentYear && quarter > currentQuarter) return '';
+    
+    // Calculate days elapsed in this specific quarter
+    let daysElapsed = 0;
+    if (selectedYear === currentYear && quarter === currentQuarter) {
+      // Current quarter: calculate days from quarter start to today
+      const quarterStartMonth = (quarter - 1) * 3;
+      const quarterStart = new Date(currentYear, quarterStartMonth, 1);
+      daysElapsed = Math.floor((today.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    } else {
+      // Past quarter: ~91 days (365 / 4)
+      daysElapsed = Math.round(365 / 4);
     }
-
-    // Expected should be proportional to quarters elapsed
-    const expectedTarget = (yearlyTarget / 4) * quartersElapsed;
-
-    if (totalSpent >= expectedTarget) {
-      return 'weekly-on-track';
-    } else if (totalSpent > 0) {
-      return 'weekly-below-target';
+    
+    // Calculate expected value based on days elapsed in THIS quarter
+    let expectedValue = 0;
+    if (task.task_type === TaskType.COUNT) {
+      if (task.follow_up_frequency === 'daily') {
+        expectedValue = (task.target_value || 0) * daysElapsed;
+      } else if (task.follow_up_frequency === 'weekly') {
+        expectedValue = (task.target_value || 0) * (daysElapsed / 7);
+      } else if (task.follow_up_frequency === 'monthly') {
+        // ~3 months per quarter
+        expectedValue = (task.target_value || 0) * (daysElapsed / (365 / 12));
+      } else {
+        expectedValue = (task.target_value || 0) / 4;
+      }
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      if (task.follow_up_frequency === 'daily') {
+        expectedValue = daysElapsed;
+      } else if (task.follow_up_frequency === 'weekly') {
+        expectedValue = daysElapsed / 7;
+      } else if (task.follow_up_frequency === 'monthly') {
+        expectedValue = daysElapsed / (365 / 12);
+      } else {
+        expectedValue = 0.25;
+      }
+    } else {
+      // TIME task
+      if (task.follow_up_frequency === 'daily') {
+        expectedValue = task.allocated_minutes * daysElapsed;
+      } else if (task.follow_up_frequency === 'weekly') {
+        expectedValue = task.allocated_minutes * (daysElapsed / 7);
+      } else if (task.follow_up_frequency === 'monthly') {
+        expectedValue = task.allocated_minutes * (daysElapsed / (365 / 12));
+      } else {
+        expectedValue = task.allocated_minutes / 4;
+      }
     }
+    
+    if (actualValue >= expectedValue) return 'cell-achieved';
+    else if (actualValue > 0) return 'cell-below-target';
     return '';
   };
 
@@ -373,11 +432,12 @@ const QuarterlyTasks: React.FC = () => {
         </td>
         {quarters.map(q => {
           const quarterValue = getQuarterlyTime(task.id, q.quarter);
+          const cellColorClass = getQuarterlyCellColorClass(task, quarterValue, q.quarter);
           // Only show background color if this quarter is >= tracking start quarter
           const shouldShowColor = trackingStartQuarter !== null && q.quarter >= trackingStartQuarter;
-          const bgColor = shouldShowColor && quarterValue > 0 ? '#e6ffed' : undefined;
+          const bgColor = shouldShowColor && quarterValue > 0 && !cellColorClass ? '#e6ffed' : undefined;
           return (
-            <td key={q.quarter} className="col-hour" style={{ backgroundColor: bgColor, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
+            <td key={q.quarter} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: bgColor, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
               {quarterValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(quarterValue)) : '-'}
             </td>
           );
