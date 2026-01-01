@@ -31,6 +31,7 @@ def create_project(
     pillar_id: Optional[int] = None,
     category_id: Optional[int] = None,
     goal_id: Optional[int] = None,  # Add goal_id parameter
+    related_wish_id: Optional[int] = None,  # Add related_wish_id parameter
     start_date: Optional[date] = None,
     target_completion_date: Optional[date] = None
 ) -> Project:
@@ -41,6 +42,7 @@ def create_project(
         pillar_id=pillar_id,
         category_id=category_id,
         goal_id=goal_id,  # Set goal_id
+        related_wish_id=related_wish_id,  # Set related_wish_id
         start_date=datetime.combine(start_date, datetime.min.time()) if start_date else None,
         target_completion_date=datetime.combine(target_completion_date, datetime.min.time()) if target_completion_date else None,
         status="not_started"

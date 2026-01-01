@@ -19,9 +19,11 @@ backend/app/database/config.py   # DB session factory (get_db dependency injecti
 backend/app/services/            # Business logic layer (25 service files - stateless @staticmethod pattern)
 backend/app/routes/              # API endpoints (30+ routers - import models for relationship resolution)
 backend/app/models/models.py     # SQLAlchemy models (must import in main.py before routes)
+backend/app/models/schemas.py    # Pydantic schemas for request/response validation
 frontend/src/contexts/           # Global state (TaskContext, TimeEntriesContext, UserPreferencesProvider)
 frontend/src/App.tsx             # Context providers wrap all routes (order matters!)
-backend/migrations/              # Database migrations (NNN_*.sql or add_*.py)
+frontend/src/components/PillarCategorySelector.tsx  # Reusable org hierarchy selector
+backend/migrations/              # Database migrations (NNN_*.py or NNN_*.sql)
 backend/database/mytimemanager.db # SQLite database (backup at ~/mytimemanager_backups/)
 ```
 
@@ -38,9 +40,9 @@ Tasks have ONE "home tab" determined by `follow_up_frequency` field:
 - `weekly` → Weekly tab (resets Sunday)
 - `monthly` → Monthly tab (resets 1st of month)
 - `yearly` → Yearly tab
-- `one_time` → Projects/One-Time tab
+- `one_time` → Important Tasks (formerly Projects/One-Time tab)
 
-**Multi-Tab Monitoring**: Tasks can be monitored in OTHER tabs via status tables (`weekly_task_status`, `monthly_task_status`, `yearly_task_status`), but only have ONE home tab.
+**Multi-Tab Monitoring**: Tasks can be monitored in OTHER tabs via status tables (`daily_task_status`, `weekly_task_status`, `monthly_task_status`, `yearly_task_status`), but only have ONE home tab.
 
 ### 3. Dual Completion Tracking
 **Global Completion** (set in home tab only):
@@ -48,7 +50,7 @@ Tasks have ONE "home tab" determined by `follow_up_frequency` field:
 - `task.completed_at = timestamp`
 
 **Tab-Specific Status** (set in monitoring tabs):
-- Separate rows in `daily_task_status`, `weekly_task_status`, `monthly_task_status`
+- Separate rows in `daily_task_status`, `weekly_task_status`, `monthly_task_status`, `yearly_task_status`
 - Allows cross-tab tracking without affecting global state
 
 **NA (Not Applicable)**: `task.is_active = false` + `task.na_marked_at = timestamp` → shows gray background until period ends

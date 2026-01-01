@@ -125,6 +125,7 @@ def get_projects(
             "name": project.name,
             "description": project.description,
             "goal_id": project.goal_id,  # Add goal_id for goal linking
+            "related_wish_id": project.related_wish_id,  # Add related_wish_id for dream linking
             "pillar_id": project.pillar_id,
             "category_id": project.category_id,
             "start_date": project.start_date.date() if project.start_date else None,
@@ -164,6 +165,7 @@ def get_project(
         "description": project.description,
         "pillar_id": project.pillar_id,
         "category_id": project.category_id,
+        "related_wish_id": project.related_wish_id,
         "start_date": project.start_date.date() if project.start_date else None,
         "target_completion_date": project.target_completion_date.date() if project.target_completion_date else None,
         "status": project.status,
@@ -222,6 +224,7 @@ def create_project(
         pillar_id=project.pillar_id,
         category_id=project.category_id,
         goal_id=project.goal_id,  # Pass goal_id to service
+        related_wish_id=project.related_wish_id,  # Pass related_wish_id to service
         start_date=project.start_date,
         target_completion_date=project.target_completion_date
     )
@@ -233,6 +236,7 @@ def create_project(
         "pillar_id": new_project.pillar_id,
         "category_id": new_project.category_id,
         "goal_id": new_project.goal_id,
+        "related_wish_id": new_project.related_wish_id,
         "start_date": new_project.start_date.date() if new_project.start_date else None,
         "target_completion_date": new_project.target_completion_date.date() if new_project.target_completion_date else None,
         "status": new_project.status,

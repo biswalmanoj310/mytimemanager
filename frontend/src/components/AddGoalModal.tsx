@@ -26,6 +26,7 @@ interface LifeGoal {
   pillar_id?: number | null;
   category_id?: number | null;
   sub_category_id?: number | null;
+  related_wish_id?: number | null;
 }
 
 interface AddGoalModalProps {
@@ -50,7 +51,9 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
 
   // Initialize values when editing
   useEffect(() => {
+    console.log('🎯 Modal useEffect - editingGoal:', editingGoal);
     if (editingGoal) {
+      console.log('🎯 editingGoal.related_wish_id:', editingGoal.related_wish_id);
       setPillarId(editingGoal.pillar_id || null);
       setCategoryId(editingGoal.category_id || null);
       setSubCategoryId(editingGoal.sub_category_id || null);
@@ -97,10 +100,15 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
         // NEW: Pillar/Category linking
         pillar_id: pillarId,
         category_id: categoryId,
-        sub_category_id: subCategoryId
+        sub_category_id: subCategoryId,
+        // Link to dream if provided
+        related_wish_id: editingGoal?.related_wish_id || null
       };
       
-      if (editingGoal) {
+      console.log('🎯 Saving goal with data:', goalData);
+      console.log('🎯 editingGoal:', editingGoal);
+      
+      if (editingGoal && editingGoal.id) {
         await api.put(`/api/life-goals/${editingGoal.id}`, goalData);
         alert('Goal updated successfully!');
       } else {
@@ -112,7 +120,12 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
       onClose();
     } catch (err: any) {
       console.error('Error saving goal:', err);
-      alert('Failed to save goal: ' + (err.response?.data?.detail || err.message));
+      const errorMessage = err.response?.data?.detail 
+        ? (typeof err.response.data.detail === 'string' 
+          ? err.response.data.detail 
+          : JSON.stringify(err.response.data.detail))
+        : err.message || 'Unknown error';
+      alert('Failed to save goal: ' + errorMessage);
     }
   };
 
@@ -324,7 +337,7 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
                 Cancel
               </button>
               <button type="submit" className="btn btn-primary">
-                {editingGoal ? 'Update Goal' : 'Create Goal'}
+                {editingGoal?.id ? 'Update Goal' : 'Create Goal'}
               </button>
             </div>
           </form>

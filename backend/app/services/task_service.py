@@ -87,6 +87,7 @@ class TaskService:
             is_daily_one_time=task_data.is_daily_one_time,
             goal_id=task_data.goal_id,
             is_part_of_goal=task_data.is_part_of_goal,
+            related_wish_id=task_data.related_wish_id,
             project_id=task_data.project_id,
             parent_task_id=task_data.parent_task_id,
             priority=task_data.priority,

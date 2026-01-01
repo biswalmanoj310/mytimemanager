@@ -305,6 +305,25 @@ def get_reflections(wish_id: int, db: Session = Depends(get_db)):
     return reflections
 
 
+@router.delete("/{wish_id}/reflections/{reflection_id}")
+def delete_reflection(
+    wish_id: int,
+    reflection_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a reflection"""
+    from app.models.models import WishReflection
+    reflection = db.query(WishReflection).filter(
+        WishReflection.id == reflection_id,
+        WishReflection.wish_id == wish_id
+    ).first()
+    if not reflection:
+        raise HTTPException(status_code=404, detail="Reflection not found")
+    db.delete(reflection)
+    db.commit()
+    return {"message": "Reflection deleted successfully"}
+
+
 # ============================================================================
 # EXPLORATION STEPS ENDPOINTS
 # ============================================================================
@@ -363,6 +382,50 @@ def get_exploration_steps(wish_id: int, db: Session = Depends(get_db)):
     """Get all exploration steps for a wish"""
     steps = WishService.get_exploration_steps(db, wish_id)
     return steps
+
+
+@router.put("/{wish_id}/steps/{step_id}")
+def update_exploration_step(
+    wish_id: int,
+    step_id: int,
+    step_data: dict,
+    db: Session = Depends(get_db)
+):
+    """Update an exploration step"""
+    from app.models.models import WishExplorationStep
+    step = db.query(WishExplorationStep).filter(
+        WishExplorationStep.id == step_id,
+        WishExplorationStep.wish_id == wish_id
+    ).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    
+    for key, value in step_data.items():
+        if hasattr(step, key):
+            setattr(step, key, value)
+    
+    db.commit()
+    db.refresh(step)
+    return step
+
+
+@router.delete("/{wish_id}/steps/{step_id}")
+def delete_exploration_step(
+    wish_id: int,
+    step_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete an exploration step"""
+    from app.models.models import WishExplorationStep
+    step = db.query(WishExplorationStep).filter(
+        WishExplorationStep.id == step_id,
+        WishExplorationStep.wish_id == wish_id
+    ).first()
+    if not step:
+        raise HTTPException(status_code=404, detail="Step not found")
+    db.delete(step)
+    db.commit()
+    return {"message": "Exploration step deleted successfully"}
 
 
 # ============================================================================

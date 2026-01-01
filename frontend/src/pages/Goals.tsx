@@ -325,6 +325,771 @@ interface WishData {
 
 type TabType = 'goals' | 'wishes';
 
+// Wish Activities Component - Shows tasks, projects, goals for a wish
+const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => {
+  const [activities, setActivities] = useState<{ tasks: any[], projects: any[], goals: any[], reflections: any[], explorationSteps: any[], completedItems: any[] }>({ 
+    tasks: [], projects: [], goals: [], reflections: [], explorationSteps: [], completedItems: [] 
+  });
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const reloadActivities = async () => {
+    try {
+      setLoading(true);
+      const [allTasks, allProjects, allGoals, allReflections, allSteps] = await Promise.all([
+        api.get('/api/tasks/').catch(() => []),
+        api.get('/api/projects/').catch(() => []),
+        api.get('/api/life-goals/').catch(() => []),
+        api.get(`/api/wishes/${selectedWish.id}/reflections`).catch(() => []),
+        api.get(`/api/wishes/${selectedWish.id}/steps`).catch(() => [])
+      ]);
+      
+      // Filter by related_wish_id (same pattern as loadWishStats)
+      const tasks = (Array.isArray(allTasks) ? allTasks : []).filter((t: any) => t.related_wish_id === selectedWish.id);
+      const projects = (Array.isArray(allProjects) ? allProjects : []).filter((p: any) => p.related_wish_id === selectedWish.id);
+      const goals = (Array.isArray(allGoals) ? allGoals : []).filter((g: any) => g.related_wish_id === selectedWish.id);
+      const reflections = Array.isArray(allReflections) ? allReflections : [];
+      const explorationSteps = Array.isArray(allSteps) ? allSteps : [];
+      
+      const activeTasks = tasks.filter((t: any) => !t.is_completed && t.is_active !== false);
+      const activeProjects = projects.filter((p: any) => p.status !== 'completed');
+      const activeGoals = goals.filter((g: any) => g.status !== 'completed' && g.status !== 'abandoned');
+      const activeSteps = explorationSteps.filter((s: any) => !s.is_completed);
+      const completedItems = [
+        ...tasks.filter((t: any) => t.is_completed).map((t: any) => ({ ...t, type: 'task', name: t.task_name || t.name })),
+        ...projects.filter((p: any) => p.status === 'completed').map((p: any) => ({ ...p, type: 'project', name: p.project_name || p.name })),
+        ...goals.filter((g: any) => g.status === 'completed').map((g: any) => ({ ...g, type: 'goal', name: g.goal_name || g.name })),
+        ...explorationSteps.filter((s: any) => s.is_completed).map((s: any) => ({ ...s, type: 'step', name: s.step_title || s.name }))
+      ];
+      
+      setActivities({ tasks: activeTasks, projects: activeProjects, goals: activeGoals, reflections, explorationSteps: activeSteps, completedItems });
+    } catch (err) {
+      console.error('Error loading activities:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadActivities();
+  }, [selectedWish.id]);
+
+  if (loading) return <div style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic' }}>Loading activities...</div>;
+
+  // Show empty state if no activities
+  if (activities.tasks.length === 0 && activities.projects.length === 0 && activities.goals.length === 0 && activities.reflections.length === 0 && activities.explorationSteps.length === 0 && activities.completedItems.length === 0) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center', color: '#9ca3af', fontStyle: 'italic', fontSize: '14px' }}>
+        No tasks, projects, goals, or reflections linked to this dream yet. Use the buttons above to add activities!
+      </div>
+    );
+  }
+
+  const handleCompleteGoal = async (goalId: number) => {
+    if (confirm('Mark this goal as complete?')) {
+      try {
+        // Optimistic update - move to completed immediately
+        setActivities(prev => {
+          const goal = prev.goals.find(g => g.id === goalId);
+          if (!goal) return prev;
+          
+          return {
+            ...prev,
+            goals: prev.goals.filter(g => g.id !== goalId),
+            completedItems: [...prev.completedItems, { ...goal, type: 'goal', status: 'completed', actual_completion_date: new Date().toISOString().split('T')[0] }]
+          };
+        });
+        
+        await api.put(`/api/life-goals/${goalId}`, { status: 'completed', actual_completion_date: new Date().toISOString().split('T')[0] });
+        showToast('Goal completed! 🎉', 'success');
+      } catch (err) {
+        console.error('Error completing goal:', err);
+        showToast('Failed to complete goal', 'error');
+        await reloadActivities();
+      }
+    }
+  };
+
+  const handleCompleteProject = async (projectId: number) => {
+    if (confirm('Mark this project as complete?')) {
+      try {
+        // Optimistic update - move to completed immediately
+        setActivities(prev => {
+          const project = prev.projects.find(p => p.id === projectId);
+          if (!project) return prev;
+          
+          return {
+            ...prev,
+            projects: prev.projects.filter(p => p.id !== projectId),
+            completedItems: [...prev.completedItems, { ...project, type: 'project', status: 'completed', is_completed: true, completed_at: new Date().toISOString() }]
+          };
+        });
+        
+        await api.put(`/api/projects/${projectId}`, { status: 'completed', is_completed: true, completed_at: new Date().toISOString() });
+        showToast('Project completed! 🎉', 'success');
+      } catch (err) {
+        console.error('Error completing project:', err);
+        showToast('Failed to complete project', 'error');
+        await reloadActivities();
+      }
+    }
+  };
+
+  const handleCompleteTask = async (taskId: number) => {
+    if (confirm('Mark this task as complete?')) {
+      try {
+        // Optimistic update - move to completed immediately
+        setActivities(prev => {
+          const task = prev.tasks.find(t => t.id === taskId);
+          if (!task) return prev;
+          
+          return {
+            ...prev,
+            tasks: prev.tasks.filter(t => t.id !== taskId),
+            completedItems: [...prev.completedItems, { ...task, type: 'task', is_completed: true, completed_at: new Date().toISOString() }]
+          };
+        });
+        
+        await api.post(`/api/tasks/${taskId}/complete`);
+        showToast('Task completed! ✅', 'success');
+      } catch (err) {
+        console.error('Error completing task:', err);
+        showToast('Failed to complete task', 'error');
+        await reloadActivities();
+      }
+    }
+  };
+
+  const handleDeleteReflection = async (reflectionId: number) => {
+    if (confirm('Archive this reflection? It will be moved to the completed section.')) {
+      try {
+        // Optimistic update - move to completed
+        setActivities(prev => {
+          const reflection = prev.reflections.find(r => r.id === reflectionId);
+          if (!reflection) return prev;
+          
+          return {
+            ...prev,
+            reflections: prev.reflections.filter(r => r.id !== reflectionId),
+            completedItems: [...prev.completedItems, { ...reflection, type: 'reflection', name: reflection.reflection_text?.substring(0, 50) + '...', completed_at: new Date().toISOString() }]
+          };
+        });
+        
+        // Note: Backend doesn't have archive field yet, so we're just removing from UI
+        // In a future update, we can add an 'is_archived' field to reflections table
+        showToast('Reflection archived! 📦', 'success');
+      } catch (err) {
+        console.error('Error archiving reflection:', err);
+        showToast('Failed to archive reflection', 'error');
+        await reloadActivities();
+      }
+    }
+  };
+
+  const handleCompleteStep = async (stepId: number) => {
+    try {
+      // Optimistic update - move to completed immediately
+      setActivities(prev => {
+        const step = prev.explorationSteps.find(s => s.id === stepId);
+        if (!step) return prev;
+        
+        return {
+          ...prev,
+          explorationSteps: prev.explorationSteps.filter(s => s.id !== stepId),
+          completedItems: [...prev.completedItems, { ...step, type: 'step', is_completed: true, completed_at: new Date().toISOString() }]
+        };
+      });
+      
+      await api.put(`/api/wishes/${selectedWish.id}/steps/${stepId}`, { is_completed: true, completed_at: new Date().toISOString() });
+      showToast('Step completed! ✅', 'success');
+    } catch (err) {
+      console.error('Error completing step:', err);
+      showToast('Failed to complete step', 'error');
+      await reloadActivities();
+    }
+  };
+
+  const handleDeleteStep = async (stepId: number) => {
+    try {
+      // Optimistic update - move to completed immediately
+      setActivities(prev => {
+        const step = prev.explorationSteps.find(s => s.id === stepId);
+        if (!step) return prev;
+        
+        return {
+          ...prev,
+          explorationSteps: prev.explorationSteps.filter(s => s.id !== stepId),
+          completedItems: [...prev.completedItems, { ...step, type: 'step', is_completed: true, completed_at: new Date().toISOString() }]
+        };
+      });
+      
+      await api.put(`/api/wishes/${selectedWish.id}/steps/${stepId}`, { is_completed: true, completed_at: new Date().toISOString() });
+      showToast('Step completed! ✅', 'success');
+    } catch (err) {
+      console.error('Error completing step:', err);
+      showToast('Failed to complete step', 'error');
+      await reloadActivities();
+    }
+  };
+
+  const handleRestoreGoal = async (goalId: number) => {
+    try {
+      // Optimistic update - move item immediately
+      setActivities(prev => {
+        const completedGoal = prev.completedItems.find(item => item.type === 'goal' && item.id === goalId);
+        if (!completedGoal) return prev;
+        
+        return {
+          ...prev,
+          goals: [...prev.goals, { ...completedGoal, status: 'not_started', actual_completion_date: null }],
+          completedItems: prev.completedItems.filter(item => !(item.type === 'goal' && item.id === goalId))
+        };
+      });
+      
+      await api.put(`/api/life-goals/${goalId}`, { status: 'not_started', actual_completion_date: null });
+      showToast('Goal restored! 🔄', 'success');
+    } catch (err) {
+      console.error('Error restoring goal:', err);
+      showToast('Failed to restore goal', 'error');
+      await reloadActivities(); // Reload on error to revert
+    }
+  };
+
+  const handleRestoreProject = async (projectId: number) => {
+    try {
+      // Optimistic update - move item immediately
+      setActivities(prev => {
+        const completedProject = prev.completedItems.find(item => item.type === 'project' && item.id === projectId);
+        if (!completedProject) return prev;
+        
+        return {
+          ...prev,
+          projects: [...prev.projects, { ...completedProject, status: 'not_started', is_completed: false, completed_at: null }],
+          completedItems: prev.completedItems.filter(item => !(item.type === 'project' && item.id === projectId))
+        };
+      });
+      
+      await api.put(`/api/projects/${projectId}`, { status: 'not_started', is_completed: false, completed_at: null });
+      showToast('Project restored! 🔄', 'success');
+    } catch (err) {
+      console.error('Error restoring project:', err);
+      showToast('Failed to restore project', 'error');
+      await reloadActivities(); // Reload on error to revert
+    }
+  };
+
+  const handleRestoreTask = async (taskId: number) => {
+    try {
+      // Optimistic update - move item immediately
+      setActivities(prev => {
+        const completedTask = prev.completedItems.find(item => item.type === 'task' && item.id === taskId);
+        if (!completedTask) return prev;
+        
+        return {
+          ...prev,
+          tasks: [...prev.tasks, { ...completedTask, is_completed: false, completed_at: null }],
+          completedItems: prev.completedItems.filter(item => !(item.type === 'task' && item.id === taskId))
+        };
+      });
+      
+      await api.put(`/api/tasks/${taskId}`, { is_completed: false, completed_at: null });
+      showToast('Task restored! 🔄', 'success');
+    } catch (err) {
+      console.error('Error restoring task:', err);
+      showToast('Failed to restore task', 'error');
+      await reloadActivities(); // Reload on error to revert
+    }
+  };
+
+  const handleRestoreStep = async (stepId: number) => {
+    try {
+      // Optimistic update - move item immediately
+      setActivities(prev => {
+        const completedStep = prev.completedItems.find(item => item.type === 'step' && item.id === stepId);
+        if (!completedStep) return prev;
+        
+        return {
+          ...prev,
+          explorationSteps: [...prev.explorationSteps, { ...completedStep, is_completed: false, completed_at: null }],
+          completedItems: prev.completedItems.filter(item => !(item.type === 'step' && item.id === stepId))
+        };
+      });
+      
+      await api.put(`/api/wishes/${selectedWish.id}/steps/${stepId}`, { is_completed: false, completed_at: null });
+      showToast('Step restored! 🔄', 'success');
+    } catch (err) {
+      console.error('Error restoring step:', err);
+      showToast('Failed to restore step', 'error');
+      await reloadActivities(); // Reload on error to revert
+    }
+  };
+
+  const handleRestoreReflection = async (reflectionId: number) => {
+    try {
+      // Optimistic update - move back to reflections
+      setActivities(prev => {
+        const archivedReflection = prev.completedItems.find(item => item.type === 'reflection' && item.id === reflectionId);
+        if (!archivedReflection) return prev;
+        
+        return {
+          ...prev,
+          reflections: [...prev.reflections, archivedReflection],
+          completedItems: prev.completedItems.filter(item => !(item.type === 'reflection' && item.id === reflectionId))
+        };
+      });
+      
+      // Note: Backend doesn't support unarchive yet, just update UI
+      showToast('Reflection restored! 🔄', 'success');
+    } catch (err) {
+      console.error('Error restoring reflection:', err);
+      showToast('Failed to restore reflection', 'error');
+      await reloadActivities();
+    }
+  };
+
+  // Helper to render circular progress
+  const CircularProgress = ({ percentage, size = 50 }: { percentage: number, size?: number }) => {
+    const radius = (size - 8) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (percentage / 100) * circumference;
+    
+    return (
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth="4" />
+        <circle 
+          cx={size/2} cy={size/2} r={radius} fill="none" 
+          stroke={percentage === 100 ? '#10b981' : '#fbbf24'} 
+          strokeWidth="4"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+        <text 
+          x="50%" y="50%" 
+          textAnchor="middle" 
+          dy="0.3em" 
+          transform={`rotate(90 ${size/2} ${size/2})`}
+          style={{ fontSize: '12px', fontWeight: '700', fill: percentage === 100 ? '#10b981' : '#78350f' }}
+        >
+          {percentage}%
+        </text>
+      </svg>
+    );
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '16px' }}>
+      {/* Active Goals - Dashboard Style */}
+      {activities.goals.length > 0 && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '10px', border: '2px solid #fbbf24' }}>
+          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#78350f', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🎯 Active Goals ({activities.goals.length})
+          </h5>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {activities.goals.map((goal: any) => (
+              <div key={goal.id} style={{ 
+                padding: '14px', 
+                background: 'white', 
+                borderRadius: '8px', 
+                border: '1px solid #fbbf24',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  {/* Progress Circle */}
+                  <div style={{ flexShrink: 0 }}>
+                    <CircularProgress percentage={goal.progress_percentage || 0} size={55} />
+                  </div>
+                  
+                  {/* Goal Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#78350f', marginBottom: '6px' }}>{goal.name}</div>
+                    <div style={{ fontSize: '12px', color: '#92400e', marginBottom: '6px' }}>
+                      {goal.target_date && <>📅 {new Date(goal.target_date).toLocaleDateString()}</>}
+                      {goal.days_remaining !== undefined && (
+                        <span style={{ marginLeft: '8px', color: goal.days_remaining < 7 ? '#dc2626' : '#92400e' }}>
+                          ({goal.days_remaining} days left)
+                        </span>
+                      )}
+                    </div>
+                    {goal.stats && (
+                      <div style={{ fontSize: '11px', color: '#a16207', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {goal.stats.time_allocated_hours > 0 && <span>⏱️ {goal.stats.time_allocated_hours}h allocated</span>}
+                        {goal.stats.total_milestones > 0 && (
+                          <span>🎯 {goal.stats.completed_milestones}/{goal.stats.total_milestones} milestones</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                    <button 
+                      onClick={() => handleCompleteGoal(goal.id)}
+                      style={{ 
+                        padding: '6px 12px', 
+                        background: '#10b981', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '5px', 
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Mark as complete"
+                    >
+                      ✓ Complete
+                    </button>
+                    <button 
+                      onClick={() => navigate('/goals')}
+                      style={{ 
+                        padding: '6px 12px', 
+                        background: '#6b7280', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '5px', 
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                      title="View/Edit"
+                    >
+                      → View
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active Projects - Dashboard Style */}
+      {activities.projects.length > 0 && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', borderRadius: '10px', border: '2px solid #3b82f6' }}>
+          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#1e40af', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            📁 Active Projects ({activities.projects.length})
+          </h5>
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {activities.projects.map((project: any) => (
+              <div key={project.id} style={{ 
+                padding: '14px', 
+                background: 'white', 
+                borderRadius: '8px', 
+                border: '1px solid #3b82f6',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                  {/* Progress Circle */}
+                  <div style={{ flexShrink: 0 }}>
+                    <CircularProgress percentage={project.progress?.progress_percentage || 0} size={55} />
+                  </div>
+                  
+                  {/* Project Info */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>{project.name}</div>
+                    <div style={{ fontSize: '12px', color: '#1e3a8a', marginBottom: '6px' }}>
+                      Status: <span style={{ fontWeight: '600', textTransform: 'capitalize' }}>{(project.status || 'not_started').replace('_', ' ')}</span>
+                      {project.target_completion_date && (
+                        <span style={{ marginLeft: '8px' }}>📅 {new Date(project.target_completion_date).toLocaleDateString()}</span>
+                      )}
+                    </div>
+                    {project.progress && (
+                      <div style={{ fontSize: '11px', color: '#1e40af', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        <span>📋 {project.progress.completed_tasks}/{project.progress.total_tasks} tasks</span>
+                        {project.milestone_progress?.total_milestones > 0 && (
+                          <span>🎯 {project.milestone_progress.completed_milestones}/{project.milestone_progress.total_milestones} milestones</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
+                    <button 
+                      onClick={() => handleCompleteProject(project.id)}
+                      style={{ 
+                        padding: '6px 12px', 
+                        background: '#10b981', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '5px', 
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '600',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title="Mark as complete"
+                    >
+                      ✓ Complete
+                    </button>
+                    <button 
+                      onClick={() => navigate('/projects')}
+                      style={{ 
+                        padding: '6px 12px', 
+                        background: '#6b7280', 
+                        color: 'white', 
+                        border: 'none', 
+                        borderRadius: '5px', 
+                        fontSize: '12px',
+                        cursor: 'pointer',
+                        fontWeight: '600'
+                      }}
+                      title="View/Edit"
+                    >
+                      → View
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Active Tasks */}
+      {activities.tasks.length > 0 && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', borderRadius: '10px', border: '2px solid #10b981' }}>
+          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#065f46', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            ✅ Active Tasks ({activities.tasks.length})
+          </h5>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {activities.tasks.map((task: any) => (
+              <div key={task.id} style={{ 
+                padding: '10px 12px', 
+                background: 'white', 
+                borderRadius: '6px', 
+                border: '1px solid #10b981',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#064e3b' }}>{task.name}</span>
+                  {task.allocated_minutes && <span style={{ fontSize: '12px', color: '#047857', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    onClick={() => handleCompleteTask(task.id)}
+                    style={{ 
+                      padding: '3px 8px', 
+                      background: '#10b981', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                    title="Complete task"
+                  >
+                    ✓
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reflections */}
+      {activities.reflections.length > 0 && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)', borderRadius: '10px', border: '2px solid #a855f7' }}>
+          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#6b21a8', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            💭 Reflections ({activities.reflections.length})
+          </h5>
+          <div style={{ display: 'grid', gap: '10px' }}>
+            {activities.reflections.map((reflection: any) => (
+              <div key={reflection.id} style={{ 
+                padding: '12px', 
+                background: 'white', 
+                borderRadius: '6px', 
+                border: '1px solid #a855f7',
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: '10px'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '12px', color: '#7c3aed', fontWeight: '600', marginBottom: '4px' }}>
+                    {new Date(reflection.reflection_date).toLocaleDateString()}
+                    {reflection.mood && ` • ${reflection.mood}`}
+                    {reflection.clarity_score && ` • Clarity: ${reflection.clarity_score}/10`}
+                  </div>
+                  <div style={{ fontSize: '13px', color: '#6b21a8' }}>{reflection.reflection_text}</div>
+                </div>
+                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                  <button 
+                    onClick={() => handleDeleteReflection(reflection.id)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      background: '#ef4444', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                    title="Delete reflection"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Exploration Steps */}
+      {activities.explorationSteps.length > 0 && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', borderRadius: '10px', border: '2px solid #8b5cf6' }}>
+          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#5b21b6', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            🔍 Exploration Steps ({activities.explorationSteps.length})
+          </h5>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {activities.explorationSteps.map((step: any) => (
+              <div key={step.id} style={{ 
+                padding: '10px 12px', 
+                background: 'white', 
+                borderRadius: '6px', 
+                border: '1px solid #8b5cf6',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: '600', color: '#5b21b6', marginBottom: '2px' }}>{step.step_title}</div>
+                  {step.step_description && (
+                    <div style={{ fontSize: '12px', color: '#7c3aed' }}>{step.step_description}</div>
+                  )}
+                  {step.step_type && (
+                    <div style={{ fontSize: '11px', color: '#8b5cf6', marginTop: '4px', fontStyle: 'italic' }}>
+                      Type: {step.step_type}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
+                  <button 
+                    onClick={() => handleCompleteStep(step.id)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      background: '#10b981', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                    title="Complete step"
+                  >
+                    ✓
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteStep(step.id)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      background: '#ef4444', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                    title="Delete step"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Completed Items (Expandable) */}
+      {activities.completedItems.length > 0 && (
+        <div style={{ padding: '14px', background: '#f9fafb', borderRadius: '10px', border: '2px solid #d1d5db' }}>
+          <div 
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
+            onClick={() => setShowCompleted(!showCompleted)}
+          >
+            <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#6b7280', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ✓ Completed ({activities.completedItems.length})
+            </h5>
+            <span style={{ fontSize: '18px', color: '#6b7280' }}>{showCompleted ? '▼' : '▶'}</span>
+          </div>
+          {showCompleted && (
+            <div style={{ display: 'grid', gap: '6px', marginTop: '12px' }}>
+              {activities.completedItems.map((item: any) => (
+                <div key={`${item.type}-${item.id}`} style={{ 
+                  fontSize: '13px', 
+                  color: '#6b7280', 
+                  padding: '8px 12px', 
+                  background: 'white', 
+                  borderRadius: '6px',
+                  border: '1px solid #e5e7eb',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '8px'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                    <span>{item.type === 'task' ? '✅' : item.type === 'project' ? '📁' : item.type === 'step' ? '🔍' : item.type === 'reflection' ? '💭' : '🎯'}</span>
+                    <span style={{ 
+                      fontSize: '10px', 
+                      fontWeight: '600', 
+                      color: '#9ca3af', 
+                      textTransform: 'uppercase',
+                      backgroundColor: '#f3f4f6',
+                      padding: '2px 6px',
+                      borderRadius: '4px'
+                    }}>
+                      {item.type}
+                    </span>
+                    <span style={{ textDecoration: 'line-through' }}>{item.name}</span>
+                    {item.completed_at && (
+                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                        {new Date(item.completed_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (item.type === 'goal') handleRestoreGoal(item.id);
+                      else if (item.type === 'project') handleRestoreProject(item.id);
+                      else if (item.type === 'task') handleRestoreTask(item.id);
+                      else if (item.type === 'step') handleRestoreStep(item.id);
+                      else if (item.type === 'reflection') handleRestoreReflection(item.id);
+                    }}
+                    style={{ 
+                      padding: '4px 8px', 
+                      background: '#3b82f6', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                    title="Restore"
+                  >
+                    🔄 Restore
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Goals() {
   // Navigation
   const navigate = useNavigate();
@@ -548,21 +1313,23 @@ export default function Goals() {
     try {
       const stats: {[key: number]: {projects: number, tasks: number, goals: number}} = {};
       
-      // Load all projects and tasks in parallel
-      const [allProjects, allTasks] = await Promise.all([
+      // Load all projects, tasks, and goals in parallel
+      const [allProjects, allTasks, allGoals] = await Promise.all([
         api.get('/api/projects/').catch(() => []),
-        api.get('/api/tasks/').catch(() => [])
+        api.get('/api/tasks/').catch(() => []),
+        api.get('/api/life-goals/').catch(() => [])
       ]);
       
       // Count for each wish
       for (const wish of wishesList) {
         const projects = (Array.isArray(allProjects) ? allProjects : []).filter((p: any) => p.related_wish_id === wish.id);
         const tasks = (Array.isArray(allTasks) ? allTasks : []).filter((t: any) => t.related_wish_id === wish.id);
+        const goals = (Array.isArray(allGoals) ? allGoals : []).filter((g: any) => g.related_wish_id === wish.id);
         
         stats[wish.id] = {
           projects: projects.length,
           tasks: tasks.length,
-          goals: 0 // Goals don't have related_wish_id yet, keeping for future
+          goals: goals.length
         };
       }
       
@@ -648,7 +1415,6 @@ export default function Goals() {
 
   const loadGoalDetails = async (goalId: number) => {
     try {
-      console.log('Loading goal details for goalId:', goalId);
       const [goal, milestones, tasks, linkedTasks, projects] = await Promise.all([
         api.get<LifeGoalData>(`/api/life-goals/${goalId}`),
         api.get<MilestoneData[]>(`/api/life-goals/${goalId}/milestones`),
@@ -3877,6 +4643,7 @@ return (
           setShowAddGoalModal(false);
           setEditingGoal(null);
           await loadLifeGoals();
+          await loadWishes(); // Refresh wish stats to show new goal count
         }}
         editingGoal={editingGoal as any}
         lifeGoals={lifeGoals as any}
@@ -5288,410 +6055,222 @@ return (
         </div>
       )}
 
-      {/* Wish Details Modal - Compact Version */}
+      {/* 🌟 SIMPLIFIED DREAM DETAILS MODAL */}
       {showWishDetailsModal && selectedWish && (
         <div className="modal-overlay" onClick={() => {
           setShowWishDetailsModal(false);
           setSelectedWish(null);
         }} style={{ zIndex: 9999 }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '650px', maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="modal-header">
-              <h2 style={{ fontSize: '20px' }}>✨ {selectedWish.title}</h2>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '90vh', overflow: 'auto' }}>
+            {/* Beautiful Header */}
+            <div style={{
+              background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #f59e0b 100%)',
+              padding: '32px',
+              borderRadius: '16px 16px 0 0',
+              color: 'white',
+              position: 'relative'
+            }}>
+              <h2 style={{ fontSize: '28px', fontWeight: '900', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span>✨</span>
+                <span>{selectedWish.title}</span>
+                {selectedWish.priority === 'burning_desire' && <span style={{ fontSize: '32px' }}>🔥</span>}
+              </h2>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {selectedWish.estimated_timeframe && (
+                  <span style={{ fontSize: '14px', opacity: 0.95, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    ⏰ <strong>{selectedWish.estimated_timeframe.replace('_', ' ')}</strong>
+                  </span>
+                )}
+                {selectedWish.category && (
+                  <span style={{ fontSize: '14px', opacity: 0.95, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {selectedWish.category === 'travel' && '🌍'} 
+                    {selectedWish.category === 'financial' && '💰'}
+                    {selectedWish.category === 'personal' && '🌱'}
+                    {selectedWish.category === 'career' && '💼'}
+                    {selectedWish.category === 'health' && '💪'}
+                    {selectedWish.category === 'relationship' && '❤️'}
+                    {selectedWish.category === 'learning' && '📚'}
+                    {selectedWish.category === 'lifestyle' && '🏡'}
+                    <strong>{selectedWish.category}</strong>
+                  </span>
+                )}
+                {selectedWish.estimated_cost && (
+                  <span style={{ fontSize: '14px', opacity: 0.95, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    💵 <strong>${selectedWish.estimated_cost.toLocaleString()}</strong>
+                  </span>
+                )}
+              </div>
               <button className="btn-close" onClick={() => {
                 setShowWishDetailsModal(false);
                 setSelectedWish(null);
-              }}>×</button>
+              }} style={{ color: 'white', fontSize: '32px', top: '16px', right: '16px' }}>×</button>
             </div>
-            <div className="modal-body" style={{ padding: '20px' }}>
-              {/* Compact Header Section */}
-              <div style={{ marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
-                {/* Row 1: Timeframe and Status */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                  {selectedWish.estimated_timeframe && (
-                    <div style={{ fontSize: '13px', color: '#718096' }}>
-                      ⏰ <strong>{selectedWish.estimated_timeframe.replace('_', ' ')}</strong>
-                    </div>
-                  )}
-                  
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span style={{
-                      padding: '4px 10px',
-                      borderRadius: '10px',
-                      fontSize: '12px',
-                      fontWeight: '600',
-                      backgroundColor: selectedWish.status === 'dreaming' ? '#e3f2fd' : 
-                                      selectedWish.status === 'exploring' ? '#f3e5f5' :
-                                      selectedWish.status === 'planning' ? '#fff3e0' :
-                                      selectedWish.status === 'ready' ? '#e8f5e9' : '#e0f2f1',
-                      color: selectedWish.status === 'dreaming' ? '#1976d2' : 
-                            selectedWish.status === 'exploring' ? '#7b1fa2' :
-                            selectedWish.status === 'planning' ? '#f57c00' :
-                            selectedWish.status === 'ready' ? '#388e3c' : '#00897b',
-                      textTransform: 'capitalize'
+
+            <div className="modal-body" style={{ padding: '32px' }}>
+              {/* Description */}
+              {selectedWish.description && (
+                <p style={{ margin: '0 0 24px 0', fontSize: '16px', color: '#4a5568', lineHeight: '1.7' }}>
+                  {selectedWish.description}
+                </p>
+              )}
+
+              {/* Why & How You'll Feel - Side by Side */}
+              {(selectedWish.why_important || selectedWish.emotional_impact) && (
+                <div style={{ display: 'grid', gridTemplateColumns: selectedWish.why_important && selectedWish.emotional_impact ? '1fr 1fr' : '1fr', gap: '16px', marginBottom: '24px' }}>
+                  {selectedWish.why_important && (
+                    <div style={{
+                      backgroundColor: '#fef5e7',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      borderLeft: '4px solid #f39c12'
                     }}>
-                      {selectedWish.status.replace('_', ' ')}
-                    </span>
-                    
-                    {selectedWish.priority === 'burning_desire' && <span style={{ fontSize: '18px' }}>🔥</span>}
-                  </div>
+                      <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#856404', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        💫 Why This Matters
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '15px', color: '#856404', lineHeight: '1.6' }}>
+                        {selectedWish.why_important}
+                      </p>
+                    </div>
+                  )}
+                  {selectedWish.emotional_impact && (
+                    <div style={{
+                      backgroundColor: '#f0f9ff',
+                      padding: '20px',
+                      borderRadius: '12px',
+                      borderLeft: '4px solid #3b82f6'
+                    }}>
+                      <h4 style={{ margin: '0 0 12px 0', fontSize: '15px', color: '#1e40af', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        ✨ How You'll Feel
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '15px', color: '#1e40af', lineHeight: '1.6' }}>
+                        {selectedWish.emotional_impact}
+                      </p>
+                    </div>
+                  )}
                 </div>
-                
-                {selectedWish.description && (
-                  <p style={{ margin: '10px 0', fontSize: '14px', color: '#4a5568', lineHeight: '1.5' }}>
-                    {selectedWish.description}
-                  </p>
-                )}
+              )}
 
-                {/* Row 2: Category and Cost */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', color: '#718096', marginTop: '8px' }}>
-                  {selectedWish.category && (
-                    <span>
-                      {selectedWish.category === 'travel' && '🌍'} 
-                      {selectedWish.category === 'financial' && '💰'}
-                      {selectedWish.category === 'personal' && '🌱'}
-                      {selectedWish.category === 'career' && '💼'}
-                      {selectedWish.category === 'health' && '💪'}
-                      {selectedWish.category === 'relationship' && '❤️'}
-                      {selectedWish.category === 'learning' && '📚'}
-                      {selectedWish.category === 'lifestyle' && '🏡'}
-                      {' '}{selectedWish.category}
-                    </span>
-                  )}
-                  
-                  {selectedWish.estimated_cost && (
-                    <span>
-                      💵 <strong>${selectedWish.estimated_cost.toLocaleString()}</strong>
-                    </span>
-                  )}
+              {/* Actual Task/Project/Goal Lists */}
+              <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} />
+
+              {/* 📝 ADD ACTIVITIES - Direct Form Access */}
+              <div style={{ marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#1f2937', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  ➕ Work Toward This Dream
+                </h4>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '10px',
+                  marginBottom: '16px'
+                }}>
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
+                      color: '#831843',
+                      border: '2px solid #ec4899',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                    onClick={() => {
+                      setTaskFormWishId(selectedWish.id);
+                      setShowWishDetailsModal(false); // Close wish modal
+                      setShowTaskFormModal(true);
+                    }}
+                  >
+                    ✅ Add Task
+                  </button>
+
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                      color: '#1e40af',
+                      border: '2px solid #3b82f6',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                    onClick={() => {
+                      setShowWishDetailsModal(false); // Close wish modal
+                      setShowInlineProjectModal(true);
+                      setCurrentExplorationWish(selectedWish);
+                    }}
+                  >
+                    📁 Add Project
+                  </button>
+
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                      color: '#065f46',
+                      border: '2px solid #10b981',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                    onClick={async () => {
+                      const title = prompt("🔍 What exploration step will you take?");
+                      if (title) {
+                        const description = prompt("Any details? (optional)");
+                        try {
+                          await api.post(`/api/wishes/${selectedWish.id}/steps`, {
+                            step_title: title,
+                            step_description: description || undefined,
+                            step_type: 'explore'
+                          });
+                          showToast('✅ Exploration step added!', 'success');
+                          await loadExplorationSteps(selectedWish.id);
+                          await loadWishes();
+                        } catch (err) {
+                          showToast('Failed to add step', 'error');
+                        }
+                      }
+                    }}
+                  >
+                    🔬 Add Step
+                  </button>
+
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '12px',
+                      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                      color: '#78350f',
+                      border: '2px solid #fbbf24',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '600',
+                      fontSize: '14px'
+                    }}
+                    onClick={() => {
+                      console.log('🎯 Button clicked - selectedWish:', selectedWish);
+                      console.log('🎯 Setting editingGoal with related_wish_id:', selectedWish.id);
+                      setShowWishDetailsModal(false);
+                      setEditingGoal({ related_wish_id: selectedWish.id } as any);
+                      setShowAddGoalModal(true);
+                    }}
+                  >
+                    🎯 Add Goal
+                  </button>
                 </div>
               </div>
 
-              {/* Why it matters section */}
-              {selectedWish.why_important && (
-                <div style={{
-                  backgroundColor: '#fef5e7',
-                  padding: '16px',
-                  borderRadius: '8px',
-                  marginBottom: '20px',
-                  borderLeft: '4px solid #f39c12'
-                }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#856404', fontWeight: '600' }}>
-                    💫 Why this matters to you:
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#856404', lineHeight: '1.6' }}>
-                    {selectedWish.why_important}
-                  </p>
-                </div>
-              )}
-
-              {/* Emotional impact section */}
-              {selectedWish.emotional_impact && (
-                <div style={{
-                  backgroundColor: '#f0f9ff',
-                  padding: '16px',
-                  borderRadius: '8px',
-                  marginBottom: '20px',
-                  borderLeft: '4px solid #3b82f6'
-                }}>
-                  <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#1e40af', fontWeight: '600' }}>
-                    ✨ How you'll feel:
-                  </h4>
-                  <p style={{ margin: 0, fontSize: '14px', color: '#1e40af', lineHeight: '1.6' }}>
-                    {selectedWish.emotional_impact}
-                  </p>
-                </div>
-              )}
-
-              {/* Stats section */}
-              {selectedWish.stats && (
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-                  gap: '16px',
-                  marginBottom: '24px',
-                  padding: '16px',
-                  backgroundColor: '#f7fafc',
-                  borderRadius: '8px'
-                }}>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
-                      {selectedWish.stats.days_dreaming || 0}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                      Days Dreaming
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
-                      {selectedWish.stats.reflections_count || 0}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                      Reflections
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
-                      {selectedWish.stats.exploration_steps_completed || 0}/{selectedWish.stats.exploration_steps_total || 0}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                      Exploration Steps
-                    </div>
-                  </div>
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
-                      {selectedWish.stats.inspirations_count || 0}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                      Inspirations
-                    </div>
-                  </div>
-                  {selectedWish.stats.average_clarity_score && (
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#4a5568' }}>
-                        {selectedWish.stats.average_clarity_score.toFixed(1)}/10
-                      </div>
-                      <div style={{ fontSize: '12px', color: '#718096', marginTop: '4px' }}>
-                        Clarity Score
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Linked Items Section - NEW */}
-              {selectedWish.stats && (selectedWish.stats.linked_tasks > 0 || selectedWish.stats.linked_projects > 0 || selectedWish.stats.linked_goals > 0) && (
-                <div style={{ marginBottom: '24px', padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '2px solid #cbd5e1' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#334155', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    🔗 Connected Items
-                  </h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-                    {selectedWish.stats.linked_goals > 0 && (
-                      <div style={{
-                        padding: '12px',
-                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                        borderRadius: '6px',
-                        border: '2px solid #fbbf24',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#92400e' }}>
-                          {selectedWish.stats.linked_goals}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#78350f', marginTop: '4px', fontWeight: '600' }}>
-                          🎯 Goals
-                        </div>
-                      </div>
-                    )}
-                    {selectedWish.stats.linked_projects > 0 && (
-                      <div style={{
-                        padding: '12px',
-                        background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-                        borderRadius: '6px',
-                        border: '2px solid #3b82f6',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af' }}>
-                          {selectedWish.stats.linked_projects}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#1e3a8a', marginTop: '4px', fontWeight: '600' }}>
-                          📁 Projects
-                        </div>
-                      </div>
-                    )}
-                    {selectedWish.stats.linked_tasks > 0 && (
-                      <div style={{
-                        padding: '12px',
-                        background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                        borderRadius: '6px',
-                        border: '2px solid #10b981',
-                        textAlign: 'center'
-                      }}>
-                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#065f46' }}>
-                          {selectedWish.stats.linked_tasks}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#064e3b', marginTop: '4px', fontWeight: '600' }}>
-                          ✅ Tasks
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ marginTop: '12px', padding: '10px', background: 'white', borderRadius: '6px', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
-                    💡 These are actively working toward making this dream a reality!
-                  </div>
-                </div>
-              )}
-
-              {/* Exploration Steps List */}
-              {explorationSteps.length > 0 && (
-                <div style={{ marginBottom: '24px' }}>
-                  <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#0f766e', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    🔬 Exploration Steps ({explorationSteps.filter((s: any) => s.is_completed).length}/{explorationSteps.length})
-                  </h4>
-                  <div style={{ 
-                    maxHeight: '300px', 
-                    overflowY: 'auto',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '12px'
-                  }}>
-                    {explorationSteps.map((step: any) => (
-                      <div key={step.id} style={{
-                        padding: '12px',
-                        marginBottom: '8px',
-                        backgroundColor: step.is_completed ? '#f0fdf4' : '#fef3c7',
-                        borderRadius: '8px',
-                        border: step.is_completed ? '2px solid #10b981' : '2px solid #f59e0b',
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: '12px'
-                      }}>
-                        <div style={{ fontSize: '20px', flexShrink: 0 }}>
-                          {step.is_completed ? '✅' : 
-                           step.step_type === 'research' ? '🔍' :
-                           step.step_type === 'save_money' ? '💰' :
-                           step.step_type === 'learn_skill' ? '📚' :
-                           step.step_type === 'explore' ? '🧭' :
-                           step.step_type === 'connect' ? '🤝' : '📝'}
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ 
-                            fontWeight: '600', 
-                            color: step.is_completed ? '#065f46' : '#92400e',
-                            textDecoration: step.is_completed ? 'line-through' : 'none',
-                            marginBottom: '4px'
-                          }}>
-                            {step.step_title}
-                          </div>
-                          {step.step_description && (
-                            <div style={{ fontSize: '13px', color: '#6b7280' }}>
-                              {step.step_description}
-                            </div>
-                          )}
-                          {step.completed_at && (
-                            <div style={{ fontSize: '12px', color: '#059669', marginTop: '4px' }}>
-                              Completed: {new Date(step.completed_at).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                        {!step.is_completed ? (
-                          <button
-                            className="btn btn-sm"
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: '#10b981',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontWeight: '600',
-                              cursor: 'pointer'
-                            }}
-                            onClick={async () => {
-                              try {
-                                await api.post(`/api/wishes/steps/${step.id}/complete`, {
-                                  notes: 'Completed'
-                                });
-                                showToast('✅ Step completed!', 'success');
-                                await loadExplorationSteps(selectedWish.id);
-                                await loadWishes();
-                              } catch (err) {
-                                console.error('Error completing step:', err);
-                                showToast('Failed to complete step', 'error');
-                              }
-                            }}
-                          >
-                            ✓ Done
-                          </button>
-                        ) : (
-                          <button
-                            className="btn btn-sm"
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: '12px',
-                              backgroundColor: '#f59e0b',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontWeight: '600',
-                              cursor: 'pointer'
-                            }}
-                            onClick={async () => {
-                              if (confirm('Mark this step as incomplete?')) {
-                                try {
-                                  await api.post(`/api/wishes/steps/${step.id}/uncomplete`);
-                                  showToast('↶ Step marked as incomplete', 'info');
-                                  await loadExplorationSteps(selectedWish.id);
-                                  await loadWishes();
-                                } catch (err) {
-                                  console.error('Error uncompleting step:', err);
-                                  showToast('Failed to mark step as incomplete', 'error');
-                                }
-                              }
-                            }}
-                          >
-                            ↶ Undo
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* View Dream Insights Button */}
-              <div style={{ marginBottom: '16px' }}>
-                <button 
-                  className="btn"
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
-                    color: '#3730a3',
-                    border: '2px solid #6366f1',
-                    borderRadius: '10px',
-                    cursor: 'pointer',
-                    fontWeight: '700',
-                    fontSize: '14px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                  onClick={async () => {
-                    try {
-                      // Load all related data for this dream
-                      const [reflections, inspirations, steps, projects, tasks] = await Promise.all([
-                        api.get(`/api/wishes/${selectedWish.id}/reflections`).catch(() => []),
-                        api.get(`/api/wishes/${selectedWish.id}/inspirations`).catch(() => []),
-                        api.get(`/api/wishes/${selectedWish.id}/steps`).catch(() => []),
-                        api.get(`/api/projects/?related_wish_id=${selectedWish.id}`).catch(() => []),
-                        api.get(`/api/tasks/?related_wish_id=${selectedWish.id}`).catch(() => [])
-                      ]);
-                      
-                      setDreamInsights({
-                        wish: selectedWish,
-                        reflections: reflections,
-                        inspirations: inspirations,
-                        steps: steps,
-                        projects: projects,
-                        tasks: tasks
-                      });
-                      setShowDreamInsightsModal(true);
-                    } catch (err) {
-                      console.error('Error loading dream insights:', err);
-                      showToast('Failed to load dream insights', 'error');
-                    }
-                  }}
-                >
-                  📊 View Dream Insights & Activities
-                </button>
-              </div>
-
-              {/* Quick Actions */}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '12px',
-                marginBottom: '24px'
+              {/* REFLECTION & ACHIEVEMENT BUTTONS */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: '10px',
+                marginBottom: '16px'
               }}>
                 <button 
                   className="btn"
@@ -5705,287 +6284,120 @@ return (
                     fontWeight: '600',
                     fontSize: '14px'
                   }}
-                  onClick={() => setShowAddReflectionModal(true)}
-                >
-                  ✍️ Add Reflection
-                </button>
-
-                <button 
-                  className="btn"
-                  style={{
-                    padding: '12px',
-                    background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                    color: '#065f46',
-                    border: '2px solid #10b981',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px'
-                  }}
-                  onClick={() => {
-                    setCurrentExplorationWish(selectedWish);
-                    setShowAddExplorationModal(true);
-                  }}
-                >
-                  🔍 Add Exploration Activity
-                </button>
-
-                <button 
-                  className="btn"
-                  style={{
-                    padding: '12px',
-                    background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
-                    color: '#831843',
-                    border: '2px solid #ec4899',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px'
-                  }}
-                  onClick={() => {
-                    setTaskFormWishId(selectedWish.id);
-                    setShowTaskFormModal(true);
-                  }}
-                >
-                  ✅ Add Task
-                </button>
-
-                <button 
-                  className="btn"
-                  style={{
-                    padding: '12px',
-                    backgroundColor: '#fef3c7',
-                    color: '#78350f',
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    fontWeight: '600',
-                    fontSize: '14px'
-                  }}
                   onClick={async () => {
-                    const title = prompt("What inspired you? (article title, quote, person, etc.)");
-                    if (title) {
-                      const url = prompt("URL (if applicable):");
-                      const typeOptions = ['article', 'video', 'photo', 'quote', 'story', 'person'];
-                      const type = prompt(`What type of inspiration? (${typeOptions.join(', ')})`);
-                      
+                    const text = prompt("✍️ What are your thoughts about this dream?");
+                    if (text) {
                       try {
-                        await api.post(`/api/wishes/${selectedWish.id}/inspirations`, {
-                          title: title,
-                          url: url || undefined,
-                          inspiration_type: type || 'article'
+                        await api.post(`/api/wishes/${selectedWish.id}/reflections`, {
+                          reflection_text: text
                         });
+                        showToast('✅ Reflection saved!', 'success');
                         await loadWishes();
-                        const updated: any = await api.get(`/api/wishes/${selectedWish.id}`);
-                        setSelectedWish(updated.data || updated);
                       } catch (err) {
-                        console.error('Error adding inspiration:', err);
-                        alert('Failed to add inspiration');
+                        showToast('Failed to add reflection', 'error');
                       }
                     }
                   }}
                 >
-                  💡 Add Inspiration
+                  ✍️ Reflect
                 </button>
 
-                {selectedWish.status !== 'achieved' && selectedWish.status !== 'released' && selectedWish.status !== 'moved_to_goal' && (
-                  <button 
-                    className="btn"
-                    style={{
-                      padding: '12px',
-                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                      color: '#78350f',
-                      border: '2px solid #eab308',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: '700',
-                      fontSize: '14px',
-                      boxShadow: '0 4px 8px rgba(234, 179, 8, 0.3)'
-                    }}
-                    onClick={async () => {
-                      const notes = prompt("🎉 Congratulations! Tell us how this dream came true:");
-                      if (notes !== null) {
-                        try {
-                          await api.post(`/api/wishes/${selectedWish.id}/mark-achieved`, null, {
-                            params: { achievement_notes: notes || 'Dream manifested!' }
-                          });
-                          
-                          // 🎊 CONFETTI CELEBRATION! 🎊
-                          confetti({
-                            particleCount: 100,
-                            spread: 70,
-                            origin: { y: 0.6 },
-                            colors: ['#ffd700', '#ff69b4', '#87ceeb', '#98fb98', '#dda0dd']
-                          });
-                          
-                          // More confetti bursts
-                          setTimeout(() => {
-                            confetti({
-                              particleCount: 50,
-                              angle: 60,
-                              spread: 55,
-                              origin: { x: 0 },
-                              colors: ['#ffd700', '#ff1493', '#00bfff']
-                            });
-                          }, 200);
-                          
-                          setTimeout(() => {
-                            confetti({
-                              particleCount: 50,
-                              angle: 120,
-                              spread: 55,
-                              origin: { x: 1 },
-                              colors: ['#ffd700', '#ff1493', '#00bfff']
-                            });
-                          }, 400);
-                          
-                          showToast('✨ Dream marked as achieved! Celebrating your success!', 'success');
-                          await loadWishes();
-                          setShowWishDetailsModal(false);
-                        } catch (err) {
-                          console.error('Error marking dream as achieved:', err);
-                          showToast('Failed to mark dream as achieved', 'error');
-                        }
-                      }
-                    }}
-                  >
-                    ✨ Mark as Achieved
-                  </button>
-                )}
-
-                {selectedWish.status === 'ready_to_commit' && (
-                  <button 
-                    className="btn"
-                    style={{
-                      padding: '12px',
-                      backgroundColor: '#d1fae5',
-                      color: '#065f46',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontWeight: '600',
-                      fontSize: '14px'
-                    }}
-                    onClick={() => {
-                      showToast('💡 Use the "Promote to Goal" button on the dream card instead!', 'info');
-                    }}
-                  >
-                    🎯 Convert to Goal
-                  </button>
-                )}
-              </div>
-
-              {/* Compact Bottom Actions - All in One Row */}
-              <div style={{ 
-                display: 'flex', 
-                gap: '8px', 
-                marginTop: '20px', 
-                paddingTop: '12px', 
-                borderTop: '1px solid #e2e8f0',
-                flexWrap: 'wrap'
-              }}>
-                {(selectedWish.status === 'exploring' || selectedWish.status === 'planning') && (
-                  <button 
-                    className="btn"
-                    onClick={async () => {
-                      if (confirm('Mark as Achieved without going through all exploration steps?')) {
-                        const notes = prompt("🎉 How did this dream come true?");
+                {selectedWish.status !== 'achieved' && selectedWish.status !== 'released' && (
+                    <button 
+                      className="btn"
+                      style={{
+                        padding: '12px',
+                        background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontWeight: '700',
+                        fontSize: '14px',
+                        boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                      }}
+                      onClick={async () => {
+                        const notes = prompt("🎉 Congratulations! How did this dream come true?");
                         if (notes !== null) {
                           try {
                             await api.post(`/api/wishes/${selectedWish.id}/mark-achieved`, null, {
                               params: { achievement_notes: notes || 'Dream manifested!' }
                             });
-                            confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-                            showToast('✨ Dream achieved!', 'success');
+                            confetti({
+                              particleCount: 100,
+                              spread: 70,
+                              origin: { y: 0.6 },
+                              colors: ['#ffd700', '#ff69b4', '#87ceeb', '#98fb98', '#dda0dd']
+                            });
+                            setTimeout(() => confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ffd700', '#ff1493', '#00bfff'] }), 200);
+                            setTimeout(() => confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ffd700', '#ff1493', '#00bfff'] }), 400);
+                            showToast('✨ Dream achieved! Celebrating!', 'success');
                             await loadWishes();
                             setShowWishDetailsModal(false);
                           } catch (err) {
                             showToast('Failed to mark as achieved', 'error');
                           }
                         }
-                      }
-                    }}
-                    style={{
-                      flex: '1 1 auto',
-                      padding: '8px 12px',
-                      fontSize: '13px',
-                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      fontWeight: '600'
-                    }}
-                  >
-                    ✨ Achieved
-                  </button>
-                )}
-                
+                      }}
+                    >
+                      ✨ Achieved!
+                    </button>
+                  )}
+              </div>
+
+              {/* 🚀 Bottom Actions */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                paddingTop: '16px', 
+                borderTop: '2px solid #e2e8f0'
+              }}>
                 <button 
                   className="btn"
-                  onClick={async () => {
-                    if (confirm('Archive this dream? You can view it later.')) {
-                      await handleArchiveWish(selectedWish.id);
-                      setShowWishDetailsModal(false);
-                    }
-                  }}
-                  style={{
-                    flex: '1 1 auto',
-                    padding: '8px 12px',
-                    fontSize: '13px',
-                    backgroundColor: '#e2e8f0',
-                    color: '#64748b',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '600'
-                  }}
-                >
-                  🗄️ Archive
-                </button>
-                
-                <button 
-                  className="btn"
-                  onClick={async () => {
-                    if (confirm('Mark this dream as "Not Needed"? It will be archived.')) {
-                      try {
-                        await api.post(`/api/wishes/${selectedWish.id}/release`, null, {
-                          params: { release_reason: 'no_longer_relevant' }
-                        });
-                        showToast('Dream marked as not needed', 'info');
-                        await loadWishes();
-                        setShowWishDetailsModal(false);
-                      } catch (err) {
-                        showToast('Failed to release dream', 'error');
-                      }
-                    }
-                  }}
-                  style={{
-                    flex: '1 1 auto',
-                    padding: '8px 12px',
-                    fontSize: '13px',
-                    backgroundColor: '#fecaca',
-                    color: '#991b1b',
-                    border: 'none',
-                    borderRadius: '6px',
-                    fontWeight: '600'
-                  }}
-                >
-                  ❌ Not Needed
-                </button>
-                
-                <button 
-                  className="btn btn-primary"
                   onClick={() => {
                     setShowWishDetailsModal(false);
                     setSelectedWish(null);
                   }}
                   style={{
-                    flex: '1 1 auto',
-                    padding: '8px 12px',
-                    fontSize: '13px',
+                    flex: 1,
+                    padding: '12px',
+                    fontSize: '14px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
                     fontWeight: '600'
                   }}
                 >
-                  Close
+                  ← Back to Dreams
+                </button>
+                <button 
+                  className="btn"
+                  onClick={async () => {
+                    if (confirm('Archive this dream?')) {
+                      try {
+                        await api.post(`/api/wishes/${selectedWish.id}/release`, null, {
+                          params: { release_reason: 'archived' }
+                        });
+                        showToast('Dream archived', 'info');
+                        await loadWishes();
+                        setShowWishDetailsModal(false);
+                      } catch (err) {
+                        showToast('Failed to archive', 'error');
+                      }
+                    }
+                  }}
+                  style={{
+                    padding: '12px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#64748b',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600'
+                  }}
+                >
+                  🗄️ Archive
                 </button>
               </div>
             </div>
@@ -6058,7 +6470,9 @@ return (
                   }}
                   onClick={() => {
                     setShowAddExplorationModal(false);
-                    setShowInlineTaskModal(true);
+                    setCurrentExplorationWish(null);
+                    setTaskFormWishId(currentExplorationWish.id);
+                    setShowTaskFormModal(true);
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
@@ -6082,7 +6496,9 @@ return (
                   }}
                   onClick={() => {
                     setShowAddExplorationModal(false);
-                    setShowInlineProjectModal(true);
+                    setCurrentExplorationWish(null);
+                    setNewProject({ ...newProject, related_wish_id: currentExplorationWish.id });
+                    setShowAddProjectModal(true);
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
@@ -6106,7 +6522,8 @@ return (
                   }}
                   onClick={() => {
                     setShowAddExplorationModal(false);
-                    setShowInlineGoalModal(true);
+                    setCurrentExplorationWish(null);
+                    setShowAddGoalModal(true);
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
@@ -7094,24 +7511,30 @@ return (
       )}
 
       {/* Task Form Modal - for adding tasks from dream activities */}
-      <TaskForm
-        isOpen={showTaskFormModal}
-        onClose={() => {
-          setShowTaskFormModal(false);
-          setTaskFormWishId(null);
-        }}
-        onSuccess={async () => {
-          setShowTaskFormModal(false);
-          setTaskFormWishId(null);
-          // Reload wishes and dream insights if open
-          await loadWishes();
-          if (dreamInsights && selectedWish) {
-            const tasks = await api.get(`/api/tasks/?related_wish_id=${selectedWish.id}`).catch(() => []);
-            setDreamInsights({ ...dreamInsights, tasks });
-          }
-        }}
-        defaultWishId={taskFormWishId || undefined}
-      />
+      {showTaskFormModal && (
+        <div style={{ position: 'relative', zIndex: 10000 }}>
+          <TaskForm
+            isOpen={showTaskFormModal}
+            onClose={() => {
+              setShowTaskFormModal(false);
+              setTaskFormWishId(null);
+            }}
+            onSuccess={async () => {
+              setShowTaskFormModal(false);
+              setTaskFormWishId(null);
+              // Reload wishes and stats
+              await loadWishes();
+              // Re-open wish modal if there was a selected wish
+              if (selectedWish) {
+                const updated = await api.get(`/api/wishes/${selectedWish.id}`);
+                setSelectedWish(updated.data || updated);
+                setShowWishDetailsModal(true);
+              }
+            }}
+            defaultWishId={taskFormWishId || undefined}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -28,6 +28,7 @@ class LifeGoal(Base):
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True, index=True)
     sub_category_id = Column(Integer, ForeignKey("sub_categories.id"), nullable=True, index=True)
     linked_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
+    related_wish_id = Column(Integer, ForeignKey("wishes.id"), nullable=True, index=True)  # Link to Dream/Wish
     
     # Relationships
     parent_goal = relationship("LifeGoal", remote_side=[id], backref="sub_goals")

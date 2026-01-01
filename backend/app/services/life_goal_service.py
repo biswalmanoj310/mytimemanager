@@ -118,7 +118,8 @@ def create_life_goal(
     pillar_id: Optional[int] = None,
     category_id: Optional[int] = None,
     sub_category_id: Optional[int] = None,
-    linked_task_id: Optional[int] = None
+    linked_task_id: Optional[int] = None,
+    related_wish_id: Optional[int] = None
 ) -> LifeGoal:
     """Create a new life goal"""
     goal = LifeGoal(
@@ -136,7 +137,8 @@ def create_life_goal(
         pillar_id=pillar_id,
         category_id=category_id,
         sub_category_id=sub_category_id,
-        linked_task_id=linked_task_id
+        linked_task_id=linked_task_id,
+        related_wish_id=related_wish_id
     )
     db.add(goal)
     db.commit()

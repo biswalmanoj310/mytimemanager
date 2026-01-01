@@ -28,6 +28,7 @@ class LifeGoalCreate(BaseModel):
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
     linked_task_id: Optional[int] = None
+    related_wish_id: Optional[int] = None
 
 
 class LifeGoalUpdate(BaseModel):
@@ -43,6 +44,7 @@ class LifeGoalUpdate(BaseModel):
     category_id: Optional[int] = None
     sub_category_id: Optional[int] = None
     linked_task_id: Optional[int] = None
+    related_wish_id: Optional[int] = None
 
 
 class MilestoneCreate(BaseModel):
@@ -166,6 +168,7 @@ def get_all_goals(include_completed: bool = False, db: Session = Depends(get_db)
             "sub_category_name": goal.sub_category.name if goal.sub_category else None,
             "linked_task_id": goal.linked_task_id,
             "linked_task_name": goal.linked_task.name if goal.linked_task else None,
+            "related_wish_id": goal.related_wish_id,  # Link to dream/wish
             "stats": stats  # Include full stats with milestone breakdown
         }
         
@@ -270,7 +273,8 @@ def create_goal(goal_data: LifeGoalCreate, db: Session = Depends(get_db)):
         pillar_id=goal_data.pillar_id,
         category_id=goal_data.category_id,
         sub_category_id=goal_data.sub_category_id,
-        linked_task_id=goal_data.linked_task_id
+        linked_task_id=goal_data.linked_task_id,
+        related_wish_id=goal_data.related_wish_id
     )
     return goal
 
