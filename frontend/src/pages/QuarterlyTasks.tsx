@@ -65,14 +65,17 @@ const QuarterlyTasks: React.FC = () => {
     setDataLoaded(false);
     const loadData = async () => {
       await Promise.all([
+        loadTasks(),
+        loadPillars(),
+        loadCategories(),
         loadYearlyTaskStatuses(yearNumber),
         loadMonthlyAggregatesForYear(yearNumber)
       ]);
       setDataLoaded(true);
-      console.log('✅ QuarterlyTasks: Data loaded');
+      console.log('✅ QuarterlyTasks: Data loaded - tasks:', tasks.length);
     };
     loadData();
-  }, [yearNumber, tasks.length]);
+  }, [yearNumber]);
 
   const filteredTasks = useMemo(() => {
     console.log('🔍 QuarterlyTasks: Filtering tasks', {
@@ -90,17 +93,37 @@ const QuarterlyTasks: React.FC = () => {
       }
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
+      if (!showInactive && !task.is_active) return false;
+      
+      // Exclude completed and NA tasks from main table
       const yearlyStatus = yearlyTaskStatuses[task.id];
       const isCompleted = yearlyStatus?.is_completed || false;
       const isNA = yearlyStatus?.is_na || false;
-      if (!showCompleted && isCompleted) return false;
-      if (!showNA && isNA) return false;
-      if (!showInactive && !task.is_active) return false;
+      if (isCompleted || isNA) return false;
+      
       console.log(`✅ Task ${task.id} "${task.name}" passed all filters`);
       return true;
     });
     return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder]);
+  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+
+  // Completed/NA tasks for bottom section
+  const completedTasks = useMemo(() => {
+    let filtered = tasks.filter(task => {
+      const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
+      if (!hasBeenAddedToYearly) return false;
+      if (selectedPillar && task.pillar_name !== selectedPillar) return false;
+      if (selectedCategory && task.category_name !== selectedCategory) return false;
+      if (!showInactive && !task.is_active) return false;
+      
+      const yearlyStatus = yearlyTaskStatuses[task.id];
+      const isCompleted = yearlyStatus?.is_completed || false;
+      const isNA = yearlyStatus?.is_na || false;
+      
+      return isCompleted || isNA;
+    });
+    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
+  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
 
   // Helper to get quarterly time from monthly aggregates
   const getQuarterlyTime = (taskId: number, quarter: number): number => {
@@ -175,7 +198,52 @@ const QuarterlyTasks: React.FC = () => {
     return '';
   };
 
-  const renderTaskRow = (task: Task) => {
+  const handleCompleteTask = async (taskId: number) => {
+    try {
+      setLoading(true);
+      await updateYearlyTaskStatus(taskId, yearNumber, true, false);
+      await loadYearlyTaskStatuses(yearNumber);
+    } catch (error) {
+      console.error('Error completing task:', error);
+      alert('Failed to complete task');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMarkNA = async (taskId: number) => {
+    try {
+      setLoading(true);
+      await updateYearlyTaskStatus(taskId, yearNumber, false, true);
+      await loadYearlyTaskStatuses(yearNumber);
+    } catch (error) {
+      console.error('Error marking task as NA:', error);
+      alert('Failed to mark task as NA');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveFromQuarterly = async (taskId: number) => {
+    if (!window.confirm('Are you sure you want to remove this task from quarterly tracking?')) {
+      return;
+    }
+    try {
+      setLoading(true);
+      // Remove task from yearly status (which quarterly shares)
+      await fetch(`/api/yearly-time/status/${taskId}?year=${yearNumber}`, {
+        method: 'DELETE'
+      });
+      await loadYearlyTaskStatuses(yearNumber);
+    } catch (error) {
+      console.error('Error removing task:', error);
+      alert('Failed to remove task from quarterly tracking');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderTaskRow = (task: Task, isCompleted: boolean = false) => {
     const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
     
     // Find first quarter with data
@@ -240,31 +308,88 @@ const QuarterlyTasks: React.FC = () => {
     else if (task.follow_up_frequency === 'weekly') taskTypeIndicator = '(Weekly)';
     else if (task.follow_up_frequency === 'monthly') taskTypeIndicator = '(Monthly)';
 
+    const yearlyStatus = yearlyTaskStatuses[task.id];
+    const taskIsCompleted = yearlyStatus?.is_completed || false;
+    const taskIsNA = yearlyStatus?.is_na || false;
+
     return (
       <tr key={task.id} className={rowColorClass}>
-        <td className="col-task sticky-col sticky-col-1">
+        <td className="col-task sticky-col sticky-col-1" style={{ minWidth: '250px' }}>
           <div style={{ fontWeight: 500, color: '#2d3748' }}>{task.name} <span style={{ color: '#718096', fontSize: '0.85em' }}>{taskTypeIndicator}</span></div>
           <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>{task.pillar_name} → {task.category_name}</div>
         </td>
-        <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center' }}>
+        <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
           {formatValue(task, idealAvgPerQuarter)}
         </td>
-        <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center' }}>
+        <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
           {formatValue(task, avgSpentPerQuarter)}
         </td>
-        <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center' }}>
+        <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
           {formatValue(task, neededPerQuarter)}
         </td>
         {quarters.map(q => {
           const quarterValue = getQuarterlyTime(task.id, q.quarter);
           return (
-            <td key={q.quarter} className="col-hour" style={{ backgroundColor: quarterValue > 0 ? '#e6ffed' : undefined, textAlign: 'center', fontSize: '12px' }}>
+            <td key={q.quarter} className="col-hour" style={{ backgroundColor: quarterValue > 0 ? '#e6ffed' : undefined, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
               {quarterValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(quarterValue)) : '-'}
             </td>
           );
         })}
-        <td className="col-status">
-          {/* Actions can be added here if needed */}
+        <td className="col-status" style={{ minWidth: '200px', textAlign: 'center' }}>
+          {!isCompleted ? (
+            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => {/* Edit handler will be added */}}
+                title="Edit Task"
+              >
+                <i className="fas fa-edit"></i> Edit
+              </button>
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#48bb78', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleCompleteTask(task.id)}
+                disabled={loading}
+                title="Mark as Completed"
+              >
+                <i className="fas fa-check"></i> Complete
+              </button>
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#ed8936', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleMarkNA(task.id)}
+                disabled={loading}
+                title="Mark as Not Applicable"
+              >
+                <i className="fas fa-times"></i> NA
+              </button>
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleRemoveFromQuarterly(task.id)}
+                disabled={loading}
+                title="Remove from Quarterly"
+              >
+                <i className="fas fa-trash"></i> Delete
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '11px', color: taskIsCompleted ? '#48bb78' : '#ed8936', fontWeight: 600 }}>
+                {taskIsCompleted ? '✓ Completed' : '⊗ NA'}
+              </span>
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleRemoveFromQuarterly(task.id)}
+                disabled={loading}
+                title="Remove from Quarterly"
+              >
+                <i className="fas fa-trash"></i> Remove
+              </button>
+            </div>
+          )}
         </td>
       </tr>
     );
@@ -295,24 +420,63 @@ const QuarterlyTasks: React.FC = () => {
               No quarterly tasks found. Use "Add Quarterly Task" button to track tasks in quarterly view.
             </div>
           ) : (
-        <div className="tasks-table-container">
+        <div className="tasks-table-container" style={{ marginBottom: '30px' }}>
           <table className="tasks-table daily-table">
             <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
               <tr>
-                <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Quarter</th>
-                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual Avg<br/>(Since Start)</th>
-                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Quarter</th>
-                {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{q.name}</th>)}
-                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filteredTasks.map(task => renderTaskRow(task))}
+              {filteredTasks.map(task => renderTaskRow(task, false))}
             </tbody>
           </table>
         </div>
       )}
+
+          {/* Completed/NA Tasks Section */}
+          {completedTasks.length > 0 && (
+            <div style={{ marginTop: '40px' }}>
+              <h3 style={{ 
+                color: '#2d3748', 
+                fontSize: '18px', 
+                fontWeight: 600, 
+                marginBottom: '15px',
+                padding: '10px',
+                backgroundColor: '#f7fafc',
+                borderLeft: '4px solid #667eea',
+                borderRadius: '4px'
+              }}>
+                ✓ Completed / NA Tasks ({completedTasks.length})
+              </h3>
+              <div className="alert alert-info" style={{ margin: '10px 0', padding: '10px', fontSize: '12px' }}>
+                <i className="fas fa-info-circle me-2"></i>
+                These tasks will remain visible until the end of the current quarter. After the quarter ends, they will be automatically hidden.
+              </div>
+              <div className="tasks-table-container">
+                <table className="tasks-table daily-table">
+                  <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #718096 0%, #4a5568 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                    <tr>
+                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#718096', minWidth: '250px' }}>Task</th>
+                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                      {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completedTasks.map(task => renderTaskRow(task, true))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
