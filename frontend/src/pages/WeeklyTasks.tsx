@@ -65,6 +65,7 @@ const WeeklyTasks: React.FC = () => {
   // ============================================================================
   
   const [loading, setLoading] = useState(false);
+  const [showCompletedSection, setShowCompletedSection] = useState(false);
 
   // ============================================================================
   // COMPUTED VALUES
@@ -146,14 +147,18 @@ const WeeklyTasks: React.FC = () => {
   /**
    * Filter tasks for weekly view
    * 
-   * Business Rule: Show only tasks that have been explicitly added to weekly tracking
-   * This is determined by presence in weeklyTaskStatuses map
+   * Business Rule: 
+   * - Native weekly tasks (follow_up_frequency='weekly') always show - this is their home tab
+   * - Monitoring tasks (daily/monthly) only show if explicitly added to weekly tracking
    */
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
-      // Must be explicitly added to weekly tracking
+      const isNativeWeeklyTask = task.follow_up_frequency === 'weekly';
       const hasBeenAddedToWeekly = weeklyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToWeekly) return false;
+      
+      // Native weekly tasks always show (this is their home tab)
+      // Monitoring tasks only show if explicitly added
+      if (!isNativeWeeklyTask && !hasBeenAddedToWeekly) return false;
 
       // Apply pillar/category filters
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
@@ -176,6 +181,50 @@ const WeeklyTasks: React.FC = () => {
   }, [tasks, weeklyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder]);
 
   /**
+   * Separate native weekly tasks from monitoring tasks
+   * Native weekly tasks have follow_up_frequency='weekly'
+   * Monitoring tasks are daily/monthly tasks being tracked weekly
+   */
+  const nativeWeeklyTasks = useMemo(() => {
+    return filteredTasks.filter(task => {
+      const weeklyStatus = weeklyTaskStatuses[task.id];
+      const isCompleted = weeklyStatus?.is_completed || false;
+      const isNA = weeklyStatus?.is_na || false;
+      return task.follow_up_frequency === 'weekly' && !isCompleted && !isNA;
+    });
+  }, [filteredTasks, weeklyTaskStatuses]);
+
+  const monitoringTasks = useMemo(() => {
+    return filteredTasks.filter(task => task.follow_up_frequency !== 'weekly');
+  }, [filteredTasks]);
+
+  const completedWeeklyTasks = useMemo(() => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now);
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    return filteredTasks.filter(task => {
+      if (task.follow_up_frequency !== 'weekly') return false;
+      
+      const weeklyStatus = weeklyTaskStatuses[task.id];
+      if (!weeklyStatus) return false;
+      
+      const isCompleted = weeklyStatus.is_completed || false;
+      const isNA = weeklyStatus.is_na || false;
+      
+      if (!isCompleted && !isNA) return false;
+      
+      // Filter out tasks completed/NA more than 1 week ago
+      if (weeklyStatus.completed_at) {
+        const completedDate = new Date(weeklyStatus.completed_at);
+        if (completedDate < oneWeekAgo) return false;
+      }
+      
+      return true;
+    });
+  }, [filteredTasks, weeklyTaskStatuses]);
+
+  /**
    * Group filtered tasks by task type for sectioned display
    */
   const tasksByType = useMemo(() => {
@@ -189,7 +238,7 @@ const WeeklyTasks: React.FC = () => {
       boolean: [],
     };
 
-    filteredTasks.forEach(task => {
+    nativeWeeklyTasks.forEach(task => {
       if (task.task_type === TaskType.TIME) {
         groups.time.push(task);
       } else if (task.task_type === TaskType.COUNT) {
@@ -200,7 +249,61 @@ const WeeklyTasks: React.FC = () => {
     });
 
     return groups;
-  }, [filteredTasks]);
+  }, [nativeWeeklyTasks]);
+
+  /**
+   * Group completed weekly tasks by type
+   */
+  const completedTasksByType = useMemo(() => {
+    const groups: {
+      time: Task[];
+      count: Task[];
+      boolean: Task[];
+    } = {
+      time: [],
+      count: [],
+      boolean: [],
+    };
+
+    completedWeeklyTasks.forEach(task => {
+      if (task.task_type === TaskType.TIME) {
+        groups.time.push(task);
+      } else if (task.task_type === TaskType.COUNT) {
+        groups.count.push(task);
+      } else if (task.task_type === TaskType.BOOLEAN) {
+        groups.boolean.push(task);
+      }
+    });
+
+    return groups;
+  }, [completedWeeklyTasks]);
+
+  /**
+   * Group monitoring tasks by task type
+   */
+  const monitoringTasksByType = useMemo(() => {
+    const groups: {
+      time: Task[];
+      count: Task[];
+      boolean: Task[];
+    } = {
+      time: [],
+      count: [],
+      boolean: [],
+    };
+
+    monitoringTasks.forEach(task => {
+      if (task.task_type === TaskType.TIME) {
+        groups.time.push(task);
+      } else if (task.task_type === TaskType.COUNT) {
+        groups.count.push(task);
+      } else if (task.task_type === TaskType.BOOLEAN) {
+        groups.boolean.push(task);
+      }
+    });
+
+    return groups;
+  }, [monitoringTasks]);
 
   // ============================================================================
   // HELPER FUNCTIONS - Time Retrieval
@@ -359,6 +462,22 @@ const WeeklyTasks: React.FC = () => {
       await loadWeeklyTaskStatuses(weekStartString);
     } catch (err: any) {
       console.error('Error marking task NA:', err);
+    }
+  };
+
+  /**
+   * Restore a completed/NA task back to active status
+   */
+  const handleRestoreWeeklyTask = async (taskId: number) => {
+    try {
+      await updateWeeklyTaskStatus(taskId, weekStartString, {
+        is_completed: false,
+        is_na: false,
+      });
+      // Reload to reflect changes
+      await loadWeeklyTaskStatuses(weekStartString);
+    } catch (err: any) {
+      console.error('Error restoring task:', err);
     }
   };
 
@@ -543,6 +662,18 @@ const WeeklyTasks: React.FC = () => {
                 ⊘ NA via Daily
               </span>
             </div>
+          ) : isWeeklyCompleted || isWeeklyNA ? (
+            <div className="action-buttons">
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleRestoreWeeklyTask(task.id)}
+                disabled={loading}
+                title="Restore Task"
+              >
+                <i className="fas fa-undo"></i> Restore
+              </button>
+            </div>
           ) : (
             <div className="action-buttons">
               <button 
@@ -569,7 +700,7 @@ const WeeklyTasks: React.FC = () => {
   /**
    * Render task type section (Time/Count/Boolean)
    */
-  const renderTaskSection = (sectionTitle: string, emoji: string, sectionClass: string, tasks: Task[]) => {
+  const renderTaskSection = (sectionTitle: string, emoji: string, sectionClass: string, tasks: Task[], subtitle?: string) => {
     if (tasks.length === 0) return null;
 
     return (
@@ -578,7 +709,7 @@ const WeeklyTasks: React.FC = () => {
         <h3 className={`task-section-header ${sectionClass}`}>
           <span className="emoji">{emoji}</span>
           <span>{sectionTitle}</span>
-          <span className="subtitle">(Auto-calculated from Daily)</span>
+          {subtitle && <span className="subtitle">{subtitle}</span>}
         </h3>
         
         {/* Table */}
@@ -644,23 +775,96 @@ const WeeklyTasks: React.FC = () => {
 
   return (
     <>
-      {/* Task Sections by Type */}
-      <div className="row">
-        <div className="col">
-          {filteredTasks.length === 0 ? (
+      {/* Monitoring Section - Daily/Monthly tasks tracked weekly */}
+      {monitoringTasks.length > 0 && (
+        <div className="row mb-4">
+          <div className="col">
+            <div className="alert alert-info" style={{ marginBottom: '24px', padding: '16px 20px', borderRadius: '12px' }}>
+              <h5 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                <i className="fas fa-chart-line me-3"></i>
+                📊 Weekly Monitoring - Read-Only ({monitoringTasks.length} tasks)
+              </h5>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px' }}>
+                These are Daily/Monthly tasks being monitored at weekly level. Values are aggregated from their home tabs.
+              </p>
+            </div>
+            {renderTaskSection('⏱️ Time-Based (Monitoring)', '⏱️', 'time-based', monitoringTasksByType.time, '(Auto-calculated from Daily)')}
+            {renderTaskSection('🔢 Count-Based (Monitoring)', '🔢', 'count-based', monitoringTasksByType.count, '(Auto-calculated from Daily)')}
+            {renderTaskSection('✅ Yes/No (Monitoring)', '✅', 'boolean-based', monitoringTasksByType.boolean, '(Auto-calculated from Daily)')}
+          </div>
+        </div>
+      )}
+
+      {/* Native Weekly Tasks Section - Tasks with follow_up_frequency='weekly' */}
+      {nativeWeeklyTasks.length > 0 && (
+        <div className="row mb-4">
+          <div className="col">
+            <div className="alert" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
+              <h5 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                <i className="fas fa-calendar-week me-3"></i>
+                📅 Weekly Tasks - Home Tab ({nativeWeeklyTasks.length} tasks)
+              </h5>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px', opacity: 0.95 }}>
+                These are your weekly tasks. Track progress day-by-day (Mon-Sun) or mark complete/NA for the entire week.
+              </p>
+            </div>
+            {renderTaskSection('⏱️ Time-Based Weekly Tasks', '⏱️', 'time-based', tasksByType.time)}
+            {renderTaskSection('🔢 Count-Based Weekly Tasks', '🔢', 'count-based', tasksByType.count)}
+            {renderTaskSection('✅ Yes/No Weekly Tasks', '✅', 'boolean-based', tasksByType.boolean)}
+          </div>
+        </div>
+      )}
+
+      {/* Completed Tasks Section */}
+      {completedWeeklyTasks.length > 0 && (
+        <div className="row">
+          <div className="col">
+            <div style={{ marginTop: '40px', paddingTop: '24px', borderTop: '3px solid #e2e8f0' }}>
+              <div 
+                onClick={() => setShowCompletedSection(!showCompletedSection)}
+                style={{ 
+                  cursor: 'pointer', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0'
+                }}
+              >
+                <i className={`fas fa-chevron-${showCompletedSection ? 'down' : 'right'}`} style={{ marginRight: '12px', color: '#64748b' }}></i>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>
+                  ✅ Completed Weekly Tasks ({completedWeeklyTasks.length})
+                </h3>
+                <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                  Auto-hide after 1 week
+                </span>
+              </div>
+              
+              {showCompletedSection && (
+                <>
+                  {renderTaskSection('⏱️ Time-Based (Completed)', '⏱️', 'time-based', completedTasksByType.time)}
+                  {renderTaskSection('🔢 Count-Based (Completed)', '🔢', 'count-based', completedTasksByType.count)}
+                  {renderTaskSection('✅ Yes/No (Completed)', '✅', 'boolean-based', completedTasksByType.boolean)}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {nativeWeeklyTasks.length === 0 && monitoringTasks.length === 0 && (
+        <div className="row">
+          <div className="col">
             <div className="alert alert-warning">
               <i className="fas fa-exclamation-triangle me-2"></i>
               No weekly tasks found. Adjust your filters or add new weekly tasks.
             </div>
-          ) : (
-            <>
-              {renderTaskSection('Time-Based Tasks', '⏱️', 'time-based', tasksByType.time)}
-              {renderTaskSection('Count-Based Tasks', '🔢', 'count-based', tasksByType.count)}
-              {renderTaskSection('Yes/No Tasks', '✅', 'boolean-based', tasksByType.boolean)}
-            </>
-          )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 };
