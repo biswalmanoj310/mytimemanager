@@ -1,7 +1,7 @@
 /* ============================================
-   Task Form Modal Styles - Updated with Orange Border & Green Inputs
-   Clean and simple design with good padding
-   Version: 2.0
+   Task Form Modal Styles - Compact Version
+   Optimized for fast task creation
+   Version: 3.0 - Compact Layout
    ============================================ */
 
 /* Modal Overlay */
@@ -350,6 +350,367 @@
   }
 
   .form-actions .btn {
+    width: 100%;
+  }
+}
+
+/* ============================================
+   COMPACT FORM LAYOUT STYLES - NEW
+   ============================================ */
+
+/* Compact Form Container */
+.task-form-compact {
+  padding: 20px 24px;
+  border: 2px solid #e2e8f0;
+  border-top: 4px solid #4299e1;
+  margin: 4px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+/* Section Divider (Subtle visual separation) */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(to right, transparent, #e2e8f0, transparent);
+  margin: 16px 0;
+}
+
+/* Inline Form Row (Label + Input on same line) */
+.form-row-inline {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+
+.inline-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  padding-top: 10px;
+  text-align: right;
+}
+
+.inline-label-short {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  padding-top: 10px;
+  text-align: right;
+  grid-column: 1;
+}
+
+.flex-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.flex-input:focus {
+  outline: none;
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.2);
+}
+
+.small-input {
+  width: 120px;
+  padding: 10px 12px;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.small-input:focus {
+  outline: none;
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.2);
+}
+
+.flex-input-small {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.flex-input-small:focus {
+  outline: none;
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.2);
+}
+
+.inline-hint {
+  font-size: 12px;
+  color: #718096;
+  padding-top: 12px;
+  padding-left: 8px;
+}
+
+/* Dual Column Row (Two fields side by side) */
+.form-row-dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.form-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-col label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 6px;
+}
+
+.form-col select,
+.form-col input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-col select:focus,
+.form-col input:focus {
+  outline: none;
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.2);
+}
+
+.form-col select:disabled {
+  background-color: #f7fafc;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Checkbox Inline (Checkbox + Text in same line with optional select) */
+.form-row-checkbox {
+  margin-bottom: 10px;
+}
+
+.checkbox-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.checkbox-inline.narrow {
+  min-width: 120px;
+  justify-content: flex-end;
+}
+
+.checkbox-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.checkbox-inline span {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+/* Why Section (Collapsible) */
+.why-section {
+  margin-top: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #f7fafc;
+}
+
+.why-section summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+  padding: 4px 0;
+  list-style: none;
+  user-select: none;
+}
+
+.why-section summary:hover {
+  color: #2d3748;
+}
+
+.why-section summary::-webkit-details-marker {
+  display: none;
+}
+
+.why-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-top: 10px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.why-input:focus {
+  outline: none;
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.2);
+}
+
+.why-field {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.why-field input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 2px solid #48bb78;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.why-field input:focus {
+  outline: none;
+  border-color: #38a169;
+  box-shadow: 0 0 0 3px rgba(72, 187, 120, 0.2);
+}
+
+.btn-remove-mini {
+  background: #e53e3e;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+.btn-remove-mini:hover {
+  background: #c53030;
+}
+
+.btn-add-mini {
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  background: #edf2f7;
+  border: 2px dashed #cbd5e0;
+  border-radius: 6px;
+  color: #4a5568;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add-mini:hover {
+  border-color: #4299e1;
+  color: #2b6cb0;
+  background: #e6f2ff;
+}
+
+/* Compact Form Actions */
+.form-actions-compact {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.btn-secondary-compact {
+  padding: 8px 20px;
+  background: #edf2f7;
+  color: #4a5568;
+  border: 1px solid #cbd5e0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary-compact:hover {
+  background: #e2e8f0;
+}
+
+.btn-primary-compact {
+  padding: 8px 20px;
+  background: #4299e1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary-compact:hover {
+  background: #3182ce;
+}
+
+.btn-primary-compact:disabled {
+  background: #cbd5e0;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Required Field Indicator */
+.required {
+  color: #e53e3e;
+}
+
+/* Responsive Compact Layout */
+@media (max-width: 768px) {
+  .form-row-inline {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  
+  .inline-label,
+  .inline-label-short {
+    text-align: left;
+    padding-top: 0;
+  }
+  
+  .form-row-dual {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .small-input {
+    width: 100%;
+  }
+  
+  .form-actions-compact {
+    flex-direction: column-reverse;
+  }
+  
+  .form-actions-compact .btn {
     width: 100%;
   }
 }

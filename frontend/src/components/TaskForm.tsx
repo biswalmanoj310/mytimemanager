@@ -76,6 +76,10 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Progressive disclosure states
+  const [showProjectSelect, setShowProjectSelect] = useState(false);
+  const [showWishSelect, setShowWishSelect] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -210,6 +214,10 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         due_date: data.due_date || '',
         priority: data.priority || 5,
       });
+      
+      // Set progressive disclosure states based on existing data
+      setShowProjectSelect(!!data.project_id);
+      setShowWishSelect(!!data.related_wish_id);
       
       setLoading(false);
     } catch (err) {
@@ -411,29 +419,16 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>Add New Task</h2>
+          <h2>{taskId ? 'Edit Task' : 'Add New Task'}</h2>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
 
-        <form onSubmit={handleSubmit} className="task-form">
+        <form onSubmit={handleSubmit} className="task-form-compact">
           {error && <div className="error-message">{error}</div>}
 
-          {/* Basic Information Section */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-            padding: '12px 20px', 
-            borderRadius: '8px',
-            marginBottom: '20px',
-            boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
-          }}>
-            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
-              🌟 Basic Information
-            </h3>
-          </div>
-
-          {/* Task Name */}
-          <div className="form-group">
-            <label htmlFor="name">Task Name: <span className="required">*</span></label>
+          {/* Inline: Task Name */}
+          <div className="form-row-inline">
+            <label htmlFor="name" className="inline-label">Task Name: <span className="required">*</span></label>
             <input
               type="text"
               id="name"
@@ -441,493 +436,341 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="Enter task name"
               required
+              className="flex-input"
             />
           </div>
 
-          {/* Description */}
-          <div className="form-group">
-            <label htmlFor="description">Description:</label>
+          {/* Inline: Description */}
+          <div className="form-row-inline">
+            <label htmlFor="description" className="inline-label">Description:</label>
             <textarea
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Optional task description"
+              placeholder="Optional"
               rows={2}
+              className="flex-input"
             />
           </div>
 
-          {/* Classification Section */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', 
-            padding: '12px 20px', 
-            borderRadius: '8px',
-            marginBottom: '20px',
-            marginTop: '30px',
-            boxShadow: '0 2px 8px rgba(240, 147, 251, 0.3)'
-          }}>
-            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
-              🏷️ Classification & Organization
-            </h3>
-          </div>
+          <div className="section-divider"></div>
 
-          {/* Pillar */}
-          <div className="form-group">
-            <label htmlFor="pillar">Pillar: <span className="required">*</span></label>
-            <select
-              id="pillar"
-              value={formData.pillar_id || ''}
-              onChange={(e) => setFormData({ ...formData, pillar_id: Number(e.target.value) })}
-              required
-            >
-              <option value="">Select a pillar</option>
-              {pillars.map(pillar => (
-                <option key={pillar.id} value={pillar.id}>
-                  {pillar.icon} {pillar.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Category */}
-          <div className="form-group">
-            <label htmlFor="category">Category: <span className="required">*</span></label>
-            <select
-              id="category"
-              value={formData.category_id || ''}
-              onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
-              disabled={!formData.pillar_id}
-              required
-            >
-              <option value="">Select a category</option>
-              {categories.map(category => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sub-Category - Hidden since we don't use subcategories */}
-          {/* 
-          <div className="form-group" style={{ display: 'none' }}>
-            <label htmlFor="sub_category">Sub-Category:</label>
-            <select
-              id="sub_category"
-              value={formData.sub_category_id || ''}
-              onChange={(e) => setFormData({ ...formData, sub_category_id: Number(e.target.value) || null })}
-              disabled={!formData.category_id}
-            >
-              <option value="">Select a sub-category (optional)</option>
-              {subCategories.map(subCat => (
-                <option key={subCat.id} value={subCat.id}>
-                  {subCat.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          */}
-
-          {/* Task Type & Measurement Section */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)', 
-            padding: '12px 20px', 
-            borderRadius: '8px',
-            marginBottom: '20px',
-            marginTop: '30px',
-            boxShadow: '0 2px 8px rgba(79, 172, 254, 0.3)'
-          }}>
-            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
-              📊 Task Type & Measurement
-            </h3>
-          </div>
-
-          {/* Task Type Selector */}
-          <div className="form-group">
-            <label>Task Type: <span className="required">*</span></label>
-            <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  value={TaskType.TIME}
-                  checked={formData.task_type === TaskType.TIME}
-                  onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
-                  style={{ marginRight: '6px' }}
-                />
-                Time-based (minutes/hours)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  value={TaskType.COUNT}
-                  checked={formData.task_type === TaskType.COUNT}
-                  onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
-                  style={{ marginRight: '6px' }}
-                />
-                Count-based (reps, glasses, etc.)
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  value={TaskType.BOOLEAN}
-                  checked={formData.task_type === TaskType.BOOLEAN}
-                  onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
-                  style={{ marginRight: '6px' }}
-                />
-                Yes/No (completion)
-              </label>
+          {/* Same row: Pillar and Category */}
+          <div className="form-row-dual">
+            <div className="form-col">
+              <label htmlFor="pillar">Pillar: <span className="required">*</span></label>
+              <select
+                id="pillar"
+                value={formData.pillar_id || ''}
+                onChange={(e) => setFormData({ ...formData, pillar_id: Number(e.target.value) })}
+                required
+              >
+                <option value="">Select</option>
+                {pillars.map(pillar => (
+                  <option key={pillar.id} value={pillar.id}>
+                    {pillar.icon} {pillar.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-col">
+              <label htmlFor="category">Category: <span className="required">*</span></label>
+              <select
+                id="category"
+                value={formData.category_id || ''}
+                onChange={(e) => setFormData({ ...formData, category_id: Number(e.target.value) })}
+                disabled={!formData.pillar_id}
+                required
+              >
+                <option value="">Select</option>
+                {categories.map(category => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          {/* Conditional fields based on task type */}
+          <div className="section-divider"></div>
+
+          {/* Same row: Follow-up Time and Task Type */}
+          <div className="form-row-dual">
+            <div className="form-col">
+              <label htmlFor="follow_up">Follow-up Time: <span className="required">*</span></label>
+              <select
+                id="follow_up"
+                value={formData.follow_up_frequency}
+                onChange={(e) => setFormData({ ...formData, follow_up_frequency: e.target.value as FollowUpFrequency })}
+                required
+              >
+                <option value={FollowUpFrequency.TODAY}>Today</option>
+                <option value={FollowUpFrequency.DAILY}>Daily</option>
+                <option value={FollowUpFrequency.WEEKLY}>Weekly</option>
+                <option value={FollowUpFrequency.MONTHLY}>Monthly</option>
+                <option value={FollowUpFrequency.QUARTERLY}>Quarterly</option>
+                <option value={FollowUpFrequency.YEARLY}>Yearly</option>
+                <option value={FollowUpFrequency.ONE_TIME}>Important</option>
+                <option value={FollowUpFrequency.MISC}>Misc Task</option>
+              </select>
+            </div>
+            <div className="form-col">
+              <label>Task Type: <span className="required">*</span></label>
+              <select
+                value={formData.task_type}
+                onChange={(e) => setFormData({ ...formData, task_type: e.target.value as TaskType })}
+                required
+              >
+                <option value={TaskType.TIME}>⏱️ Time</option>
+                <option value={TaskType.COUNT}>🔢 Count</option>
+                <option value={TaskType.BOOLEAN}>✅ Yes/No</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Conditional: Time allocated */}
           {formData.task_type === TaskType.TIME && (
-            <div className="form-group">
-              <label htmlFor="allocated_time">Time Allocated (minutes): <span className="required">*</span></label>
+            <div className="form-row-inline">
+              <label htmlFor="allocated_time" className="inline-label-short">Minutes: <span className="required">*</span></label>
               <input
-                type="text"
+                type="number"
                 id="allocated_time"
                 value={formData.allocated_minutes === 0 ? '' : formData.allocated_minutes}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || /^\d+$/.test(value)) {
-                    setFormData({ ...formData, allocated_minutes: value === '' ? 0 : Number(value) });
-                  }
-                }}
-                placeholder="Enter minutes (e.g., 60)"
+                onChange={(e) => setFormData({ ...formData, allocated_minutes: e.target.value ? Number(e.target.value) : 0 })}
+                placeholder="60"
                 required
+                className="small-input"
               />
               {formData.allocated_minutes > 0 && (
-                <small className="help-text">
-                  {(formData.allocated_minutes / 60).toFixed(1)} hours • Total for the week/month (flexible scheduling)
-                </small>
+                <span className="inline-hint">{(formData.allocated_minutes / 60).toFixed(1)}h</span>
               )}
             </div>
           )}
 
+          {/* Conditional: Count + Unit */}
           {formData.task_type === TaskType.COUNT && (
-            <>
-              <div className="form-group">
-                <label htmlFor="target_value">Target Count: <span className="required">*</span></label>
+            <div className="form-row-dual">
+              <div className="form-col">
+                <label htmlFor="target_value">Target: <span className="required">*</span></label>
                 <input
                   type="number"
                   id="target_value"
                   value={formData.target_value || ''}
                   onChange={(e) => setFormData({ ...formData, target_value: e.target.value ? Number(e.target.value) : null })}
-                  placeholder="e.g., 10"
+                  placeholder="10"
                   min="1"
                   required
                 />
-                <small className="help-text">
-                  Total completions needed for the week/month (flexible scheduling)
-                </small>
               </div>
-              <div className="form-group">
+              <div className="form-col">
                 <label htmlFor="unit">Unit: <span className="required">*</span></label>
                 <input
                   type="text"
                   id="unit"
                   value={formData.unit}
                   onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  placeholder="e.g., push-ups, glasses, miles, pages"
+                  placeholder="reps, glasses, pages"
                   required
                 />
-                <small className="help-text">
-                  Example units: reps, glasses, miles, pages, calls, emails
-                </small>
               </div>
-            </>
-          )}
-
-          {formData.task_type === TaskType.BOOLEAN && (
-            <div className="form-group">
-              <small className="help-text" style={{ display: 'block', marginTop: '0', color: '#666' }}>
-                ✓ This is a yes/no completion task (e.g., "Did I go to the gym?", "Did I meditate?")
-              </small>
             </div>
           )}
 
-          {/* Scheduling & Tracking Section */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)', 
-            padding: '12px 20px', 
-            borderRadius: '8px',
-            marginBottom: '20px',
-            marginTop: '30px',
-            boxShadow: '0 2px 8px rgba(67, 233, 123, 0.3)'
-          }}>
-            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
-              📅 Scheduling & Tracking
-            </h3>
-          </div>
+          {/* Conditional: Daily One Time checkbox - only for daily tasks */}
+          {formData.follow_up_frequency === FollowUpFrequency.DAILY && (
+            <div className="form-row-checkbox">
+              <label className="checkbox-inline">
+                <input
+                  type="checkbox"
+                  checked={formData.is_daily_one_time}
+                  onChange={(e) => setFormData({ ...formData, is_daily_one_time: e.target.checked })}
+                />
+                <span>Is this a Daily One Time Task?</span>
+              </label>
+            </div>
+          )}
 
-          {/* Follow-up Frequency */}
-          <div className="form-group">
-            <label htmlFor="follow_up">Follow-up Time: <span className="required">*</span></label>
-            <select
-              id="follow_up"
-              value={formData.follow_up_frequency}
-              onChange={(e) => setFormData({ ...formData, follow_up_frequency: e.target.value as FollowUpFrequency })}
-              required
-            >
-              <option value={FollowUpFrequency.TODAY}>Today</option>
-              <option value={FollowUpFrequency.DAILY}>Daily</option>
-              <option value={FollowUpFrequency.WEEKLY}>Weekly</option>
-              <option value={FollowUpFrequency.MONTHLY}>Monthly</option>
-              <option value={FollowUpFrequency.QUARTERLY}>Quarterly</option>
-              <option value={FollowUpFrequency.YEARLY}>Yearly</option>
-              <option value={FollowUpFrequency.ONE_TIME}>Important</option>
-              <option value={FollowUpFrequency.MISC}>Misc Task</option>
-            </select>
-          </div>
-
-          {/* Due Date */}
-          <div className="form-group">
-            <label htmlFor="due_date">Due Date:</label>
-            <input
-              type="date"
-              id="due_date"
-              value={formData.due_date}
-              onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-            />
-          </div>
-
-          {/* Priority */}
-          <div className="form-group">
-            <label htmlFor="priority">Priority: <span className="required">*</span></label>
-            <select
-              id="priority"
-              value={formData.priority}
-              onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
-              required
-            >
-              <option value={1}>1 - Highest Priority</option>
-              <option value={2}>2 - Very High</option>
-              <option value={3}>3 - High</option>
-              <option value={4}>4 - Above Average</option>
-              <option value={5}>5 - Average</option>
-              <option value={6}>6 - Below Average</option>
-              <option value={7}>7 - Low</option>
-              <option value={8}>8 - Very Low</option>
-              <option value={9}>9 - Minimal</option>
-              <option value={10}>10 - Lowest Priority (Default)</option>
-            </select>
-            <small className="help-text">
-              Set task priority (1 = highest, 10 = lowest). Default is 10.
-            </small>
-          </div>
-
-          {/* Ideal Gap Days for Important Tasks */}
+          {/* Conditional: Ideal Gap for Important tasks */}
           {formData.follow_up_frequency === FollowUpFrequency.ONE_TIME && (
-            <div className="form-group">
-              <label htmlFor="ideal_gap_days">Ideal Gap (Days): <span className="required">*</span></label>
+            <div className="form-row-inline">
+              <label htmlFor="ideal_gap_days" className="inline-label-short">Gap (Days): <span className="required">*</span></label>
               <input
                 type="number"
                 id="ideal_gap_days"
                 min="1"
                 value={formData.ideal_gap_days || ''}
                 onChange={(e) => setFormData({ ...formData, ideal_gap_days: parseInt(e.target.value) || undefined })}
-                placeholder="e.g., 7, 30, 45, 90"
-                required={formData.follow_up_frequency === FollowUpFrequency.ONE_TIME}
+                placeholder="e.g., 45"
+                required
+                className="small-input"
               />
-              <small className="help-text">
-                How many days between checks? (e.g., check bank account every 45 days)
-              </small>
+              <span className="inline-hint">days between checks</span>
             </div>
           )}
 
-          {/* Separately Followed */}
-          <div className="form-group checkbox-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={formData.separately_followed}
-                onChange={(e) => setFormData({ ...formData, separately_followed: e.target.checked })}
-              />
-              <span>Separately Followed (no time bound)</span>
-            </label>
-            <small className="help-text">
-              Check this for tasks that are tracked separately without strict time constraints
-            </small>
-          </div>
+          <div className="section-divider"></div>
 
-          {/* Daily One Time Task */}
-          <div className="form-group checkbox-group">
-            <label>
-              <input
-                type="checkbox"
-                checked={formData.is_daily_one_time}
-                onChange={(e) => setFormData({ ...formData, is_daily_one_time: e.target.checked })}
-              />
-              <span>Is this a Daily One Time Task?</span>
-            </label>
-            <small className="help-text">
-              Check this for simple daily tasks done once per day (e.g., "Read 15 minutes")
-            </small>
-          </div>
-
-          {/* Goals & Dreams Section */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)', 
-            padding: '12px 20px', 
-            borderRadius: '8px',
-            marginBottom: '20px',
-            marginTop: '30px',
-            boxShadow: '0 2px 8px rgba(250, 112, 154, 0.3)'
-          }}>
-            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
-              🎯 Goals & Dreams
-            </h3>
-          </div>
-
-          {/* Part of a Goal */}
-          <div className="form-group checkbox-group">
-            <label>
+          {/* Same row: Goal checkbox + dropdown */}
+          <div className="form-row-inline">
+            <label className="checkbox-inline narrow">
               <input
                 type="checkbox"
                 checked={formData.is_part_of_goal}
                 onChange={(e) => setFormData({ ...formData, is_part_of_goal: e.target.checked, goal_id: null })}
               />
-              <span>Part of a Goal</span>
+              <span>Goal:</span>
             </label>
-          </div>
-
-          {/* Goal Selection */}
-          {formData.is_part_of_goal && (
-            <div className="form-group">
-              <label htmlFor="goal">Select Goal:</label>
+            {formData.is_part_of_goal && (
               <select
-                id="goal"
                 value={formData.goal_id || ''}
                 onChange={(e) => setFormData({ ...formData, goal_id: Number(e.target.value) || null })}
+                className="flex-input-small"
               >
-                <option value="">Select a goal</option>
+                <option value="">Select goal</option>
                 {goals.map(goal => (
                   <option key={goal.id} value={goal.id}>
                     {goal.name}
                   </option>
                 ))}
               </select>
+            )}
+          </div>
+
+          {/* Same row: Project checkbox + dropdown */}
+          <div className="form-row-inline">
+            <label className="checkbox-inline narrow">
+              <input
+                type="checkbox"
+                checked={showProjectSelect}
+                onChange={(e) => {
+                  setShowProjectSelect(e.target.checked);
+                  if (!e.target.checked) {
+                    setFormData({ ...formData, project_id: null });
+                  }
+                }}
+              />
+              <span>Project:</span>
+            </label>
+            {showProjectSelect && (
+              <select
+                value={formData.project_id || ''}
+                onChange={(e) => setFormData({ ...formData, project_id: Number(e.target.value) || null })}
+                className="flex-input-small"
+              >
+                <option value="">Select project</option>
+                {projects.map(project => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Same row: Dream checkbox + dropdown */}
+          <div className="form-row-inline">
+            <label className="checkbox-inline narrow">
+              <input
+                type="checkbox"
+                checked={showWishSelect}
+                onChange={(e) => {
+                  setShowWishSelect(e.target.checked);
+                  if (!e.target.checked) {
+                    setFormData({ ...formData, related_wish_id: null });
+                  }
+                }}
+              />
+              <span>Dream:</span>
+            </label>
+            {showWishSelect && (
+              <select
+                value={formData.related_wish_id || ''}
+                onChange={(e) => setFormData({ ...formData, related_wish_id: Number(e.target.value) || null })}
+                className="flex-input-small"
+              >
+                <option value="">Select dream</option>
+                {wishes.map(wish => (
+                  <option key={wish.id} value={wish.id}>
+                    {wish.title} {wish.status === 'exploring' ? '🔬' : '💭'}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          <div className="section-divider"></div>
+
+          {/* Optional: Due Date and Priority in same row */}
+          <div className="form-row-dual">
+            <div className="form-col">
+              <label htmlFor="due_date">Due Date:</label>
+              <input
+                type="date"
+                id="due_date"
+                value={formData.due_date}
+                onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+              />
             </div>
-          )}
-
-          {/* Project Selection */}
-          <div className="form-group">
-            <label htmlFor="project">Part of a Project?</label>
-            <select
-              id="project"
-              value={formData.project_id || ''}
-              onChange={(e) => setFormData({ ...formData, project_id: Number(e.target.value) || null })}
-              style={{
-                padding: '10px',
-                borderRadius: '6px',
-                border: '2px solid #e0e0e0',
-                fontSize: '14px',
-                backgroundColor: formData.project_id ? '#eff6ff' : 'white'
-              }}
-            >
-              <option value="">-- No associated project --</option>
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-            <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '6px' }}>
-              📂 Link this task to a project for better organization
-            </small>
+            <div className="form-col">
+              <label htmlFor="priority">Priority:</label>
+              <select
+                id="priority"
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) })}
+              >
+                <option value={1}>1 - Highest</option>
+                <option value={2}>2 - Very High</option>
+                <option value={3}>3 - High</option>
+                <option value={5}>5 - Normal</option>
+                <option value={7}>7 - Low</option>
+                <option value={10}>10 - Lowest</option>
+              </select>
+            </div>
           </div>
 
-          {/* Wish/Dream Selection */}
-          <div className="form-group">
-            <label htmlFor="wish">Part of a Dream?</label>
-            <select
-              id="wish"
-              value={formData.related_wish_id || ''}
-              onChange={(e) => setFormData({ ...formData, related_wish_id: Number(e.target.value) || null })}
-              style={{
-                padding: '10px',
-                borderRadius: '6px',
-                border: '2px solid #e0e0e0',
-                fontSize: '14px',
-                backgroundColor: formData.related_wish_id ? '#f0fdfa' : 'white'
-              }}
-            >
-              <option value="">-- No associated dream --</option>
-              {wishes.map(wish => (
-                <option key={wish.id} value={wish.id}>
-                  {wish.title} {wish.status === 'exploring' ? '🔬' : '💭'}
-                </option>
-              ))}
-            </select>
-            <small style={{ fontSize: '12px', color: '#666', display: 'block', marginTop: '6px' }}>
-              💡 Link this task to a dream you're exploring or pursuing
-            </small>
-          </div>
-
-          {/* Purpose & Motivation Section */}
-          <div style={{ 
-            background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)', 
-            padding: '12px 20px', 
-            borderRadius: '8px',
-            marginBottom: '20px',
-            marginTop: '30px',
-            boxShadow: '0 2px 8px rgba(252, 182, 159, 0.3)'
-          }}>
-            <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
-              💭 Purpose & Motivation
-            </h3>
-          </div>
-
-          {/* Why Reason */}
-          <div className="form-group">
-            <label htmlFor="why_reason">Why I am adding this task:</label>
+          {/* Optional: Why field - collapsible */}
+          <details className="why-section">
+            <summary>💭 Why am I adding this task? (Optional)</summary>
             <input
               type="text"
-              id="why_reason"
               value={formData.why_reason}
               onChange={(e) => setFormData({ ...formData, why_reason: e.target.value })}
-              placeholder="Explain why this task is important..."
+              placeholder="Explain the purpose..."
+              className="why-input"
             />
-          </div>
-
-          {/* Additional Whys */}
-          {formData.additional_whys.map((why, index) => (
-            <div key={index} className="form-group additional-why">
-              <label htmlFor={`why_${index}`}>Why #{index + 2}:</label>
-              <div className="input-with-button">
+            {formData.additional_whys.map((why, index) => (
+              <div key={index} className="why-field">
                 <input
                   type="text"
-                  id={`why_${index}`}
                   value={why}
                   onChange={(e) => updateWhyField(index, e.target.value)}
-                  placeholder="Dig deeper into the reason..."
+                  placeholder={`Why #${index + 2}`}
                 />
                 <button
                   type="button"
-                  className="btn-remove"
+                  className="btn-remove-mini"
                   onClick={() => removeWhyField(index)}
-                  title="Remove this why"
                 >
                   ✕
                 </button>
               </div>
-            </div>
-          ))}
-
-          <button
-            type="button"
-            className="btn-add-why"
-            onClick={addWhyField}
-          >
-            + Add Another "Why"
-          </button>
+            ))}
+            <button
+              type="button"
+              className="btn-add-mini"
+              onClick={addWhyField}
+            >
+              + Add deeper why
+            </button>
+          </details>
 
           {/* Form Actions */}
-          <div className="form-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>
+          <div className="form-actions-compact">
+            <button type="button" className="btn btn-secondary-compact" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={loading}>
-              {loading ? 'Creating...' : 'Create Task'}
+            <button type="submit" className="btn btn-primary-compact" disabled={loading}>
+              {loading ? '...' : (taskId ? 'Update' : 'Create')}
             </button>
           </div>
         </form>
