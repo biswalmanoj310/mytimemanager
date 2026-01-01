@@ -186,7 +186,9 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
   const loadTask = async (id: number) => {
     try {
       setLoading(true);
+      console.log('Loading task with ID:', id);
       const data: any = await api.get(`/api/tasks/${id}`);
+      console.log('Task data received:', data);
       
       setFormData({
         name: data.name || '',
@@ -211,14 +213,16 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         priority: data.priority || 5,
       });
       
-      // Set progressive disclosure states based on existing data
-      setShowProjectSelect(!!data.project_id);
-      setShowWishSelect(!!data.related_wish_id);
-      
       setLoading(false);
-    } catch (err) {
-      console.error('Error loading task:', err);
-      setError('Failed to load task');
+    } catch (err: any) {
+      console.error('Error loading task (detailed):', {
+        error: err,
+        message: err?.message,
+        response: err?.response,
+        status: err?.response?.status,
+        data: err?.response?.data
+      });
+      setError(`Failed to load task: ${err?.response?.data?.detail || err?.message || 'Unknown error'}`);
       setLoading(false);
     }
   };

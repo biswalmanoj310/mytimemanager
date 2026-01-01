@@ -3203,19 +3203,29 @@ return (
                 border: '3px solid #10b981',
                 marginBottom: '20px'
               }}>
-                <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px' }}>
-                  📅 Supporting Tasks by Frequency
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '8px' }}>
+                      📅 Supporting Tasks by Frequency
+                    </h3>
+                    <div style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic', marginBottom: '12px' }}>
+                      Tasks created with Goal link - organized by frequency (Daily, Weekly, etc.)
+                    </div>
+                  </div>
+                </div>
                 {linkedTasks.length === 0 ? (
                   <div className="empty-section">
-                    <p>No supporting tasks yet. Link tasks to track your daily/weekly/monthly efforts toward this goal!</p>
+                    <p>No supporting tasks yet. Create tasks and select this goal to track your daily/weekly/monthly efforts!</p>
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
                     {(() => {
-                      // Group linked tasks by frequency
+                      // Group linked tasks by frequency - separate active and completed
+                      const activeTasks = linkedTasks.filter(link => link.completion_percentage !== 100);
+                      const completedTasks = linkedTasks.filter(link => link.completion_percentage === 100);
+                      
                       const tasksByFrequency: Record<string, any[]> = {};
-                      linkedTasks.forEach(link => {
+                      activeTasks.forEach(link => {
                         const freq = link.task_type || 'unknown';
                         if (!tasksByFrequency[freq]) {
                           tasksByFrequency[freq] = [];
@@ -3301,23 +3311,31 @@ return (
                             </div>
                             
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {tasks.map(link => (
-                                <div key={link.id} style={{
-                                  padding: '6px 8px',
-                                  background: 'white',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                  borderLeft: `3px solid ${config.color}`
-                                }}>
-                                  <div style={{ fontWeight: '600', color: '#1f2937' }}>
-                                    {link.task?.name || 'Task'}
+                              {tasks.map(link => {
+                                return (
+                                  <div key={link.id} style={{
+                                    padding: '8px',
+                                    background: 'white',
+                                    borderRadius: '4px',
+                                    fontSize: '12px',
+                                    borderLeft: `3px solid ${config.color}`
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                                      🔄
+                                      <span style={{ fontWeight: '600', color: '#1f2937', flex: 1 }}>
+                                        {link.task?.name || 'Task'}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '3px' }}>
+                                      Progress: {link.completion_count}/{link.expected_count} 
+                                      ({link.completion_percentage?.toFixed(0) || 0}%)
+                                      {link.link_start_date && (
+                                        <> • Started: {new Date(link.link_start_date).toLocaleDateString()}</>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                                    {link.completion_count}/{link.expected_count} 
-                                    ({link.completion_percentage?.toFixed(0) || 0}%)
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </div>
                         );
@@ -3326,6 +3344,62 @@ return (
                   </div>
                 )}
               </div>
+
+              {/* Completed Supporting Tasks Section */}
+              {(() => {
+                const completedTasks = linkedTasks.filter(link => link.completion_percentage === 100);
+                
+                if (completedTasks.length === 0) return null;
+                
+                return (
+                  <div className="goal-section completed-tasks-section" style={{
+                    background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)',
+                    padding: '20px',
+                    borderRadius: '12px',
+                    border: '3px solid #48bb78',
+                    marginBottom: '20px'
+                  }}>
+                    <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '12px' }}>
+                      ✅ Completed Supporting Tasks ({completedTasks.length})
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                      {completedTasks.map(link => (
+                        <div key={link.id} style={{
+                          padding: '12px',
+                          background: 'white',
+                          borderRadius: '6px',
+                          borderLeft: '3px solid #48bb78',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '16px' }}>✅</span>
+                            <span style={{ 
+                              fontWeight: '600', 
+                              color: '#666',
+                              textDecoration: 'line-through',
+                              flex: 1,
+                              fontSize: '14px'
+                            }}>
+                              {link.task?.name || 'Task'}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px' }}>
+                            Frequency: {link.task_type}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#718096' }}>
+                            Completed: {link.completion_count}/{link.expected_count} (100%)
+                          </div>
+                          {link.link_start_date && (
+                            <div style={{ fontSize: '10px', color: '#718096', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
+                              Started: {new Date(link.link_start_date).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Linked Tasks */}
               <div className="goal-section linked-section" style={{
