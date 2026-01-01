@@ -45,6 +45,9 @@ const QuarterlyTasks: React.FC = () => {
   const yearStartDate = useMemo(() => getYearStart(selectedDate), [selectedDate]);
   const yearNumber = useMemo(() => yearStartDate.getFullYear(), [yearStartDate]);
 
+  // Track if data has been loaded at least once
+  const [dataLoaded, setDataLoaded] = useState(false);
+
   const quarters = useMemo(() => {
     return [
       { quarter: 1, name: 'Q1', fullName: 'Q1 (Jan-Mar)', months: [1, 2, 3] },
@@ -59,14 +62,32 @@ const QuarterlyTasks: React.FC = () => {
   // Load data on mount and when year changes
   useEffect(() => {
     console.log('📊 QuarterlyTasks: Loading data for year', yearNumber);
-    loadYearlyTaskStatuses(yearNumber);
-    loadMonthlyAggregatesForYear(yearNumber);
+    setDataLoaded(false);
+    const loadData = async () => {
+      await Promise.all([
+        loadYearlyTaskStatuses(yearNumber),
+        loadMonthlyAggregatesForYear(yearNumber)
+      ]);
+      setDataLoaded(true);
+      console.log('✅ QuarterlyTasks: Data loaded');
+    };
+    loadData();
   }, [yearNumber, tasks.length]);
 
   const filteredTasks = useMemo(() => {
+    console.log('🔍 QuarterlyTasks: Filtering tasks', {
+      totalTasks: tasks.length,
+      yearlyTaskStatusesKeys: Object.keys(yearlyTaskStatuses).length,
+      yearlyTaskStatuses,
+      yearlyMonthlyAggregatesKeys: Object.keys(yearlyMonthlyAggregates).length
+    });
+    
     let filtered = tasks.filter(task => {
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToYearly) return false;
+      if (!hasBeenAddedToYearly) {
+        console.log(`❌ Task ${task.id} "${task.name}" not in yearly statuses`);
+        return false;
+      }
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       const yearlyStatus = yearlyTaskStatuses[task.id];
@@ -75,6 +96,7 @@ const QuarterlyTasks: React.FC = () => {
       if (!showCompleted && isCompleted) return false;
       if (!showNA && isNA) return false;
       if (!showInactive && !task.is_active) return false;
+      console.log(`✅ Task ${task.id} "${task.name}" passed all filters`);
       return true;
     });
     return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
@@ -250,22 +272,29 @@ const QuarterlyTasks: React.FC = () => {
 
   return (
     <div>
-      <div className="alert alert-info" style={{ margin: '10px 0', padding: '12px', borderRadius: '8px', backgroundColor: '#ebf8ff', border: '1px solid #bee3f8' }}>
-        <strong>📊 Read-Only Dashboard:</strong> Quarterly values are auto-aggregated from Daily/Weekly/Monthly tabs.
-        To update data, enter time in the task's home tab (based on follow-up frequency). Each quarter shows the sum of 3 months.
-        <strong> Average calculation starts from first quarter with data.</strong>
-      </div>
-
-      <div style={{ margin: '15px 0', padding: '10px', backgroundColor: '#f7fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-        <strong>{filteredTasks.length}</strong> tasks tracked this year
-      </div>
-
-      {filteredTasks.length === 0 ? (
-        <div className="alert alert-warning" style={{ textAlign: 'center', padding: '30px', margin: '20px 0' }}>
-          <i className="fas fa-exclamation-triangle me-2"></i>
-          No quarterly tasks found. Use "Add Quarterly Task" button to track tasks in quarterly view.
+      {!dataLoaded ? (
+        <div className="alert alert-info" style={{ textAlign: 'center', padding: '30px', margin: '20px 0' }}>
+          <i className="fas fa-spinner fa-spin me-2"></i>
+          Loading quarterly data...
         </div>
       ) : (
+        <>
+          <div className="alert alert-info" style={{ margin: '10px 0', padding: '12px', borderRadius: '8px', backgroundColor: '#ebf8ff', border: '1px solid #bee3f8' }}>
+            <strong>📊 Read-Only Dashboard:</strong> Quarterly values are auto-aggregated from Daily/Weekly/Monthly tabs.
+            To update data, enter time in the task's home tab (based on follow-up frequency). Each quarter shows the sum of 3 months.
+            <strong> Average calculation starts from first quarter with data.</strong>
+          </div>
+
+          <div style={{ margin: '15px 0', padding: '10px', backgroundColor: '#f7fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+            <strong>{filteredTasks.length}</strong> tasks tracked this year
+          </div>
+
+          {filteredTasks.length === 0 ? (
+            <div className="alert alert-warning" style={{ textAlign: 'center', padding: '30px', margin: '20px 0' }}>
+              <i className="fas fa-exclamation-triangle me-2"></i>
+              No quarterly tasks found. Use "Add Quarterly Task" button to track tasks in quarterly view.
+            </div>
+          ) : (
         <div className="tasks-table-container">
           <table className="tasks-table daily-table">
             <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
@@ -283,6 +312,8 @@ const QuarterlyTasks: React.FC = () => {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </div>
   );
