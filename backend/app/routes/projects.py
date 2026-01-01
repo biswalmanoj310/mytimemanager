@@ -301,27 +301,47 @@ def get_project_tasks(
     include_completed: bool = True,
     db: Session = Depends(get_db)
 ):
-    """Get all tasks for a project"""
+    """Get all tasks for a project - includes both ProjectTasks and regular Tasks"""
     tasks = project_service.get_project_tasks(db, project_id, include_completed)
     
-    return [
-        {
+    result = []
+    for task in tasks:
+        # Handle both ProjectTask and Task types
+        task_dict = {
             "id": task.id,
             "project_id": task.project_id,
-            "parent_task_id": task.parent_task_id,
-            "milestone_id": task.milestone_id,
             "name": task.name,
-            "description": task.description,
-            "due_date": task.due_date.date() if task.due_date else None,
-            "priority": task.priority,
+            "description": task.description or "",
             "is_completed": task.is_completed,
             "completed_at": task.completed_at,
-            "order": task.order,
             "created_at": task.created_at,
             "updated_at": task.updated_at
         }
-        for task in tasks
-    ]
+        
+        # ProjectTask specific fields
+        if hasattr(task, 'parent_task_id'):
+            task_dict.update({
+                "parent_task_id": task.parent_task_id,
+                "milestone_id": getattr(task, 'milestone_id', None),
+                "due_date": task.due_date.date() if task.due_date else None,
+                "priority": task.priority if hasattr(task, 'priority') else None,
+                "order": task.order if hasattr(task, 'order') else None,
+            })
+        
+        # Regular Task specific fields (with frequency support)
+        if hasattr(task, 'follow_up_frequency'):
+            task_dict.update({
+                "follow_up_frequency": task.follow_up_frequency,
+                "allocated_minutes": getattr(task, 'allocated_minutes', 0),
+                "task_type": getattr(task, 'task_type', 'time'),
+                "pillar_id": getattr(task, 'pillar_id', None),
+                "category_id": getattr(task, 'category_id', None),
+                "goal_id": getattr(task, 'goal_id', None),
+            })
+        
+        result.append(task_dict)
+    
+    return result
 
 
 @router.post("/{project_id}/tasks")

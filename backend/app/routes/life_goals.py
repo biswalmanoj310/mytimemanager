@@ -340,7 +340,10 @@ def delete_milestone(milestone_id: int, db: Session = Depends(get_db)):
 # Task linking endpoints
 @router.get("/{goal_id}/linked-tasks")
 def get_linked_tasks(goal_id: int, db: Session = Depends(get_db)):
-    """Get all tasks linked to a goal with completion statistics"""
+    """Get all tasks linked to a goal with completion statistics - includes both linked tasks and regular tasks with goal_id"""
+    from app.models.models import Task
+    
+    # Get tasks from LifeGoalTaskLink (old linking system)
     links = life_goal_service.get_linked_tasks(db, goal_id)
     
     # Enhance each link with completion statistics
@@ -368,6 +371,34 @@ def get_linked_tasks(goal_id: int, db: Session = Depends(get_db)):
         link_dict.update(stats)
         
         enhanced_links.append(link_dict)
+    
+    # Get regular tasks with goal_id set (new system with frequency support)
+    regular_tasks = db.query(Task).filter(Task.goal_id == goal_id).all()
+    for task in regular_tasks:
+        # Create a similar structure for regular tasks
+        task_dict = {
+            "id": f"task_{task.id}",  # Prefix to distinguish from linked tasks
+            "goal_id": goal_id,
+            "task_id": task.id,
+            "task_type": task.follow_up_frequency,  # Use frequency as task type
+            "time_allocated_hours": task.allocated_minutes / 60 if task.allocated_minutes else 0,
+            "notes": task.description or "",
+            "link_start_date": task.created_at.isoformat() if task.created_at else None,
+            "expected_frequency": task.follow_up_frequency,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "task": {
+                "id": task.id,
+                "name": task.name,
+                "pillar_name": task.pillar.name if task.pillar else None
+            },
+            # Add basic stats for regular tasks
+            "completion_count": 1 if task.is_completed else 0,
+            "expected_count": 1,
+            "completion_percentage": 100 if task.is_completed else 0,
+            "days_tracked": 0,
+            "recent_trend": 0
+        }
+        enhanced_links.append(task_dict)
     
     return enhanced_links
 

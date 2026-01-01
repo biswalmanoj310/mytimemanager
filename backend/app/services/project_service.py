@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
-from app.models.models import Project, ProjectTask, ProjectMilestone
+from app.models.models import Project, ProjectTask, ProjectMilestone, Task
 
 
 # ============ Project CRUD Operations ============
@@ -123,12 +123,22 @@ def get_project_progress(db: Session, project_id: int) -> Dict:
 
 # ============ Project Task CRUD Operations ============
 
-def get_project_tasks(db: Session, project_id: int, include_completed: bool = True) -> List[ProjectTask]:
-    """Get all tasks for a project"""
+def get_project_tasks(db: Session, project_id: int, include_completed: bool = True) -> List:
+    """Get all tasks for a project - includes both ProjectTasks and regular Tasks linked to this project"""
+    # Get ProjectTask entries (old system)
     query = db.query(ProjectTask).filter(ProjectTask.project_id == project_id)
     if not include_completed:
         query = query.filter(ProjectTask.is_completed == False)
-    return query.order_by(ProjectTask.order, ProjectTask.created_at).all()
+    project_tasks = query.order_by(ProjectTask.order, ProjectTask.created_at).all()
+    
+    # Get regular Task entries linked to this project (new system with frequency)
+    task_query = db.query(Task).filter(Task.project_id == project_id)
+    if not include_completed:
+        task_query = task_query.filter(Task.is_completed == False)
+    regular_tasks = task_query.order_by(Task.created_at).all()
+    
+    # Combine both lists
+    return list(project_tasks) + list(regular_tasks)
 
 
 def get_task_by_id(db: Session, task_id: int) -> Optional[ProjectTask]:
