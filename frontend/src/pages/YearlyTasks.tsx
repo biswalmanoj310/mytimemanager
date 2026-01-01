@@ -40,6 +40,7 @@ const YearlyTasks: React.FC = () => {
   } = useUserPreferencesContext();
 
   const [loading, setLoading] = useState(false);
+  const [showCompletedSection, setShowCompletedSection] = useState(false);
 
   const yearStartDate = useMemo(() => getYearStart(selectedDate), [selectedDate]);
   const yearNumber = useMemo(() => yearStartDate.getFullYear(), [yearStartDate]);
@@ -95,21 +96,58 @@ const YearlyTasks: React.FC = () => {
   }, [yearNumber, tasks.length]);
 
   const filteredTasks = useMemo(() => {
+    const now = new Date();
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
     let filtered = tasks.filter(task => {
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
       if (!hasBeenAddedToYearly) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
+      if (!showInactive && !task.is_active) return false;
+      
       const yearlyStatus = yearlyTaskStatuses[task.id];
       const isCompleted = yearlyStatus?.is_completed || false;
       const isNA = yearlyStatus?.is_na || false;
-      if (!showCompleted && isCompleted) return false;
-      if (!showNA && isNA) return false;
-      if (!showInactive && !task.is_active) return false;
+      
+      // Exclude completed and NA tasks from main table
+      if (isCompleted || isNA) return false;
+      
       return true;
     });
     return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder]);
+  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+
+  // Completed/NA tasks for bottom section
+  const completedTasks = useMemo(() => {
+    const now = new Date();
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    let filtered = tasks.filter(task => {
+      const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
+      if (!hasBeenAddedToYearly) return false;
+      if (selectedPillar && task.pillar_name !== selectedPillar) return false;
+      if (selectedCategory && task.category_name !== selectedCategory) return false;
+      if (!showInactive && !task.is_active) return false;
+      
+      const yearlyStatus = yearlyTaskStatuses[task.id];
+      const isCompleted = yearlyStatus?.is_completed || false;
+      const isNA = yearlyStatus?.is_na || false;
+      
+      if (!isCompleted && !isNA) return false;
+      
+      // Filter out tasks completed/NA more than a month ago
+      if (yearlyStatus?.completed_at) {
+        const completedDate = new Date(yearlyStatus.completed_at);
+        if (completedDate < oneMonthAgo) return false;
+      }
+      
+      return true;
+    });
+    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
+  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
 
   const tasksByType = useMemo(() => {
     const groups: { time: Task[]; count: Task[]; boolean: Task[]; } = { time: [], count: [], boolean: [] };
@@ -120,6 +158,16 @@ const YearlyTasks: React.FC = () => {
     });
     return groups;
   }, [filteredTasks]);
+
+  const completedTasksByType = useMemo(() => {
+    const groups: { time: Task[]; count: Task[]; boolean: Task[]; } = { time: [], count: [], boolean: [] };
+    completedTasks.forEach(task => {
+      if (task.task_type === TaskType.TIME) groups.time.push(task);
+      else if (task.task_type === TaskType.COUNT) groups.count.push(task);
+      else if (task.task_type === TaskType.BOOLEAN) groups.boolean.push(task);
+    });
+    return groups;
+  }, [completedTasks]);
 
   const getYearlyTime = (taskId: number, month: number): number => {
     const key = `${taskId}-${month}`;
@@ -253,6 +301,14 @@ const YearlyTasks: React.FC = () => {
     }
   };
 
+  const handleRestoreYearlyTask = async (taskId: number) => {
+    try {
+      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: false });
+      await loadYearlyTaskStatuses(yearNumber);
+    } catch (err: any) {
+      console.error('Error restoring task:', err);
+    }
+  };
 
 
   const formatValue = (task: Task, value: number): string => {
@@ -432,6 +488,156 @@ const YearlyTasks: React.FC = () => {
     );
   };
 
+  // Render function for completed tasks
+  const renderCompletedTaskRow = (task: Task) => {
+    const totalSpent = months.reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
+    
+    let yearlyTarget = 0;
+    if (task.task_type === TaskType.COUNT) {
+      if (task.follow_up_frequency === 'daily') {
+        yearlyTarget = (task.target_value || 0) * 365;
+      } else if (task.follow_up_frequency === 'weekly') {
+        yearlyTarget = Math.round((task.target_value || 0) * 52);
+      } else if (task.follow_up_frequency === 'monthly') {
+        yearlyTarget = (task.target_value || 0) * 12;
+      } else {
+        yearlyTarget = task.target_value || 0;
+      }
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      if (task.follow_up_frequency === 'daily') {
+        yearlyTarget = 365;
+      } else if (task.follow_up_frequency === 'weekly') {
+        yearlyTarget = 52;
+      } else if (task.follow_up_frequency === 'monthly') {
+        yearlyTarget = 12;
+      } else {
+        yearlyTarget = 1;
+      }
+    } else {
+      if (task.follow_up_frequency === 'daily') {
+        yearlyTarget = task.allocated_minutes * 365;
+      } else if (task.follow_up_frequency === 'weekly') {
+        yearlyTarget = task.allocated_minutes * 52;
+      } else if (task.follow_up_frequency === 'monthly') {
+        yearlyTarget = task.allocated_minutes * 12;
+      } else {
+        yearlyTarget = task.allocated_minutes;
+      }
+    }
+    
+    const yearlyStatus = yearlyTaskStatuses[task.id];
+    const isYearlyCompleted = yearlyStatus?.is_completed || false;
+    const isYearlyNA = yearlyStatus?.is_na || false;
+    
+    const bgColor = isYearlyCompleted ? '#e6ffed' : isYearlyNA ? '#f3f4f6' : undefined;
+    const rowColorClass = isYearlyCompleted ? 'row-completed' : isYearlyNA ? 'row-na' : '';
+    
+    let trackingStartMonth: number | null = 1;
+    if (yearlyStatus?.created_at) {
+      const createdDate = new Date(yearlyStatus.created_at);
+      if (createdDate.getFullYear() === yearStartDate.getFullYear()) {
+        trackingStartMonth = createdDate.getMonth() + 1;
+      } else if (createdDate.getFullYear() < yearStartDate.getFullYear()) {
+        trackingStartMonth = 1;
+      } else {
+        trackingStartMonth = 1;
+      }
+    }
+    
+    const today = new Date();
+    const yearStart = new Date(yearStartDate);
+    
+    let monthsElapsed = 1;
+    if (today.getFullYear() === yearStart.getFullYear()) {
+      const currentMonth = today.getMonth() + 1;
+      monthsElapsed = Math.max(1, currentMonth - trackingStartMonth + 1);
+    } else if (today.getFullYear() > yearStart.getFullYear()) {
+      monthsElapsed = Math.max(1, 12 - trackingStartMonth + 1);
+    }
+    
+    const monthsRemaining = 12 - (today.getMonth() + 1);
+    
+    const avgSpentPerMonth = Math.round(totalSpent / monthsElapsed);
+    const remaining = yearlyTarget - totalSpent;
+    const avgRemainingPerMonth = monthsRemaining > 0 ? Math.round(remaining / monthsRemaining) : 0;
+    
+    return (
+      <tr key={task.id} className={rowColorClass} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+        <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+          <div className="task-name">
+            {task.name}
+            {task.follow_up_frequency === 'daily' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>}
+            {task.follow_up_frequency === 'weekly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Weekly)</span>}
+            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Monthly)</span>}
+            {task.follow_up_frequency === 'yearly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#4299e1', fontWeight: '600' }}>(Yearly)</span>}
+          </div>
+        </td>
+        <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {formatValue(task, task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes)}
+        </td>
+        <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {formatValue(task, avgSpentPerMonth)}
+        </td>
+        <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
+          {formatValue(task, avgRemainingPerMonth)}
+        </td>
+        {months.map(m => {
+          const monthValue = getYearlyTime(task.id, m.month);
+          const cellColorClass = getYearlyCellColorClass(task, monthValue, m.month);
+          const shouldShowColor = trackingStartMonth !== null && m.month >= trackingStartMonth;
+          const cellBgColor = bgColor || (shouldShowColor && monthValue > 0 && !cellColorClass ? '#e6ffed' : undefined);
+          return (
+            <td key={m.month} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: cellBgColor, textAlign: 'center', fontSize: '12px' }}>
+              {monthValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(monthValue)) : '-'}
+            </td>
+          );
+        })}
+        <td className="col-status" style={bgColor ? { backgroundColor: bgColor } : undefined}>
+          <div className="action-buttons">
+            <button 
+              className="btn btn-sm" 
+              style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px' }}
+              onClick={() => handleRestoreYearlyTask(task.id)}
+              disabled={loading}
+              title="Restore Task"
+            >
+              <i className="fas fa-undo"></i> Restore
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
+  const renderCompletedSection = (sectionTitle: string, emoji: string, tasks: Task[]) => {
+    if (tasks.length === 0) return null;
+    return (
+      <div style={{ marginBottom: '32px' }}>
+        <h3 className="task-section-header">
+          <span className="emoji">{emoji}</span>
+          <span>{sectionTitle}</span>
+        </h3>
+        <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
+          <table className="tasks-table daily-table">
+            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
+              <tr>
+                <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Month</th>
+                <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual Avg<br/>(Since Start)</th>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Month</th>
+                {months.map(m => <th key={m.month} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{m.name}</th>)}
+                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tasks.map(task => renderCompletedTaskRow(task))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   if (loading && tasks.length === 0) {
     return (
       <div className="container-fluid mt-4">
@@ -472,6 +678,41 @@ const YearlyTasks: React.FC = () => {
               {renderTaskSection('Count-Based Tasks', '🔢', 'count-based', tasksByType.count)}
               {renderTaskSection('Yes/No Tasks', '✅', 'boolean-based', tasksByType.boolean)}
             </>
+          )}
+
+          {/* Completed Tasks Section */}
+          {completedTasks.length > 0 && (
+            <div style={{ marginTop: '40px', paddingTop: '24px', borderTop: '3px solid #e2e8f0' }}>
+              <div 
+                onClick={() => setShowCompletedSection(!showCompletedSection)}
+                style={{ 
+                  cursor: 'pointer', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  marginBottom: '16px',
+                  padding: '12px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0'
+                }}
+              >
+                <i className={`fas fa-chevron-${showCompletedSection ? 'down' : 'right'}`} style={{ marginRight: '12px', color: '#64748b' }}></i>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b' }}>
+                  ✅ Completed Tasks ({completedTasks.length})
+                </h3>
+                <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                  Auto-hide after 1 month
+                </span>
+              </div>
+              
+              {showCompletedSection && (
+                <>
+                  {renderCompletedSection('Time-Based Tasks', '⏱️', completedTasksByType.time)}
+                  {renderCompletedSection('Count-Based Tasks', '🔢', completedTasksByType.count)}
+                  {renderCompletedSection('Yes/No Tasks', '✅', completedTasksByType.boolean)}
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>

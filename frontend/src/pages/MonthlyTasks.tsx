@@ -84,6 +84,10 @@ const MonthlyTasks: React.FC = () => {
   }, [monthStartString, loadMonthlyTaskStatuses, loadDailyAggregatesForMonth]);
 
   const filteredTasks = useMemo(() => {
+    const now = new Date();
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
     let filtered = tasks.filter(task => {
       const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
       if (!hasBeenAddedToMonthly) return false;
@@ -92,6 +96,13 @@ const MonthlyTasks: React.FC = () => {
       const monthlyStatus = monthlyTaskStatuses[task.id];
       const isCompleted = monthlyStatus?.is_completed || false;
       const isNA = monthlyStatus?.is_na || false;
+      
+      // Hide completed/NA tasks older than 1 month
+      if ((isCompleted || isNA) && monthlyStatus?.completed_at) {
+        const completedDate = new Date(monthlyStatus.completed_at);
+        if (completedDate < oneMonthAgo) return false;
+      }
+      
       if (!showCompleted && isCompleted) return false;
       if (!showNA && isNA) return false;
       if (!showInactive && !task.is_active) return false;
@@ -184,6 +195,15 @@ const MonthlyTasks: React.FC = () => {
     }
   };
 
+  const handleRestoreMonthlyTask = async (taskId: number) => {
+    try {
+      await updateMonthlyTaskStatus(taskId, monthStartString, { is_completed: false, is_na: false });
+      await loadMonthlyTaskStatuses(monthStartString);
+    } catch (err: any) {
+      console.error('Error restoring task:', err);
+    }
+  };
+
 
 
   const formatValue = (task: Task, value: number): string => {
@@ -264,6 +284,12 @@ const MonthlyTasks: React.FC = () => {
               <span style={{ background: 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600, boxShadow: '0 2px 4px rgba(156, 163, 175, 0.3)' }}>
                 ⊘ NA via Daily
               </span>
+            </div>
+          ) : isMonthlyCompleted || isMonthlyNA ? (
+            <div className="action-buttons">
+              <button style={{ background: '#4299e1', color: 'white', padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }} onClick={() => handleRestoreMonthlyTask(task.id)} title="Restore this task to active state">
+                <i className="fas fa-undo"></i> RESTORE
+              </button>
             </div>
           ) : (
             <div className="action-buttons">

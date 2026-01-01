@@ -110,6 +110,10 @@ const QuarterlyTasks: React.FC = () => {
 
   // Completed/NA tasks for bottom section
   const completedTasks = useMemo(() => {
+    const now = new Date();
+    const oneMonthAgo = new Date(now);
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
     let filtered = tasks.filter(task => {
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
       if (!hasBeenAddedToYearly) return false;
@@ -121,7 +125,15 @@ const QuarterlyTasks: React.FC = () => {
       const isCompleted = yearlyStatus?.is_completed || false;
       const isNA = yearlyStatus?.is_na || false;
       
-      return isCompleted || isNA;
+      if (!isCompleted && !isNA) return false;
+      
+      // Filter out tasks completed/NA more than a month ago
+      if (yearlyStatus?.completed_at) {
+        const completedDate = new Date(yearlyStatus.completed_at);
+        if (completedDate < oneMonthAgo) return false;
+      }
+      
+      return true;
     });
     return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
   }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
@@ -225,6 +237,19 @@ const QuarterlyTasks: React.FC = () => {
     } catch (error) {
       console.error('Error marking task as NA:', error);
       alert('Failed to mark task as NA');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRestoreTask = async (taskId: number) => {
+    try {
+      setLoading(true);
+      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: false });
+      await loadYearlyTaskStatuses(yearNumber);
+    } catch (error) {
+      console.error('Error restoring task:', error);
+      alert('Failed to restore task');
     } finally {
       setLoading(false);
     }
@@ -401,6 +426,15 @@ const QuarterlyTasks: React.FC = () => {
               <span style={{ fontSize: '11px', color: taskIsCompleted ? '#48bb78' : '#ed8936', fontWeight: 600 }}>
                 {taskIsCompleted ? '✓ Completed' : '⊗ NA'}
               </span>
+              <button 
+                className="btn btn-sm" 
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleRestoreTask(task.id)}
+                disabled={loading}
+                title="Restore Task"
+              >
+                <i className="fas fa-undo"></i> Restore
+              </button>
               <button 
                 className="btn btn-sm" 
                 style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px' }}
