@@ -379,7 +379,7 @@
 /* Inline Form Row (Label + Input on same line) */
 .form-row-inline {
   display: flex;
-  gap: 12px;
+  gap: 6px;
   align-items: center;
   margin-bottom: 10px;
 }
@@ -389,7 +389,7 @@
   font-weight: 600;
   color: #2d3748;
   white-space: nowrap;
-  width: 110px;
+  width: 100px;
   flex-shrink: 0;
 }
 
