@@ -41,6 +41,7 @@ const QuarterlyTasks: React.FC = () => {
   } = useUserPreferencesContext();
 
   const [loading, setLoading] = useState(false);
+  const [showCompletedSection, setShowCompletedSection] = useState(false);
 
   const yearStartDate = useMemo(() => getYearStart(selectedDate), [selectedDate]);
   const yearNumber = useMemo(() => yearStartDate.getFullYear(), [yearStartDate]);
@@ -142,7 +143,12 @@ const QuarterlyTasks: React.FC = () => {
     else return value > 0 ? 'Yes' : 'No';
   };
 
-  const getQuarterlyRowColorClass = (task: Task, totalSpent: number, firstDataQuarter: number): string => {
+  const getQuarterlyRowColorClass = (task: Task, totalSpent: number, trackingStartQuarter: number | null): string => {
+    // If trackingStartQuarter is null, task was added before this year - no special handling needed
+    if (trackingStartQuarter === null) {
+      trackingStartQuarter = 1; // Track from beginning of year
+    }
+
     const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
     
     // Calculate yearly target based on task type
@@ -179,12 +185,12 @@ const QuarterlyTasks: React.FC = () => {
       }
     }
 
-    // Calculate quarters elapsed from first data entry
+    // Calculate quarters elapsed from tracking start
     let quartersElapsed = 1;
     if (today.getFullYear() === yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, currentQuarter - firstDataQuarter + 1);
+      quartersElapsed = Math.max(1, currentQuarter - trackingStartQuarter + 1);
     } else if (today.getFullYear() > yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, 4 - firstDataQuarter + 1);
+      quartersElapsed = Math.max(1, 4 - trackingStartQuarter + 1);
     }
 
     // Expected should be proportional to quarters elapsed
@@ -246,18 +252,32 @@ const QuarterlyTasks: React.FC = () => {
   const renderTaskRow = (task: Task, isCompleted: boolean = false) => {
     const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
     
-    // Find first quarter with data
-    const firstQuarterWithData = quarters.find(q => getQuarterlyTime(task.id, q.quarter) > 0);
-    const firstDataQuarter = firstQuarterWithData ? firstQuarterWithData.quarter : 1;
+    // Determine tracking start quarter from created_at
+    const yearlyStatus = yearlyTaskStatuses[task.id];
+    let trackingStartQuarter: number | null = 1; // Default to Q1 if no created_at
+    
+    if (yearlyStatus?.created_at) {
+      const createdDate = new Date(yearlyStatus.created_at);
+      // Only apply tracking start if created in current year
+      if (createdDate.getFullYear() === yearStartDate.getFullYear()) {
+        trackingStartQuarter = Math.ceil((createdDate.getMonth() + 1) / 3);
+      } else if (createdDate.getFullYear() < yearStartDate.getFullYear()) {
+        // Task added in previous year, track from Q1
+        trackingStartQuarter = 1;
+      } else {
+        // Task added in future year (shouldn't happen), track from Q1
+        trackingStartQuarter = 1;
+      }
+    }
     
     const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
     
-    // Calculate quarters elapsed from first data entry
+    // Calculate quarters elapsed from tracking start
     let quartersElapsed = 1;
     if (today.getFullYear() === yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, currentQuarter - firstDataQuarter + 1);
+      quartersElapsed = Math.max(1, currentQuarter - trackingStartQuarter + 1);
     } else if (today.getFullYear() > yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, 4 - firstDataQuarter + 1);
+      quartersElapsed = Math.max(1, 4 - trackingStartQuarter + 1);
     }
 
     const avgSpentPerQuarter = Math.round(totalSpent / quartersElapsed);
@@ -300,7 +320,7 @@ const QuarterlyTasks: React.FC = () => {
     const quartersRemaining = 4 - currentQuarter;
     const neededPerQuarter = quartersRemaining > 0 ? Math.max(0, Math.round((yearlyTarget - totalSpent) / quartersRemaining)) : 0;
 
-    const rowColorClass = getQuarterlyRowColorClass(task, totalSpent, firstDataQuarter);
+    const rowColorClass = getQuarterlyRowColorClass(task, totalSpent, trackingStartQuarter);
 
     // Task type indicator
     let taskTypeIndicator = '';
@@ -308,7 +328,6 @@ const QuarterlyTasks: React.FC = () => {
     else if (task.follow_up_frequency === 'weekly') taskTypeIndicator = '(Weekly)';
     else if (task.follow_up_frequency === 'monthly') taskTypeIndicator = '(Monthly)';
 
-    const yearlyStatus = yearlyTaskStatuses[task.id];
     const taskIsCompleted = yearlyStatus?.is_completed || false;
     const taskIsNA = yearlyStatus?.is_na || false;
 
@@ -329,8 +348,11 @@ const QuarterlyTasks: React.FC = () => {
         </td>
         {quarters.map(q => {
           const quarterValue = getQuarterlyTime(task.id, q.quarter);
+          // Only show background color if this quarter is >= tracking start quarter
+          const shouldShowColor = trackingStartQuarter !== null && q.quarter >= trackingStartQuarter;
+          const bgColor = shouldShowColor && quarterValue > 0 ? '#e6ffed' : undefined;
           return (
-            <td key={q.quarter} className="col-hour" style={{ backgroundColor: quarterValue > 0 ? '#e6ffed' : undefined, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
+            <td key={q.quarter} className="col-hour" style={{ backgroundColor: bgColor, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
               {quarterValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(quarterValue)) : '-'}
             </td>
           );
@@ -404,16 +426,6 @@ const QuarterlyTasks: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="alert alert-info" style={{ margin: '10px 0', padding: '12px', borderRadius: '8px', backgroundColor: '#ebf8ff', border: '1px solid #bee3f8' }}>
-            <strong>📊 Read-Only Dashboard:</strong> Quarterly values are auto-aggregated from Daily/Weekly/Monthly tabs.
-            To update data, enter time in the task's home tab (based on follow-up frequency). Each quarter shows the sum of 3 months.
-            <strong> Average calculation starts from first quarter with data.</strong>
-          </div>
-
-          <div style={{ margin: '15px 0', padding: '10px', backgroundColor: '#f7fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-            <strong>{filteredTasks.length}</strong> tasks tracked this year
-          </div>
-
           {filteredTasks.length === 0 ? (
             <div className="alert alert-warning" style={{ textAlign: 'center', padding: '30px', margin: '20px 0' }}>
               <i className="fas fa-exclamation-triangle me-2"></i>
@@ -442,39 +454,53 @@ const QuarterlyTasks: React.FC = () => {
           {/* Completed/NA Tasks Section */}
           {completedTasks.length > 0 && (
             <div style={{ marginTop: '40px' }}>
-              <h3 style={{ 
-                color: '#2d3748', 
-                fontSize: '18px', 
-                fontWeight: 600, 
-                marginBottom: '15px',
-                padding: '10px',
-                backgroundColor: '#f7fafc',
-                borderLeft: '4px solid #667eea',
-                borderRadius: '4px'
-              }}>
-                ✓ Completed / NA Tasks ({completedTasks.length})
-              </h3>
-              <div className="alert alert-info" style={{ margin: '10px 0', padding: '10px', fontSize: '12px' }}>
-                <i className="fas fa-info-circle me-2"></i>
-                These tasks will remain visible until the end of the current quarter. After the quarter ends, they will be automatically hidden.
+              <div 
+                onClick={() => setShowCompletedSection(!showCompletedSection)}
+                style={{ 
+                  color: '#2d3748', 
+                  fontSize: '18px', 
+                  fontWeight: 600, 
+                  marginBottom: '15px',
+                  padding: '12px',
+                  backgroundColor: '#f7fafc',
+                  borderLeft: '4px solid #718096',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  transition: 'background-color 0.2s'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#edf2f7'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f7fafc'}
+              >
+                <span>
+                  ✓ Completed / NA Tasks ({completedTasks.length})
+                </span>
+                <i className={`fas fa-chevron-${showCompletedSection ? 'up' : 'down'}`} style={{ color: '#718096' }}></i>
               </div>
-              <div className="tasks-table-container">
-                <table className="tasks-table daily-table">
-                  <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #718096 0%, #4a5568 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
-                    <tr>
-                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#718096', minWidth: '250px' }}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
-                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
-                      {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
-                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {completedTasks.map(task => renderTaskRow(task, true))}
-                  </tbody>
-                </table>
-              </div>
+              
+              {showCompletedSection && (
+                <>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #718096 0%, #4a5568 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#718096', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {completedTasks.map(task => renderTaskRow(task, true))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </>

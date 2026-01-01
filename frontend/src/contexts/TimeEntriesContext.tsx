@@ -73,6 +73,7 @@ export interface OneTimeEntry {
 export interface TaskStatus {
   is_completed: boolean;
   is_na: boolean;
+  created_at?: string; // When task was added to this tracking view
 }
 
 interface TimeEntriesContextValue {
@@ -510,7 +511,8 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
         statusData.forEach((status: any) => {
           statusMap[status.task_id] = {
             is_completed: status.is_completed,
-            is_na: status.is_na
+            is_na: status.is_na,
+            created_at: status.created_at
           };
         });
       }

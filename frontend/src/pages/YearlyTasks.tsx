@@ -126,21 +126,26 @@ const YearlyTasks: React.FC = () => {
     return yearlyMonthlyAggregates[key] || 0;
   };
 
-  const getYearlyRowColorClass = (task: Task, totalSpent: number, firstDataMonth: number): string => {
+  const getYearlyRowColorClass = (task: Task, totalSpent: number, trackingStartMonth: number | null): string => {
+    // If trackingStartMonth is null, task was added before this year - no special handling needed
+    if (trackingStartMonth === null) {
+      trackingStartMonth = 1; // Track from beginning of year
+    }
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const yearStart = new Date(yearStartDate);
     yearStart.setHours(0, 0, 0, 0);
     
-    // Calculate months elapsed from first data entry (not from January)
+    // Calculate months elapsed from tracking start (not from January)
     let monthsElapsed = 1;
     if (today.getFullYear() === yearStart.getFullYear()) {
-      // Current year: from first data month to current month
+      // Current year: from tracking start month to current month
       const currentMonth = today.getMonth() + 1;
-      monthsElapsed = Math.max(1, currentMonth - firstDataMonth + 1);
+      monthsElapsed = Math.max(1, currentMonth - trackingStartMonth + 1);
     } else if (today.getFullYear() > yearStart.getFullYear()) {
-      // Past year: from first data month to December
-      monthsElapsed = Math.max(1, 12 - firstDataMonth + 1);
+      // Past year: from tracking start month to December
+      monthsElapsed = Math.max(1, 12 - trackingStartMonth + 1);
     }
     
     let expectedTarget = 0;
@@ -292,22 +297,36 @@ const YearlyTasks: React.FC = () => {
       }
     }
     
-    // Find first month with data to calculate accurate average
-    const firstMonthWithData = months.find(m => getYearlyTime(task.id, m.month) > 0);
-    const firstDataMonth = firstMonthWithData ? firstMonthWithData.month : 1;
+    // Determine tracking start month from created_at
+    const yearlyStatus = yearlyTaskStatuses[task.id];
+    let trackingStartMonth: number | null = 1; // Default to January if no created_at
+    
+    if (yearlyStatus?.created_at) {
+      const createdDate = new Date(yearlyStatus.created_at);
+      // Only apply tracking start if created in current year
+      if (createdDate.getFullYear() === yearStartDate.getFullYear()) {
+        trackingStartMonth = createdDate.getMonth() + 1; // 1-based month
+      } else if (createdDate.getFullYear() < yearStartDate.getFullYear()) {
+        // Task added in previous year, track from January
+        trackingStartMonth = 1;
+      } else {
+        // Task added in future year (shouldn't happen), track from January
+        trackingStartMonth = 1;
+      }
+    }
     
     const today = new Date();
     const yearStart = new Date(yearStartDate);
     
-    // Calculate months elapsed from first data entry (not from January)
+    // Calculate months elapsed from tracking start (not from January)
     let monthsElapsed = 1;
     if (today.getFullYear() === yearStart.getFullYear()) {
-      // Current year: from first data month to current month
+      // Current year: from tracking start month to current month
       const currentMonth = today.getMonth() + 1;
-      monthsElapsed = Math.max(1, currentMonth - firstDataMonth + 1);
+      monthsElapsed = Math.max(1, currentMonth - trackingStartMonth + 1);
     } else if (today.getFullYear() > yearStart.getFullYear()) {
-      // Past year: from first data month to December
-      monthsElapsed = Math.max(1, 12 - firstDataMonth + 1);
+      // Past year: from tracking start month to December
+      monthsElapsed = Math.max(1, 12 - trackingStartMonth + 1);
     }
     
     const monthsRemaining = 12 - (today.getMonth() + 1); // Remaining in the year
@@ -316,7 +335,7 @@ const YearlyTasks: React.FC = () => {
     const remaining = yearlyTarget - totalSpent;
     const avgRemainingPerMonth = monthsRemaining > 0 ? Math.round(remaining / monthsRemaining) : 0;
     
-    const rowColorClass = getYearlyRowColorClass(task, totalSpent, firstDataMonth);
+    const rowColorClass = getYearlyRowColorClass(task, totalSpent, trackingStartMonth);
     const yearlyStatus = yearlyTaskStatuses[task.id];
     const isYearlyCompleted = yearlyStatus?.is_completed || false;
     const isYearlyNA = yearlyStatus?.is_na || false;
@@ -346,8 +365,11 @@ const YearlyTasks: React.FC = () => {
         {months.map(m => {
           const monthValue = getYearlyTime(task.id, m.month);
           const cellColorClass = getYearlyCellColorClass(task, monthValue, m.month);
+          // Only show background color if this month is >= tracking start month
+          const shouldShowColor = trackingStartMonth !== null && m.month >= trackingStartMonth;
+          const cellBgColor = bgColor || (shouldShowColor && monthValue > 0 && !cellColorClass ? '#e6ffed' : undefined);
           return (
-            <td key={m.month} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: bgColor || (monthValue > 0 && !cellColorClass ? '#e6ffed' : undefined), textAlign: 'center', fontSize: '12px' }}>
+            <td key={m.month} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: cellBgColor, textAlign: 'center', fontSize: '12px' }}>
               {monthValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(monthValue)) : '-'}
             </td>
           );
