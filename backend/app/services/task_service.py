@@ -63,11 +63,8 @@ class TaskService:
             if not goal:
                 raise ValueError(f"Goal with id {task_data.goal_id} not found")
             
-            # Ensure goal belongs to the same hierarchy
-            if goal.pillar_id != task_data.pillar_id:
-                raise ValueError(f"Goal does not belong to the same pillar")
-            if goal.category_id != task_data.category_id:
-                raise ValueError(f"Goal does not belong to the same category")
+            # Allow cross-pillar/cross-category goal linking for flexibility
+            # Tasks can support goals from any pillar (e.g., work task supporting family goal)
         
         # Convert additional_whys list to JSON string for storage
         additional_whys_json = None
@@ -227,14 +224,8 @@ class TaskService:
             if not goal:
                 raise ValueError(f"Goal with id {task_data.goal_id} not found")
             
-            # Ensure goal belongs to the same hierarchy
-            pillar_id = task_data.pillar_id if task_data.pillar_id is not None else db_task.pillar_id
-            category_id = task_data.category_id if task_data.category_id is not None else db_task.category_id
-            
-            if goal.pillar_id != pillar_id:
-                raise ValueError(f"Goal does not belong to the same pillar")
-            if goal.category_id != category_id:
-                raise ValueError(f"Goal does not belong to the same category")
+            # Allow cross-pillar/cross-category goal linking for flexibility
+            # Tasks can support goals from any pillar (e.g., work task supporting family goal)
         
         # Update fields
         update_data = task_data.model_dump(exclude_unset=True)
