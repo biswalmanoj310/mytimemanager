@@ -25,6 +25,7 @@ class FollowUpFrequency(str, enum.Enum):
     MONTHLY = "monthly"
     QUARTERLY = "quarterly"
     YEARLY = "yearly"
+    PROJECT_TASK = "project_task"  # Tasks that live only in Projects tab
     ONE_TIME = "one_time"
     MISC = "misc"
 

@@ -502,6 +502,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
                 <option value={FollowUpFrequency.MONTHLY}>Monthly</option>
                 <option value={FollowUpFrequency.QUARTERLY}>Quarterly</option>
                 <option value={FollowUpFrequency.YEARLY}>Yearly</option>
+                <option value={FollowUpFrequency.PROJECT_TASK}>📁 Project Task</option>
                 <option value={FollowUpFrequency.ONE_TIME}>Important</option>
                 <option value={FollowUpFrequency.MISC}>Misc Task</option>
               </select>

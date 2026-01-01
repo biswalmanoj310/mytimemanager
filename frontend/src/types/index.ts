@@ -10,6 +10,7 @@ export enum FollowUpFrequency {
   MONTHLY = 'monthly',
   QUARTERLY = 'quarterly',
   YEARLY = 'yearly',
+  PROJECT_TASK = 'project_task',
   ONE_TIME = 'one_time',
   MISC = 'misc'
 }
