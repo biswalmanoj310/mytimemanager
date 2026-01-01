@@ -5384,6 +5384,68 @@ return (
                 </div>
               )}
 
+              {/* Linked Items Section - NEW */}
+              {selectedWish.stats && (selectedWish.stats.linked_tasks > 0 || selectedWish.stats.linked_projects > 0 || selectedWish.stats.linked_goals > 0) && (
+                <div style={{ marginBottom: '24px', padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '2px solid #cbd5e1' }}>
+                  <h4 style={{ fontSize: '16px', fontWeight: '700', color: '#334155', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    🔗 Connected Items
+                  </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                    {selectedWish.stats.linked_goals > 0 && (
+                      <div style={{
+                        padding: '12px',
+                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                        borderRadius: '6px',
+                        border: '2px solid #fbbf24',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#92400e' }}>
+                          {selectedWish.stats.linked_goals}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#78350f', marginTop: '4px', fontWeight: '600' }}>
+                          🎯 Goals
+                        </div>
+                      </div>
+                    )}
+                    {selectedWish.stats.linked_projects > 0 && (
+                      <div style={{
+                        padding: '12px',
+                        background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                        borderRadius: '6px',
+                        border: '2px solid #3b82f6',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1e40af' }}>
+                          {selectedWish.stats.linked_projects}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#1e3a8a', marginTop: '4px', fontWeight: '600' }}>
+                          📁 Projects
+                        </div>
+                      </div>
+                    )}
+                    {selectedWish.stats.linked_tasks > 0 && (
+                      <div style={{
+                        padding: '12px',
+                        background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                        borderRadius: '6px',
+                        border: '2px solid #10b981',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#065f46' }}>
+                          {selectedWish.stats.linked_tasks}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#064e3b', marginTop: '4px', fontWeight: '600' }}>
+                          ✅ Tasks
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: '12px', padding: '10px', background: 'white', borderRadius: '6px', fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
+                    💡 These are actively working toward making this dream a reality!
+                  </div>
+                </div>
+              )}
+
               {/* Exploration Steps List */}
               {explorationSteps.length > 0 && (
                 <div style={{ marginBottom: '24px' }}>
