@@ -378,8 +378,7 @@
 
 /* Inline Form Row (Label + Input on same line) */
 .form-row-inline {
-  display: grid;
-  grid-template-columns: 120px 1fr;
+  display: flex;
   gap: 12px;
   align-items: start;
   margin-bottom: 10px;
@@ -390,7 +389,8 @@
   font-weight: 600;
   color: #2d3748;
   padding-top: 10px;
-  text-align: right;
+  white-space: nowrap;
+  min-width: fit-content;
 }
 
 .inline-label-short {

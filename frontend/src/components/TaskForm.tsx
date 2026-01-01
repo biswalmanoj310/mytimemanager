@@ -76,10 +76,6 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
   const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  // Progressive disclosure states
-  const [showProjectSelect, setShowProjectSelect] = useState(false);
-  const [showWishSelect, setShowWishSelect] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -604,92 +600,61 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             </div>
           )}
 
-          {/* Same row: Goal checkbox + dropdown */}
+          {/* Goal dropdown - always visible */}
           <div className="form-row-inline">
-            <label className="checkbox-inline narrow">
-              <input
-                type="checkbox"
-                checked={formData.is_part_of_goal}
-                onChange={(e) => setFormData({ ...formData, is_part_of_goal: e.target.checked, goal_id: null })}
-              />
-              <span>Goal:</span>
-            </label>
-            {formData.is_part_of_goal && (
-              <select
-                value={formData.goal_id || ''}
-                onChange={(e) => setFormData({ ...formData, goal_id: Number(e.target.value) || null })}
-                className="flex-input-small"
-              >
-                <option value="">Select goal</option>
-                {goals.map(goal => (
-                  <option key={goal.id} value={goal.id}>
-                    {goal.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            <label htmlFor="goal" className="inline-label">Goal:</label>
+            <select
+              id="goal"
+              value={formData.goal_id || ''}
+              onChange={(e) => {
+                const goalId = Number(e.target.value) || null;
+                setFormData({ ...formData, goal_id: goalId, is_part_of_goal: !!goalId });
+              }}
+              className="flex-input"
+            >
+              <option value="">None</option>
+              {goals.map(goal => (
+                <option key={goal.id} value={goal.id}>
+                  {goal.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Same row: Project checkbox + dropdown */}
+          {/* Project dropdown - always visible */}
           <div className="form-row-inline">
-            <label className="checkbox-inline narrow">
-              <input
-                type="checkbox"
-                checked={showProjectSelect}
-                onChange={(e) => {
-                  setShowProjectSelect(e.target.checked);
-                  if (!e.target.checked) {
-                    setFormData({ ...formData, project_id: null });
-                  }
-                }}
-              />
-              <span>Project:</span>
-            </label>
-            {showProjectSelect && (
-              <select
-                value={formData.project_id || ''}
-                onChange={(e) => setFormData({ ...formData, project_id: Number(e.target.value) || null })}
-                className="flex-input-small"
-              >
-                <option value="">Select project</option>
-                {projects.map(project => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            )}
+            <label htmlFor="project" className="inline-label">Project:</label>
+            <select
+              id="project"
+              value={formData.project_id || ''}
+              onChange={(e) => setFormData({ ...formData, project_id: Number(e.target.value) || null })}
+              className="flex-input"
+            >
+              <option value="">None</option>
+              {projects.map(project => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Same row: Dream checkbox + dropdown */}
+          {/* Dream dropdown - always visible */}
           <div className="form-row-inline">
-            <label className="checkbox-inline narrow">
-              <input
-                type="checkbox"
-                checked={showWishSelect}
-                onChange={(e) => {
-                  setShowWishSelect(e.target.checked);
-                  if (!e.target.checked) {
-                    setFormData({ ...formData, related_wish_id: null });
-                  }
-                }}
-              />
-              <span>Dream:</span>
-            </label>
-            {showWishSelect && (
-              <select
-                value={formData.related_wish_id || ''}
-                onChange={(e) => setFormData({ ...formData, related_wish_id: Number(e.target.value) || null })}
-                className="flex-input-small"
-              >
-                <option value="">Select dream</option>
-                {wishes.map(wish => (
-                  <option key={wish.id} value={wish.id}>
-                    {wish.title} {wish.status === 'exploring' ? '🔬' : '💭'}
-                  </option>
-                ))}
-              </select>
-            )}
+            <label htmlFor="dream" className="inline-label">Dream:</label>
+            <select
+              id="dream"
+              value={formData.related_wish_id || ''}
+              onChange={(e) => setFormData({ ...formData, related_wish_id: Number(e.target.value) || null })}
+              className="flex-input"
+            >
+              <option value="">None</option>
+              {wishes.map(wish => (
+                <option key={wish.id} value={wish.id}>
+                  {wish.title} {wish.status === 'exploring' ? '🔬' : '💭'}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Optional: Due Date and Priority in same row */}
