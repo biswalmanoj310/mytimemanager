@@ -380,7 +380,7 @@
 .form-row-inline {
   display: flex;
   gap: 12px;
-  align-items: start;
+  align-items: center;
   margin-bottom: 10px;
 }
 
@@ -388,7 +388,6 @@
   font-size: 14px;
   font-weight: 600;
   color: #2d3748;
-  padding-top: 10px;
   white-space: nowrap;
   min-width: fit-content;
 }

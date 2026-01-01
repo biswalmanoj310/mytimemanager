@@ -174,7 +174,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     try {
       const data = await api.get<any[]>('/api/projects/');
       console.log('Projects loaded (raw):', data);
-      const activeProjects = data.filter((p: any) => p.status === 'active');
+      const activeProjects = data.filter((p: any) => p.status === 'active' || p.status === 'in_progress');
       console.log('Active projects:', activeProjects);
       console.log('All project statuses:', data.map(p => ({ id: p.id, name: p.name, status: p.status })));
       setProjects(activeProjects);
