@@ -453,8 +453,6 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             />
           </div>
 
-          <div className="section-divider"></div>
-
           {/* Same row: Pillar and Category */}
           <div className="form-row-dual">
             <div className="form-col">
@@ -491,8 +489,6 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               </select>
             </div>
           </div>
-
-          <div className="section-divider"></div>
 
           {/* Same row: Follow-up Time and Task Type */}
           <div className="form-row-dual">
@@ -608,8 +604,6 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
             </div>
           )}
 
-          <div className="section-divider"></div>
-
           {/* Same row: Goal checkbox + dropdown */}
           <div className="form-row-inline">
             <label className="checkbox-inline narrow">
@@ -697,8 +691,6 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
               </select>
             )}
           </div>
-
-          <div className="section-divider"></div>
 
           {/* Optional: Due Date and Priority in same row */}
           <div className="form-row-dual">
