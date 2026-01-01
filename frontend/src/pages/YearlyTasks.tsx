@@ -336,7 +336,7 @@ const YearlyTasks: React.FC = () => {
     const avgRemainingPerMonth = monthsRemaining > 0 ? Math.round(remaining / monthsRemaining) : 0;
     
     const rowColorClass = getYearlyRowColorClass(task, totalSpent, trackingStartMonth);
-    const yearlyStatus = yearlyTaskStatuses[task.id];
+    // yearlyStatus already declared above when determining trackingStartMonth
     const isYearlyCompleted = yearlyStatus?.is_completed || false;
     const isYearlyNA = yearlyStatus?.is_na || false;
     const rowClassName = isYearlyCompleted ? 'completed-row' : isYearlyNA ? 'na-row' : '';
