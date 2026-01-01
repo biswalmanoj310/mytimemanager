@@ -384,7 +384,7 @@ export default function Tasks() {
   const [showAddMiscTaskModal, setShowAddMiscTaskModal] = useState(false);
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
   const [showCompletedMiscTasks, setShowCompletedMiscTasks] = useState(false);
-  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean }>({ milestones: true, allTasks: true });
+  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean; frequencyTasks: boolean }>({ milestones: true, allTasks: true, frequencyTasks: true });
   const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone'>('all');
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
@@ -8298,6 +8298,225 @@ export default function Tasks() {
                     })}
                   </div>
                   )
+                )}
+              </div>
+
+              {/* Tasks by Frequency Section - NEW */}
+              <div className="project-frequency-tasks-section" style={{ marginTop: '30px', marginBottom: '30px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  marginBottom: '15px',
+                  cursor: 'pointer' 
+                }}
+                  onClick={() => setExpandedSections(prev => ({ ...prev, frequencyTasks: !prev.frequencyTasks }))}
+                >
+                  <h3 style={{ margin: 0 }}>
+                    {expandedSections.frequencyTasks ? '▼' : '▶'} 📅 Tasks by Frequency
+                  </h3>
+                </div>
+                
+                {expandedSections.frequencyTasks && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                    {(() => {
+                      const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                      const projectTasksFreq = thisProjectTasks.filter(t => t.follow_up_frequency === 'project_task');
+                      const dailyTasks = thisProjectTasks.filter(t => t.follow_up_frequency === 'daily');
+                      const weeklyTasks = thisProjectTasks.filter(t => t.follow_up_frequency === 'weekly');
+                      const monthlyTasks = thisProjectTasks.filter(t => t.follow_up_frequency === 'monthly');
+                      const yearlyTasks = thisProjectTasks.filter(t => t.follow_up_frequency === 'yearly');
+                      const oneTimeTasks = thisProjectTasks.filter(t => t.follow_up_frequency === 'one_time');
+                      
+                      return (
+                        <>
+                          {/* Project Tasks */}
+                          {projectTasksFreq.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#f0f7ff', 
+                              borderRadius: '8px',
+                              border: '2px solid #4299e1' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#2c5282' }}>
+                                📁 Project Tasks ({projectTasksFreq.length})
+                              </h4>
+                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                Shows only in Projects tab
+                              </div>
+                              {projectTasksFreq.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: task.is_completed ? '3px solid #48bb78' : '3px solid #4299e1'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {task.is_completed ? '✅' : '⏳'}
+                                    <span style={{ 
+                                      fontSize: '13px',
+                                      textDecoration: task.is_completed ? 'line-through' : 'none',
+                                      color: task.is_completed ? '#666' : '#333'
+                                    }}>
+                                      {task.name}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Daily Support Tasks */}
+                          {dailyTasks.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#f0fff4', 
+                              borderRadius: '8px',
+                              border: '2px solid #48bb78' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#22543d' }}>
+                                📆 Daily Support ({dailyTasks.length})
+                              </h4>
+                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                Daily tasks supporting this project
+                              </div>
+                              {dailyTasks.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: task.is_completed ? '3px solid #48bb78' : '3px solid #38a169'
+                                }}>
+                                  <div style={{ fontSize: '13px' }}>
+                                    {task.name}
+                                    {task.allocated_minutes > 0 && (
+                                      <span style={{ marginLeft: '8px', fontSize: '11px', color: '#666' }}>
+                                        ({task.allocated_minutes}m)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Weekly Support Tasks */}
+                          {weeklyTasks.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#fffaf0', 
+                              borderRadius: '8px',
+                              border: '2px solid #ed8936' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#7c2d12' }}>
+                                📅 Weekly Support ({weeklyTasks.length})
+                              </h4>
+                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                Weekly tasks supporting this project
+                              </div>
+                              {weeklyTasks.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: '3px solid #ed8936'
+                                }}>
+                                  <div style={{ fontSize: '13px' }}>{task.name}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Monthly Support Tasks */}
+                          {monthlyTasks.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#faf5ff', 
+                              borderRadius: '8px',
+                              border: '2px solid #9f7aea' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#44337a' }}>
+                                📅 Monthly Support ({monthlyTasks.length})
+                              </h4>
+                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                Monthly tasks supporting this project
+                              </div>
+                              {monthlyTasks.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: '3px solid #9f7aea'
+                                }}>
+                                  <div style={{ fontSize: '13px' }}>{task.name}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Yearly Support Tasks */}
+                          {yearlyTasks.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#fff5f5', 
+                              borderRadius: '8px',
+                              border: '2px solid #fc8181' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#742a2a' }}>
+                                📅 Yearly Support ({yearlyTasks.length})
+                              </h4>
+                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                Yearly tasks supporting this project
+                              </div>
+                              {yearlyTasks.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: '3px solid #fc8181'
+                                }}>
+                                  <div style={{ fontSize: '13px' }}>{task.name}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* One-Time Tasks */}
+                          {oneTimeTasks.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#f7fafc', 
+                              borderRadius: '8px',
+                              border: '2px solid #718096' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#2d3748' }}>
+                                ⭐ Important One-Time ({oneTimeTasks.length})
+                              </h4>
+                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+                                One-time important tasks
+                              </div>
+                              {oneTimeTasks.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: '3px solid #718096'
+                                }}>
+                                  <div style={{ fontSize: '13px' }}>{task.name}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
                 )}
               </div>
 
