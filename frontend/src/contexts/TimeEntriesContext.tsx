@@ -14,12 +14,9 @@ import { api } from '../services/api';
 export interface DailyEntry {
   id: number;
   task_id: number;
-  date: string;
-  time_spent?: number;
-  count?: number;
-  notes?: string;
-  is_completed: boolean;
-  is_na: boolean;
+  entry_date: string;  // Changed from 'date' to match backend
+  hour: number;        // Hour of the day (0-23)
+  minutes: number;     // Minutes spent in that hour
   created_at?: string;
   updated_at?: string;
 }
@@ -193,7 +190,7 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     try {
       setLoadingDaily(true);
       setError(null);
-      const data = await api.get<DailyEntry[]>(`/api/daily-entries/?date=${date}`);
+      const data = await api.get<DailyEntry[]>(`/api/daily-time/?date=${date}`);
       setDailyEntries(data);
     } catch (err: any) {
       console.error('Error loading daily entries:', err);
@@ -206,7 +203,7 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
 
   const saveDailyEntry = useCallback(async (entry: Partial<DailyEntry>): Promise<DailyEntry> => {
     try {
-      const newEntry = await api.post<DailyEntry>('/api/daily-entries/', entry);
+      const newEntry = await api.post<DailyEntry>('/api/daily-time/entries/', entry);
       setDailyEntries((prev) => [...prev, newEntry]);
       return newEntry;
     } catch (err: any) {
@@ -218,7 +215,7 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
 
   const updateDailyEntry = useCallback(async (entryId: number, updates: Partial<DailyEntry>): Promise<DailyEntry> => {
     try {
-      const updatedEntry = await api.put<DailyEntry>(`/api/daily-entries/${entryId}`, updates);
+      const updatedEntry = await api.put<DailyEntry>(`/api/daily-time/entries/${entryId}`, updates);
       setDailyEntries((prev) =>
         prev.map((entry) => (entry.id === entryId ? updatedEntry : entry))
       );

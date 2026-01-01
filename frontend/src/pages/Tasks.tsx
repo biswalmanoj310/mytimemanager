@@ -3309,10 +3309,29 @@ export default function Tasks() {
 
   async function loadWeeklyTasksNeedingAttention() {
     try {
-      // Find weekly tasks that haven't been completed this week
+      console.log('🔍 Loading weekly tasks needing attention...');
+      // Find weekly tasks that haven't been completed this week OR are behind on progress
       const weekStart = new Date(selectedWeekStart);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      console.log('📅 Week start:', weekStart, 'Today:', today);
+      
+      // Fetch daily entries for this week to calculate progress for native weekly tasks
+      const weekDays = Array.from({ length: 7 }, (_, i) => {
+        const day = new Date(weekStart);
+        day.setDate(day.getDate() + i);
+        const year = day.getFullYear();
+        const month = String(day.getMonth() + 1).padStart(2, '0');
+        const dayNum = String(day.getDate()).padStart(2, '0');
+        return `${year}-${month}-${dayNum}`;
+      });
+      
+      // Fetch all daily entries for this week
+      const allEntriesPromises = weekDays.map(dateStr => 
+        api.get<any[]>(`/api/daily-time/?date=${dateStr}`).catch(() => [])
+      );
+      const allEntriesArrays = await Promise.all(allEntriesPromises);
+      const allEntries = allEntriesArrays.flat();
       
       const needsAttention = tasks.filter(task => {
         if (task.follow_up_frequency !== 'weekly' || task.is_completed || !task.is_active) return false;
@@ -3321,9 +3340,44 @@ export default function Tasks() {
         const statusKey = task.id;
         const status = weeklyTaskStatuses[statusKey];
         
-        return !status || (!status.is_completed && !status.is_na);
+        // If completed or NA this week, doesn't need attention
+        if (status && (status.is_completed || status.is_na)) return false;
+        
+        // For native weekly tasks, check if they're behind on progress
+        // Calculate days elapsed in the week
+        const weekStartDate = new Date(weekStart);
+        weekStartDate.setHours(0, 0, 0, 0);
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+        
+        let daysElapsed = 1;
+        if (today >= weekStartDate) {
+          if (today <= weekEndDate) {
+            const diffTime = today.getTime() - weekStartDate.getTime();
+            daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          } else {
+            daysElapsed = 7; // Past week
+          }
+        }
+        
+        // Calculate expected progress
+        const expectedTarget = task.allocated_minutes * daysElapsed;
+        
+        // Calculate actual progress from daily entries
+        const taskEntries = allEntries.filter((e: any) => e.task_id === task.id);
+        const actualProgress = taskEntries.reduce((sum: number, e: any) => sum + (e.minutes || 0), 0);
+        
+        const needsAttention = !status || actualProgress < expectedTarget;
+        if (task.follow_up_frequency === 'weekly') {
+          console.log(`📊 Task "${task.name}": actual=${actualProgress}, expected=${expectedTarget}, daysElapsed=${daysElapsed}, needsAttention=${needsAttention}`);
+        }
+        
+        // Task needs attention if it exists (no status = needs to be done) 
+        // OR if it's behind schedule (actual < expected)
+        return needsAttention;
       });
       
+      console.log(`✅ Weekly tasks needing attention: ${needsAttention.length}`, needsAttention.map(t => t.name));
       setWeeklyTasksNeedingAttention(needsAttention);
     } catch (err: any) {
       console.error('Error loading weekly tasks needing attention:', err);
@@ -4960,7 +5014,17 @@ export default function Tasks() {
 
       // Check weekly tab (current week only)
       const weeklyStatus = weeklyTaskStatuses[task.id];
-      if (weeklyStatus && !weeklyStatus.is_completed && !weeklyStatus.is_na) {
+      const isWeeklyTask = task.follow_up_frequency === 'weekly';
+      
+      // Include task if:
+      // For native weekly tasks: no status OR (has status but not completed/NA)
+      // For other tasks: has status AND not completed/NA
+      const shouldCheckWeekly = isWeeklyTask 
+        ? (!weeklyStatus || (!weeklyStatus.is_completed && !weeklyStatus.is_na))
+        : (weeklyStatus && !weeklyStatus.is_completed && !weeklyStatus.is_na);
+      
+      if (shouldCheckWeekly) {
+        if (isWeeklyTask) console.log(`🔍 Checking weekly task in getTasksNeedingAttention: "${task.name}"`);
         // Calculate total spent and check if behind schedule
         let totalSpent = 0;
         let totalDaysIncludingToday = 0; // Total days including today (for display)
@@ -4993,7 +5057,8 @@ export default function Tasks() {
         } else if (task.task_type === TaskType.BOOLEAN) {
           weeklyTarget = task.follow_up_frequency === 'daily' ? 7 : 1;
         } else {
-          weeklyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes * 7 : task.allocated_minutes;
+          // TIME tasks: allocated_minutes is daily target, so weekly = daily * 7
+          weeklyTarget = task.allocated_minutes * 7;
         }
 
         const remaining = weeklyTarget - totalSpent;
@@ -5006,7 +5071,9 @@ export default function Tasks() {
         } else if (task.task_type === TaskType.BOOLEAN) {
           dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/7;
         } else {
-          dailyTarget = task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7;
+          // TIME tasks: allocated_minutes is ALWAYS the daily target (whether daily or weekly)
+          // For weekly tasks, user enters 60 min = 60 min/day (not 60 min total for week)
+          dailyTarget = task.allocated_minutes;
         }
         
         // Calculate expected vs actual - ONLY count PAST days (not including today)
@@ -5021,6 +5088,10 @@ export default function Tasks() {
         // 2. Haven't completed today's target yet (totalSpent < expected including today)
         const expectedIncludingToday = dailyTarget * totalDaysIncludingToday;
         const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        
+        if (isWeeklyTask) {
+          console.log(`🔍 Task "${task.name}": totalSpent=${totalSpent}, expectedIncludingToday=${expectedIncludingToday}, shouldShowInAttention=${shouldShowInAttention}, totalDaysIncludingToday=${totalDaysIncludingToday}, dailyTarget=${dailyTarget}`);
+        }
         
         if (shouldShowInAttention) {
           // Count red days for display purposes only

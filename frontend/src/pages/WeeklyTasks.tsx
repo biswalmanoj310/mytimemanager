@@ -26,6 +26,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useTaskContext, useTimeEntriesContext, useUserPreferencesContext } from '../contexts';
 import { Task, TaskType } from '../types';
+import type { DailyEntry } from '../contexts/TimeEntriesContext';
 import { 
   getWeekStart, 
   addDays, 
@@ -48,6 +49,10 @@ const WeeklyTasks: React.FC = () => {
     updateWeeklyTaskStatus,
     dailyAggregatesWeekly,
     loadDailyAggregatesForWeek,
+    dailyEntries,
+    loadDailyEntries,
+    saveDailyEntry,
+    updateDailyEntry,
   } = useTimeEntriesContext();
   const {
     selectedDate,
@@ -66,6 +71,9 @@ const WeeklyTasks: React.FC = () => {
   
   const [loading, setLoading] = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const [weeklyDailyEntries, setWeeklyDailyEntries] = useState<DailyEntry[]>([]);
 
   // ============================================================================
   // COMPUTED VALUES
@@ -124,10 +132,31 @@ const WeeklyTasks: React.FC = () => {
     const loadWeekData = async () => {
       try {
         setLoading(true);
+        
+        // Load weekly statuses and aggregates
         await Promise.all([
           loadWeeklyTaskStatuses(weekStartString),
           loadDailyAggregatesForWeek(weekStartString),
         ]);
+        
+        // Load daily entries for all 7 days of the week and accumulate them
+        const allEntries: DailyEntry[] = [];
+        for (const day of weekDays) {
+          try {
+            const response = await fetch(`/api/daily-time/?date=${day.dateString}`);
+            if (response.ok) {
+              const dayEntries: DailyEntry[] = await response.json();
+              allEntries.push(...dayEntries);
+            }
+            // 404 is expected when there are no entries for that date - just skip
+          } catch (err) {
+            // Silently skip - no entries for this date yet
+          }
+        }
+        
+        // Store all accumulated entries in local state
+        setWeeklyDailyEntries(allEntries);
+        
       } catch (err) {
         console.error('Error loading week data:', err);
       } finally {
@@ -138,6 +167,13 @@ const WeeklyTasks: React.FC = () => {
     if (tasks.length > 0) {
       loadWeekData();
     }
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [weekStartString, tasks.length]);
 
   // ============================================================================
@@ -192,7 +228,7 @@ const WeeklyTasks: React.FC = () => {
       const isNA = weeklyStatus?.is_na || false;
       return task.follow_up_frequency === 'weekly' && !isCompleted && !isNA;
     });
-  }, [filteredTasks, weeklyTaskStatuses]);
+  }, [filteredTasks, weeklyTaskStatuses, weeklyDailyEntries]);
 
   const monitoringTasks = useMemo(() => {
     return filteredTasks.filter(task => task.follow_up_frequency !== 'weekly');
@@ -371,11 +407,10 @@ const WeeklyTasks: React.FC = () => {
       expectedTarget = task.follow_up_frequency === 'daily' ? daysElapsed : (daysElapsed / 7);
     } else {
       // TIME tasks
-      if (task.follow_up_frequency === 'daily') {
-        expectedTarget = task.allocated_minutes * daysElapsed;
-      } else {
-        expectedTarget = task.allocated_minutes * (daysElapsed / 7);
-      }
+      // Both daily and weekly tasks need the same cumulative total by each day
+      // Daily: strict daily requirement, Weekly: flexible distribution
+      // Example: 60 min/day task → by day 4, need 240 min whether daily or weekly
+      expectedTarget = task.allocated_minutes * daysElapsed;
     }
     
     // Return color based on progress
@@ -481,6 +516,66 @@ const WeeklyTasks: React.FC = () => {
     }
   };
 
+  /**
+   * Handle input change for native weekly task cells
+   * Debounced auto-save after 1.5 seconds
+   */
+  const handleCellChange = (taskId: number, date: string, hour: number, value: string) => {
+    const key = `${taskId}-${date}-${hour}`;
+    const numValue = value === '' ? 0 : parseFloat(value) || 0;
+    
+    setPendingChanges(prev => ({
+      ...prev,
+      [key]: { taskId, date, hour, value: numValue }
+    }));
+
+    // Clear existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-save
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        // Always use saveDailyEntry - backend handles upsert logic
+        // (creates if doesn't exist, updates if it does)
+        if (numValue > 0) {
+          await saveDailyEntry({
+            task_id: taskId,
+            entry_date: `${date}T00:00:00`,  // Convert date string to ISO datetime
+            hour,
+            minutes: numValue,
+          });
+        }
+        // TODO: Handle deletion when numValue === 0 (if needed)
+
+        // Reload entries for this specific date and update our local state
+        const response = await fetch(`/api/daily-time/?date=${date}`);
+        if (response.ok) {
+          const dayEntries: DailyEntry[] = await response.json();
+          
+          // Update weeklyDailyEntries: remove old entries for this date and add new ones
+          setWeeklyDailyEntries(prev => {
+            const filtered = prev.filter(e => e.entry_date.split('T')[0] !== date);
+            return [...filtered, ...dayEntries];
+          });
+        }
+        
+        // Reload aggregates
+        await loadDailyAggregatesForWeek(weekStartString);
+
+        // Remove from pending changes
+        setPendingChanges(prev => {
+          const newPending = { ...prev };
+          delete newPending[key];
+          return newPending;
+        });
+      } catch (err) {
+        console.error('Error saving cell value:', err);
+      }
+    }, 1500);
+  };
+
   // ============================================================================
   // HELPER FUNCTIONS - UI Utilities
   // ============================================================================
@@ -506,8 +601,32 @@ const WeeklyTasks: React.FC = () => {
    * Render a single task row with full styling
    */
   const renderTaskRow = (task: Task) => {
+    const isNativeWeeklyTask = task.follow_up_frequency === 'weekly';
+    
     // Calculate totals for this task
-    const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
+    // For native weekly tasks, use weeklyDailyEntries; for monitoring tasks, use dailyAggregatesWeekly
+    let totalSpent = 0;
+    if (isNativeWeeklyTask) {
+      // Sum from weeklyDailyEntries for this task across all days in the week
+      weekDays.forEach(day => {
+        const pendingKey = `${task.id}-${day.dateString}-0`;
+        
+        // Check if there's a pending change for this day
+        if (pendingChanges[pendingKey] !== undefined) {
+          // Use pending value (user is typing/editing)
+          totalSpent += pendingChanges[pendingKey].value;
+        } else {
+          // Use saved value from weeklyDailyEntries
+          const dayEntries = weeklyDailyEntries.filter(
+            e => e.task_id === task.id && e.entry_date.split('T')[0] === day.dateString
+          );
+          totalSpent += dayEntries.reduce((sum, e) => sum + (e.minutes || 0), 0);
+        }
+      });
+    } else {
+      // Use aggregates for monitoring tasks
+      totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
+    }
     
     // Calculate target and averages
     const weeklyTarget = task.task_type === TaskType.COUNT 
@@ -541,6 +660,11 @@ const WeeklyTasks: React.FC = () => {
     const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
     const remaining = weeklyTarget - totalSpent;
     const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+    
+    // Debug logging for all tasks on first render
+    if (isNativeWeeklyTask) {
+      console.log(`📊 Native Weekly Task "${task.name}": totalSpent=${totalSpent}, weeklyDailyEntries.length=${weeklyDailyEntries.length}, daysElapsed=${daysElapsed}, avgSpentPerDay=${avgSpentPerDay}, avgRemainingPerDay=${avgRemainingPerDay}`);
+    }
     
     // Get colors
     const rowColorClass = getWeeklyRowColorClass(task, totalSpent);
@@ -601,20 +725,64 @@ const WeeklyTasks: React.FC = () => {
         
         {/* 7 Day Columns */}
         {weekDays.map(day => {
-          const dayValue = getWeeklyTime(task.id, day.index);
-          const cellColorClass = getWeeklyCellColorClass(task, dayValue, day.date);
+          const isNativeWeeklyTask = task.follow_up_frequency === 'weekly';
+          
+          // Get cell value based on task type
+          let cellValue = 0;
+          if (isNativeWeeklyTask) {
+            // For native weekly tasks, sum all entries for this day
+            const dayEntries = weeklyDailyEntries.filter(
+              e => e.task_id === task.id && e.entry_date.split('T')[0] === day.dateString
+            );
+            cellValue = dayEntries.reduce((sum, e) => sum + (e.minutes || 0), 0);
+          } else {
+            // For monitoring tasks, use aggregates
+            cellValue = getWeeklyTime(task.id, day.index);
+          }
+          
+          const cellColorClass = getWeeklyCellColorClass(task, cellValue, day.date);
+          
+          // Check if there's a pending change for this cell
+          const pendingKey = `${task.id}-${day.dateString}-0`;
+          const hasPending = pendingChanges[pendingKey] !== undefined;
+          const displayValue = hasPending ? pendingChanges[pendingKey].value : cellValue;
           
           return (
             <td 
               key={day.index} 
               className={`col-hour ${cellColorClass}`}
               style={{ 
-                backgroundColor: bgColor || (dayValue > 0 && !cellColorClass ? '#e6ffed' : undefined),
+                backgroundColor: bgColor || (cellValue > 0 && !cellColorClass ? '#e6ffed' : undefined),
                 textAlign: 'center',
-                fontSize: '12px'
+                fontSize: '12px',
+                padding: '4px'
               }}
             >
-              {dayValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : dayValue) : '-'}
+              {isNativeWeeklyTask ? (
+                // Editable input for native weekly tasks
+                <input
+                  type="number"
+                  min="0"
+                  step={task.task_type === TaskType.TIME ? "1" : "0.1"}
+                  value={displayValue > 0 ? displayValue : ''}
+                  onChange={(e) => handleCellChange(task.id, day.dateString, 0, e.target.value)}
+                  style={{
+                    width: '100%',
+                    border: hasPending ? '2px solid #f59e0b' : '1px solid #e2e8f0',
+                    borderRadius: '4px',
+                    padding: '4px',
+                    textAlign: 'center',
+                    fontSize: '12px',
+                    backgroundColor: hasPending ? '#fffbeb' : 'white'
+                  }}
+                  placeholder="-"
+                  disabled={isWeeklyCompleted || isWeeklyNA}
+                  title={hasPending ? 'Saving...' : ''}
+                />
+              ) : (
+                // Read-only display for monitoring tasks
+                <span>{cellValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(cellValue)) : '-'}</span>
+              )}
             </td>
           );
         })}
