@@ -661,11 +661,6 @@ const WeeklyTasks: React.FC = () => {
     const remaining = weeklyTarget - totalSpent;
     const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
     
-    // Debug logging for all tasks on first render
-    if (isNativeWeeklyTask) {
-      console.log(`📊 Native Weekly Task "${task.name}": totalSpent=${totalSpent}, weeklyDailyEntries.length=${weeklyDailyEntries.length}, daysElapsed=${daysElapsed}, avgSpentPerDay=${avgSpentPerDay}, avgRemainingPerDay=${avgRemainingPerDay}`);
-    }
-    
     // Get colors
     const rowColorClass = getWeeklyRowColorClass(task, totalSpent);
     

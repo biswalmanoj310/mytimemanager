@@ -3309,12 +3309,10 @@ export default function Tasks() {
 
   async function loadWeeklyTasksNeedingAttention() {
     try {
-      console.log('🔍 Loading weekly tasks needing attention...');
       // Find weekly tasks that haven't been completed this week OR are behind on progress
       const weekStart = new Date(selectedWeekStart);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      console.log('📅 Week start:', weekStart, 'Today:', today);
       
       // Fetch daily entries for this week to calculate progress for native weekly tasks
       const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -3367,17 +3365,11 @@ export default function Tasks() {
         const taskEntries = allEntries.filter((e: any) => e.task_id === task.id);
         const actualProgress = taskEntries.reduce((sum: number, e: any) => sum + (e.minutes || 0), 0);
         
-        const needsAttention = !status || actualProgress < expectedTarget;
-        if (task.follow_up_frequency === 'weekly') {
-          console.log(`📊 Task "${task.name}": actual=${actualProgress}, expected=${expectedTarget}, daysElapsed=${daysElapsed}, needsAttention=${needsAttention}`);
-        }
-        
         // Task needs attention if it exists (no status = needs to be done) 
         // OR if it's behind schedule (actual < expected)
-        return needsAttention;
+        return !status || actualProgress < expectedTarget;
       });
       
-      console.log(`✅ Weekly tasks needing attention: ${needsAttention.length}`, needsAttention.map(t => t.name));
       setWeeklyTasksNeedingAttention(needsAttention);
     } catch (err: any) {
       console.error('Error loading weekly tasks needing attention:', err);
@@ -5024,7 +5016,6 @@ export default function Tasks() {
         : (weeklyStatus && !weeklyStatus.is_completed && !weeklyStatus.is_na);
       
       if (shouldCheckWeekly) {
-        if (isWeeklyTask) console.log(`🔍 Checking weekly task in getTasksNeedingAttention: "${task.name}"`);
         // Calculate total spent and check if behind schedule
         let totalSpent = 0;
         let totalDaysIncludingToday = 0; // Total days including today (for display)
@@ -5088,10 +5079,6 @@ export default function Tasks() {
         // 2. Haven't completed today's target yet (totalSpent < expected including today)
         const expectedIncludingToday = dailyTarget * totalDaysIncludingToday;
         const shouldShowInAttention = totalSpent < expectedIncludingToday;
-        
-        if (isWeeklyTask) {
-          console.log(`🔍 Task "${task.name}": totalSpent=${totalSpent}, expectedIncludingToday=${expectedIncludingToday}, shouldShowInAttention=${shouldShowInAttention}, totalDaysIncludingToday=${totalDaysIncludingToday}, dailyTarget=${dailyTarget}`);
-        }
         
         if (shouldShowInAttention) {
           // Count red days for display purposes only
