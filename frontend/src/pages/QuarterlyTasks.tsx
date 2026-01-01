@@ -207,7 +207,7 @@ const QuarterlyTasks: React.FC = () => {
   const handleCompleteTask = async (taskId: number) => {
     try {
       setLoading(true);
-      await updateYearlyTaskStatus(taskId, yearNumber, true, false);
+      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: true, is_na: false });
       await loadYearlyTaskStatuses(yearNumber);
     } catch (error) {
       console.error('Error completing task:', error);
@@ -220,7 +220,7 @@ const QuarterlyTasks: React.FC = () => {
   const handleMarkNA = async (taskId: number) => {
     try {
       setLoading(true);
-      await updateYearlyTaskStatus(taskId, yearNumber, false, true);
+      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: true });
       await loadYearlyTaskStatuses(yearNumber);
     } catch (error) {
       console.error('Error marking task as NA:', error);
