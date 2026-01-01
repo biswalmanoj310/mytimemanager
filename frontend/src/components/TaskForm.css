@@ -389,7 +389,8 @@
   font-weight: 600;
   color: #2d3748;
   white-space: nowrap;
-  min-width: fit-content;
+  width: 110px;
+  flex-shrink: 0;
 }
 
 .inline-label-short {
