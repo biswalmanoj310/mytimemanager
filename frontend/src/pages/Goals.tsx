@@ -3195,6 +3195,138 @@ return (
                 )}
               </div>
 
+              {/* Supporting Tasks by Frequency - NEW */}
+              <div className="goal-section supporting-tasks-section" style={{
+                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #10b981',
+                marginBottom: '20px'
+              }}>
+                <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px' }}>
+                  📅 Supporting Tasks by Frequency
+                </h3>
+                {linkedTasks.length === 0 ? (
+                  <div className="empty-section">
+                    <p>No supporting tasks yet. Link tasks to track your daily/weekly/monthly efforts toward this goal!</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                    {(() => {
+                      // Group linked tasks by frequency
+                      const tasksByFrequency: Record<string, any[]> = {};
+                      linkedTasks.forEach(link => {
+                        const freq = link.task_type || 'unknown';
+                        if (!tasksByFrequency[freq]) {
+                          tasksByFrequency[freq] = [];
+                        }
+                        tasksByFrequency[freq].push(link);
+                      });
+                      
+                      const frequencyConfig: Record<string, {label: string; icon: string; color: string; bgColor: string}> = {
+                        daily: { label: 'Daily Tasks', icon: '📆', color: '#065f46', bgColor: '#d1fae5' },
+                        weekly: { label: 'Weekly Tasks', icon: '📅', color: '#92400e', bgColor: '#fed7aa' },
+                        monthly: { label: 'Monthly Tasks', icon: '📊', color: '#581c87', bgColor: '#e9d5ff' },
+                        yearly: { label: 'Yearly Tasks', icon: '🎯', color: '#7c2d12', bgColor: '#fecaca' },
+                        project_task: { label: 'Project Tasks', icon: '📁', color: '#1e40af', bgColor: '#dbeafe' }
+                      };
+                      
+                      return Object.entries(tasksByFrequency).map(([freq, tasks]) => {
+                        const config = frequencyConfig[freq] || { label: freq, icon: '📋', color: '#374151', bgColor: '#f3f4f6' };
+                        const totalExpected = tasks.reduce((sum, t) => sum + (t.expected_count || 0), 0);
+                        const totalCompleted = tasks.reduce((sum, t) => sum + (t.completion_count || 0), 0);
+                        const avgCompletion = totalExpected > 0 ? (totalCompleted / totalExpected) * 100 : 0;
+                        
+                        return (
+                          <div key={freq} style={{
+                            padding: '14px',
+                            background: config.bgColor,
+                            borderRadius: '8px',
+                            border: `2px solid ${config.color}`
+                          }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center',
+                              marginBottom: '12px'
+                            }}>
+                              <h4 style={{ 
+                                margin: 0, 
+                                color: config.color, 
+                                fontSize: '15px',
+                                fontWeight: '700'
+                              }}>
+                                {config.icon} {config.label}
+                              </h4>
+                              <span style={{ 
+                                fontSize: '13px', 
+                                fontWeight: '600',
+                                color: config.color,
+                                background: 'white',
+                                padding: '3px 8px',
+                                borderRadius: '12px'
+                              }}>
+                                {tasks.length}
+                              </span>
+                            </div>
+                            
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#4b5563',
+                              marginBottom: '10px',
+                              padding: '8px',
+                              background: 'white',
+                              borderRadius: '6px'
+                            }}>
+                              <div>Progress: {totalCompleted} / {totalExpected}</div>
+                              <div style={{ marginTop: '4px' }}>
+                                <div style={{
+                                  width: '100%',
+                                  height: '6px',
+                                  background: '#e5e7eb',
+                                  borderRadius: '3px',
+                                  overflow: 'hidden'
+                                }}>
+                                  <div style={{
+                                    width: `${Math.min(avgCompletion, 100)}%`,
+                                    height: '100%',
+                                    background: avgCompletion >= 70 ? '#10b981' : avgCompletion >= 40 ? '#f59e0b' : '#ef4444',
+                                    transition: 'width 0.3s ease'
+                                  }} />
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                                  {avgCompletion.toFixed(0)}% complete
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {tasks.map(link => (
+                                <div key={link.id} style={{
+                                  padding: '6px 8px',
+                                  background: 'white',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  borderLeft: `3px solid ${config.color}`
+                                }}>
+                                  <div style={{ fontWeight: '600', color: '#1f2937' }}>
+                                    {link.task?.name || 'Task'}
+                                  </div>
+                                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
+                                    {link.completion_count}/{link.expected_count} 
+                                    ({link.completion_percentage?.toFixed(0) || 0}%)
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+              </div>
+
               {/* Linked Tasks */}
               <div className="goal-section linked-section" style={{
                 background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
