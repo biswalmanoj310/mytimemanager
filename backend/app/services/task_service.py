@@ -9,7 +9,8 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import json
 
-from app.models.models import Task, Pillar, Category, SubCategory, Goal
+from app.models.models import Task, Pillar, Category, SubCategory
+from app.models.goal import LifeGoal
 from app.models.schemas import TaskCreate, TaskUpdate, TaskFilters
 from app.utils.datetime_utils import normalize_to_midnight
 
@@ -58,7 +59,7 @@ class TaskService:
         
         # Validate goal if provided AND is_part_of_goal is True
         if task_data.goal_id and task_data.is_part_of_goal:
-            goal = db.query(Goal).filter(Goal.id == task_data.goal_id).first()
+            goal = db.query(LifeGoal).filter(LifeGoal.id == task_data.goal_id).first()
             if not goal:
                 raise ValueError(f"Goal with id {task_data.goal_id} not found")
             
@@ -222,7 +223,7 @@ class TaskService:
         
         # Validate goal if changed
         if task_data.goal_id is not None and task_data.goal_id != db_task.goal_id:
-            goal = db.query(Goal).filter(Goal.id == task_data.goal_id).first()
+            goal = db.query(LifeGoal).filter(LifeGoal.id == task_data.goal_id).first()
             if not goal:
                 raise ValueError(f"Goal with id {task_data.goal_id} not found")
             
