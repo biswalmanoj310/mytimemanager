@@ -11,7 +11,7 @@ import './MiscTaskColors.css';
 import './Projects.css';
 import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
-import { WeeklyTasks, MonthlyTasks, YearlyTasks } from './index';
+import { WeeklyTasks, MonthlyTasks, QuarterlyTasks, YearlyTasks } from './index';
 import { getWeekStart } from '../utils/dateHelpers';
 import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
@@ -2682,7 +2682,9 @@ export default function Tasks() {
       setYearlyMonthlyAggregates({...aggregatesMap});
 
       // Load yearly task statuses
+      console.log('📡 Loading yearly task statuses for:', dateStr);
       const statusResponse: any = await api.get(`/api/yearly-time/status/${dateStr}`);
+      console.log('📡 Yearly status response:', statusResponse);
       
       const statusData = Array.isArray(statusResponse) ? statusResponse : (statusResponse.data || []);
       const statusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {}
@@ -2696,7 +2698,9 @@ export default function Tasks() {
         });
       }
       
+      console.log('✅ Yearly task statuses loaded:', Object.keys(statusMap).length, 'tasks', statusMap);
       setYearlyTaskStatuses(statusMap);
+      console.log('🔄 State updated, component should re-render now');
     } catch (err: any) {
       console.error('Error loading yearly entries:', err);
       // Initialize empty states on error
@@ -5953,48 +5957,6 @@ export default function Tasks() {
   }
 
   if (activeTab === 'quarterly') {
-    // Show tasks that have been added to yearly tracking (shares yearlyTaskStatuses)
-    // Quarterly is a different view of yearly data (4 quarters vs 12 months)
-    const quarterlyTasks = tasks.filter(t => {
-      const hasBeenAddedToYearly = yearlyTaskStatuses[t.id] !== undefined;
-      return hasBeenAddedToYearly && t.is_active;
-    });
-    
-    console.log('🔍 Quarterly Tab Debug:', {
-      totalTasks: tasks.length,
-      tasksWithYearlyStatus: Object.keys(yearlyTaskStatuses).length,
-      yearlyTaskStatusIds: Object.keys(yearlyTaskStatuses),
-      quarterlyTasks: quarterlyTasks.length,
-      quarterlyTaskNames: quarterlyTasks.map(t => t.name),
-      yearlyMonthlyAggregatesKeys: Object.keys(yearlyMonthlyAggregates).length,
-      sampleAggregateKeys: Object.keys(yearlyMonthlyAggregates).slice(0, 10),
-      selectedYearStart,
-      yearNumber: selectedYearStart.getFullYear()
-    });
-    
-    // Helper to get quarterly time from monthly aggregates
-    const getQuarterlyTime = (taskId: number, quarter: number): number => {
-      const monthsInQuarter = {
-        1: [1, 2, 3],      // Q1: Jan, Feb, Mar
-        2: [4, 5, 6],      // Q2: Apr, May, Jun
-        3: [7, 8, 9],      // Q3: Jul, Aug, Sep
-        4: [10, 11, 12]    // Q4: Oct, Nov, Dec
-      };
-      
-      const months = monthsInQuarter[quarter as 1 | 2 | 3 | 4] || [];
-      return months.reduce((sum, month) => {
-        const key = `${taskId}-${month}`;
-        return sum + (yearlyMonthlyAggregates[key] || 0);
-      }, 0);
-    };
-
-    const quarters = [
-      { quarter: 1, name: 'Q1', fullName: 'Q1 (Jan-Mar)' },
-      { quarter: 2, name: 'Q2', fullName: 'Q2 (Apr-Jun)' },
-      { quarter: 3, name: 'Q3', fullName: 'Q3 (Jul-Sep)' },
-      { quarter: 4, name: 'Q4', fullName: 'Q4 (Oct-Dec)' }
-    ];
-
     return (
       <div className="tasks-page">
         <header className="tasks-header">
@@ -6035,161 +5997,11 @@ export default function Tasks() {
           </span>
         </div>
 
-        <div className="container-fluid" style={{ padding: '20px' }}>
-          <div className="alert alert-info" style={{ marginBottom: '20px' }}>
-            <strong>📊 Read-Only Dashboard:</strong> Quarterly values are auto-aggregated from Daily/Weekly/Monthly tabs. 
-            To update data, enter time in the task's home tab (Daily/Weekly/Monthly based on follow-up frequency).
-            Each quarter shows the sum of 3 months.
-          </div>
-
-          {quarterlyTasks.length === 0 ? (
-            <div className="alert alert-warning">
-              <i className="fas fa-exclamation-triangle me-2"></i>
-              No quarterly tasks found. Click "Add Quarterly Task" to create one.
-            </div>
-          ) : (
-            <div className="tasks-table-container">
-              <table className="tasks-table daily-table">
-                <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
-                  <tr>
-                    <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                    <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Quarter</th>
-                    <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual Avg<br/>(Since Start)</th>
-                    <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Quarter</th>
-                    {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{q.name}</th>)}
-                    <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quarterlyTasks.map(task => {
-                    const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
-                    
-                    // Calculate yearly target based on task type
-                    let yearlyTarget = 0;
-                    if (task.task_type === TaskType.COUNT) {
-                      if (task.follow_up_frequency === 'daily') {
-                        yearlyTarget = (task.target_value || 0) * 365;
-                      } else if (task.follow_up_frequency === 'weekly') {
-                        yearlyTarget = Math.round((task.target_value || 0) * 52);
-                      } else if (task.follow_up_frequency === 'monthly') {
-                        yearlyTarget = (task.target_value || 0) * 12;
-                      } else {
-                        yearlyTarget = task.target_value || 0;
-                      }
-                    } else if (task.task_type === TaskType.BOOLEAN) {
-                      if (task.follow_up_frequency === 'daily') {
-                        yearlyTarget = 365;
-                      } else if (task.follow_up_frequency === 'weekly') {
-                        yearlyTarget = 52;
-                      } else if (task.follow_up_frequency === 'monthly') {
-                        yearlyTarget = 12;
-                      } else {
-                        yearlyTarget = 1;
-                      }
-                    } else {
-                      if (task.follow_up_frequency === 'daily') {
-                        yearlyTarget = task.allocated_minutes * 365;
-                      } else if (task.follow_up_frequency === 'weekly') {
-                        yearlyTarget = task.allocated_minutes * 52;
-                      } else if (task.follow_up_frequency === 'monthly') {
-                        yearlyTarget = task.allocated_minutes * 12;
-                      } else {
-                        yearlyTarget = task.allocated_minutes;
-                      }
-                    }
-
-                    // Find first quarter with data
-                    const firstQuarterWithData = quarters.find(q => getQuarterlyTime(task.id, q.quarter) > 0);
-                    const firstDataQuarter = firstQuarterWithData ? firstQuarterWithData.quarter : 1;
-                    
-                    const today = new Date();
-                    const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
-                    
-                    // Calculate quarters elapsed from first data entry
-                    let quartersElapsed = 1;
-                    if (today.getFullYear() === selectedYearStart.getFullYear()) {
-                      quartersElapsed = Math.max(1, currentQuarter - firstDataQuarter + 1);
-                    } else if (today.getFullYear() > selectedYearStart.getFullYear()) {
-                      quartersElapsed = Math.max(1, 4 - firstDataQuarter + 1);
-                    }
-                    
-                    const quartersRemaining = 4 - currentQuarter;
-                    const avgSpentPerQuarter = Math.round(totalSpent / quartersElapsed);
-                    const remaining = yearlyTarget - totalSpent;
-                    const avgRemainingPerQuarter = quartersRemaining > 0 ? Math.round(remaining / quartersRemaining) : 0;
-                    
-                    // Calculate expected target based on quarters elapsed
-                    const expectedTarget = (yearlyTarget / 4) * quartersElapsed;
-                    const rowColorClass = totalSpent >= expectedTarget ? 'weekly-on-track' : totalSpent > 0 ? 'weekly-below-target' : '';
-                    
-                    const formatValue = (value: number): string => {
-                      if (task.task_type === TaskType.TIME) return `${Math.round(value)} min`;
-                      else if (task.task_type === TaskType.COUNT) return `${Math.round(value)} ${task.unit || ''}`;
-                      else return value > 0 ? 'Yes' : 'No';
-                    };
-
-                    return (
-                      <tr key={task.id} style={{ backgroundColor: task.is_completed ? '#c6f6d5' : task.is_active ? 'white' : '#e2e8f0' }}>
-                        <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`}>
-                          <div style={{ fontWeight: 600 }}>
-                            {task.name}
-                            {task.follow_up_frequency === 'daily' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>}
-                            {task.follow_up_frequency === 'weekly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Weekly)</span>}
-                            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Monthly)</span>}
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#666' }}>
-                            {task.pillar_name} - {task.category_name}
-                          </div>
-                        </td>
-                        <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center' }}>
-                          {formatValue(yearlyTarget / 4)}
-                        </td>
-                        <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center' }}>
-                          {formatValue(avgSpentPerQuarter)}
-                        </td>
-                        <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center' }}>
-                          {formatValue(avgRemainingPerQuarter)}
-                        </td>
-                        {quarters.map(q => {
-                          const quarterValue = getQuarterlyTime(task.id, q.quarter);
-                          return (
-                            <td key={q.quarter} className="col-hour" style={{ backgroundColor: quarterValue > 0 ? '#e6ffed' : undefined, textAlign: 'center', fontSize: '12px' }}>
-                              {quarterValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(quarterValue)) : '-'}
-                            </td>
-                          );
-                        })}
-                        <td className="col-status">
-                          <button
-                            className={`btn-complete ${task.is_completed ? 'active' : ''}`}
-                            onClick={async () => {
-                              await completeTask(task.id);
-                              await loadTasks();
-                            }}
-                            title="Mark as completed"
-                          >
-                            COMPLETED
-                          </button>
-                          <button
-                            className={`btn-na ${!task.is_active ? 'active' : ''}`}
-                            onClick={async () => {
-                              await markTaskNA(task.id);
-                              await loadTasks();
-                            }}
-                            title="Mark as NA"
-                          >
-                            NA
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+        <div className="container-fluid">
+          <QuarterlyTasks />
         </div>
 
-        {/* Add Quarterly Task Modal - Selection modal */}
+        {/* Add Quarterly Task Modal */}
         {showAddQuarterlyTaskModal && (
           <div className="modal-overlay" onClick={() => setShowAddQuarterlyTaskModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -6199,7 +6011,7 @@ export default function Tasks() {
               </div>
               <div className="modal-body">
                 <p style={{ marginBottom: '15px', color: '#666' }}>
-                  Select an existing task to track for this quarter:
+                  Select an existing task to track quarterly:
                 </p>
                 
                 <div className="form-group">
@@ -6220,15 +6032,11 @@ export default function Tasks() {
                     <option value="">-- Select a daily task --</option>
                     {tasks
                       .filter(task => task.follow_up_frequency === 'daily' && task.is_active)
-                      .map(task => {
-                        const alreadyTracked = yearlyTaskStatuses[task.id] !== undefined;
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name}
-                            {alreadyTracked ? ' ✓' : ''}
-                          </option>
-                        );
-                      })
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
                     }
                   </select>
                 </div>
@@ -6251,15 +6059,11 @@ export default function Tasks() {
                     <option value="">-- Select a weekly task --</option>
                     {tasks
                       .filter(task => task.follow_up_frequency === 'weekly' && task.is_active)
-                      .map(task => {
-                        const alreadyTracked = yearlyTaskStatuses[task.id] !== undefined;
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name}
-                            {alreadyTracked ? ' ✓' : ''}
-                          </option>
-                        );
-                      })
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
                     }
                   </select>
                 </div>
@@ -6282,15 +6086,11 @@ export default function Tasks() {
                     <option value="">-- Select a monthly task --</option>
                     {tasks
                       .filter(task => task.follow_up_frequency === 'monthly' && task.is_active)
-                      .map(task => {
-                        const alreadyTracked = yearlyTaskStatuses[task.id] !== undefined;
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name}
-                            {alreadyTracked ? ' ✓' : ''}
-                          </option>
-                        );
-                      })
+                      .map(task => (
+                        <option key={task.id} value={task.id}>
+                          {task.pillar_name} - {task.category_name}: {task.name}
+                        </option>
+                      ))
                     }
                   </select>
                 </div>
