@@ -5216,7 +5216,7 @@ export default function Tasks() {
     const needsAttention: Array<{
       task: Task;
       reason: string;
-      weeklyIssue?: { redDays: number; totalDays: number; neededToday?: number; dailyTarget?: number; deficit?: number }
+      weeklyIssue?: { redDays: number; totalDays: number; neededToday?: number; dailyTarget?: number; deficit?: number; currentAverage?: number }
       monthlyIssue?: { 
         percentBehind: number; 
         totalSpent: number; 
@@ -5228,9 +5228,20 @@ export default function Tasks() {
       }
       quarterlyIssue?: {
         daysElapsed: number;
+        neededToday?: number;
+        dailyTarget?: number;
+        deficit?: number;
+        currentAverage?: number;
+        daysLeft?: number;
+        quarter?: number;
       }
       yearlyIssue?: {
         daysElapsed: number;
+        neededToday?: number;
+        dailyTarget?: number;
+        deficit?: number;
+        currentAverage?: number;
+        daysLeft?: number;
       }
       recommendation: string;
     }> = [];
@@ -5451,9 +5462,33 @@ export default function Tasks() {
         
         const daysElapsedInYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         const pastDaysInYear = Math.max(0, daysElapsedInYear - 1);
+        const daysLeftInYear = 365 - daysElapsedInYear + 1; // Including today
         
-        // Calculate total spent (would need yearly data - for now, use simple check)
-        // This is a simplified check - full implementation would need yearly entry data
+        // Calculate total spent from current week's data
+        // Get today's day index in current week
+        const todayDayOfWeek = today.getDay();
+        const todayDayIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1; // 0=Mon, 6=Sun
+        
+        // Sum all days from start of year to today
+        let totalSpent = 0;
+        for (let i = 0; i <= todayDayIndex; i++) {
+          totalSpent += getWeeklyTime(task.id, i);
+        }
+        
+        // If current week is not the first week of the year, we need historical data
+        // For now, check if we're still in the first week of the year
+        const currentWeekStart = new Date(selectedWeekStart);
+        currentWeekStart.setHours(0, 0, 0, 0);
+        
+        // If not first week of year, use yearlyEntries as more accurate
+        if (currentWeekStart.getTime() > startOfYear.getTime()) {
+          const yearlyEntry = yearlyEntries[task.id];
+          if (yearlyEntry && yearlyEntry.time_spent > totalSpent) {
+            totalSpent = yearlyEntry.time_spent;
+          }
+        }
+        
+        // Calculate daily target
         let dailyTarget = 0;
         if (task.task_type === TaskType.COUNT) {
           dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 365;
@@ -5463,19 +5498,42 @@ export default function Tasks() {
           dailyTarget = task.allocated_minutes;
         }
         
+        // Expected progress based on past days only (excluding today)
         const expectedIncludingToday = dailyTarget * daysElapsedInYear;
+        const expectedPastOnly = dailyTarget * pastDaysInYear;
         
-        // For now, flag all yearly tasks as needing attention (full implementation needs API data)
-        const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
+        // Calculate deficit (how much behind from past days)
+        const deficit = expectedPastOnly - totalSpent;
         
-        needsAttention.push({
-          task,
-          reason: 'yearly',
-          yearlyIssue: {
-            daysElapsed: daysElapsedInYear
-          },
-          recommendation: `Monitor yearly progress - ${daysElapsedInYear} days into year`
-        });
+        // Calculate current average
+        const currentAverage = daysElapsedInYear > 0 ? totalSpent / daysElapsedInYear : 0;
+        
+        // TODAY = daily target + ALL catch-up (front-loaded)
+        const neededToday = dailyTarget + deficit;
+        
+        // Only show in attention if behind schedule (totalSpent < expectedIncludingToday)
+        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        
+        if (shouldShowInAttention) {
+          const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
+          const recommendation = daysLeftInYear > 0
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
+            : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
+          
+          needsAttention.push({
+            task,
+            reason: 'yearly',
+            yearlyIssue: {
+              daysElapsed: daysElapsedInYear,
+              neededToday: Math.ceil(neededToday),
+              dailyTarget: Math.round(dailyTarget),
+              deficit: Math.round(deficit),
+              currentAverage: Math.round(currentAverage * 10) / 10,
+              daysLeft: daysLeftInYear
+            },
+            recommendation
+          });
+        }
       }
 
       // Check quarterly tab (current quarter only)
@@ -5493,18 +5551,86 @@ export default function Tasks() {
         const quarterStart = new Date(today.getFullYear(), quarterStartMonth, 1);
         quarterStart.setHours(0, 0, 0, 0);
         
+        // Days in current quarter (quarters vary: Q1=90, Q2=91, Q3=92, Q4=92 in non-leap years)
+        const quarterEndMonth = quarterStartMonth + 3;
+        const quarterEnd = new Date(today.getFullYear(), quarterEndMonth, 0); // Last day of quarter
+        const daysInQuarter = Math.floor((quarterEnd.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
         // Days elapsed in current quarter
         const daysElapsedInQuarter = Math.floor((today.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const pastDaysInQuarter = Math.max(0, daysElapsedInQuarter - 1);
+        const daysLeftInQuarter = daysInQuarter - daysElapsedInQuarter + 1; // Including today
         
-        // For now, flag all quarterly tasks as needing attention (full implementation needs API data)
-        needsAttention.push({
-          task,
-          reason: 'quarterly',
-          quarterlyIssue: {
-            daysElapsed: daysElapsedInQuarter
-          },
-          recommendation: `Monitor quarterly progress - Q${currentQuarter}, ${daysElapsedInQuarter} days elapsed`
-        });
+        // Calculate total spent from current week's data
+        // Get today's day index in current week
+        const todayDayOfWeek = today.getDay();
+        const todayDayIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1; // 0=Mon, 6=Sun
+        
+        // Sum all days from start of quarter to today
+        let totalSpent = 0;
+        for (let i = 0; i <= todayDayIndex; i++) {
+          totalSpent += getWeeklyTime(task.id, i);
+        }
+        
+        // If current week is not the first week of the quarter, we need historical data
+        const currentWeekStart = new Date(selectedWeekStart);
+        currentWeekStart.setHours(0, 0, 0, 0);
+        
+        // If not first week of quarter, use yearlyEntries as more accurate
+        if (currentWeekStart.getTime() > quarterStart.getTime()) {
+          const yearlyEntry = yearlyEntries[task.id];
+          if (yearlyEntry && yearlyEntry.time_spent > totalSpent) {
+            totalSpent = yearlyEntry.time_spent;
+          }
+        }
+        
+        // Calculate daily target for the quarter
+        let dailyTarget = 0;
+        if (task.task_type === TaskType.COUNT) {
+          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / daysInQuarter;
+        } else if (task.task_type === TaskType.BOOLEAN) {
+          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/daysInQuarter;
+        } else {
+          dailyTarget = task.allocated_minutes;
+        }
+        
+        // Expected progress based on past days only (excluding today)
+        const expectedIncludingToday = dailyTarget * daysElapsedInQuarter;
+        const expectedPastOnly = dailyTarget * pastDaysInQuarter;
+        
+        // Calculate deficit (how much behind from past days)
+        const deficit = expectedPastOnly - totalSpent;
+        
+        // Calculate current average
+        const currentAverage = daysElapsedInQuarter > 0 ? totalSpent / daysElapsedInQuarter : 0;
+        
+        // TODAY = daily target + ALL catch-up (front-loaded)
+        const neededToday = dailyTarget + deficit;
+        
+        // Only show in attention if behind schedule (totalSpent < expectedIncludingToday)
+        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        
+        if (shouldShowInAttention) {
+          const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
+          const recommendation = daysLeftInQuarter > 0
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInQuarter} days left)`
+            : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
+          
+          needsAttention.push({
+            task,
+            reason: 'quarterly',
+            quarterlyIssue: {
+              daysElapsed: daysElapsedInQuarter,
+              neededToday: Math.ceil(neededToday),
+              dailyTarget: Math.round(dailyTarget),
+              deficit: Math.round(deficit),
+              currentAverage: Math.round(currentAverage * 10) / 10,
+              daysLeft: daysLeftInQuarter,
+              quarter: currentQuarter
+            },
+            recommendation
+          });
+        }
       }
     });
 
@@ -16262,13 +16388,16 @@ export default function Tasks() {
                               boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                             }}
                           >
+                            {/* Line 1: Task name, Need Today prominently displayed */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
                               <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
                                 {item.task.name}
                               </span>
-                              <span style={{ fontSize: '14px', color: '#8b5cf6', fontWeight: '600' }}>
-                                {item.recommendation}
-                              </span>
+                              {item.quarterlyIssue && (
+                                <span style={{ fontSize: '14px', color: '#8b5cf6', fontWeight: '600' }}>
+                                  Need <strong>{item.quarterlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.quarterlyIssue.dailyTarget}, Lagged: {item.quarterlyIssue.deficit || 0}, {item.quarterlyIssue.daysLeft} days left)
+                                </span>
+                              )}
                               {(() => {
                                 const priority = item.task.priority;
                                 const isInNOW = priority && priority <= 3;
@@ -16313,6 +16442,7 @@ export default function Tasks() {
                               })()}
                             </div>
                             
+                            {/* Line 2: Category, frequency badge, and detailed stats */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                               <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
                                 {item.task.pillar_name} - {item.task.category_name}
@@ -16326,6 +16456,14 @@ export default function Tasks() {
                               }}>
                                 {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : item.task.follow_up_frequency === 'monthly' ? 'Monthly' : 'Quarterly'}
                               </span>
+                              {item.quarterlyIssue && (
+                                <span style={{ fontSize: '12px', color: '#718096' }}>
+                                  Target: <strong style={{ color: '#8b5cf6' }}>{item.quarterlyIssue.dailyTarget}</strong> |
+                                  Current: <strong style={{ color: '#10b981' }}>{item.quarterlyIssue.currentAverage}</strong> |
+                                  Need Today: <strong style={{ color: '#8b5cf6' }}>{item.quarterlyIssue.neededToday}</strong> {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} |
+                                  📅 Q{item.quarterlyIssue.quarter} | Lag: {item.quarterlyIssue.deficit || 0}
+                                </span>
+                              )}
                               <button
                                 onClick={() => setActiveTab('quarterly')}
                                 style={{
@@ -16396,7 +16534,7 @@ export default function Tasks() {
                               </span>
                               {item.yearlyIssue && (
                                 <span style={{ fontSize: '14px', color: '#06b6d4', fontWeight: '600' }}>
-                                  Year Progress: <strong>{item.yearlyIssue.daysElapsed}</strong> days (Monitor yearly tracking)
+                                  Need <strong>{item.yearlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.yearlyIssue.dailyTarget}, Lagged: {item.yearlyIssue.deficit || 0}, {item.yearlyIssue.daysLeft} days left)
                                 </span>
                               )}
                               {(() => {
@@ -16459,7 +16597,10 @@ export default function Tasks() {
                               </span>
                               {item.yearlyIssue && (
                                 <span style={{ fontSize: '12px', color: '#718096' }}>
-                                  Days Elapsed: <strong style={{ color: '#06b6d4' }}>{item.yearlyIssue.daysElapsed}</strong> / 365
+                                  Target: <strong style={{ color: '#06b6d4' }}>{item.yearlyIssue.dailyTarget}</strong> |
+                                  Current: <strong style={{ color: '#10b981' }}>{item.yearlyIssue.currentAverage}</strong> |
+                                  Need Today: <strong style={{ color: '#06b6d4' }}>{item.yearlyIssue.neededToday}</strong> {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''} |
+                                  📅 {item.yearlyIssue.daysElapsed} days | Lag: {item.yearlyIssue.deficit || 0}
                                 </span>
                               )}
                               <button
