@@ -412,6 +412,8 @@ export default function Tasks() {
       importantTasksDueToday: true,
       weeklyNeedsAttention: true,
       monthlyNeedsAttention: true,
+      quarterlyNeedsAttention: true,
+      yearlyNeedsAttention: true,
       todaysHabits: true,
       upcomingTasks: true,
       upcomingNext7Days: true,
@@ -1303,6 +1305,7 @@ export default function Tasks() {
         loadOneTimeTasks();
         loadWeeklyEntries(selectedWeekStart);
         loadMonthlyEntries(selectedMonthStart);
+        loadYearlyEntries(selectedYearStart); // Load yearly data for Needs Attention section
       }
     }
   }, [tasks.length]);
@@ -1349,9 +1352,10 @@ export default function Tasks() {
       loadUpcomingTasks();
       // Load one-time tasks so we can check for overdue ones
       loadOneTimeTasks();
-      // Load weekly and monthly data for "Needs Attention" section
+      // Load weekly, monthly, and yearly data for "Needs Attention" section
       loadWeeklyEntries(selectedWeekStart);
       loadMonthlyEntries(selectedMonthStart);
+      loadYearlyEntries(selectedYearStart); // Load yearly data for Needs Attention section
     }
   }, [activeTab, selectedDate, selectedWeekStart, selectedMonthStart, selectedYearStart]);
 
@@ -1430,7 +1434,34 @@ export default function Tasks() {
   // Memoized version that will recompute when dependencies change
   const tasksNeedingAttention = useMemo(() => {
     return getTasksNeedingAttention();
-  }, [tasks, weeklyTaskStatuses, monthlyTaskStatuses, weeklyEntries, dailyAggregates, monthlyEntries, monthlyDailyAggregates, selectedWeekStart, selectedMonthStart, activeTab]);
+  }, [tasks, weeklyTaskStatuses, monthlyTaskStatuses, yearlyTaskStatuses, weeklyEntries, dailyAggregates, monthlyEntries, monthlyDailyAggregates, selectedWeekStart, selectedMonthStart, activeTab]);
+
+  // Calculate tab counts for badges
+  const tabCounts = useMemo(() => {
+    const todayTasksCount = tasksNeedingAttention.filter(item => 
+      !item.task.priority || item.task.priority > 3
+    ).length;
+    const weeklyTasksCount = tasksNeedingAttention.filter(item => 
+      item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
+    ).length;
+    const monthlyTasksCount = tasksNeedingAttention.filter(item => 
+      item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
+    ).length;
+    const quarterlyTasksCount = tasksNeedingAttention.filter(item => 
+      item.reason === 'quarterly' && (!item.task.priority || item.task.priority > 3)
+    ).length;
+    const yearlyTasksCount = tasksNeedingAttention.filter(item => 
+      item.reason === 'yearly' && (!item.task.priority || item.task.priority > 3)
+    ).length;
+    
+    return {
+      today: todayTasksCount,
+      weekly: weeklyTasksCount,
+      monthly: monthlyTasksCount,
+      quarterly: quarterlyTasksCount,
+      yearly: yearlyTasksCount
+    };
+  }, [tasksNeedingAttention]);
 
   // Filter tasks by active tab
   // Also filter out completed/NA tasks that are older than today
@@ -5169,22 +5200,23 @@ export default function Tasks() {
   // Get tasks that need attention (showing red in current week or month)
   function getTasksNeedingAttention() {
     // Wait for data to load before checking
-    // Check if we have ANY weekly or monthly data (statuses, entries, or aggregates)
+    // Check if we have ANY weekly, monthly, or yearly data (statuses, entries, or aggregates)
     const hasWeeklyData = Object.keys(weeklyTaskStatuses).length > 0 || 
                           Object.keys(weeklyEntries).length > 0 || 
                           Object.keys(dailyAggregates).length > 0;
     const hasMonthlyData = Object.keys(monthlyTaskStatuses).length > 0 || 
                            Object.keys(monthlyEntries).length > 0 || 
                            Object.keys(monthlyDailyAggregates).length > 0;
+    const hasYearlyData = Object.keys(yearlyTaskStatuses).length > 0;
     
-    if (!hasWeeklyData && !hasMonthlyData) {
+    if (!hasWeeklyData && !hasMonthlyData && !hasYearlyData) {
       return [];
     }
     
     const needsAttention: Array<{
       task: Task;
       reason: string;
-      weeklyIssue?: { redDays: number; totalDays: number }
+      weeklyIssue?: { redDays: number; totalDays: number; neededToday?: number; dailyTarget?: number; deficit?: number }
       monthlyIssue?: { 
         percentBehind: number; 
         totalSpent: number; 
@@ -5192,6 +5224,13 @@ export default function Tasks() {
         dailyTarget?: number;
         currentAverage?: number;
         neededToday?: number;
+        deficit?: number;
+      }
+      quarterlyIssue?: {
+        daysElapsed: number;
+      }
+      yearlyIssue?: {
+        daysElapsed: number;
       }
       recommendation: string;
     }> = [];
@@ -5400,6 +5439,72 @@ export default function Tasks() {
             recommendation
           });
         }
+      }
+
+      // Check yearly tab (current year only)
+      const yearlyStatus = yearlyTaskStatuses[task.id];
+      if (yearlyStatus && !yearlyStatus.is_completed && !yearlyStatus.is_na) {
+        const today = new Date();
+        const startOfYear = new Date(today.getFullYear(), 0, 1);
+        startOfYear.setHours(0, 0, 0, 0);
+        today.setHours(0, 0, 0, 0);
+        
+        const daysElapsedInYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const pastDaysInYear = Math.max(0, daysElapsedInYear - 1);
+        
+        // Calculate total spent (would need yearly data - for now, use simple check)
+        // This is a simplified check - full implementation would need yearly entry data
+        let dailyTarget = 0;
+        if (task.task_type === TaskType.COUNT) {
+          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 365;
+        } else if (task.task_type === TaskType.BOOLEAN) {
+          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/365;
+        } else {
+          dailyTarget = task.allocated_minutes;
+        }
+        
+        const expectedIncludingToday = dailyTarget * daysElapsedInYear;
+        
+        // For now, flag all yearly tasks as needing attention (full implementation needs API data)
+        const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
+        
+        needsAttention.push({
+          task,
+          reason: 'yearly',
+          yearlyIssue: {
+            daysElapsed: daysElapsedInYear
+          },
+          recommendation: `Monitor yearly progress - ${daysElapsedInYear} days into year`
+        });
+      }
+
+      // Check quarterly tab (current quarter only)
+      // Use yearlyTaskStatuses since quarterly uses the same backend data structure
+      if (yearlyStatus && !yearlyStatus.is_completed && !yearlyStatus.is_na) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        // Determine current quarter
+        const currentMonth = today.getMonth() + 1; // 1-12
+        const currentQuarter = Math.ceil(currentMonth / 3); // 1, 2, 3, or 4
+        
+        // Calculate quarter start date
+        const quarterStartMonth = (currentQuarter - 1) * 3; // 0, 3, 6, or 9
+        const quarterStart = new Date(today.getFullYear(), quarterStartMonth, 1);
+        quarterStart.setHours(0, 0, 0, 0);
+        
+        // Days elapsed in current quarter
+        const daysElapsedInQuarter = Math.floor((today.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // For now, flag all quarterly tasks as needing attention (full implementation needs API data)
+        needsAttention.push({
+          task,
+          reason: 'quarterly',
+          quarterlyIssue: {
+            daysElapsed: daysElapsedInQuarter
+          },
+          recommendation: `Monitor quarterly progress - Q${currentQuarter}, ${daysElapsedInQuarter} days elapsed`
+        });
       }
     });
 
@@ -7167,27 +7272,37 @@ export default function Tasks() {
 
       {/* Tabs */}
       <div className="tasks-tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            className={`tab ${activeTab === tab.key ? 'active' : ''}`}
-            onClick={() => {
-              setActiveTab(tab.key);
-              // Update URL with tab parameter
-              const searchParams = new URLSearchParams(location.search);
-              searchParams.set('tab', tab.key);
-              navigate(`?${searchParams.toString()}`, { replace: true });
-              // Force reload data when switching tabs
-              if (tab.key === 'weekly') {
-                loadWeeklyEntries(selectedWeekStart);
-              } else if (tab.key === 'monthly') {
-                loadMonthlyEntries(selectedMonthStart);
-              }
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {tabs.map(tab => {
+          // Get count for this tab
+          let badgeCount = 0;
+          if (tab.key === 'today') badgeCount = tabCounts.today;
+          else if (tab.key === 'weekly') badgeCount = tabCounts.weekly;
+          else if (tab.key === 'monthly') badgeCount = tabCounts.monthly;
+          else if (tab.key === 'quarterly') badgeCount = tabCounts.quarterly;
+          else if (tab.key === 'yearly') badgeCount = tabCounts.yearly;
+          
+          return (
+            <button
+              key={tab.key}
+              className={`tab ${activeTab === tab.key ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab(tab.key);
+                // Update URL with tab parameter
+                const searchParams = new URLSearchParams(location.search);
+                searchParams.set('tab', tab.key);
+                navigate(`?${searchParams.toString()}`, { replace: true });
+                // Force reload data when switching tabs
+                if (tab.key === 'weekly') {
+                  loadWeeklyEntries(selectedWeekStart);
+                } else if (tab.key === 'monthly') {
+                  loadMonthlyEntries(selectedMonthStart);
+                }
+              }}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Date Navigator for Daily Tab */}
@@ -12961,9 +13076,15 @@ export default function Tasks() {
             const monthlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
               item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
             ).length;
+            const quarterlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
+              item.reason === 'quarterly' && (!item.task.priority || item.task.priority > 3)
+            ).length;
+            const yearlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
+              item.reason === 'yearly' && (!item.task.priority || item.task.priority > 3)
+            ).length;
             
             // Calculate total using the same filtered counts as displayed
-            const totalTasks = projectCount + goalCount + miscCount + importantCount + habitsCount + weeklyNeedsAttentionCount + monthlyNeedsAttentionCount;
+            const totalTasks = projectCount + goalCount + miscCount + importantCount + habitsCount + weeklyNeedsAttentionCount + monthlyNeedsAttentionCount + quarterlyNeedsAttentionCount + yearlyNeedsAttentionCount;
 
             // Scroll to section helper
             const scrollToSection = (sectionId: string) => {
@@ -13191,6 +13312,60 @@ export default function Tasks() {
                       }}
                     >
                       📊 Monthly: {monthlyNeedsAttentionCount}
+                    </button>
+                  )}
+                  
+                  {/* Quarterly Needs Attention */}
+                  {quarterlyNeedsAttentionCount > 0 && (
+                    <button
+                      onClick={() => scrollToSection('quarterly-needs-attention-section')}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        backgroundColor: '#e9d5ff',
+                        color: '#581c87',
+                        fontWeight: '500',
+                        border: '1px solid #d8b4fe',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.backgroundColor = '#d8b4fe';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.backgroundColor = '#e9d5ff';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      📅 Quarterly: {quarterlyNeedsAttentionCount}
+                    </button>
+                  )}
+                  
+                  {/* Yearly Needs Attention */}
+                  {yearlyNeedsAttentionCount > 0 && (
+                    <button
+                      onClick={() => scrollToSection('yearly-needs-attention-section')}
+                      style={{
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        backgroundColor: '#dbeafe',
+                        color: '#1e3a8a',
+                        fontWeight: '500',
+                        border: '1px solid #93c5fd',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.backgroundColor = '#bfdbfe';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.backgroundColor = '#dbeafe';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      📆 Yearly: {yearlyNeedsAttentionCount}
                     </button>
                   )}
 
@@ -15413,6 +15588,12 @@ export default function Tasks() {
             const monthlyTasks = tasksNeedingAttention.filter(item => 
               item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
             );
+            const quarterlyTasks = tasksNeedingAttention.filter(item => 
+              item.reason === 'quarterly' && (!item.task.priority || item.task.priority > 3)
+            );
+            const yearlyTasks = tasksNeedingAttention.filter(item => 
+              item.reason === 'yearly' && (!item.task.priority || item.task.priority > 3)
+            );
             
             // Motivational quotes that rotate daily
             const motivationalQuotes = [
@@ -15720,6 +15901,269 @@ export default function Tasks() {
                                 }}
                               >
                                 View Monthly →
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Quarterly Tasks Needing Attention */}
+                {quarterlyTasks.length > 0 && (
+                  <div id="quarterly-needs-attention-section" style={{ marginTop: '30px', marginBottom: '20px', scrollMarginTop: '80px' }}>
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 6px rgba(139, 92, 246, 0.3)',
+                      }}
+                      onClick={() => setTodayTabSections(prev => ({ ...prev, quarterlyNeedsAttention: !prev.quarterlyNeedsAttention }))}
+                    >
+                      <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
+                        📅 Needs Attention - Quarterly Tasks ({quarterlyTasks.length} {quarterlyTasks.length === 1 ? 'task' : 'tasks'})
+                      </h3>
+                      <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                        {todayTabSections.quarterlyNeedsAttention ? '▼' : '▶'}
+                      </span>
+                    </div>
+
+                    {todayTabSections.quarterlyNeedsAttention && (
+                      <div style={{ marginTop: '12px' }}>
+                        {quarterlyTasks.map((item, index) => (
+                          <div 
+                            key={item.task.id}
+                            style={{
+                              marginBottom: '6px',
+                              padding: '10px 14px',
+                              backgroundColor: '#fff',
+                              border: '1px solid #ddd6fe',
+                              borderLeft: '4px solid #8b5cf6',
+                              borderRadius: '4px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
+                                {item.task.name}
+                              </span>
+                              <span style={{ fontSize: '14px', color: '#8b5cf6', fontWeight: '600' }}>
+                                {item.recommendation}
+                              </span>
+                              {(() => {
+                                const priority = item.task.priority;
+                                const isInNOW = priority && priority <= 3;
+                                return (
+                                  <>
+                                    {isInNOW ? (
+                                      <button 
+                                        className="btn btn-sm btn-warning"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToToday(item.task.id, 'task');
+                                        }}
+                                        title="Task is in NOW - move back to Today (P5)"
+                                        style={{ marginLeft: 'auto' }}
+                                      >
+                                        ← Today
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        className="btn btn-sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToNow(item.task.id, 'task');
+                                        }}
+                                        title="Move to NOW tab (P1)"
+                                        style={{
+                                          marginLeft: 'auto',
+                                          backgroundColor: '#dc2626',
+                                          color: 'white',
+                                          padding: '6px 12px',
+                                          fontSize: '12px',
+                                          borderRadius: '6px',
+                                          border: 'none',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        → NOW
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
+                                {item.task.pillar_name} - {item.task.category_name}
+                              </span>
+                              <span style={{ 
+                                fontSize: '10px', 
+                                padding: '2px 6px', 
+                                backgroundColor: '#e2e8f0', 
+                                borderRadius: '10px',
+                                color: '#4a5568'
+                              }}>
+                                {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : item.task.follow_up_frequency === 'monthly' ? 'Monthly' : 'Quarterly'}
+                              </span>
+                              <button
+                                onClick={() => setActiveTab('quarterly')}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#8b5cf6',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  marginLeft: 'auto'
+                                }}
+                              >
+                                View Quarterly →
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Yearly Tasks Needing Attention */}
+                {yearlyTasks.length > 0 && (
+                  <div id="yearly-needs-attention-section" style={{ marginTop: '30px', marginBottom: '20px', scrollMarginTop: '80px' }}>
+                    <div 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        padding: '14px 16px',
+                        background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 6px rgba(6, 182, 212, 0.3)',
+                      }}
+                      onClick={() => setTodayTabSections(prev => ({ ...prev, yearlyNeedsAttention: !prev.yearlyNeedsAttention }))}
+                    >
+                      <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600' }}>
+                        📆 Needs Attention - Yearly Tasks ({yearlyTasks.length} {yearlyTasks.length === 1 ? 'task' : 'tasks'})
+                      </h3>
+                      <span style={{ fontSize: '20px', color: '#ffffff' }}>
+                        {todayTabSections.yearlyNeedsAttention ? '▼' : '▶'}
+                      </span>
+                    </div>
+
+                    {todayTabSections.yearlyNeedsAttention && (
+                      <div style={{ marginTop: '12px' }}>
+                        {yearlyTasks.map((item, index) => (
+                          <div 
+                            key={item.task.id}
+                            style={{
+                              marginBottom: '6px',
+                              padding: '10px 14px',
+                              backgroundColor: '#fff',
+                              border: '1px solid #cffafe',
+                              borderLeft: '4px solid #06b6d4',
+                              borderRadius: '4px',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                          >
+                            {/* Line 1: Task name, Need Today prominently displayed */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
+                                {item.task.name}
+                              </span>
+                              {item.yearlyIssue && (
+                                <span style={{ fontSize: '14px', color: '#06b6d4', fontWeight: '600' }}>
+                                  Year Progress: <strong>{item.yearlyIssue.daysElapsed}</strong> days (Monitor yearly tracking)
+                                </span>
+                              )}
+                              {(() => {
+                                const priority = item.task.priority;
+                                const isInNOW = priority && priority <= 3;
+                                return (
+                                  <>
+                                    {isInNOW ? (
+                                      <button 
+                                        className="btn btn-sm btn-warning"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToToday(item.task.id, 'task');
+                                        }}
+                                        title="Task is in NOW - move back to Today (P5)"
+                                        style={{ marginLeft: 'auto' }}
+                                      >
+                                        ← Today
+                                      </button>
+                                    ) : (
+                                      <button 
+                                        className="btn btn-sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleMoveToNow(item.task.id, 'task');
+                                        }}
+                                        title="Move to NOW tab (P1)"
+                                        style={{
+                                          marginLeft: 'auto',
+                                          backgroundColor: '#dc2626',
+                                          color: 'white',
+                                          padding: '6px 12px',
+                                          fontSize: '12px',
+                                          borderRadius: '6px',
+                                          border: 'none',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        → NOW
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                            
+                            {/* Line 2: Category, frequency badge, and detailed stats */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '11px', color: '#718096', minWidth: '200px' }}>
+                                {item.task.pillar_name} - {item.task.category_name}
+                              </span>
+                              <span style={{ 
+                                fontSize: '10px', 
+                                padding: '2px 6px', 
+                                backgroundColor: '#e2e8f0', 
+                                borderRadius: '10px',
+                                color: '#4a5568'
+                              }}>
+                                {item.task.follow_up_frequency === 'daily' ? 'Daily' : item.task.follow_up_frequency === 'weekly' ? 'Weekly' : item.task.follow_up_frequency === 'monthly' ? 'Monthly' : 'Yearly'}
+                              </span>
+                              {item.yearlyIssue && (
+                                <span style={{ fontSize: '12px', color: '#718096' }}>
+                                  Days Elapsed: <strong style={{ color: '#06b6d4' }}>{item.yearlyIssue.daysElapsed}</strong> / 365
+                                </span>
+                              )}
+                              <button
+                                onClick={() => setActiveTab('yearly')}
+                                style={{
+                                  padding: '4px 8px',
+                                  fontSize: '11px',
+                                  backgroundColor: '#06b6d4',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  marginLeft: 'auto'
+                                }}
+                              >
+                                View Yearly →
                               </button>
                             </div>
                           </div>
