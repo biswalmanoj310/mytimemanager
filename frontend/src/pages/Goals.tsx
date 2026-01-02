@@ -3215,6 +3215,14 @@ return (
                   }}>
                     Not Started: {lifeGoals.filter(g => g.status === 'not_started').length}
                   </span>
+                  <span style={{ 
+                    background: 'rgba(34, 197, 94, 0.3)', 
+                    padding: '4px 12px', 
+                    borderRadius: '12px',
+                    fontWeight: '600'
+                  }}>
+                    Completed: {lifeGoals.filter(g => g.status === 'completed').length}
+                  </span>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>

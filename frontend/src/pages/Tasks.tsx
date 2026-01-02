@@ -7449,14 +7449,90 @@ export default function Tasks() {
           {!selectedProject ? (
             // Projects List View
             <>
-              <div className="projects-header">
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => setShowAddProjectModal(true)}
-                  style={{ marginBottom: '20px' }}
-                >
-                  ➕ Add Project
-                </button>
+              {/* Compact Header with Inline Stats */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '24px',
+                padding: '20px 24px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: '12px',
+                color: 'white'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>
+                    📋 Projects
+                  </h1>
+                  <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
+                    <span style={{ 
+                      background: 'rgba(255,255,255,0.2)', 
+                      padding: '4px 12px', 
+                      borderRadius: '12px',
+                      fontWeight: '600'
+                    }}>
+                      Total: {
+                        projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date()).length +
+                        projects.filter(p => p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < new Date())).length +
+                        projects.filter(p => p.status === 'not_started' && !p.is_completed).length +
+                        projects.filter(p => p.is_completed).length
+                      }
+                    </span>
+                    <span style={{ 
+                      background: 'rgba(59, 130, 246, 0.3)', 
+                      padding: '4px 12px', 
+                      borderRadius: '12px',
+                      fontWeight: '600'
+                    }}>
+                      In Progress: {projects.filter(p => p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < new Date())).length}
+                    </span>
+                    <span style={{ 
+                      background: 'rgba(168, 85, 247, 0.3)', 
+                      padding: '4px 12px', 
+                      borderRadius: '12px',
+                      fontWeight: '600'
+                    }}>
+                      Not Started: {projects.filter(p => p.status === 'not_started' && !p.is_completed).length}
+                    </span>
+                    <span style={{ 
+                      background: 'rgba(16, 185, 129, 0.3)', 
+                      padding: '4px 12px', 
+                      borderRadius: '12px',
+                      fontWeight: '600'
+                    }}>
+                      Completed: {projects.filter(p => p.is_completed).length}
+                    </span>
+                    <span style={{ 
+                      background: 'rgba(239, 68, 68, 0.3)', 
+                      padding: '4px 12px', 
+                      borderRadius: '12px',
+                      fontWeight: '600'
+                    }}>
+                      Overdue: {projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date()).length}
+                    </span>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => setShowAddProjectModal(true)}
+                    style={{ 
+                      background: 'rgba(255,255,255,0.2)', 
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      color: 'white',
+                      fontWeight: '600',
+                      padding: '8px 16px',
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      transition: 'all 0.2s',
+                      fontSize: '14px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
+                  >
+                    ➕ Add Project
+                  </button>
+                </div>
               </div>
 
               {projects.length === 0 ? (
@@ -7467,13 +7543,249 @@ export default function Tasks() {
                 <>
                   {/* Group projects by status */}
                   {(() => {
-                    const inProgressProjects = projects.filter(p => p.status === 'in_progress' && !p.is_completed);
+                    const overdueProjects = projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date());
+                    const inProgressProjects = projects.filter(p => p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < new Date()));
                     const notStartedProjects = projects.filter(p => p.status === 'not_started' && !p.is_completed);
                     const completedProjects = projects.filter(p => p.is_completed);
                     const otherProjects = projects.filter(p => !p.is_completed && p.status !== 'in_progress' && p.status !== 'not_started');
 
                     return (
                       <>
+                        {/* OVERDUE Section */}
+                        {overdueProjects.length > 0 && (
+                          <div style={{ marginBottom: '40px' }}>
+                            <div style={{ 
+                              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                              color: 'white',
+                              padding: '16px 24px',
+                              borderRadius: '12px',
+                              marginBottom: '20px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+                            }}>
+                              <span style={{ fontSize: '24px' }}>🚨</span>
+                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Overdue</h2>
+                              <span style={{ 
+                                background: 'rgba(255,255,255,0.3)', 
+                                padding: '4px 12px', 
+                                borderRadius: '12px',
+                                fontSize: '14px',
+                                fontWeight: 'bold'
+                              }}>
+                                {overdueProjects.length}
+                              </span>
+                            </div>
+                            <div className="projects-grid">
+                              {overdueProjects.map((project, index) => {
+                    const hasOverdue = hasOverdueTasks(project.id);
+                    const cardClass = getProjectCardClass(project);
+                    
+                    return (
+                      <div 
+                        key={project.id} 
+                        className={`project-card ${cardClass} ${hasOverdue ? 'project-has-overdue' : ''} ${project.is_completed ? 'status-completed' : ''}`}
+                        onClick={(e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest('button, input')) return;
+                          handleSelectProject(project);
+                        }}
+                        style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px 24px', minHeight: '110px' }}
+                      >
+                        {/* Top Row */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                          {/* Left: Icon & Title */}
+                          <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
+                            <div style={{ flex: 1 }}>
+                              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                              <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
+                                {project.is_completed ? '✅ Completed' : '🚨 Overdue'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Center: Circular Progress (Tasks & Milestones side by side) */}
+                          <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+                            {/* Task Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{project.progress.completed_tasks}/{project.progress.total_tasks}</span>
+                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#10b981" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - project.progress.progress_percentage / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
+                            </div>
+                            {/* Milestone Progress Circle */}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
+                                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
+                                  {project.milestone_progress ? `${project.milestone_progress.completed_milestones}/${project.milestone_progress.total_milestones}` : '0/0'}
+                                </span>
+                              </div>
+                              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                <circle 
+                                  cx="40" 
+                                  cy="40" 
+                                  r="32" 
+                                  fill="none" 
+                                  stroke="#3b82f6" 
+                                  strokeWidth="8"
+                                  strokeDasharray={`${2 * Math.PI * 32}`}
+                                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (project.milestone_progress && project.milestone_progress.total_milestones > 0 ? (project.milestone_progress.completed_milestones / project.milestone_progress.total_milestones) * 100 : 0) / 100)}`}
+                                  strokeLinecap="round"
+                                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                />
+                              </svg>
+                            </div>
+                          </div>
+
+                          {/* Right: Dates & Days Left */}
+                          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                            <div style={{ fontSize: '12px' }}>
+                              <div style={{ marginBottom: '8px' }}>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
+                                <input
+                                  type="date"
+                                  value={project.start_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { start_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
+                                <input
+                                  type="date"
+                                  value={project.target_completion_date || ''}
+                                  onChange={(e) => { e.stopPropagation(); handleUpdateProject(project.id, { target_completion_date: e.target.value }); }}
+                                  style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                />
+                              </div>
+                            </div>
+                            {project.target_completion_date && (() => {
+                              const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                              const isOverdue = daysLeft < 0;
+                              return (
+                                <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
+                                  <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                  <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Bottom Row: Stats & Next Milestone */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+                          {/* Left: Quick Stats */}
+                          <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>⏳</span>
+                              <span style={{ color: '#718096' }}>Active Tasks:</span>
+                              <span style={{ fontWeight: '600', color: '#2d3748' }}>{project.progress.total_tasks - project.progress.completed_tasks}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px' }}>✅</span>
+                              <span style={{ color: '#718096' }}>Completed:</span>
+                              <span style={{ fontWeight: '600', color: '#10b981' }}>{project.progress.completed_tasks}</span>
+                            </div>
+                            {(() => {
+                              const nextMilestone = project.milestones?.filter(m => !m.is_completed).sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
+                              if (nextMilestone) {
+                                const milestoneDate = parseDateString(nextMilestone.target_date);
+                                const milestoneDaysLeft = Math.ceil((milestoneDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                const isOverdue = milestoneDaysLeft < 0;
+                                return (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '14px' }}>🎯</span>
+                                    <span style={{ color: '#718096' }}>Next Milestone:</span>
+                                    <span style={{ fontWeight: '600', color: isOverdue ? '#dc2626' : '#3b82f6', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={nextMilestone.name}>
+                                      {nextMilestone.name} ({Math.abs(milestoneDaysLeft)}d {isOverdue ? 'overdue' : 'left'})
+                                    </span>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            })()}
+                          </div>
+
+                          {/* Right: Action Buttons */}
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              className="btn btn-primary"
+                              onClick={(e) => { e.stopPropagation(); handleSelectProject(project); }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
+                            >
+                              👁️ View
+                            </button>
+                            <button 
+                              className="btn btn-secondary"
+                              onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
+                              title="Edit Project"
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button 
+                              className="btn btn-info"
+                              onClick={(e) => { e.stopPropagation(); handleDuplicateProject(project.id); }}
+                              title="Duplicate"
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
+                            >
+                              📋 Duplicate
+                            </button>
+                            <button 
+                              className="btn btn-danger"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteProject(project.id); }}
+                              style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
+                            >
+                              🗑️ Delete
+                            </button>
+                            {(!project.is_completed && project.progress.pending_tasks === 0 && project.progress.total_tasks > 0) && (
+                              <button 
+                                className="btn btn-success"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, true); }}
+                                title="Complete"
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
+                              >
+                                ✓ Complete
+                              </button>
+                            )}
+                            {project.is_completed && (
+                              <button 
+                                className="btn btn-warning"
+                                onClick={(e) => { e.stopPropagation(); handleToggleProjectComplete(project.id, false); }}
+                                title="Reopen"
+                                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
+                              >
+                                ↺ Reopen
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                            </div>
+                          </div>
+                        )}
+
                         {/* IN PROGRESS Section */}
                         {inProgressProjects.length > 0 && (
                           <div style={{ marginBottom: '40px' }}>
