@@ -6368,6 +6368,7 @@ export default function Tasks() {
                       .filter(task => {
                         if (task.follow_up_frequency !== 'weekly') return false;
                         if (monthlyTaskStatuses[task.id]) return false;
+                        if (weeklyTaskStatuses[task.id]) return false; // Exclude completed/NA weekly tasks
                         if (task.is_completed) return false;
                         return task.is_active;
                       })
@@ -6615,7 +6616,13 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a weekly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'weekly' && task.is_active && !task.is_completed)
+                      .filter(task => {
+                        if (task.follow_up_frequency !== 'weekly') return false;
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly/quarterly
+                        if (weeklyTaskStatuses[task.id]) return false; // Exclude completed/NA weekly tasks
+                        if (task.is_completed) return false;
+                        return task.is_active;
+                      })
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6642,7 +6649,12 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a monthly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'monthly' && task.is_active && !task.is_completed)
+                      .filter(task => {
+                        if (task.follow_up_frequency !== 'monthly') return false;
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly/quarterly
+                        if (task.is_completed) return false;
+                        return task.is_active;
+                      })
                       .map(task => (
                         <option key={task.id} value={task.id}>
                           {task.pillar_name} - {task.category_name}: {task.name}
@@ -6846,6 +6858,8 @@ export default function Tasks() {
                     {tasks
                       .filter(task => {
                         if (task.follow_up_frequency !== 'weekly') return false;
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly
+                        if (weeklyTaskStatuses[task.id]) return false; // Exclude completed/NA weekly tasks
                         if (!task.is_active) return false;
                         if (task.is_completed) return false;
                         return true;

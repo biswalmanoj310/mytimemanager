@@ -147,6 +147,16 @@ const QuarterlyTasks: React.FC = () => {
     return filteredTasks.filter(task => task.task_type === TaskType.COUNT || task.task_type === TaskType.BOOLEAN);
   }, [filteredTasks]);
 
+  // Group tasks by frequency for better organization
+  const tasksByFrequency = useMemo(() => {
+    return {
+      daily: filteredTasks.filter(task => task.follow_up_frequency === 'daily'),
+      weekly: filteredTasks.filter(task => task.follow_up_frequency === 'weekly'),
+      monthly: filteredTasks.filter(task => task.follow_up_frequency === 'monthly'),
+      quarterly: filteredTasks.filter(task => task.follow_up_frequency === 'quarterly')
+    };
+  }, [filteredTasks]);
+
   // Helper to get quarterly time from monthly aggregates
   const getQuarterlyTime = (taskId: number, quarter: number): number => {
     const quarterData = quarters.find(q => q.quarter === quarter);
@@ -454,14 +464,16 @@ const QuarterlyTasks: React.FC = () => {
         <td className="col-status" style={{ minWidth: '200px', textAlign: 'center' }}>
           {!isCompleted ? (
             <div style={{ display: 'flex', gap: '5px', justifyContent: 'center', flexWrap: 'wrap' }}>
-              <button 
-                className="btn btn-sm" 
-                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px' }}
-                onClick={() => {/* Edit handler will be added */}}
-                title="Edit Task"
-              >
-                <i className="fas fa-edit"></i> Edit
-              </button>
+              {(task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly') && (
+                <button 
+                  className="btn btn-sm" 
+                  style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px' }}
+                  onClick={() => {/* Edit handler will be added */}}
+                  title="Edit Task"
+                >
+                  <i className="fas fa-edit"></i> Edit
+                </button>
+              )}
               <button 
                 className="btn btn-sm" 
                 style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#48bb78', color: 'white', border: 'none', borderRadius: '4px' }}
@@ -536,59 +548,213 @@ const QuarterlyTasks: React.FC = () => {
             </div>
           ) : (
         <>
-          {/* TIME-BASED TASKS TABLE */}
-          {timeBasedTasks.length > 0 && (
+          {/* DAILY TASKS */}
+          {tasksByFrequency.daily.filter(t => t.task_type === TaskType.TIME).length > 0 && (
             <div style={{ marginBottom: '32px' }}>
               <h3 className="task-section-header time-based">
                 <span className="emoji">⏰</span>
-                <span>Time-Based Tasks</span>
+                <span>Time-Based Tasks (Daily)</span>
               </h3>
-              <div className="tasks-table-container">
-                <table className="tasks-table daily-table">
-                  <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
-                    <tr>
-                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
-                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
-                      {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
-                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {timeBasedTasks.map(task => renderTaskRow(task, false))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* COUNT-BASED TASKS TABLE */}
-          {countBasedTasks.length > 0 && (
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.daily.filter(t => t.task_type === TaskType.TIME).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+          {tasksByFrequency.daily.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).length > 0 && (
             <div style={{ marginBottom: '32px' }}>
               <h3 className="task-section-header count-based">
                 <span className="emoji">🔢</span>
-                <span>Count-Based Tasks</span>
+                <span>Count-Based Tasks (Daily)</span>
               </h3>
-              <div className="tasks-table-container">
-                <table className="tasks-table daily-table">
-                  <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
-                    <tr>
-                      <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                      <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
-                      <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                      <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
-                      {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
-                      <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {countBasedTasks.map(task => renderTaskRow(task, false))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.daily.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+          {/* WEEKLY TASKS */}
+          {tasksByFrequency.weekly.filter(t => t.task_type === TaskType.TIME).length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header time-based">
+                <span className="emoji">⏰</span>
+                <span>Time-Based Tasks (Weekly)</span>
+              </h3>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.weekly.filter(t => t.task_type === TaskType.TIME).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+          {tasksByFrequency.weekly.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header count-based">
+                <span className="emoji">🔢</span>
+                <span>Count-Based Tasks (Weekly)</span>
+              </h3>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.weekly.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+          {/* MONTHLY TASKS */}
+          {tasksByFrequency.monthly.filter(t => t.task_type === TaskType.TIME).length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header time-based">
+                <span className="emoji">⏰</span>
+                <span>Time-Based Tasks (Monthly)</span>
+              </h3>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.monthly.filter(t => t.task_type === TaskType.TIME).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+          {tasksByFrequency.monthly.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header count-based">
+                <span className="emoji">🔢</span>
+                <span>Count-Based Tasks (Monthly)</span>
+              </h3>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.monthly.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+          {/* QUARTERLY TASKS */}
+          {tasksByFrequency.quarterly.filter(t => t.task_type === TaskType.TIME).length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header time-based">
+                <span className="emoji">⏰</span>
+                <span>Time-Based Tasks (Quarterly)</span>
+              </h3>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.quarterly.filter(t => t.task_type === TaskType.TIME).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+          {tasksByFrequency.quarterly.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).length > 0 && (
+            <div style={{ marginBottom: '32px' }}>
+              <h3 className="task-section-header count-based">
+                <span className="emoji">🔢</span>
+                <span>Count-Based Tasks (Quarterly)</span>
+              </h3>
+                  <div className="tasks-table-container">
+                    <table className="tasks-table daily-table">
+                      <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
+                        <tr>
+                          <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
+                          <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tasksByFrequency.quarterly.filter(t => t.task_type === TaskType.COUNT || t.task_type === TaskType.BOOLEAN).map(task => renderTaskRow(task, false))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
         </>
       )}
 

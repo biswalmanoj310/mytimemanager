@@ -36,6 +36,7 @@ import {
 import {
   sortTasksByHierarchy,
 } from '../utils/taskHelpers';
+import TaskForm from '../components/TaskForm';
 
 const WeeklyTasks: React.FC = () => {
   // ============================================================================
@@ -75,9 +76,9 @@ const WeeklyTasks: React.FC = () => {
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const [weeklyDailyEntries, setWeeklyDailyEntries] = useState<DailyEntry[]>([]);
   
-  // Edit task modal state
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
+  // Edit task state - use TaskForm component (like Daily tab)
+  const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<number | null>(null);
 
   // ============================================================================
   // COMPUTED VALUES
@@ -521,39 +522,11 @@ const WeeklyTasks: React.FC = () => {
   };
 
   /**
-   * Open edit modal for a task
+   * Open TaskForm for editing a task
    */
   const handleEditTask = (task: Task) => {
-    setEditingTask(task);
-    setShowEditModal(true);
-  };
-
-  /**
-   * Save edited task
-   */
-  const handleSaveTask = async () => {
-    if (!editingTask) return;
-    
-    try {
-      const response = await fetch(`/api/tasks/${editingTask.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: editingTask.name,
-          description: editingTask.description,
-          allocated_minutes: editingTask.allocated_minutes,
-        }),
-      });
-      
-      if (!response.ok) throw new Error('Failed to update task');
-      
-      setShowEditModal(false);
-      setEditingTask(null);
-      await loadTasks();
-    } catch (err: any) {
-      console.error('Error updating task:', err);
-      alert('Failed to update task');
-    }
+    setEditingTaskId(task.id);
+    setIsTaskFormOpen(true);
   };
 
   /**
@@ -577,17 +550,27 @@ const WeeklyTasks: React.FC = () => {
     // Set new timeout for auto-save
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        // Always use saveDailyEntry - backend handles upsert logic
-        // (creates if doesn't exist, updates if it does)
         if (numValue > 0) {
+          // Save/update entry
           await saveDailyEntry({
             task_id: taskId,
             entry_date: `${date}T00:00:00`,  // Convert date string to ISO datetime
             hour,
             minutes: numValue,
           });
+        } else {
+          // Delete entry when value is 0
+          try {
+            const response = await fetch(`/api/daily-time/${taskId}/${date}/0`, {
+              method: 'DELETE',
+            });
+            if (!response.ok) {
+              console.warn('Delete returned non-ok status, but continuing');
+            }
+          } catch (deleteErr) {
+            console.warn('Error deleting entry (may not exist):', deleteErr);
+          }
         }
-        // TODO: Handle deletion when numValue === 0 (if needed)
 
         // Reload entries for this specific date and update our local state
         const response = await fetch(`/api/daily-time/?date=${date}`);
@@ -799,7 +782,7 @@ const WeeklyTasks: React.FC = () => {
                   type="number"
                   min="0"
                   step={task.task_type === TaskType.TIME ? "1" : "0.1"}
-                  value={displayValue > 0 ? displayValue : ''}
+                  value={displayValue || ''}
                   onChange={(e) => handleCellChange(task.id, day.dateString, 0, e.target.value)}
                   style={{
                     width: '100%',
@@ -1078,133 +1061,20 @@ const WeeklyTasks: React.FC = () => {
         </div>
       )}
       
-      {/* Edit Task Modal */}
-      {showEditModal && editingTask && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
+      {/* TaskForm Component for Editing Tasks */}
+      <TaskForm
+        isOpen={isTaskFormOpen}
+        taskId={editingTaskId || undefined}
+        onClose={() => {
+          setIsTaskFormOpen(false);
+          setEditingTaskId(null);
         }}
-        onClick={() => setShowEditModal(false)}
-        >
-          <div style={{
-            backgroundColor: 'white',
-            padding: '24px',
-            borderRadius: '8px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto'
-          }}
-          onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Edit Task</h2>
-            
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                Task Name *
-              </label>
-              <input
-                type="text"
-                value={editingTask.name}
-                onChange={(e) => setEditingTask({ ...editingTask, name: e.target.value })}
-                required
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
-
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                Description
-              </label>
-              <textarea
-                value={editingTask.description || ''}
-                onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
-                rows={3}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px',
-                  fontSize: '14px'
-                }}
-              />
-            </div>
-
-            {editingTask.task_type === TaskType.TIME && (
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                  {editingTask.follow_up_frequency === 'weekly' ? 'Weekly' : 'Daily'} Target (minutes)
-                </label>
-                <input
-                  type="number"
-                  value={editingTask.allocated_minutes || 0}
-                  onChange={(e) => setEditingTask({ ...editingTask, allocated_minutes: parseInt(e.target.value) || 0 })}
-                  min="0"
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowEditModal(false);
-                  setEditingTask(null);
-                }}
-                style={{
-                  padding: '10px 20px',
-                  fontSize: '14px',
-                  backgroundColor: '#e2e8f0',
-                  color: '#2d3748',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: '500'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveTask}
-                style={{
-                  padding: '10px 20px',
-                  fontSize: '14px',
-                  backgroundColor: '#4299e1',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontWeight: '500'
-                }}
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        onSuccess={async () => {
+          await loadTasks();
+          setIsTaskFormOpen(false);
+          setEditingTaskId(null);
+        }}
+      />
     </>
   );
 };
