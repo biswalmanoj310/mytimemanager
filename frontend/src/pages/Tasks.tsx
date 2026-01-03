@@ -372,6 +372,9 @@ export default function Tasks() {
   const [editingProject, setEditingProject] = useState<ProjectData | null>(null);
   const [editingTask, setEditingTask] = useState<ProjectTaskData | null>(null);
   const [showEditTaskModal, setShowEditTaskModal] = useState(false);
+  // Regular task editing (non-project tasks)
+  const [editingRegularTask, setEditingRegularTask] = useState<Task | null>(null);
+  const [showEditRegularTaskModal, setShowEditRegularTaskModal] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
 
   // Misc Tasks state (similar to Projects)
@@ -1500,13 +1503,24 @@ export default function Tasks() {
       } else if (activeTab === 'monthly') {
         const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
         
-        if (!hasBeenAddedToMonthly) {
+        // Show if explicitly added OR if it's a daily/weekly task (they should always appear)
+        if (!hasBeenAddedToMonthly && task.follow_up_frequency !== 'daily' && task.follow_up_frequency !== 'weekly') {
+          return false;
+        }
+        
+      } else if (activeTab === 'quarterly') {
+        const hasBeenAddedToQuarterly = yearlyTaskStatuses[task.id] !== undefined;
+        
+        // Show if explicitly added OR if it's a daily/weekly/monthly task
+        if (!hasBeenAddedToQuarterly && task.follow_up_frequency !== 'daily' && task.follow_up_frequency !== 'weekly' && task.follow_up_frequency !== 'monthly') {
           return false;
         }
         
       } else if (activeTab === 'yearly') {
         const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-        if (!hasBeenAddedToYearly) {
+        
+        // Show if explicitly added OR if it's a daily/weekly/monthly task  
+        if (!hasBeenAddedToYearly && task.follow_up_frequency !== 'daily' && task.follow_up_frequency !== 'weekly' && task.follow_up_frequency !== 'monthly') {
           return false;
         }
         
@@ -1695,7 +1709,7 @@ export default function Tasks() {
 
   // Separate tasks by type for daily and weekly tabs
   const timeBasedTasks = useMemo(() => {
-    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly') {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table (they show in completed section)
       if (activeTab === 'daily') {
         return filteredTasks.filter(task => {
@@ -1710,7 +1724,7 @@ export default function Tasks() {
   }, [activeTab, filteredTasks, dailyStatuses]);
   
   const countBasedTasks = useMemo(() => {
-    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table
       if (activeTab === 'daily') {
         return filteredTasks.filter(task => {
@@ -1725,7 +1739,7 @@ export default function Tasks() {
   }, [activeTab, filteredTasks, dailyStatuses]);
   
   const booleanTasks = useMemo(() => {
-    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'yearly') {
+    if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table
       if (activeTab === 'daily') {
         return filteredTasks.filter(task => {
@@ -3819,6 +3833,41 @@ export default function Tasks() {
       if (activeTab === 'today') {
         await loadProjectTasksDueToday();
       }
+    } catch (err: any) {
+      console.error('Error updating task:', err);
+      alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // Handlers for regular task editing (non-project tasks)
+  const handleEditRegularTask = (task: Task) => {
+    console.log('Editing regular task:', task.name, 'id:', task.id);
+    setEditingRegularTask(task);
+    setShowEditRegularTaskModal(true);
+  };
+
+  const handleUpdateRegularTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingRegularTask) return;
+
+    try {
+      await api.put(`/api/tasks/${editingRegularTask.id}`, {
+        name: editingRegularTask.name,
+        description: editingRegularTask.description,
+        allocated_minutes: editingRegularTask.allocated_minutes,
+        pillar: editingRegularTask.pillar,
+        category: editingRegularTask.category,
+        subcategory: editingRegularTask.subcategory,
+        follow_up_frequency: editingRegularTask.follow_up_frequency
+      });
+      
+      setShowEditRegularTaskModal(false);
+      setEditingRegularTask(null);
+      
+      // Refresh tasks
+      await loadTasks();
+      
+      console.log('Task updated successfully');
     } catch (err: any) {
       console.error('Error updating task:', err);
       alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
@@ -12565,6 +12614,14 @@ export default function Tasks() {
                               </div>
                             ) : (
                               <div className="action-buttons">
+                                {/* Add Edit button for all tasks in Weekly tab */}
+                                <button 
+                                  className="btn-edit"
+                                  onClick={() => handleEditRegularTask(task)}
+                                  title="Edit task"
+                                >
+                                  EDIT
+                                </button>
                                 <button 
                                   className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
                                   onClick={() => handleWeeklyTaskComplete(task.id)}
@@ -12717,6 +12774,14 @@ export default function Tasks() {
                               </div>
                             ) : (
                               <div className="action-buttons">
+                                {/* Add Edit button for all tasks in Weekly tab */}
+                                <button 
+                                  className="btn-edit"
+                                  onClick={() => handleEditRegularTask(task)}
+                                  title="Edit task"
+                                >
+                                  EDIT
+                                </button>
                                 <button 
                                   className={`btn-complete ${weeklyTaskStatuses[task.id]?.is_completed ? 'active' : ''}`}
                                   onClick={() => handleWeeklyTaskComplete(task.id)}
@@ -18021,6 +18086,133 @@ export default function Tasks() {
                     Save Changes
                   </button>
                 </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Regular Task Modal (for non-project tasks) */}
+      {showEditRegularTaskModal && editingRegularTask && (
+        <div className="modal-overlay" onClick={() => setShowEditRegularTaskModal(false)} style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
+            backgroundColor: 'white',
+            padding: '24px',
+            borderRadius: '8px',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}>
+            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Edit Task</h2>
+            <form onSubmit={handleUpdateRegularTask}>
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Task Name *
+                </label>
+                <input
+                  type="text"
+                  value={editingRegularTask.name}
+                  onChange={(e) => setEditingRegularTask({ ...editingRegularTask, name: e.target.value })}
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  Description
+                </label>
+                <textarea
+                  value={editingRegularTask.description || ''}
+                  onChange={(e) => setEditingRegularTask({ ...editingRegularTask, description: e.target.value })}
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+
+              {editingRegularTask.task_type === TaskType.TIME && (
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                    {editingRegularTask.follow_up_frequency === 'weekly' ? 'Weekly' : 
+                     editingRegularTask.follow_up_frequency === 'monthly' ? 'Monthly' : 
+                     editingRegularTask.follow_up_frequency === 'quarterly' ? 'Quarterly' : 
+                     editingRegularTask.follow_up_frequency === 'yearly' ? 'Yearly' : 'Daily'} Target (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingRegularTask.allocated_minutes || 0}
+                    onChange={(e) => setEditingRegularTask({ ...editingRegularTask, allocated_minutes: parseInt(e.target.value) || 0 })}
+                    min="0"
+                    style={{
+                      width: '100%',
+                      padding: '8px',
+                      border: '1px solid #ccc',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditRegularTaskModal(false);
+                    setEditingRegularTask(null);
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#2d3748',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#4299e1',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontWeight: '500'
+                  }}
+                >
+                  Save Changes
+                </button>
               </div>
             </form>
           </div>

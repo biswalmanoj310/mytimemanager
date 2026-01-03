@@ -74,6 +74,10 @@ const WeeklyTasks: React.FC = () => {
   const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const [weeklyDailyEntries, setWeeklyDailyEntries] = useState<DailyEntry[]>([]);
+  
+  // Edit task modal state
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   // ============================================================================
   // COMPUTED VALUES
@@ -517,6 +521,42 @@ const WeeklyTasks: React.FC = () => {
   };
 
   /**
+   * Open edit modal for a task
+   */
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setShowEditModal(true);
+  };
+
+  /**
+   * Save edited task
+   */
+  const handleSaveTask = async () => {
+    if (!editingTask) return;
+    
+    try {
+      const response = await fetch(`/api/tasks/${editingTask.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editingTask.name,
+          description: editingTask.description,
+          allocated_minutes: editingTask.allocated_minutes,
+        }),
+      });
+      
+      if (!response.ok) throw new Error('Failed to update task');
+      
+      setShowEditModal(false);
+      setEditingTask(null);
+      await loadTasks();
+    } catch (err: any) {
+      console.error('Error updating task:', err);
+      alert('Failed to update task');
+    }
+  };
+
+  /**
    * Handle input change for native weekly task cells
    * Debounced auto-save after 1.5 seconds
    */
@@ -705,7 +745,7 @@ const WeeklyTasks: React.FC = () => {
         {/* Actual Average/Day - Sticky Column 3 */}
         <td 
           className={`col-time sticky-col sticky-col-3 ${rowColorClass}`}
-          style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
+          style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
           {formatValue(task, avgSpentPerDay)}
         </td>
@@ -713,7 +753,7 @@ const WeeklyTasks: React.FC = () => {
         {/* Needed Average/Day - Sticky Column 4 */}
         <td 
           className={`col-time sticky-col sticky-col-4 ${rowColorClass}`}
-          style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
+          style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
           {formatValue(task, avgRemainingPerDay)}
         </td>
@@ -839,6 +879,15 @@ const WeeklyTasks: React.FC = () => {
             </div>
           ) : (
             <div className="action-buttons">
+              {task.follow_up_frequency === 'weekly' && (
+                <button 
+                  className="btn-edit"
+                  onClick={() => handleEditTask(task)}
+                  title="Edit task"
+                >
+                  EDIT
+                </button>
+              )}
               <button 
                 className={`btn-complete ${isWeeklyCompleted ? 'active' : ''}`}
                 onClick={() => handleWeeklyTaskComplete(task.id)}
@@ -1024,6 +1073,134 @@ const WeeklyTasks: React.FC = () => {
             <div className="alert alert-warning">
               <i className="fas fa-exclamation-triangle me-2"></i>
               No weekly tasks found. Adjust your filters or add new weekly tasks.
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Task Modal */}
+      {showEditModal && editingTask && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}
+        onClick={() => setShowEditModal(false)}
+        >
+          <div style={{
+            backgroundColor: 'white',
+            padding: '24px',
+            borderRadius: '8px',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '90vh',
+            overflow: 'auto'
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: '20px' }}>Edit Task</h2>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                Task Name *
+              </label>
+              <input
+                type="text"
+                value={editingTask.name}
+                onChange={(e) => setEditingTask({ ...editingTask, name: e.target.value })}
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                Description
+              </label>
+              <textarea
+                value={editingTask.description || ''}
+                onChange={(e) => setEditingTask({ ...editingTask, description: e.target.value })}
+                rows={3}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+
+            {editingTask.task_type === TaskType.TIME && (
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                  {editingTask.follow_up_frequency === 'weekly' ? 'Weekly' : 'Daily'} Target (minutes)
+                </label>
+                <input
+                  type="number"
+                  value={editingTask.allocated_minutes || 0}
+                  onChange={(e) => setEditingTask({ ...editingTask, allocated_minutes: parseInt(e.target.value) || 0 })}
+                  min="0"
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    border: '1px solid #ccc',
+                    borderRadius: '4px',
+                    fontSize: '14px'
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingTask(null);
+                }}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  backgroundColor: '#e2e8f0',
+                  color: '#2d3748',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveTask}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '14px',
+                  backgroundColor: '#4299e1',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>
