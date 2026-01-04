@@ -2334,6 +2334,12 @@ export default function Analytics() {
           todayCategoryData={todayCategoryData}
           weekCategoryData={weekCategoryData}
           monthCategoryData={monthCategoryData}
+          todayTaskData={todayTaskData}
+          weekTaskData={weekTaskData}
+          monthTaskData={monthTaskData}
+          todayOneTimeTaskData={todayOneTimeTaskData}
+          weekOneTimeTaskData={weekOneTimeTaskData}
+          monthOneTimeTaskData={monthOneTimeTaskData}
           allTasksData={allTasksData}
         />
       )}
