@@ -239,8 +239,12 @@ export default function Analytics() {
   const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(false); // Toggle for One-Time Tasks
   const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(false); // Toggle for One-Time Tasks weekly
   const [showPillarWeek, setShowPillarWeek] = useState(false); // Toggle for Pillar weekly data
-  const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState(false); // Toggle for Category Breakdown weekly
-  const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState(false); // Toggle for Task Breakdown weekly
+  const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  const [showUtilizationWeek, setShowUtilizationWeek] = useState(false); // Toggle for Time Utilization weekly
+  const [showUtilizationMonth, setShowUtilizationMonth] = useState(false); // Toggle for Time Utilization monthly
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -371,35 +375,6 @@ export default function Analytics() {
       const todayStr = formatDateForInput(today);
       console.log('📅 Today date:', todayStr);
       
-      // Load daily task statuses to check completion (with error handling)
-      // We need to check if tasks were EVER completed/NA, not just today
-      let oneTimeCompletionMap = new Map<number, boolean>();
-      try {
-        // Load ALL daily task statuses (not just today) to check historical completion
-        const dailyStatusResponse = await apiClient.get(`/api/daily-task-status/`);
-        const allDailyStatuses = dailyStatusResponse.data || [];
-        
-        console.log('📋 ALL Daily task statuses loaded:', allDailyStatuses.length, 'total status records');
-        
-        // Create a map: task_id -> has ANY completion or NA record
-        const taskCompletionMap = new Map<number, boolean>();
-        allDailyStatuses.forEach((s: any) => {
-          if (s.is_completed || s.is_na) {
-            taskCompletionMap.set(s.task_id, true);
-            if (s.task_id === 158 || s.task_id === 159) {
-              console.log(`Task ${s.task_id} has completion record:`, s);
-            }
-          }
-        });
-        
-        oneTimeCompletionMap = taskCompletionMap;
-        console.log('📋 Tasks with completion/NA records:', taskCompletionMap.size);
-        console.log('Task 158 in map:', taskCompletionMap.has(158));
-        console.log('Task 159 in map:', taskCompletionMap.has(159));
-      } catch (error) {
-        console.warn('Could not load daily task statuses:', error);
-      }
-      
       // Load daily task completion dates to exclude previously completed tasks
       let dailyTaskCompletionDates = new Map<number, string>();
       try {
@@ -451,8 +426,6 @@ export default function Analytics() {
       // One-Time Tasks: daily frequency + task_type=TIME + is_daily_one_time + is_active
       // For analytics chart: only show active tasks (not completed, not NA)
       // Check daily_task_status table for completion (same as Daily tab does)
-      console.log('🔍 One-time completion map size:', oneTimeCompletionMap.size);
-      console.log('Sample completion map entries (first 10):', Array.from(oneTimeCompletionMap.entries()).slice(0, 10));
       
       const baseOneTimeTasks: TaskData[] = tasks
         .filter((task: any) => {
@@ -477,11 +450,7 @@ export default function Analytics() {
             }
           }
           
-          // Check completion/NA status from daily_task_status (same as Daily tab)
-          const isCompletedOrNA = oneTimeCompletionMap.get(task.id) === true;
-          
-          // Only include tasks that are NOT completed/NA in daily_task_status
-          if (isCompletedOrNA) return false;
+          // Only exclude tasks with na_marked_at
           if (task.na_marked_at) return false;
           
           return true;
@@ -1354,15 +1323,31 @@ export default function Analytics() {
                 <h2>📊 Time Utilization Percentage</h2>
                 <p className="chart-description">Percentage of allocated time actually used (100% = perfect match, &gt;100% = overtime)</p>
               </div>
-              <button 
-                onClick={() => {
-                  setModalChartType('utilization' as any);
-                  setShowDetailModal(true);
-                }}
-                className="expand-button"
-              >
-                🔍 View All
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showUtilizationWeek ? 'active' : ''}`}
+                  onClick={() => setShowUtilizationWeek(!showUtilizationWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showUtilizationWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showUtilizationMonth ? 'active' : ''}`}
+                  onClick={() => setShowUtilizationMonth(!showUtilizationMonth)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showUtilizationMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setModalChartType('utilization' as any);
+                    setShowDetailModal(true);
+                  }}
+                  className="expand-button"
+                >
+                  🔍 View All
+                </button>
+              </div>
             </div>
             
             <div className="unified-comparison-chart">
@@ -1450,14 +1435,16 @@ export default function Analytics() {
                     radius={[4, 4, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
                   />
-                  <Bar 
-                    dataKey="weekly" 
-                    name="Weekly Avg %" 
-                    fill="#48bb78" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
-                  />
-                  {showTaskMonth && (
+                  {showUtilizationWeek && (
+                    <Bar 
+                      dataKey="weekly" 
+                      name="Weekly Avg %" 
+                      fill="#48bb78" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                    />
+                  )}
+                  {showUtilizationMonth && (
                     <Bar 
                       dataKey="monthly" 
                       name="Monthly Avg %" 
@@ -1559,7 +1546,29 @@ export default function Analytics() {
                       <h3 style={{ color: pillar.color_code }}>
                         {pillar.icon} {pillar.pillar_name}
                       </h3>
-                      <span className="pillar-total-time">{pillar.spent_hours.toFixed(1)}h total</span>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span className="pillar-total-time">{pillar.spent_hours.toFixed(1)}h total</span>
+                        <button 
+                          className={`toggle-month-btn ${showCategoryBreakdownWeek[pillar.pillar_name] ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowCategoryBreakdownWeek({...showCategoryBreakdownWeek, [pillar.pillar_name]: !showCategoryBreakdownWeek[pillar.pillar_name]});
+                          }}
+                          style={{ fontSize: '11px', padding: '4px 8px' }}
+                        >
+                          {showCategoryBreakdownWeek[pillar.pillar_name] ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                        </button>
+                        <button 
+                          className={`toggle-month-btn ${showCategoryBreakdownMonth[pillar.pillar_name] ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowCategoryBreakdownMonth({...showCategoryBreakdownMonth, [pillar.pillar_name]: !showCategoryBreakdownMonth[pillar.pillar_name]});
+                          }}
+                          style={{ fontSize: '11px', padding: '4px 8px' }}
+                        >
+                          {showCategoryBreakdownMonth[pillar.pillar_name] ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                        </button>
+                      </div>
                     </div>
                     <div
                       className="clickable-chart"
@@ -1603,7 +1612,7 @@ export default function Analytics() {
                           radius={[6, 6, 0, 0]}
                           label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                         />
-                        {showCategoryBreakdownWeek && (
+                        {showCategoryBreakdownWeek[pillar.pillar_name] && (
                           <Bar 
                             dataKey="weekAvg" 
                             name="Weekly Avg" 
@@ -1612,7 +1621,7 @@ export default function Analytics() {
                             label={{ position: 'top', fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                           />
                         )}
-                        {showMonthColumn && (
+                        {showCategoryBreakdownMonth[pillar.pillar_name] && (
                           <Bar 
                             dataKey="monthAvg" 
                             name="Monthly Avg" 
@@ -1727,6 +1736,26 @@ export default function Analytics() {
                       <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                         <span className="pillar-total-time">{pillarTasks.length} tasks</span>
                         <button 
+                          className={`toggle-month-btn ${showTaskBreakdownWeek[pillar.pillar_name] ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowTaskBreakdownWeek({...showTaskBreakdownWeek, [pillar.pillar_name]: !showTaskBreakdownWeek[pillar.pillar_name]});
+                          }}
+                          style={{ fontSize: '11px', padding: '4px 8px' }}
+                        >
+                          {showTaskBreakdownWeek[pillar.pillar_name] ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                        </button>
+                        <button 
+                          className={`toggle-month-btn ${showTaskBreakdownMonth[pillar.pillar_name] ? 'active' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowTaskBreakdownMonth({...showTaskBreakdownMonth, [pillar.pillar_name]: !showTaskBreakdownMonth[pillar.pillar_name]});
+                          }}
+                          style={{ fontSize: '11px', padding: '4px 8px' }}
+                        >
+                          {showTaskBreakdownMonth[pillar.pillar_name] ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                        </button>
+                        <button 
                           onClick={(e) => {
                             e.stopPropagation();
                             setModalChartType(('pillar-tasks-' + pillar.pillar_id) as any);
@@ -1781,7 +1810,7 @@ export default function Analytics() {
                           radius={[4, 4, 0, 0]}
                           label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                         />
-                        {showTaskBreakdownWeek && (
+                        {showTaskBreakdownWeek[pillar.pillar_name] && (
                           <Bar 
                             dataKey="weekAvg" 
                             name="Weekly Avg (Actual)" 
@@ -1790,7 +1819,7 @@ export default function Analytics() {
                             label={{ position: 'top', fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                           />
                         )}
-                        {showMonthColumn && (
+                        {showTaskBreakdownMonth[pillar.pillar_name] && (
                           <Bar 
                             dataKey="monthAvg" 
                             name="Monthly Avg (Actual)" 
