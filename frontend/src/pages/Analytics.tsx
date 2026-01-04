@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
+import WheelsOfLife from '../components/WheelsOfLife';
 import {
   XAxis,
   YAxis,
@@ -16,7 +17,10 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  Radar
+  Radar,
+  PieChart,
+  Pie,
+  Cell
 } from 'recharts';
 import apiClient from '../services/api';
 import './Analytics.css';
@@ -199,7 +203,18 @@ export default function Analytics() {
   const [loading, setLoading] = useState(true);
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
-  const [viewMode, setViewMode] = useState<'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed'>('overview');
+  
+  // Get initial viewMode from URL params or default to 'overview'
+  const getInitialViewMode = (): 'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed' => {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get('view');
+    if (view === 'wheel' || view === 'categories' || view === 'tasks' || view === 'detailed') {
+      return view;
+    }
+    return 'overview';
+  };
+  
+  const [viewMode, setViewMode] = useState<'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed'>(getInitialViewMode());
   const [streakData, setStreakData] = useState<StreakData | null>(null);
   const [badgeData, setBadgeData] = useState<BadgeData | null>(null);
   
@@ -722,14 +737,19 @@ export default function Analytics() {
           </button>
           <button 
             className={`tab-button ${viewMode === 'wheel' ? 'active' : ''}`}
-            onClick={() => setViewMode('wheel')}
+            onClick={() => {
+              setViewMode('wheel');
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', 'wheel');
+              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }}
           >
             ⭕ Wheel of Life
           </button>
         </div>
         
-        {/* Date Range Selector - Only show for Categories/Tasks/Wheel modes */}
-        {viewMode !== 'overview' && viewMode !== 'detailed' && (
+        {/* Date Range Selector - Only show for Categories/Tasks modes (NOT Wheel) */}
+        {viewMode !== 'overview' && viewMode !== 'detailed' && viewMode !== 'wheel' && (
           <div className="analytics-controls">
             <div className="date-range-selector">
               <label>Date Range:</label>
@@ -2307,142 +2327,15 @@ export default function Analytics() {
 
       {/* WHEEL MODE: Wheel of Life Visualization */}
       {viewMode === 'wheel' && (
-        <div className="wheel-view-section">
-          <h2>⭕ Wheel of Life - Balance Visualization</h2>
-          <p className="chart-description">See how balanced your time allocation is across life pillars</p>
-          
-          <div className="wheel-container">
-            {/* Pillar Balance Wheel */}
-            <div className="wheel-chart-container">
-              <h3>Pillar Balance</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <RadarChart data={pillarData.map(p => ({
-                  pillar: p.pillar_name,
-                  allocated: p.allocated_hours,
-                  spent: p.spent_hours,
-                  utilization: p.utilization_percentage
-                }))}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="pillar" />
-                  <PolarRadiusAxis angle={90} domain={[0, 'auto']} />
-                  <Radar 
-                    name="Allocated Hours" 
-                    dataKey="allocated" 
-                    stroke="#cbd5e0" 
-                    fill="#cbd5e0" 
-                    fillOpacity={0.3} 
-                  />
-                  <Radar 
-                    name="Spent Hours" 
-                    dataKey="spent" 
-                    stroke="#4299e1" 
-                    fill="#4299e1" 
-                    fillOpacity={0.6} 
-                  />
-                  <Tooltip />
-                  <Legend />
-                </RadarChart>
-              </ResponsiveContainer>
-              
-              {/* Balance Score */}
-              <div className="balance-score-card">
-                <h4>Balance Score</h4>
-                <div className="balance-score">
-                  {(() => {
-                    const utilizationValues = pillarData.map(p => p.utilization_percentage);
-                    const avgUtilization = utilizationValues.length > 0
-                      ? utilizationValues.reduce((a, b) => a + b) / utilizationValues.length
-                      : 0;
-                    const variance = utilizationValues.length > 0
-                      ? Math.sqrt(utilizationValues.reduce((sum, val) => 
-                          sum + Math.pow(val - avgUtilization, 2), 0) / utilizationValues.length)
-                      : 100;
-                    const balanceScore = Math.max(0, 100 - variance);
-                    
-                    return (
-                      <>
-                        <div className="score-circle" style={{
-                          background: `conic-gradient(
-                            ${balanceScore >= 80 ? '#48bb78' : balanceScore >= 50 ? '#ecc94b' : '#f56565'} 0% ${balanceScore}%, 
-                            #e2e8f0 ${balanceScore}% 100%
-                          )`
-                        }}>
-                          <div className="score-inner">
-                            <span className="score-number">{balanceScore.toFixed(0)}</span>
-                            <span className="score-label">/100</span>
-                          </div>
-                        </div>
-                        <p className="score-description">
-                          {balanceScore >= 80 && '✨ Excellent balance across pillars!'}
-                          {balanceScore >= 50 && balanceScore < 80 && '👍 Good balance, room for improvement'}
-                          {balanceScore < 50 && '⚠️ Uneven distribution - focus on neglected areas'}
-                        </p>
-                        <div className="balance-insight">
-                          {(() => {
-                            const sorted = [...pillarData].sort((a, b) => 
-                              a.utilization_percentage - b.utilization_percentage
-                            );
-                            if (sorted.length >= 2) {
-                              const weakest = sorted[0];
-                              const strongest = sorted[sorted.length - 1];
-                              return (
-                                <small>
-                                  💡 Most neglected: <strong>{weakest.pillar_name}</strong> ({weakest.utilization_percentage.toFixed(0)}%)
-                                  <br />
-                                  🏆 Strongest: <strong>{strongest.pillar_name}</strong> ({strongest.utilization_percentage.toFixed(0)}%)
-                                </small>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
-              </div>
-            </div>
-            
-            {/* Category Distribution Wheel */}
-            <div className="wheel-chart-container">
-              <h3>Category Distribution</h3>
-              <ResponsiveContainer width="100%" height={400}>
-                <RadarChart data={categoryData.slice(0, 8).map(c => ({
-                  category: c.category_name.length > 15 
-                    ? c.category_name.substring(0, 12) + '...' 
-                    : c.category_name,
-                  hours: c.spent_hours,
-                  utilization: c.utilization_percentage
-                }))}>
-                  <PolarGrid />
-                  <PolarAngleAxis dataKey="category" />
-                  <PolarRadiusAxis angle={90} domain={[0, 'auto']} />
-                  <Radar 
-                    name="Hours Spent" 
-                    dataKey="hours" 
-                    stroke="#ed8936" 
-                    fill="#ed8936" 
-                    fillOpacity={0.6} 
-                  />
-                  <Tooltip />
-                  <Legend />
-                </RadarChart>
-              </ResponsiveContainer>
-              
-              {/* Top Categories List */}
-              <div className="top-categories-list">
-                <h4>Top 5 Categories</h4>
-                {categoryData.slice(0, 5).map((category, index) => (
-                  <div key={category.category_id} className="category-item">
-                    <span className="category-rank">#{index + 1}</span>
-                    <span className="category-name">{category.category_name}</span>
-                    <span className="category-hours">{category.spent_hours}h</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+        <WheelsOfLife
+          dailyPillarData={dailyPillarData}
+          weeklyPillarData={weeklyPillarData}
+          monthlyPillarData={monthlyPillarData}
+          todayCategoryData={todayCategoryData}
+          weekCategoryData={weekCategoryData}
+          monthCategoryData={monthCategoryData}
+          allTasksData={allTasksData}
+        />
       )}
 
       {/* Summary Stats - Show on all views */}

@@ -725,6 +725,115 @@
    PHASE 2: WHEEL OF LIFE
    ============================================ */
 
+.wheel-comparison-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 2.5rem;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+.wheel-card {
+  background: white;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.wheel-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.wheel-card h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1.125rem;
+  color: #2b6cb0;
+  text-align: center;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e2e8f0;
+  font-weight: 600;
+}
+
+.wheel-insights {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f7fafc;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.insight-text {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: #2d3748;
+}
+
+.insight-subtext {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #718096;
+  font-style: italic;
+}
+
+.category-summary {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #f7fafc;
+  border-radius: 0.375rem;
+  text-align: center;
+}
+
+.category-summary p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+.pillar-breakdown-table {
+  margin-top: 1rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.pillar-breakdown-table th,
+.pillar-breakdown-table td {
+  padding: 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pillar-breakdown-table th {
+  background: #f7fafc;
+  color: #2b6cb0;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.pillar-breakdown-table td {
+  color: #4a5568;
+}
+
+.pillar-breakdown-table .pillar-icon {
+  width: 30px;
+  text-align: center;
+}
+
+.pillar-breakdown-table .percentage-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pillar-breakdown-table .bar {
+  height: 8px;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
 .wheel-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));

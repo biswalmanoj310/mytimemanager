@@ -1,0 +1,258 @@
+.wheels-of-life-container {
+  padding: 1rem 0;
+}
+
+.wheels-of-life-container h2 {
+  font-size: 1.75rem;
+  color: #2b6cb0;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.wheels-of-life-container .chart-description {
+  color: #718096;
+  font-size: 0.95rem;
+  margin-bottom: 2rem;
+}
+
+.wheel-comparison-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 2.5rem;
+  margin-top: 2rem;
+  margin-bottom: 3rem;
+}
+
+.wheel-card {
+  background: white;
+  padding: 1.75rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.wheel-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+.wheel-card h3 {
+  margin: 0 0 1.25rem 0;
+  font-size: 1.15rem;
+  color: #2b6cb0;
+  text-align: center;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid #e2e8f0;
+  font-weight: 600;
+}
+
+.achievement-circle-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.achievement-circle {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.achievement-inner {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.achievement-number {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #2d3748;
+  line-height: 1;
+}
+
+.achievement-label {
+  font-size: 0.75rem;
+  color: #718096;
+  margin-top: 0.25rem;
+}
+
+.wheel-insights {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: #f7fafc;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.insight-text {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: #2d3748;
+}
+
+.insight-subtext {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #718096;
+  font-style: italic;
+}
+
+.category-summary {
+  margin-top: 1.25rem;
+  padding: 0.875rem;
+  background: #f7fafc;
+  border-radius: 0.5rem;
+  text-align: center;
+}
+
+.category-summary p {
+  margin: 0.25rem 0;
+  font-size: 0.875rem;
+  color: #4a5568;
+}
+
+/* Percentage Breakdown Table */
+.pillar-breakdown-table {
+  margin-top: 1.25rem;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.pillar-breakdown-table th,
+.pillar-breakdown-table td {
+  padding: 0.625rem 0.5rem;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pillar-breakdown-table th {
+  background: #f7fafc;
+  color: #2b6cb0;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pillar-breakdown-table td {
+  color: #4a5568;
+}
+
+.pillar-breakdown-table .pillar-icon {
+  width: 35px;
+  text-align: center;
+  font-size: 1.1rem;
+}
+
+.pillar-breakdown-table .percentage-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pillar-breakdown-table .percentage-bar span {
+  min-width: 35px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.pillar-breakdown-table .bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  transition: width 0.3s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.pillar-breakdown-table tbody tr {
+  transition: background-color 0.2s;
+}
+
+.pillar-breakdown-table tbody tr:hover {
+  background-color: #f7fafc;
+}
+
+/* Top Categories Compact List */
+.top-categories-compact {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: #f7fafc;
+  border-radius: 0.5rem;
+}
+
+.category-compact-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+  background: white;
+  border-radius: 0.375rem;
+  transition: transform 0.2s;
+}
+
+.category-compact-item:hover {
+  transform: translateX(3px);
+}
+
+.category-compact-item:last-child {
+  margin-bottom: 0;
+}
+
+.category-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.category-name-compact {
+  flex: 1;
+  font-size: 0.85rem;
+  color: #4a5568;
+  font-weight: 500;
+}
+
+.category-hours-compact {
+  font-size: 0.85rem;
+  color: #2d3748;
+  font-weight: 600;
+  min-width: 45px;
+  text-align: right;
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .wheel-comparison-container {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .wheel-comparison-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .wheel-card {
+    padding: 1.25rem;
+  }
+
+  .wheels-of-life-container h2 {
+    font-size: 1.5rem;
+  }
+}
