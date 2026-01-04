@@ -371,6 +371,48 @@ export default function Analytics() {
       const todayStr = formatDateForInput(today);
       console.log('📅 Today date:', todayStr);
       
+      // Load daily task statuses to check completion (with error handling)
+      // We need to check if tasks were EVER completed/NA, not just today
+      let oneTimeCompletionMap = new Map<number, boolean>();
+      try {
+        // Load ALL daily task statuses (not just today) to check historical completion
+        const dailyStatusResponse = await apiClient.get(`/api/daily-task-status/`);
+        const allDailyStatuses = dailyStatusResponse.data || [];
+        
+        console.log('📋 ALL Daily task statuses loaded:', allDailyStatuses.length, 'total status records');
+        
+        // Create a map: task_id -> has ANY completion or NA record
+        const taskCompletionMap = new Map<number, boolean>();
+        allDailyStatuses.forEach((s: any) => {
+          if (s.is_completed || s.is_na) {
+            taskCompletionMap.set(s.task_id, true);
+            if (s.task_id === 158 || s.task_id === 159) {
+              console.log(`Task ${s.task_id} has completion record:`, s);
+            }
+          }
+        });
+        
+        oneTimeCompletionMap = taskCompletionMap;
+        console.log('📋 Tasks with completion/NA records:', taskCompletionMap.size);
+        console.log('Task 158 in map:', taskCompletionMap.has(158));
+        console.log('Task 159 in map:', taskCompletionMap.has(159));
+      } catch (error) {
+        console.warn('Could not load daily task statuses:', error);
+      }
+      
+      // Load daily task completion dates to exclude previously completed tasks
+      let dailyTaskCompletionDates = new Map<number, string>();
+      try {
+        const completionResponse = await apiClient.get('/api/daily-tasks-history/completion-dates');
+        const completionData = completionResponse.data || {};
+        dailyTaskCompletionDates = new Map(
+          Object.entries(completionData).map(([id, date]) => [parseInt(id), date as string])
+        );
+        console.log('📋 Daily task completion dates loaded:', dailyTaskCompletionDates.size);
+      } catch (error) {
+        console.warn('Could not load daily task completion dates:', error);
+      }
+      
       // Load ALL tasks with allocated time
       const allTasksResponse = await apiClient.get('/api/tasks?limit=1000');
       console.log('📥 Tasks API response:', allTasksResponse.data?.length, 'tasks received');
@@ -389,22 +431,11 @@ export default function Analytics() {
           if (task.is_daily_one_time) return false;
           if (!task.is_active) return false;
           
-          // Include if not completed/NA
-          if (!task.is_completed && !task.na_marked_at) return true;
+          // Only include tasks that are NOT completed and NOT marked as NA
+          if (task.is_completed) return false;
+          if (task.na_marked_at) return false;
           
-          // Include if completed today
-          if (task.is_completed && task.completed_at) {
-            const completedDate = new Date(task.completed_at);
-            return completedDate.toDateString() === today.toDateString();
-          }
-          
-          // Include if NA marked today
-          if (task.na_marked_at) {
-            const naDate = new Date(task.na_marked_at);
-            return naDate.toDateString() === today.toDateString();
-          }
-          
-          return false;
+          return true;
         })
         .map((task: any) => ({
           task_id: task.id,
@@ -415,10 +446,14 @@ export default function Analytics() {
           spent_minutes: 0
         }));
       setAllTasksData(baseTasks);
-      console.log('✅ Base time-based tasks:', baseTasks.length, 'tasks');
+      console.log('✅ Base time-based tasks (active only):', baseTasks.length, 'tasks');
       
       // One-Time Tasks: daily frequency + task_type=TIME + is_daily_one_time + is_active
-      // Same logic: include tasks completed/NA today
+      // For analytics chart: only show active tasks (not completed, not NA)
+      // Check daily_task_status table for completion (same as Daily tab does)
+      console.log('🔍 One-time completion map size:', oneTimeCompletionMap.size);
+      console.log('Sample completion map entries (first 10):', Array.from(oneTimeCompletionMap.entries()).slice(0, 10));
+      
       const baseOneTimeTasks: TaskData[] = tasks
         .filter((task: any) => {
           if (task.follow_up_frequency !== 'daily') return false;
@@ -426,22 +461,30 @@ export default function Analytics() {
           if (task.is_daily_one_time !== true) return false;
           if (!task.is_active) return false;
           
-          // Include if not completed/NA
-          if (!task.is_completed && !task.na_marked_at) return true;
-          
-          // Include if completed today
-          if (task.is_completed && task.completed_at) {
-            const completedDate = new Date(task.completed_at);
-            return completedDate.toDateString() === today.toDateString();
+          // Exclude tasks that were completed on previous days (same logic as Daily tab)
+          const completionDateStr = dailyTaskCompletionDates.get(task.id);
+          if (completionDateStr) {
+            const [year, month, day] = completionDateStr.split('-').map(Number);
+            const completionDate = new Date(year, month - 1, day);
+            completionDate.setHours(0, 0, 0, 0);
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // If task was completed BEFORE today, exclude it
+            if (completionDate < today) {
+              return false;
+            }
           }
           
-          // Include if NA marked today
-          if (task.na_marked_at) {
-            const naDate = new Date(task.na_marked_at);
-            return naDate.toDateString() === today.toDateString();
-          }
+          // Check completion/NA status from daily_task_status (same as Daily tab)
+          const isCompletedOrNA = oneTimeCompletionMap.get(task.id) === true;
           
-          return false;
+          // Only include tasks that are NOT completed/NA in daily_task_status
+          if (isCompletedOrNA) return false;
+          if (task.na_marked_at) return false;
+          
+          return true;
         })
         .map((task: any) => ({
           task_id: task.id,
@@ -451,7 +494,8 @@ export default function Analytics() {
           spent_minutes: 0
         }));
       setAllOneTimeTasksData(baseOneTimeTasks);
-      console.log('✅ Base one-time tasks:', baseOneTimeTasks.length, 'tasks');
+      console.log('✅ Base one-time tasks (active only):', baseOneTimeTasks.length, 'tasks');
+      console.log('Task names:', baseOneTimeTasks.map(t => t.task_name));
       
       // Load Today's task time entries - Use the entries endpoint which has hourly breakdown
       const todayEntriesResponse = await apiClient.get(`/api/daily-time/entries/${todayStr}`);
@@ -932,6 +976,7 @@ export default function Analytics() {
                     console.log('Days in month so far:', daysInMonth);
                     
                     const mappedData = allCategoriesData
+                      .filter((category) => category.allocated_hours > 0) // Only show categories with time allocated in daily tab
                       .map((category) => {
                         // Find matching today, week, and month data
                         const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
@@ -2533,7 +2578,9 @@ export default function Analytics() {
               {modalChartType === 'category' && (
                 <ResponsiveContainer width="100%" height={700}>
                   <BarChart 
-                    data={allCategoriesData.map((category) => {
+                    data={allCategoriesData
+                      .filter((category) => category.allocated_hours > 0) // Only show categories with time allocated in daily tab
+                      .map((category) => {
                       const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
                       const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
                       const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
