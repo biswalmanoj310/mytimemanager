@@ -203,9 +203,15 @@ const ImportantTasks: React.FC = () => {
 
   const handleMarkDone = async (taskId: number) => {
     try {
-      const today = new Date().toISOString();
+      // Use local date format (YYYY-MM-DD) instead of UTC ISO string
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      const localDateString = `${year}-${month}-${day}`;
+      
       await axios.post(`http://localhost:8000/api/important-tasks/${taskId}/check`, {
-        check_date: today
+        check_date: localDateString
       });
       
       // Mark as inactive (completed)
@@ -293,7 +299,12 @@ const ImportantTasks: React.FC = () => {
 
   const formatDate = (dateString?: string): string => {
     if (!dateString) return '-';
-    const date = new Date(dateString);
+    // Extract just the date portion (YYYY-MM-DD) to avoid timezone issues
+    // This handles both "YYYY-MM-DD" and "YYYY-MM-DDTHH:MM:SS" formats
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    // Create date using local timezone components
+    const date = new Date(year, month - 1, day);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 

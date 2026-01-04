@@ -45,6 +45,41 @@
   background-color: #bee3f8 !important;
 }
 
+.frequency-group-header {
+  background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%);
+  color: white;
+  padding: 16px 20px;
+  margin: 32px 0 16px 0;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.frequency-group-header.daily {
+  background: linear-gradient(135deg, #3182ce 0%, #2c5282 100%);
+}
+
+.frequency-group-header.weekly {
+  background: linear-gradient(135deg, #38a169 0%, #276749 100%);
+}
+
+.frequency-group-header.monthly {
+  background: linear-gradient(135deg, #805ad5 0%, #553c9a 100%);
+}
+
+.frequency-group-header.quarterly {
+  background: linear-gradient(135deg, #d69e2e 0%, #975a16 100%);
+}
+
+.frequency-group-header.yearly {
+  background: linear-gradient(135deg, #dd6b20 0%, #9c4221 100%);
+}
+
 .tasks-page {
   padding: 24px;
   max-width: 1600px;

@@ -150,11 +150,40 @@ const YearlyTasks: React.FC = () => {
   }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
 
   const tasksByType = useMemo(() => {
-    const groups: { time: Task[]; count: Task[]; boolean: Task[]; } = { time: [], count: [], boolean: [] };
+    const groups: { 
+      timeDaily: Task[]; countDaily: Task[]; booleanDaily: Task[];
+      timeWeekly: Task[]; countWeekly: Task[]; booleanWeekly: Task[];
+      timeMonthly: Task[]; countMonthly: Task[]; booleanMonthly: Task[];
+      timeQuarterly: Task[]; countQuarterly: Task[]; booleanQuarterly: Task[];
+      timeYearly: Task[]; countYearly: Task[]; booleanYearly: Task[];
+    } = { 
+      timeDaily: [], countDaily: [], booleanDaily: [],
+      timeWeekly: [], countWeekly: [], booleanWeekly: [],
+      timeMonthly: [], countMonthly: [], booleanMonthly: [],
+      timeQuarterly: [], countQuarterly: [], booleanQuarterly: [],
+      timeYearly: [], countYearly: [], booleanYearly: []
+    };
     filteredTasks.forEach(task => {
-      if (task.task_type === TaskType.TIME) groups.time.push(task);
-      else if (task.task_type === TaskType.COUNT) groups.count.push(task);
-      else if (task.task_type === TaskType.BOOLEAN) groups.boolean.push(task);
+      const freq = task.follow_up_frequency;
+      if (task.task_type === TaskType.TIME) {
+        if (freq === 'daily') groups.timeDaily.push(task);
+        else if (freq === 'weekly') groups.timeWeekly.push(task);
+        else if (freq === 'monthly') groups.timeMonthly.push(task);
+        else if (freq === 'quarterly') groups.timeQuarterly.push(task);
+        else if (freq === 'yearly') groups.timeYearly.push(task);
+      } else if (task.task_type === TaskType.COUNT) {
+        if (freq === 'daily') groups.countDaily.push(task);
+        else if (freq === 'weekly') groups.countWeekly.push(task);
+        else if (freq === 'monthly') groups.countMonthly.push(task);
+        else if (freq === 'quarterly') groups.countQuarterly.push(task);
+        else if (freq === 'yearly') groups.countYearly.push(task);
+      } else if (task.task_type === TaskType.BOOLEAN) {
+        if (freq === 'daily') groups.booleanDaily.push(task);
+        else if (freq === 'weekly') groups.booleanWeekly.push(task);
+        else if (freq === 'monthly') groups.booleanMonthly.push(task);
+        else if (freq === 'quarterly') groups.booleanQuarterly.push(task);
+        else if (freq === 'yearly') groups.booleanYearly.push(task);
+      }
     });
     return groups;
   }, [filteredTasks]);
@@ -421,8 +450,9 @@ const YearlyTasks: React.FC = () => {
           <div className="task-name">
             {task.name}
             {task.follow_up_frequency === 'daily' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>}
-            {task.follow_up_frequency === 'weekly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Weekly)</span>}
-            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Monthly)</span>}
+            {task.follow_up_frequency === 'weekly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#38a169', fontWeight: '600' }}>(Weekly)</span>}
+            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#805ad5', fontWeight: '600' }}>(Monthly)</span>}
+            {task.follow_up_frequency === 'quarterly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#d69e2e', fontWeight: '600' }}>(Quarterly)</span>}
             {task.follow_up_frequency === 'yearly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#4299e1', fontWeight: '600' }}>(Yearly)</span>}
           </div>
         </td>
@@ -584,8 +614,9 @@ const YearlyTasks: React.FC = () => {
           <div className="task-name">
             {task.name}
             {task.follow_up_frequency === 'daily' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>}
-            {task.follow_up_frequency === 'weekly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Weekly)</span>}
-            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Monthly)</span>}
+            {task.follow_up_frequency === 'weekly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#38a169', fontWeight: '600' }}>(Weekly)</span>}
+            {task.follow_up_frequency === 'monthly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#805ad5', fontWeight: '600' }}>(Monthly)</span>}
+            {task.follow_up_frequency === 'quarterly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#d69e2e', fontWeight: '600' }}>(Quarterly)</span>}
             {task.follow_up_frequency === 'yearly' && <span style={{ marginLeft: '8px', fontSize: '11px', color: '#4299e1', fontWeight: '600' }}>(Yearly)</span>}
           </div>
         </td>
@@ -691,9 +722,25 @@ const YearlyTasks: React.FC = () => {
             </div>
           ) : (
             <>
-              {renderTaskSection('Time-Based Tasks', '⏱️', 'time-based', tasksByType.time)}
-              {renderTaskSection('Count-Based Tasks', '🔢', 'count-based', tasksByType.count)}
-              {renderTaskSection('Yes/No Tasks', '✅', 'boolean-based', tasksByType.boolean)}
+              {renderTaskSection('Time-Based Tasks (Daily)', '⏱️', 'time-based', tasksByType.timeDaily)}
+              {renderTaskSection('Count-Based Tasks (Daily)', '🔢', 'count-based', tasksByType.countDaily)}
+              {renderTaskSection('Yes/No Tasks (Daily)', '✅', 'boolean-based', tasksByType.booleanDaily)}
+              
+              {renderTaskSection('Time-Based Tasks (Weekly)', '⏱️', 'time-based', tasksByType.timeWeekly)}
+              {renderTaskSection('Count-Based Tasks (Weekly)', '🔢', 'count-based', tasksByType.countWeekly)}
+              {renderTaskSection('Yes/No Tasks (Weekly)', '✅', 'boolean-based', tasksByType.booleanWeekly)}
+              
+              {renderTaskSection('Time-Based Tasks (Monthly)', '⏱️', 'time-based', tasksByType.timeMonthly)}
+              {renderTaskSection('Count-Based Tasks (Monthly)', '🔢', 'count-based', tasksByType.countMonthly)}
+              {renderTaskSection('Yes/No Tasks (Monthly)', '✅', 'boolean-based', tasksByType.booleanMonthly)}
+              
+              {renderTaskSection('Time-Based Tasks (Quarterly)', '⏱️', 'time-based', tasksByType.timeQuarterly)}
+              {renderTaskSection('Count-Based Tasks (Quarterly)', '🔢', 'count-based', tasksByType.countQuarterly)}
+              {renderTaskSection('Yes/No Tasks (Quarterly)', '✅', 'boolean-based', tasksByType.booleanQuarterly)}
+              
+              {renderTaskSection('Time-Based Tasks (Yearly)', '⏱️', 'time-based', tasksByType.timeYearly)}
+              {renderTaskSection('Count-Based Tasks (Yearly)', '🔢', 'count-based', tasksByType.countYearly)}
+              {renderTaskSection('Yes/No Tasks (Yearly)', '✅', 'boolean-based', tasksByType.booleanYearly)}
             </>
           )}
 

@@ -4,7 +4,7 @@ API routes for Important Tasks - Periodic check tasks
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 import json
 
@@ -123,6 +123,10 @@ def create_important_task(
     db: Session = Depends(get_db)
 ):
     """Create new important task"""
+    # Get current time with local timezone awareness
+    local_tz = datetime.now().astimezone().tzinfo
+    current_time = datetime.now(local_tz)
+    
     db_task = ImportantTask(
         name=task.name,
         description=task.description,
@@ -132,7 +136,9 @@ def create_important_task(
         ideal_gap_days=task.ideal_gap_days,
         priority=task.priority,
         parent_id=task.parent_id,
-        check_history="[]"
+        check_history="[]",
+        start_date=current_time,  # Use timezone-aware local time
+        created_at=current_time   # Use timezone-aware local time
     )
     db.add(db_task)
     db.commit()
@@ -169,7 +175,11 @@ def update_important_task(
     if task.is_active is not None:
         db_task.is_active = task.is_active
     if task.start_date is not None:
-        db_task.start_date = datetime.fromisoformat(task.start_date.replace('Z', '+00:00'))
+        # Handle both ISO format with timezone and simple date format (YYYY-MM-DD)
+        if 'T' in task.start_date:
+            db_task.start_date = datetime.fromisoformat(task.start_date.replace('Z', '+00:00'))
+        else:
+            db_task.start_date = datetime.strptime(task.start_date, '%Y-%m-%d')
     if task.parent_id is not None:
         db_task.parent_id = task.parent_id
     
@@ -194,7 +204,13 @@ def mark_task_checked(
     
     # Use provided date or current time
     if request.check_date:
-        check_time = datetime.fromisoformat(request.check_date.replace('Z', '+00:00'))
+        # Handle both ISO format with timezone and simple date format (YYYY-MM-DD)
+        if 'T' in request.check_date:
+            # ISO format with time
+            check_time = datetime.fromisoformat(request.check_date.replace('Z', '+00:00'))
+        else:
+            # Simple date format (YYYY-MM-DD) - parse as local date at midnight
+            check_time = datetime.strptime(request.check_date, '%Y-%m-%d')
     else:
         check_time = datetime.now()
     
