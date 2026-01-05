@@ -396,9 +396,26 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       title.includes('Today') ? 'today' : 
       title.includes('Week') ? 'week' : 'month';
     
-    // Sort by task name
+    // Sort by hierarchy: pillar → category → task name (same as Daily tab)
     const sortedData = [...filteredData]
-      .sort((a, b) => a.task_name.localeCompare(b.task_name))
+      .sort((a, b) => {
+        // Sort by pillar order first
+        const pillarIndexA = PILLAR_ORDER.indexOf(a.pillar_name || '');
+        const pillarIndexB = PILLAR_ORDER.indexOf(b.pillar_name || '');
+        if (pillarIndexA !== pillarIndexB) {
+          return (pillarIndexA === -1 ? 999 : pillarIndexA) - (pillarIndexB === -1 ? 999 : pillarIndexB);
+        }
+        
+        // Then by category order
+        const categoryIndexA = CATEGORY_ORDER.indexOf(a.category_name || '');
+        const categoryIndexB = CATEGORY_ORDER.indexOf(b.category_name || '');
+        if (categoryIndexA !== categoryIndexB) {
+          return (categoryIndexA === -1 ? 999 : categoryIndexA) - (categoryIndexB === -1 ? 999 : categoryIndexB);
+        }
+        
+        // Finally by task name
+        return a.task_name.localeCompare(b.task_name);
+      })
       .slice(0, 8); // Show top 8 tasks
 
     const radarData = sortedData.map(t => {
