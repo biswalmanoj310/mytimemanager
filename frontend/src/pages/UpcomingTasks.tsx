@@ -148,8 +148,6 @@ export default function UpcomingTasks() {
     try {
       const endpoint = editingTaskType === 'project' 
         ? `/api/projects/tasks/${editingTaskId}`
-        : editingTaskType === 'misc'
-        ? `/api/misc-tasks/items/${editingTaskId}`
         : `/api/tasks/${editingTaskId}`;
       
       await api.patch(endpoint, {
