@@ -394,6 +394,14 @@ export default function Tasks() {
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
   const [pendingProjectId, setPendingProjectId] = useState<number | null>(null); // Track project ID from URL
+  
+  // Collapsible project sections state
+  const [collapsedProjectSections, setCollapsedProjectSections] = useState<{[key: string]: boolean}>({
+    'overdue': false,
+    'in_progress': false,
+    'not_started': false,
+    'completed': false
+  });
 
   // Today Tab state - expandable sections
   const [todayTabSections, setTodayTabSections] = useState(() => {
@@ -428,6 +436,13 @@ export default function Tasks() {
   useEffect(() => {
     localStorage.setItem('todayTabSections', JSON.stringify(todayTabSections));
   }, [todayTabSections]);
+  
+  // Reset selected project when navigating away from projects tab
+  useEffect(() => {
+    if (activeTab !== 'projects' && selectedProject) {
+      setSelectedProject(null);
+    }
+  }, [activeTab, selectedProject]);
   
   // Today Tab data
   const [todaysOnlyTasks, setTodaysOnlyTasks] = useState<Task[]>([]);
@@ -7749,29 +7764,37 @@ export default function Tasks() {
                         {/* OVERDUE Section */}
                         {overdueProjects.length > 0 && (
                           <div style={{ marginBottom: '40px' }}>
-                            <div style={{ 
-                              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '12px',
-                              marginBottom: '20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
-                            }}>
-                              <span style={{ fontSize: '24px' }}>🚨</span>
-                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Overdue</h2>
-                              <span style={{ 
-                                background: 'rgba(255,255,255,0.3)', 
-                                padding: '4px 12px', 
+                            <div 
+                              onClick={() => setCollapsedProjectSections(prev => ({ ...prev, 'overdue': !prev['overdue'] }))}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                                color: 'white',
+                                padding: '16px 24px',
                                 borderRadius: '12px',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
+                                marginBottom: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
+                                cursor: 'pointer'
                               }}>
-                                {overdueProjects.length}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontSize: '24px' }}>🚨</span>
+                                <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Overdue</h2>
+                                <span style={{ 
+                                  background: 'rgba(255,255,255,0.3)', 
+                                  padding: '4px 12px', 
+                                  borderRadius: '12px',
+                                  fontSize: '14px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {overdueProjects.length}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '18px' }}>{collapsedProjectSections['overdue'] ? '▶' : '▼'}</span>
                             </div>
+                            {!collapsedProjectSections['overdue'] && (
                             <div className="projects-grid">
                               {overdueProjects.map((project, index) => {
                     const hasOverdue = hasOverdueTasks(project.id);
@@ -7873,7 +7896,7 @@ export default function Tasks() {
                                 />
                               </div>
                             </div>
-                            {project.target_completion_date && (() => {
+                            {!project.is_completed && project.target_completion_date && (() => {
                               const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                               const isOverdue = daysLeft < 0;
                               return (
@@ -7978,35 +8001,44 @@ export default function Tasks() {
                     );
                   })}
                             </div>
+                            )}
                           </div>
                         )}
 
                         {/* IN PROGRESS Section */}
                         {inProgressProjects.length > 0 && (
                           <div style={{ marginBottom: '40px' }}>
-                            <div style={{ 
-                              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '12px',
-                              marginBottom: '20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
-                            }}>
-                              <span style={{ fontSize: '24px' }}>▶️</span>
-                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>In Progress</h2>
-                              <span style={{ 
-                                background: 'rgba(255,255,255,0.3)', 
-                                padding: '4px 12px', 
+                            <div 
+                              onClick={() => setCollapsedProjectSections(prev => ({ ...prev, 'in_progress': !prev['in_progress'] }))}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                                color: 'white',
+                                padding: '16px 24px',
                                 borderRadius: '12px',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
+                                marginBottom: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                                cursor: 'pointer'
                               }}>
-                                {inProgressProjects.length}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontSize: '24px' }}>▶️</span>
+                                <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>In Progress</h2>
+                                <span style={{ 
+                                  background: 'rgba(255,255,255,0.3)', 
+                                  padding: '4px 12px', 
+                                  borderRadius: '12px',
+                                  fontSize: '14px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {inProgressProjects.length}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '18px' }}>{collapsedProjectSections['in_progress'] ? '▶' : '▼'}</span>
                             </div>
+                            {!collapsedProjectSections['in_progress'] && (
                             <div className="projects-grid">
                               {inProgressProjects.map((project, index) => {
                     const hasOverdue = hasOverdueTasks(project.id);
@@ -8108,7 +8140,7 @@ export default function Tasks() {
                                 />
                               </div>
                             </div>
-                            {project.target_completion_date && (() => {
+                            {!project.is_completed && project.target_completion_date && (() => {
                               const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                               const isOverdue = daysLeft < 0;
                               return (
@@ -8213,35 +8245,44 @@ export default function Tasks() {
                     );
                   })}
                             </div>
+                            )}
                           </div>
                         )}
 
                         {/* NOT STARTED Section */}
                         {notStartedProjects.length > 0 && (
                           <div style={{ marginBottom: '40px' }}>
-                            <div style={{ 
-                              background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '12px',
-                              marginBottom: '20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              boxShadow: '0 4px 12px rgba(100, 116, 139, 0.3)'
-                            }}>
-                              <span style={{ fontSize: '24px' }}>⏸️</span>
-                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Not Started</h2>
-                              <span style={{ 
-                                background: 'rgba(255,255,255,0.3)', 
-                                padding: '4px 12px', 
+                            <div 
+                              onClick={() => setCollapsedProjectSections(prev => ({ ...prev, 'not_started': !prev['not_started'] }))}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                                color: 'white',
+                                padding: '16px 24px',
                                 borderRadius: '12px',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
+                                marginBottom: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                boxShadow: '0 4px 12px rgba(100, 116, 139, 0.3)',
+                                cursor: 'pointer'
                               }}>
-                                {notStartedProjects.length}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontSize: '24px' }}>⏸️</span>
+                                <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Not Started</h2>
+                                <span style={{ 
+                                  background: 'rgba(255,255,255,0.3)', 
+                                  padding: '4px 12px', 
+                                  borderRadius: '12px',
+                                  fontSize: '14px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {notStartedProjects.length}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '18px' }}>{collapsedProjectSections['not_started'] ? '▶' : '▼'}</span>
                             </div>
+                            {!collapsedProjectSections['not_started'] && (
                             <div className="projects-grid">
                               {notStartedProjects.map((project, index) => {
                     const hasOverdue = hasOverdueTasks(project.id);
@@ -8343,7 +8384,7 @@ export default function Tasks() {
                                 />
                               </div>
                             </div>
-                            {project.target_completion_date && (() => {
+                            {!project.is_completed && project.target_completion_date && (() => {
                               const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                               const isOverdue = daysLeft < 0;
                               return (
@@ -8448,35 +8489,44 @@ export default function Tasks() {
                     );
                   })}
                             </div>
+                            )}
                           </div>
                         )}
 
                         {/* COMPLETED Section */}
                         {completedProjects.length > 0 && (
                           <div style={{ marginBottom: '40px' }}>
-                            <div style={{ 
-                              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                              color: 'white',
-                              padding: '16px 24px',
-                              borderRadius: '12px',
-                              marginBottom: '20px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '12px',
-                              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
-                            }}>
-                              <span style={{ fontSize: '24px' }}>✅</span>
-                              <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Completed</h2>
-                              <span style={{ 
-                                background: 'rgba(255,255,255,0.3)', 
-                                padding: '4px 12px', 
+                            <div 
+                              onClick={() => setCollapsedProjectSections(prev => ({ ...prev, 'completed': !prev['completed'] }))}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                color: 'white',
+                                padding: '16px 24px',
                                 borderRadius: '12px',
-                                fontSize: '14px',
-                                fontWeight: 'bold'
+                                marginBottom: '20px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: '12px',
+                                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                                cursor: 'pointer'
                               }}>
-                                {completedProjects.length}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <span style={{ fontSize: '24px' }}>✅</span>
+                                <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Completed</h2>
+                                <span style={{ 
+                                  background: 'rgba(255,255,255,0.3)', 
+                                  padding: '4px 12px', 
+                                  borderRadius: '12px',
+                                  fontSize: '14px',
+                                  fontWeight: 'bold'
+                                }}>
+                                  {completedProjects.length}
+                                </span>
+                              </div>
+                              <span style={{ fontSize: '18px' }}>{collapsedProjectSections['completed'] ? '▶' : '▼'}</span>
                             </div>
+                            {!collapsedProjectSections['completed'] && (
                             <div className="projects-grid">
                               {completedProjects.map((project, index) => {
                     const hasOverdue = hasOverdueTasks(project.id);
@@ -8578,7 +8628,7 @@ export default function Tasks() {
                                 />
                               </div>
                             </div>
-                            {project.target_completion_date && (() => {
+                            {!project.is_completed && project.target_completion_date && (() => {
                               const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
                               const isOverdue = daysLeft < 0;
                               return (
@@ -8683,6 +8733,7 @@ export default function Tasks() {
                     );
                   })}
                             </div>
+                            )}
                           </div>
                         )}
 

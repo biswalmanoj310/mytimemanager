@@ -1865,10 +1865,10 @@ export default function Goals() {
           {/* Center: Circular Progress (Goal Milestones, Goal Tasks, Project Milestones, Project Tasks, Projects) */}
           <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
             {/* Goal Milestones Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🏁 Goal Milestones</span>
-                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{goalMilestonesCompleted}/{goalMilestonesTotal}</span>
+                <span style={{ fontSize: '14px', color: '#2d3748', fontWeight: '700' }}>{goalMilestonesCompleted}/{goalMilestonesTotal}</span>
               </div>
               <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
@@ -1882,10 +1882,10 @@ export default function Goals() {
               </svg>
             </div>
             {/* Goal Tasks Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>✅ Goal Tasks</span>
-                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
+                <span style={{ fontSize: '14px', color: '#2d3748', fontWeight: '700' }}>
                   {goal.stats?.linked_tasks?.completed || 0}/{goal.stats?.linked_tasks?.total || 0}
                 </span>
               </div>
@@ -1901,10 +1901,10 @@ export default function Goals() {
               </svg>
             </div>
             {/* Project Milestones Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Project Milestones</span>
-                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{projectMilestonesCompleted}/{projectMilestonesTotal}</span>
+                <span style={{ fontSize: '14px', color: '#2d3748', fontWeight: '700' }}>{projectMilestonesCompleted}/{projectMilestonesTotal}</span>
               </div>
               <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
@@ -1918,10 +1918,10 @@ export default function Goals() {
               </svg>
             </div>
             {/* Project Tasks Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📊 Project Tasks</span>
-                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{allTasksCompleted}/{allTasksTotal}</span>
+                <span style={{ fontSize: '14px', color: '#2d3748', fontWeight: '700' }}>{allTasksCompleted}/{allTasksTotal}</span>
               </div>
               <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
@@ -1935,10 +1935,10 @@ export default function Goals() {
               </svg>
             </div>
             {/* Projects Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
                 <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📁 Projects</span>
-                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>
+                <span style={{ fontSize: '14px', color: '#2d3748', fontWeight: '700' }}>
                   {goal.stats?.goal_projects?.completed || 0}/{goal.stats?.goal_projects?.total || 0}
                 </span>
               </div>
