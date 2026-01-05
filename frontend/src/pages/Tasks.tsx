@@ -1472,7 +1472,25 @@ export default function Tasks() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
+    // Debug: Check if missing tasks are in the tasks array
+    const debugTaskIds = [5, 6, 12, 20, 24];
+    console.log(`🔍 [filteredTasks useMemo] Running filter, activeTab=${activeTab}, total tasks=${tasks.length}`);
+    const debugTasks = tasks.filter(t => debugTaskIds.includes(t.id));
+    console.log(`🔍 [filteredTasks useMemo] Missing tasks in tasks array (${debugTasks.length}/5):`, debugTasks.map(t => ({
+      id: t.id,
+      name: t.name,
+      follow_up_frequency: t.follow_up_frequency,
+      is_active: t.is_active,
+      is_completed: t.is_completed
+    })));
+    
     return tasks.filter(task => {
+      // Debug each missing task
+      const isDebugTask = debugTaskIds.includes(task.id);
+      if (isDebugTask) {
+        console.log(`🔍 [Filter Processing] Task ${task.id} (${task.name}) - activeTab=${activeTab}`);
+      }
+      
       // Exclude one-time tasks from other tabs (they only appear in onetime tab)
       if (activeTab !== 'onetime' && task.follow_up_frequency === 'one_time') {
         return false;
@@ -1525,7 +1543,21 @@ export default function Tasks() {
         }
         
       } else {
-        if (task.follow_up_frequency !== activeTab) return false;
+        // Debug specific tasks
+        const debugTaskIds = [5, 6, 12, 20, 24];
+        if (debugTaskIds.includes(task.id)) {
+          console.log(`🔍 [Tab Filter] Task ${task.id} (${task.name}):`, {
+            activeTab,
+            follow_up_frequency: task.follow_up_frequency,
+            matches: task.follow_up_frequency === activeTab
+          });
+        }
+        if (task.follow_up_frequency !== activeTab) {
+          if (debugTaskIds.includes(task.id)) {
+            console.log(`❌ [Tab Filter] Task ${task.id} filtered: frequency mismatch`);
+          }
+          return false;
+        }
       }
       
       // For weekly tab: Handle weekly-specific completion status
@@ -1582,21 +1614,24 @@ export default function Tasks() {
         return true;
       }
       
-      // For daily tab: Handle date-based visibility rules
+      // For daily tab: Handle date-based visibility with completion history
       if (activeTab === 'daily') {
         const viewingDate = new Date(selectedDate);
         viewingDate.setHours(0, 0, 0, 0);
         const todayDate = new Date();
         todayDate.setHours(0, 0, 0, 0);
         
-        // Debug task 155
-        if (task.id === 155 || task.name.includes('anothe task 3')) {
-          console.log('🔍 Filter check for task 155:', {
-            name: task.name,
-            id: task.id,
-            selectedDate,
+        // Debug specific tasks
+        const debugTaskIds = [5, 6, 12, 20, 24]; // Cloud, LLM GenAI, Sleep, Parent Talk, Daughter Sports
+        const isDebugTask = debugTaskIds.includes(task.id);
+        
+        if (isDebugTask) {
+          console.log(`🔍 [Daily Tab Filter] Task ${task.id} (${task.name}):`, {
             viewingDate: viewingDate.toISOString(),
-            created_at: task.created_at
+            created_at: task.created_at,
+            is_active: task.is_active,
+            is_completed: task.is_completed,
+            is_daily_one_time: task.is_daily_one_time
           });
         }
         
@@ -1605,45 +1640,50 @@ export default function Tasks() {
           const taskCreatedDate = new Date(task.created_at);
           taskCreatedDate.setHours(0, 0, 0, 0);
           if (viewingDate < taskCreatedDate) {
-            if (task.id === 155) console.log('❌ Task 155 filtered: viewing date before creation');
+            if (isDebugTask) console.log(`❌ Rule 1: Viewing date before task creation`);
             return false; // Task didn't exist on this date
           }
         }
         
-        // Rule 2: Check if task was EVER completed before viewing date (but not ON viewing date)
-        const completionDateStr = dailyTaskCompletionDates.get(task.id);
-        if (completionDateStr) {
-          // Parse as local date (not UTC) to avoid timezone issues
-          // completionDateStr is like '2026-01-01' from backend
-          const [year, month, day] = completionDateStr.split('-').map(Number);
-          const completionDate = new Date(year, month - 1, day); // month is 0-indexed
-          completionDate.setHours(0, 0, 0, 0);
-          
-          if (task.id === 155) {
-            console.log('🔍 Task 155 completion check:', {
-              completionDateStr,
-              completionDate: completionDate.toISOString(),
-              viewingDate: viewingDate.toISOString(),
-              isBeforeViewingDate: completionDate < viewingDate,
-              isEqualToViewingDate: completionDate.getTime() === viewingDate.getTime()
-            });
-          }
-          
-          // If task was completed BEFORE viewing date (not on the same day), hide it
-          if (completionDate < viewingDate) {
-            if (task.id === 155) console.log('❌ Task 155 filtered: completed before viewing date');
-            return false;
-          }
-          // If completed ON viewing date, keep showing it (will appear in completed section)
+        // Rule 2: Check if task has daily_task_status entry for the viewing date
+        const status = dailyStatuses.get(task.id);
+        
+        if (isDebugTask) {
+          console.log(`   Status check:`, { hasStatus: !!status, status });
         }
         
-        // Rule 3: Show all active tasks and tasks completed today
-        const status = dailyStatuses.get(task.id);
-        if (task.id === 155) {
-          console.log('✅ Task 155 passed all filters, returning true');
+        // If there's a status for today's viewing date and it's completed/NA,
+        // show it (it will appear in completed section until midnight)
+        if (status && (status.is_completed || status.is_na)) {
+          if (isDebugTask) console.log(`✅ Rule 2: Has completed/NA status for today`);
+          return true;
         }
-        // Show task if it's active OR completed/NA on this specific viewing date
-        return true;
+        
+        // Rule 3: Check if task was completed on any PREVIOUS day
+        // If yes, hide it (user manually completed it, so it should disappear after midnight)
+        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+        
+        if (isDebugTask) {
+          console.log(`   Completion history:`, { completionDateStr });
+        }
+        
+        if (completionDateStr) {
+          // Parse as local date (not UTC) to avoid timezone issues
+          const [year, month, day] = completionDateStr.split('-').map(Number);
+          const completionDate = new Date(year, month - 1, day);
+          completionDate.setHours(0, 0, 0, 0);
+          
+          // If task was completed BEFORE viewing date, hide it permanently
+          if (completionDate < viewingDate) {
+            if (isDebugTask) console.log(`❌ Rule 3: Completed on previous day (${completionDateStr})`);
+            return false;
+          }
+          // If completed ON viewing date, it's already handled by Rule 2 above
+        }
+        
+        // Rule 4: Show all active tasks that were never completed
+        if (isDebugTask) console.log(`✅ Rule 4: Active task with no completion history`);
+        return task.is_active;
       }
       
       // For today tab: Filter completed/NA tasks and priority 1-3 tasks (they show in NOW tab)
@@ -1665,25 +1705,37 @@ export default function Tasks() {
         // Check if task is completed via daily status OR global completion
         const status = dailyStatuses.get(task.id);
         
+        if (isDebugTask) {
+          console.log(`🔍 [Daily Tab Final Check] Task ${task.id}:`, {
+            status,
+            is_completed: task.is_completed,
+            is_active: task.is_active
+          });
+        }
+        
         // Always show if marked complete via daily status
         if (status && status.is_completed) {
+          if (isDebugTask) console.log(`✅ Passed: has completed status`);
           return true;
         }
         
         // Show if globally completed (during reload when dailyStatuses might be empty)
         if (task.is_completed) {
+          if (isDebugTask) console.log(`✅ Passed: globally completed`);
           return true;
         }
         
         // Show if marked as NA for today
         if (status && status.is_na) {
+          if (isDebugTask) console.log(`✅ Passed: marked NA`);
           return true;
         }
         
         // Show all active tasks
+        if (isDebugTask) console.log(`${task.is_active ? '✅' : '❌'} Final result: is_active = ${task.is_active}`);
         return task.is_active;
       }
-      
+
       return task.is_active && !task.is_completed;
     })
     .sort((a, b) => {
@@ -5505,39 +5557,23 @@ export default function Tasks() {
       const yearlyStatus = yearlyTaskStatuses[task.id];
       if (yearlyStatus && !yearlyStatus.is_completed && !yearlyStatus.is_na) {
         const today = new Date();
-        const startOfYear = new Date(today.getFullYear(), 0, 1);
+        const currentYear = today.getFullYear();
+        const startOfYear = new Date(currentYear, 0, 1);
         startOfYear.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
         
         const daysElapsedInYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        const pastDaysInYear = Math.max(0, daysElapsedInYear - 1);
         const daysLeftInYear = 365 - daysElapsedInYear + 1; // Including today
         
-        // Calculate total spent from current week's data
-        // Get today's day index in current week
-        const todayDayOfWeek = today.getDay();
-        const todayDayIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1; // 0=Mon, 6=Sun
-        
-        // Sum all days from start of year to today
+        // Calculate total spent from yearlyMonthlyAggregates (all months year-to-date)
         let totalSpent = 0;
-        for (let i = 0; i <= todayDayIndex; i++) {
-          totalSpent += getWeeklyTime(task.id, i);
+        const currentMonthIndex = today.getMonth() + 1; // 1-12
+        for (let month = 1; month <= currentMonthIndex; month++) {
+          const key = `${task.id}-${month}`;
+          totalSpent += (yearlyMonthlyAggregates[key] || 0);
         }
         
-        // If current week is not the first week of the year, we need historical data
-        // For now, check if we're still in the first week of the year
-        const currentWeekStart = new Date(selectedWeekStart);
-        currentWeekStart.setHours(0, 0, 0, 0);
-        
-        // If not first week of year, use yearlyEntries as more accurate
-        if (currentWeekStart.getTime() > startOfYear.getTime()) {
-          const yearlyEntry = yearlyEntries[task.id];
-          if (yearlyEntry && yearlyEntry.time_spent > totalSpent) {
-            totalSpent = yearlyEntry.time_spent;
-          }
-        }
-        
-        // Calculate daily target
+        // Calculate daily target (ideal daily average)
         let dailyTarget = 0;
         if (task.task_type === TaskType.COUNT) {
           dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 365;
@@ -5547,23 +5583,17 @@ export default function Tasks() {
           dailyTarget = task.allocated_minutes;
         }
         
-        // Expected progress based on past days only (excluding today)
-        const expectedIncludingToday = dailyTarget * daysElapsedInYear;
-        const expectedPastOnly = dailyTarget * pastDaysInYear;
+        // Calculate actual average per day (since start of year)
+        const actualAverage = daysElapsedInYear > 0 ? totalSpent / daysElapsedInYear : 0;
         
-        // Calculate deficit (how much behind from past days)
-        const deficit = expectedPastOnly - totalSpent;
-        
-        // Calculate current average
-        const currentAverage = daysElapsedInYear > 0 ? totalSpent / daysElapsedInYear : 0;
-        
-        // TODAY = daily target + ALL catch-up (front-loaded)
-        const neededToday = dailyTarget + deficit;
-        
-        // Only show in attention if behind schedule (totalSpent < expectedIncludingToday)
-        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        // Only show in attention if actual average < ideal average
+        const shouldShowInAttention = actualAverage < dailyTarget;
         
         if (shouldShowInAttention) {
+          const expectedPastOnly = dailyTarget * (daysElapsedInYear - 1); // Past days only
+          const deficit = Math.max(0, expectedPastOnly - totalSpent);
+          const neededToday = dailyTarget + deficit;
+          
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeftInYear > 0
             ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
@@ -5577,7 +5607,7 @@ export default function Tasks() {
               neededToday: Math.ceil(neededToday),
               dailyTarget: Math.round(dailyTarget),
               deficit: Math.round(deficit),
-              currentAverage: Math.round(currentAverage * 10) / 10,
+              currentAverage: Math.round(actualAverage * 10) / 10,
               daysLeft: daysLeftInYear
             },
             recommendation
@@ -5589,92 +5619,63 @@ export default function Tasks() {
       // Use yearlyTaskStatuses since quarterly uses the same backend data structure
       if (yearlyStatus && !yearlyStatus.is_completed && !yearlyStatus.is_na) {
         const today = new Date();
+        const currentYear = today.getFullYear();
         today.setHours(0, 0, 0, 0);
         
         // Determine current quarter
         const currentMonth = today.getMonth() + 1; // 1-12
         const currentQuarter = Math.ceil(currentMonth / 3); // 1, 2, 3, or 4
         
-        // Calculate quarter start date
-        const quarterStartMonth = (currentQuarter - 1) * 3; // 0, 3, 6, or 9
-        const quarterStart = new Date(today.getFullYear(), quarterStartMonth, 1);
-        quarterStart.setHours(0, 0, 0, 0);
-        
-        // Days in current quarter (quarters vary: Q1=90, Q2=91, Q3=92, Q4=92 in non-leap years)
-        const quarterEndMonth = quarterStartMonth + 3;
-        const quarterEnd = new Date(today.getFullYear(), quarterEndMonth, 0); // Last day of quarter
-        const daysInQuarter = Math.floor((quarterEnd.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        
-        // Days elapsed in current quarter
-        const daysElapsedInQuarter = Math.floor((today.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        const pastDaysInQuarter = Math.max(0, daysElapsedInQuarter - 1);
-        const daysLeftInQuarter = daysInQuarter - daysElapsedInQuarter + 1; // Including today
-        
-        // Calculate total spent from current week's data
-        // Get today's day index in current week
-        const todayDayOfWeek = today.getDay();
-        const todayDayIndex = todayDayOfWeek === 0 ? 6 : todayDayOfWeek - 1; // 0=Mon, 6=Sun
-        
-        // Sum all days from start of quarter to today
+        // Calculate total spent from yearlyMonthlyAggregates (all quarters year-to-date)
         let totalSpent = 0;
-        for (let i = 0; i <= todayDayIndex; i++) {
-          totalSpent += getWeeklyTime(task.id, i);
+        const currentMonthIndex = today.getMonth() + 1; // 1-12
+        for (let month = 1; month <= currentMonthIndex; month++) {
+          const key = `${task.id}-${month}`;
+          totalSpent += (yearlyMonthlyAggregates[key] || 0);
         }
         
-        // If current week is not the first week of the quarter, we need historical data
-        const currentWeekStart = new Date(selectedWeekStart);
-        currentWeekStart.setHours(0, 0, 0, 0);
+        // Calculate days elapsed in year
+        const startOfYear = new Date(currentYear, 0, 1);
+        startOfYear.setHours(0, 0, 0, 0);
+        const daysElapsedInYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         
-        // If not first week of quarter, use yearlyEntries as more accurate
-        if (currentWeekStart.getTime() > quarterStart.getTime()) {
-          const yearlyEntry = yearlyEntries[task.id];
-          if (yearlyEntry && yearlyEntry.time_spent > totalSpent) {
-            totalSpent = yearlyEntry.time_spent;
-          }
-        }
-        
-        // Calculate daily target for the quarter
+        // Calculate daily target (ideal daily average)
         let dailyTarget = 0;
         if (task.task_type === TaskType.COUNT) {
-          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / daysInQuarter;
+          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 365;
         } else if (task.task_type === TaskType.BOOLEAN) {
-          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/daysInQuarter;
+          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/365;
         } else {
           dailyTarget = task.allocated_minutes;
         }
         
-        // Expected progress based on past days only (excluding today)
-        const expectedIncludingToday = dailyTarget * daysElapsedInQuarter;
-        const expectedPastOnly = dailyTarget * pastDaysInQuarter;
+        // Calculate actual average per day (since start of year)
+        const actualAverage = daysElapsedInYear > 0 ? totalSpent / daysElapsedInYear : 0;
         
-        // Calculate deficit (how much behind from past days)
-        const deficit = expectedPastOnly - totalSpent;
-        
-        // Calculate current average
-        const currentAverage = daysElapsedInQuarter > 0 ? totalSpent / daysElapsedInQuarter : 0;
-        
-        // TODAY = daily target + ALL catch-up (front-loaded)
-        const neededToday = dailyTarget + deficit;
-        
-        // Only show in attention if behind schedule (totalSpent < expectedIncludingToday)
-        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        // Only show in attention if actual average < ideal average
+        const shouldShowInAttention = actualAverage < dailyTarget;
         
         if (shouldShowInAttention) {
+          const daysLeftInYear = 365 - daysElapsedInYear + 1;
+          const expectedSoFar = dailyTarget * (daysElapsedInYear - 1); // Past days only
+          const deficit = Math.max(0, expectedSoFar - totalSpent);
+          const neededToday = dailyTarget + deficit;
+          
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
-          const recommendation = daysLeftInQuarter > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInQuarter} days left)`
+          const recommendation = daysLeftInYear > 0
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
             : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
           
           needsAttention.push({
             task,
             reason: 'quarterly',
             quarterlyIssue: {
-              daysElapsed: daysElapsedInQuarter,
+              daysElapsed: daysElapsedInYear,
               neededToday: Math.ceil(neededToday),
               dailyTarget: Math.round(dailyTarget),
               deficit: Math.round(deficit),
-              currentAverage: Math.round(currentAverage * 10) / 10,
-              daysLeft: daysLeftInQuarter,
+              currentAverage: Math.round(actualAverage * 10) / 10,
+              daysLeft: daysLeftInYear,
               quarter: currentQuarter
             },
             recommendation
