@@ -339,7 +339,7 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
       const [allTasks, allProjects, allGoals, allReflections, allSteps] = await Promise.all([
         api.get('/api/tasks/').catch(() => []),
         api.get('/api/projects/').catch(() => []),
-        api.get('/api/life-goals/').catch(() => []),
+        api.get('/api/life-goals/?include_completed=true').catch(() => []),
         api.get(`/api/wishes/${selectedWish.id}/reflections`).catch(() => []),
         api.get(`/api/wishes/${selectedWish.id}/steps`).catch(() => [])
       ]);
@@ -1118,6 +1118,15 @@ export default function Goals() {
   const [createAsProject, setCreateAsProject] = useState(false);
   const [showAddProjectToGoalModal, setShowAddProjectToGoalModal] = useState(false); // Dedicated Add Project modal
   const [goalProjectPillarId, setGoalProjectPillarId] = useState<number | null>(null);
+  
+  // Section collapse state - all sections expanded by default
+  const [collapsedSections, setCollapsedSections] = useState<{[key: string]: boolean}>({
+    'on_track': false,
+    'at_risk': false,
+    'behind': false,
+    'completed': false,
+    'not_started': false
+  });
   const [goalProjectCategoryId, setGoalProjectCategoryId] = useState<number | null>(null);
   const [goalProjectSubCategoryId, setGoalProjectSubCategoryId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1317,7 +1326,7 @@ export default function Goals() {
       const [allProjects, allTasks, allGoals] = await Promise.all([
         api.get('/api/projects/').catch(() => []),
         api.get('/api/tasks/').catch(() => []),
-        api.get('/api/life-goals/').catch(() => [])
+        api.get('/api/life-goals/?include_completed=true').catch(() => [])
       ]);
       
       // Count for each wish
@@ -1402,7 +1411,7 @@ export default function Goals() {
   const loadLifeGoals = async () => {
     try {
       setLoading(true);
-      const response = await api.get<LifeGoalData[]>('/api/life-goals/');
+      const response = await api.get<LifeGoalData[]>('/api/life-goals/?include_completed=true');
       console.log('Life goals loaded:', response);
       setLifeGoals(response);
     } catch (error) {
@@ -1799,8 +1808,11 @@ export default function Goals() {
 
   // Render Goal Card Function
   const renderGoalCard = (goal: LifeGoalData, cardIndex: number) => {
-    const milestonesTotal = goal.stats?.milestones?.total || 0;
-    const milestonesCompleted = goal.stats?.milestones?.completed || 0;
+    const goalMilestonesTotal = goal.stats?.milestones?.goal_milestones?.total || 0;
+    const goalMilestonesCompleted = goal.stats?.milestones?.goal_milestones?.completed || 0;
+    
+    const projectMilestonesTotal = goal.stats?.milestones?.project_milestones?.total || 0;
+    const projectMilestonesCompleted = goal.stats?.milestones?.project_milestones?.completed || 0;
     
     // Use all_tasks which includes goal_tasks + all project tasks (including subtasks)
     const allTasksTotal = goal.stats?.all_tasks?.total || 0;
@@ -1850,20 +1862,20 @@ export default function Goals() {
             </div>
           </div>
 
-          {/* Center: Circular Progress (Milestones & Tasks) */}
+          {/* Center: Circular Progress (Goal Milestones, Goal Tasks, Project Milestones, Project Tasks, Projects) */}
           <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
-            {/* Milestones Circle */}
+            {/* Goal Milestones Circle */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🏁 Milestones</span>
-                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{milestonesCompleted}/{milestonesTotal}</span>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🏁 Goal Milestones</span>
+                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{goalMilestonesCompleted}/{goalMilestonesTotal}</span>
               </div>
               <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
                 <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
                 <circle 
                   cx="40" cy="40" r="32" fill="none" stroke="#ec4899" strokeWidth="8"
                   strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (milestonesTotal > 0 ? milestonesCompleted / milestonesTotal : 0))}`}
+                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (goalMilestonesTotal > 0 ? goalMilestonesCompleted / goalMilestonesTotal : 0))}`}
                   strokeLinecap="round"
                   style={{ transition: 'stroke-dashoffset 0.3s' }}
                 />
@@ -1883,6 +1895,23 @@ export default function Goals() {
                   cx="40" cy="40" r="32" fill="none" stroke="#8b5cf6" strokeWidth="8"
                   strokeDasharray={`${2 * Math.PI * 32}`}
                   strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.linked_tasks?.total || 0) > 0 ? (goal.stats?.linked_tasks?.completed || 0) / (goal.stats?.linked_tasks?.total || 0) : 0))}`}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.3s' }}
+                />
+              </svg>
+            </div>
+            {/* Project Milestones Circle */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Project Milestones</span>
+                <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{projectMilestonesCompleted}/{projectMilestonesTotal}</span>
+              </div>
+              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                <circle 
+                  cx="40" cy="40" r="32" fill="none" stroke="#f59e0b" strokeWidth="8"
+                  strokeDasharray={`${2 * Math.PI * 32}`}
+                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (projectMilestonesTotal > 0 ? projectMilestonesCompleted / projectMilestonesTotal : 0))}`}
                   strokeLinecap="round"
                   style={{ transition: 'stroke-dashoffset 0.3s' }}
                 />
@@ -1983,6 +2012,47 @@ export default function Goals() {
             >
               ✏️ Edit
             </button>
+            {goal.status !== 'completed' ? (
+              <button 
+                className="btn btn-success"
+                onClick={async (e) => { 
+                  e.stopPropagation(); 
+                  try {
+                    await api.put(`/api/life-goals/${goal.id}`, { 
+                      status: 'completed', 
+                      actual_completion_date: new Date().toISOString().split('T')[0] 
+                    });
+                    await loadLifeGoals();
+                  } catch (err) {
+                    console.error('Error completing goal:', err);
+                    alert('Failed to complete goal');
+                  }
+                }}
+                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px', backgroundColor: '#10b981', border: 'none' }}
+              >
+                ✓ Complete
+              </button>
+            ) : (
+              <button 
+                className="btn btn-warning"
+                onClick={async (e) => { 
+                  e.stopPropagation(); 
+                  try {
+                    await api.put(`/api/life-goals/${goal.id}`, { 
+                      status: 'on_track', 
+                      actual_completion_date: null 
+                    });
+                    await loadLifeGoals();
+                  } catch (err) {
+                    console.error('Error reopening goal:', err);
+                    alert('Failed to reopen goal');
+                  }
+                }}
+                style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px', backgroundColor: '#f59e0b', border: 'none' }}
+              >
+                ↻ Reopen
+              </button>
+            )}
             <button 
               className="btn btn-danger"
               onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }}
@@ -3288,105 +3358,150 @@ return (
                 {/* � Active & On Track Section */}
                 {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      color: '#059669',
-                      marginBottom: '16px',
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                      borderRadius: '8px',
-                      border: '2px solid #10b981'
-                    }}>
-                      🚀 Goals: Active & On Track ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length})
+                    <h3 
+                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'on_track': !prev['on_track'] }))}
+                      style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#059669',
+                        marginBottom: '16px',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                        borderRadius: '8px',
+                        border: '2px solid #10b981',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                      <span>🚀 Goals: Active & On Track ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length})</span>
+                      <span>{collapsedSections['on_track'] ? '▶' : '▼'}</span>
                     </h3>
-                    <div className="goals-grid">
-                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'on_track').map((goal, index) => renderGoalCard(goal, index))}
-                    </div>
+                    {!collapsedSections['on_track'] && (
+                      <div className="goals-grid">
+                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'on_track').map((goal, index) => renderGoalCard(goal, index))}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* ⚠️ At Risk Section - Needs Attention */}
                 {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      color: '#d97706',
-                      marginBottom: '16px',
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                      borderRadius: '8px',
-                      border: '2px solid #f59e0b'
-                    }}>
-                      ⚠️ Goals: At Risk ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length})
+                    <h3 
+                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'at_risk': !prev['at_risk'] }))}
+                      style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#d97706',
+                        marginBottom: '16px',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                        borderRadius: '8px',
+                        border: '2px solid #f59e0b',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                      <span>⚠️ Goals: At Risk ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length})</span>
+                      <span>{collapsedSections['at_risk'] ? '▶' : '▼'}</span>
                     </h3>
-                    <div className="goals-grid">
-                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'at_risk').map((goal, index) => renderGoalCard(goal, index))}
-                    </div>
+                    {!collapsedSections['at_risk'] && (
+                      <div className="goals-grid">
+                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'at_risk').map((goal, index) => renderGoalCard(goal, index))}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* � Behind Schedule Section - Urgent */}
                 {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      color: '#dc2626',
-                      marginBottom: '16px',
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-                      borderRadius: '8px',
-                      border: '2px solid #ef4444'
-                    }}>
-                      � Goals: Behind Schedule ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length})
+                    <h3 
+                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'behind': !prev['behind'] }))}
+                      style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#dc2626',
+                        marginBottom: '16px',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+                        borderRadius: '8px',
+                        border: '2px solid #ef4444',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                      <span>� Goals: Behind Schedule ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length})</span>
+                      <span>{collapsedSections['behind'] ? '▶' : '▼'}</span>
                     </h3>
-                    <div className="goals-grid">
-                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'behind').map((goal, index) => renderGoalCard(goal, index))}
-                    </div>
-                  </div>
-                )}
-
-                {/* 🏆 Completed Section - Achieved */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      color: '#059669',
-                      marginBottom: '16px',
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                      borderRadius: '8px',
-                      border: '2px solid #10b981'
-                    }}>
-                      🏆 Goals: Done ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length})
-                    </h3>
-                    <div className="goals-grid">
-                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'completed').map((goal, index) => renderGoalCard(goal, index))}
-                    </div>
+                    {!collapsedSections['behind'] && (
+                      <div className="goals-grid">
+                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'behind').map((goal, index) => renderGoalCard(goal, index))}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* 📋 Not Started Section - Planned */}
                 {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
-                    <h3 style={{
-                      fontSize: '18px',
-                      fontWeight: '700',
-                      color: '#64748b',
-                      marginBottom: '16px',
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
-                      borderRadius: '8px',
-                      border: '2px solid #94a3b8'
-                    }}>
-                      📋 Goals: Not Started ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length})
+                    <h3 
+                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'not_started': !prev['not_started'] }))}
+                      style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#64748b',
+                        marginBottom: '16px',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+                        borderRadius: '8px',
+                        border: '2px solid #94a3b8',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                      <span>📋 Goals: Not Started ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length})</span>
+                      <span>{collapsedSections['not_started'] ? '▶' : '▼'}</span>
                     </h3>
-                    <div className="goals-grid">
-                      {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'not_started').map((goal, index) => renderGoalCard(goal, index))}
-                    </div>
+                    {!collapsedSections['not_started'] && (
+                      <div className="goals-grid">
+                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'not_started').map((goal, index) => renderGoalCard(goal, index))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 🏆 Completed Section - Achieved */}
+                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length > 0 && (
+                  <div style={{ marginBottom: '32px' }}>
+                    <h3 
+                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'completed': !prev['completed'] }))}
+                      style={{
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#059669',
+                        marginBottom: '16px',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                        borderRadius: '8px',
+                        border: '2px solid #10b981',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                      <span>🏆 Goals: Completed ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length})</span>
+                      <span>{collapsedSections['completed'] ? '▶' : '▼'}</span>
+                    </h3>
+                    {!collapsedSections['completed'] && (
+                      <div className="goals-grid">
+                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'completed').map((goal, index) => renderGoalCard(goal, index))}
+                      </div>
+                    )}
                   </div>
                 )}
               </>
