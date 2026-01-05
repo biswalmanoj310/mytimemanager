@@ -4151,14 +4151,16 @@ export default function Tasks() {
         due_date: task.due_date || null,
         priority: task.priority?.toString() || '5',
         is_completed: task.is_completed,
-        parent_task_id: null, // Misc tasks don't have hierarchy
+        parent_task_id: task.parent_task_id || null, // Preserve parent-child relationships
         project_id: 0, // Not a project task
         milestone_id: null,
         created_at: task.created_at,
         completed_at: task.completed_at || null,
         order: 0,
         updated_at: task.updated_at || task.created_at,
-        pillar_name: task.pillar_name // Include pillar_name for pillar grouping
+        pillar_name: task.pillar_name, // Include pillar_name for pillar grouping
+        pillar_id: task.pillar_id, // Include for inheritance to subtasks
+        category_id: task.category_id // Include for inheritance to subtasks
       }));
       
       setMiscTasks(convertedTasks);
@@ -5901,9 +5903,12 @@ export default function Tasks() {
             <button 
               className="btn btn-sm"
               onClick={() => {
+                console.log('➕ Sub button clicked for task:', task.name, 'ID:', task.id);
                 if (onAddSubtask) {
+                  console.log('Calling onAddSubtask callback');
                   onAddSubtask(task);
                 } else {
+                  console.log('No onAddSubtask callback, using default behavior');
                   setEditingTask(task);
                   setShowAddTaskModal(true);
                 }
@@ -10068,8 +10073,10 @@ export default function Tasks() {
                     getDueDateColorClass={getDueDateColorClass}
                     getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
                     onAddSubtask={(parentTask: ProjectTaskData) => {
+                      console.log('onAddSubtask called for Misc task:', parentTask);
                       setEditingMiscTask(parentTask);
                       setShowAddMiscTaskModal(true);
+                      console.log('Modal should open now. editingMiscTask:', parentTask, 'showAddMiscTaskModal: true');
                     }}
                   />
                 ))}
@@ -10176,6 +10183,7 @@ export default function Tasks() {
                             getDueDateColorClass={getDueDateColorClass}
                             getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
                             onAddSubtask={(parentTask: ProjectTaskData) => {
+                              console.log('onAddSubtask called for Misc task (Calmness):', parentTask);
                               setEditingMiscTask(parentTask);
                               setShowAddMiscTaskModal(true);
                             }}
@@ -10284,6 +10292,7 @@ export default function Tasks() {
                             getDueDateColorClass={getDueDateColorClass}
                             getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
                             onAddSubtask={(parentTask: ProjectTaskData) => {
+                              console.log('onAddSubtask called for Misc task (Family):', parentTask);
                               setEditingMiscTask(parentTask);
                               setShowAddMiscTaskModal(true);
                             }}
@@ -19905,7 +19914,10 @@ export default function Tasks() {
 
       {/* Add Misc Task Modal - Same as Project Task Modal */}
       {showAddMiscTaskModal && (
-        <div className="modal-overlay" onClick={() => setShowAddMiscTaskModal(false)} style={{
+        <div className="modal-overlay" onClick={() => {
+          console.log('Closing Misc Task modal');
+          setShowAddMiscTaskModal(false);
+        }} style={{
           position: 'fixed',
           top: 0,
           left: 0,
@@ -19948,8 +19960,9 @@ export default function Tasks() {
                 const taskPayload: any = {
                   name: formData.get('name'),
                   description: formData.get('description') || '',
-                  pillar_id: 1,
-                  category_id: 1,
+                  // If creating a subtask, inherit pillar/category from parent
+                  pillar_id: editingMiscTask?.pillar_id || 1,
+                  category_id: editingMiscTask?.category_id || 1,
                   task_type: 'time',
                   allocated_minutes: 30,
                   follow_up_frequency: 'misc',
