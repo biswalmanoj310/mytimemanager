@@ -75,7 +75,7 @@ def get_tasks(
     is_completed: Optional[bool] = Query(None, description="Filter by completion status"),
     is_part_of_goal: Optional[bool] = Query(None, description="Filter by goal linkage"),
     skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum records to return"),
+    limit: int = Query(100000, ge=1, le=1000000, description="Maximum records to return"),
     db: Session = Depends(get_db)
 ):
     """
