@@ -3258,20 +3258,15 @@ export default function Tasks() {
       const response: any = await api.get('/api/habits/today/active');
       const allHabits = Array.isArray(response.data || response) ? (response.data || response) : [];
       
-      console.log('🔍 loadTodaysHabits - All habits from API:', allHabits.length, allHabits);
-      
       // Get current nowHabits from localStorage
       const storedNowHabits = localStorage.getItem('nowHabits');
       const nowHabitIds = storedNowHabits ? new Set(JSON.parse(storedNowHabits)) : new Set();
-      
-      console.log('🔍 nowHabitIds from localStorage:', Array.from(nowHabitIds));
       
       // Filter to only show habits that haven't been done for 2+ consecutive days
       // OR habits that are in the NOW list (those should always load)
       const habitsNeedingAttention = allHabits.filter((habit: any) => {
         // Always include habits that are in NOW list
         if (nowHabitIds.has(habit.id)) {
-          console.log(`✅ Habit ${habit.id} (${habit.name}) - IN NOW list, always included`);
           return true;
         }
         
@@ -3305,25 +3300,7 @@ export default function Tasks() {
             }
           }
           
-          // 2. Check for recent miss streak in last 7 days (even if completed today)
-          let maxRecentMissStreak = 0;
-          let currentStreak = 0;
-          const startIndex = Math.max(0, todayIndex - 6);
-          
-          for (let i = todayIndex; i >= startIndex; i--) {
-            const dayStatus = completionArray[i];
-            
-            if (dayStatus === null) continue;
-            
-            if (dayStatus === false) {
-              currentStreak++;
-              maxRecentMissStreak = Math.max(maxRecentMissStreak, currentStreak);
-            } else {
-              currentStreak = 0;
-            }
-          }
-          
-          // 3. Calculate weekly average (Monday to today)
+          // 2. Calculate weekly average (Monday to today)
           // monthly_completion array goes from 1st of month to today
           // We need to find Monday of current week
           const today = new Date();
@@ -3354,35 +3331,23 @@ export default function Tasks() {
             ? (weeklyCompletedDays / weeklyApplicableDays * 100) 
             : 100;
           
-          // 4. Check if behind on averages
+          // 3. Check if behind on averages
           const isBehindOnWeekly = weeklyCompletionRate < 60;
           const isBehindOnMonthly = habit.completion_rate !== undefined && habit.completion_rate < 40;
           
-          console.log(`📊 Habit ${habit.id} (${habit.name}) - Consecutive missed: ${consecutiveMissedDays}, Recent streak: ${maxRecentMissStreak}, Weekly: ${weeklyCompletionRate.toFixed(0)}%, Monthly: ${habit.completion_rate}%, Behind weekly: ${isBehindOnWeekly}, Behind monthly: ${isBehindOnMonthly}, Completed today: ${habit.completed_today}`);
-          
           // Show habit if ANY of these conditions are met:
           // 1. Currently missing 2+ consecutive days, OR
-          // 2. Had a 2+ day miss streak in last 7 days (recent warning), OR
-          // 3. Weekly average < 60%, OR
-          // 4. Monthly average < 40%
-          const shouldShow = consecutiveMissedDays >= 2 || maxRecentMissStreak >= 2 || isBehindOnWeekly || isBehindOnMonthly;
+          // 2. Weekly average < 60%, OR
+          // 3. Monthly average < 40%
+          const shouldShow = consecutiveMissedDays >= 2 || isBehindOnWeekly || isBehindOnMonthly;
           
-          const reasons = [];
-          if (consecutiveMissedDays >= 2) reasons.push(`${consecutiveMissedDays} consecutive now`);
-          if (maxRecentMissStreak >= 2 && consecutiveMissedDays < 2) reasons.push(`${maxRecentMissStreak} miss streak recently`);
-          if (isBehindOnWeekly) reasons.push(`${weeklyCompletionRate.toFixed(0)}% weekly`);
-          if (isBehindOnMonthly) reasons.push(`${habit.completion_rate}% monthly`);
-          
-          console.log(`${shouldShow ? '✅' : '❌'} Habit ${habit.id} (${habit.name}) - ${shouldShow ? 'INCLUDED' : 'EXCLUDED'} (${reasons.join(', ') || 'on track'})`);
           return shouldShow;
         }
         
         // Fallback: if no monthly_completion data, don't show if completed today
-        console.log(`⚠️ Habit ${habit.id} (${habit.name}) - No monthly_completion data, using fallback`);
         return !habit.completed_today;
       });
       
-      console.log('🎯 Final habitsNeedingAttention:', habitsNeedingAttention.length, habitsNeedingAttention);
       setTodaysHabits(habitsNeedingAttention);
     } catch (err: any) {
       console.error('Error loading today\'s habits:', err);
