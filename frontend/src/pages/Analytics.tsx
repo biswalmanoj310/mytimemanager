@@ -258,8 +258,10 @@ export default function Analytics() {
   const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
-  const [showUtilizationWeek, setShowUtilizationWeek] = useState(false); // Toggle for Time Utilization weekly
-  const [showUtilizationMonth, setShowUtilizationMonth] = useState(false); // Toggle for Time Utilization monthly
+  const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(false); // Toggle for Task Utilization weekly
+  const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(false); // Toggle for Task Utilization monthly
+  const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(false); // Toggle for Category Utilization weekly
+  const [showUtilizationCategoryMonth, setShowUtilizationCategoryMonth] = useState(false); // Toggle for Category Utilization monthly
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -657,54 +659,65 @@ export default function Analytics() {
       <div className="analytics-header">
         <h1>Analytics Dashboard</h1>
         
-        {/* Streak Counter - Always visible at top */}
-        {streakData && (
-          <div className={`streak-banner streak-${streakData.streak_status}`}>
-            <div className="streak-main">
-              <div className="streak-icon">
-                {streakData.streak_status === 'active' ? '🔥' : 
-                 streakData.streak_status === 'at_risk' ? '⚡' : '💤'}
-              </div>
-              <div className="streak-info">
-                <div className="streak-current">
-                  <span className="streak-number">{streakData.current_streak}</span>
-                  <span className="streak-label">Day Streak</span>
-                </div>
-                <div className="streak-status-text">
-                  {streakData.streak_status === 'active' && '🎉 Keep it going!'}
-                  {streakData.streak_status === 'at_risk' && '⚠️ Track today to keep your streak!'}
-                  {streakData.streak_status === 'broken' && '💪 Start a new streak today!'}
-                  {streakData.streak_status === 'inactive' && '🚀 Begin your tracking journey!'}
-                </div>
-              </div>
-            </div>
-            <div className="streak-stats">
-              <div className="stat-item">
-                <span className="stat-label">Longest</span>
-                <span className="stat-value">{streakData.longest_streak} days</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-label">Total Days</span>
-                <span className="stat-value">{streakData.total_tracked_days}</span>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        {/* Badges Display */}
-        {badgeData && badgeData.badges.length > 0 && (
-          <div className="badges-container">
-            <h3>🏆 Your Achievements ({badgeData.total_earned})</h3>
-            <div className="badges-grid">
-              {badgeData.badges.map((badge) => (
-                <div key={badge.id} className="badge-card">
-                  <div className="badge-icon">{badge.name.split(' ')[0]}</div>
-                  <div className="badge-info">
-                    <div className="badge-name">{badge.name}</div>
-                    <div className="badge-description">{badge.description}</div>
+        {/* Combined Streak & Achievements Panel */}
+        {(streakData || (badgeData && badgeData.badges.length > 0)) && (
+          <div style={{ 
+            padding: '12px 20px', 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+            color: 'white',
+            borderRadius: '12px', 
+            marginBottom: '16px',
+            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+              {/* Streak Section */}
+              {streakData && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '28px' }}>
+                    {streakData.streak_status === 'active' ? '🔥' : 
+                     streakData.streak_status === 'at_risk' ? '⚡' : '💤'}
+                  </span>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontSize: '24px', fontWeight: 700 }}>{streakData.current_streak}</span>
+                    <span style={{ fontSize: '14px', opacity: 0.9 }}>day streak</span>
+                    <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
+                      {streakData.streak_status === 'active' && '🎉 Keep going!'}
+                      {streakData.streak_status === 'at_risk' && '⚠️ Track today!'}
+                      {streakData.streak_status === 'broken' && '💪 Restart!'}
+                      {streakData.streak_status === 'inactive' && '🚀 Start!'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', fontSize: '12px', marginLeft: '16px', opacity: 0.85 }}>
+                    <span>Longest: {streakData.longest_streak}</span>
+                    <span>Total: {streakData.total_tracked_days}</span>
                   </div>
                 </div>
-              ))}
+              )}
+              
+              {/* Achievements Section */}
+              {badgeData && badgeData.badges.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 600, opacity: 0.95 }}>🏆 Achievements ({badgeData.total_earned})</span>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {badgeData.badges.slice(0, 5).map((badge) => (
+                      <span 
+                        key={badge.id} 
+                        style={{ 
+                          fontSize: '11px', 
+                          padding: '4px 10px', 
+                          background: 'rgba(255,255,255,0.2)', 
+                          borderRadius: '14px',
+                          border: '1px solid rgba(255,255,255,0.3)',
+                          backdropFilter: 'blur(10px)'
+                        }}
+                        title={badge.description}
+                      >
+                        {badge.name.split(' ')[0]} {badge.name.replace(badge.name.split(' ')[0], '').trim()}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -716,6 +729,17 @@ export default function Analytics() {
             onClick={() => setViewMode('overview')}
           >
             📊 Overview
+          </button>
+          <button 
+            className={`tab-button ${viewMode === 'wheel' ? 'active' : ''}`}
+            onClick={() => {
+              setViewMode('wheel');
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', 'wheel');
+              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }}
+          >
+            ⭕ Wheel of Life
           </button>
           <button 
             className={`tab-button ${viewMode === 'detailed' ? 'active' : ''}`}
@@ -734,17 +758,6 @@ export default function Analytics() {
             onClick={() => setViewMode('tasks')}
           >
             ✓ Tasks
-          </button>
-          <button 
-            className={`tab-button ${viewMode === 'wheel' ? 'active' : ''}`}
-            onClick={() => {
-              setViewMode('wheel');
-              const params = new URLSearchParams(window.location.search);
-              params.set('view', 'wheel');
-              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-            }}
-          >
-            ⭕ Wheel of Life
           </button>
         </div>
         
@@ -905,6 +918,397 @@ export default function Analytics() {
                       radius={[6, 6, 0, 0]}
                       label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                     />
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* UTILIZATION PERCENTAGE CHART - TASKS */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>📊 Time Utilization Percentage: Daily Tasks</h2>
+                <p className="chart-description">Percentage of allocated time actually used (100% = perfect match, &gt;100% = overtime)</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showUtilizationTaskWeek ? 'active' : ''}`}
+                  onClick={() => setShowUtilizationTaskWeek(!showUtilizationTaskWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showUtilizationTaskWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showUtilizationTaskMonth ? 'active' : ''}`}
+                  onClick={() => setShowUtilizationTaskMonth(!showUtilizationTaskMonth)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showUtilizationTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setModalChartType('utilization' as any);
+                    setShowDetailModal(true);
+                  }}
+                  className="expand-button"
+                >
+                  🔍 View All
+                </button>
+              </div>
+            </div>
+            
+            <div className="unified-comparison-chart">
+              <ResponsiveContainer width="100%" height={500}>
+                <BarChart 
+                  data={(() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Normalize to midnight
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    return allTasksData
+                      .map((task) => {
+                        const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
+                        const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
+                        const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
+                        
+                        const allocated = task.allocated_minutes / 60;
+                        const todaySpent = (todayTask?.spent_minutes || 0) / 60;
+                        const weeklyAvg = (weekTask?.spent_minutes || 0) / 60 / daysInWeek;
+                        const monthlyAvg = (monthTask?.spent_minutes || 0) / 60 / daysInMonth;
+                        
+                        // Calculate utilization percentages
+                        const todayUtil = allocated > 0 ? (todaySpent / allocated) * 100 : 0;
+                        const weekUtil = allocated > 0 ? (weeklyAvg / allocated) * 100 : 0;
+                        const monthUtil = allocated > 0 ? (monthlyAvg / allocated) * 100 : 0;
+                        
+                        return {
+                          name: task.task_name,
+                          category: task.category_name,
+                          today: Math.min(todayUtil, 100),
+                          todayOvertime: Math.max(todayUtil - 100, 0),
+                          weekly: Math.min(weekUtil, 100),
+                          weeklyOvertime: Math.max(weekUtil - 100, 0),
+                          monthly: Math.min(monthUtil, 100),
+                          monthlyOvertime: Math.max(monthUtil - 100, 0),
+                          hasData: allocated > 0 || todaySpent > 0 || weeklyAvg > 0 || monthlyAvg > 0
+                        };
+                      })
+                      .filter(task => task.hasData)
+                      .sort((a, b) => {
+                        // Sort by Daily tab order: category first
+                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
+                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
+                        
+                        if (categoryOrderA !== categoryOrderB) {
+                          return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                        }
+                        
+                        // Within same category, sort by task name order
+                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
+                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
+                        
+                        if (taskOrderA !== taskOrderB) {
+                          return taskOrderA - taskOrderB;
+                        }
+                        
+                        return a.name.localeCompare(b.name);
+                      })
+                      .slice(0, 20); // Show top 20 tasks
+                  })()}
+                  barSize={15}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    height={60}
+                    interval={0}
+                    tick={<CustomMultilineLabel />}
+                  />
+                  <YAxis 
+                    label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Legend 
+                    wrapperStyle={{ paddingTop: '10px' }}
+                    iconType="rect"
+                  />
+                  {/* Reference line at 100% - Target utilization */}
+                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" label={{ value: '100%', position: 'right', fill: '#10b981', fontSize: 12, fontWeight: 600 }} />
+                  <Bar 
+                    dataKey="today" 
+                    name="Today %" 
+                    stackId="today"
+                    fill="#4299e1" 
+                    radius={[0, 0, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="todayOvertime" 
+                    name="Overtime" 
+                    stackId="today"
+                    fill="#dc2626" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
+                      if (!props || !props.payload) return '';
+                      const payload = props.payload;
+                      const total = (payload.today || 0) + (payload.todayOvertime || 0);
+                      return total > 0 ? `${total.toFixed(0)}%` : '';
+                    }}}
+                  />
+                  {showUtilizationTaskWeek && (
+                    <>
+                      <Bar 
+                        dataKey="weekly" 
+                        name="Weekly Avg %" 
+                        stackId="weekly"
+                        fill="#48bb78" 
+                        radius={[0, 0, 0, 0]}
+                      />
+                      <Bar 
+                        dataKey="weeklyOvertime" 
+                        name="Weekly Overtime" 
+                        stackId="weekly"
+                        fill="#dc2626" 
+                        radius={[4, 4, 0, 0]}
+                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number, name: any, props: any) => {
+                          if (!props || !props.payload) return '';
+                          const payload = props.payload;
+                          const total = (payload.weekly || 0) + (payload.weeklyOvertime || 0);
+                          return total > 0 ? `${total.toFixed(0)}%` : '';
+                        }}}
+                      />
+                    </>
+                  )}
+                  {showUtilizationTaskMonth && (
+                    <>
+                      <Bar 
+                        dataKey="monthly" 
+                        name="Monthly Avg %" 
+                        stackId="monthly"
+                        fill="#ed8936" 
+                        radius={[0, 0, 0, 0]}
+                      />
+                      <Bar 
+                        dataKey="monthlyOvertime" 
+                        name="Monthly Overtime" 
+                        stackId="monthly"
+                        fill="#dc2626" 
+                        radius={[4, 4, 0, 0]}
+                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number, name: any, props: any) => {
+                          if (!props || !props.payload) return '';
+                          const payload = props.payload;
+                          const total = (payload.monthly || 0) + (payload.monthlyOvertime || 0);
+                          return total > 0 ? `${total.toFixed(0)}%` : '';
+                        }}}
+                      />
+                    </>
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* UTILIZATION PERCENTAGE CHART - CATEGORIES */}
+          <div className="comparative-charts-section">
+            <div className="section-header-with-toggle">
+              <div>
+                <h2>📊 Time Utilization Percentage: Daily Categories</h2>
+                <p className="chart-description">Percentage of allocated time actually used by category (100% = perfect match, &gt;100% = overtime)</p>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className={`toggle-month-btn ${showUtilizationCategoryWeek ? 'active' : ''}`}
+                  onClick={() => setShowUtilizationCategoryWeek(!showUtilizationCategoryWeek)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showUtilizationCategoryWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showUtilizationCategoryMonth ? 'active' : ''}`}
+                  onClick={() => setShowUtilizationCategoryMonth(!showUtilizationCategoryMonth)}
+                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                >
+                  {showUtilizationCategoryMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setModalChartType('utilization-category' as any);
+                    setShowDetailModal(true);
+                  }}
+                  className="expand-button"
+                >
+                  🔍 View All
+                </button>
+              </div>
+            </div>
+            
+            <div className="unified-comparison-chart">
+              <ResponsiveContainer width="100%" height={500}>
+                <BarChart 
+                  data={(() => {
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0); // Normalize to midnight
+                    const weekStart = getWeekStart(today);
+                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    const daysInMonth = today.getDate();
+                    
+                    // Aggregate task data by category
+                    const categoryMap = new Map<string, {
+                      category_name: string;
+                      allocated: number;
+                      todaySpent: number;
+                      weekSpent: number;
+                      monthSpent: number;
+                    }>();
+                    
+                    allTasksData.forEach((task) => {
+                      const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
+                      const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
+                      const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
+                      
+                      const allocated = task.allocated_minutes / 60;
+                      const todaySpent = (todayTask?.spent_minutes || 0) / 60;
+                      const weekSpent = (weekTask?.spent_minutes || 0) / 60;
+                      const monthSpent = (monthTask?.spent_minutes || 0) / 60;
+                      
+                      if (!categoryMap.has(task.category_name)) {
+                        categoryMap.set(task.category_name, {
+                          category_name: task.category_name,
+                          allocated: 0,
+                          todaySpent: 0,
+                          weekSpent: 0,
+                          monthSpent: 0
+                        });
+                      }
+                      
+                      const cat = categoryMap.get(task.category_name)!;
+                      cat.allocated += allocated;
+                      cat.todaySpent += todaySpent;
+                      cat.weekSpent += weekSpent;
+                      cat.monthSpent += monthSpent;
+                    });
+                    
+                    return Array.from(categoryMap.values())
+                      .map((cat) => {
+                        const weeklyAvg = cat.weekSpent / daysInWeek;
+                        const monthlyAvg = cat.monthSpent / daysInMonth;
+                        
+                        // Calculate utilization percentages
+                        const todayUtil = cat.allocated > 0 ? (cat.todaySpent / cat.allocated) * 100 : 0;
+                        const weekUtil = cat.allocated > 0 ? (weeklyAvg / cat.allocated) * 100 : 0;
+                        const monthUtil = cat.allocated > 0 ? (monthlyAvg / cat.allocated) * 100 : 0;
+                        
+                        return {
+                          name: cat.category_name,
+                          today: Math.min(todayUtil, 100),
+                          todayOvertime: Math.max(todayUtil - 100, 0),
+                          weekly: Math.min(weekUtil, 100),
+                          weeklyOvertime: Math.max(weekUtil - 100, 0),
+                          monthly: Math.min(monthUtil, 100),
+                          monthlyOvertime: Math.max(monthUtil - 100, 0),
+                          hasData: cat.allocated > 0 || cat.todaySpent > 0 || weeklyAvg > 0 || monthlyAvg > 0
+                        };
+                      })
+                      .filter(cat => cat.hasData)
+                      .sort((a, b) => {
+                        // Sort by Daily tab category order
+                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.name);
+                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.name);
+                        return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                      });
+                  })()}
+                  barSize={25}
+                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    height={60}
+                    interval={0}
+                    tick={<CustomMultilineLabel />}
+                  />
+                  <YAxis 
+                    label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                    style={{ fontSize: '12px' }}
+                    domain={[0, 'auto']}
+                  />
+                  <Legend 
+                    wrapperStyle={{ paddingTop: '10px' }}
+                    iconType="rect"
+                  />
+                  {/* Reference line at 100% - Target utilization */}
+                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" label={{ value: '100%', position: 'right', fill: '#10b981', fontSize: 12, fontWeight: 600 }} />
+                  <Bar 
+                    dataKey="today" 
+                    name="Today %" 
+                    stackId="today"
+                    fill="#4299e1" 
+                    radius={[0, 0, 0, 0]}
+                  />
+                  <Bar 
+                    dataKey="todayOvertime" 
+                    name="Overtime" 
+                    stackId="today"
+                    fill="#dc2626" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontSize: 10, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
+                      if (!props || !props.payload) return '';
+                      const payload = props.payload;
+                      const total = (payload.today || 0) + (payload.todayOvertime || 0);
+                      return total > 0 ? `${total.toFixed(0)}%` : '';
+                    }}}
+                  />
+                  {showUtilizationCategoryWeek && (
+                    <>
+                      <Bar 
+                        dataKey="weekly" 
+                        name="Weekly Avg %" 
+                        stackId="weekly"
+                        fill="#48bb78" 
+                        radius={[0, 0, 0, 0]}
+                      />
+                      <Bar 
+                        dataKey="weeklyOvertime" 
+                        name="Weekly Overtime" 
+                        stackId="weekly"
+                        fill="#dc2626" 
+                        radius={[4, 4, 0, 0]}
+                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number, name: any, props: any) => {
+                          if (!props || !props.payload) return '';
+                          const payload = props.payload;
+                          const total = (payload.weekly || 0) + (payload.weeklyOvertime || 0);
+                          return total > 0 ? `${total.toFixed(0)}%` : '';
+                        }}}
+                      />
+                    </>
+                  )}
+                  {showUtilizationCategoryMonth && (
+                    <>
+                      <Bar 
+                        dataKey="monthly" 
+                        name="Monthly Avg %" 
+                        stackId="monthly"
+                        fill="#ed8936" 
+                        radius={[0, 0, 0, 0]}
+                      />
+                      <Bar 
+                        dataKey="monthlyOvertime" 
+                        name="Monthly Overtime" 
+                        stackId="monthly"
+                        fill="#dc2626" 
+                        radius={[4, 4, 0, 0]}
+                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number, name: any, props: any) => {
+                          if (!props || !props.payload) return '';
+                          const payload = props.payload;
+                          const total = (payload.monthly || 0) + (payload.monthlyOvertime || 0);
+                          return total > 0 ? `${total.toFixed(0)}%` : '';
+                        }}}
+                      />
+                    </>
                   )}
                 </BarChart>
               </ResponsiveContainer>
@@ -1333,164 +1737,6 @@ export default function Analytics() {
                   )}
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* UTILIZATION PERCENTAGE CHART */}
-          <div className="comparative-charts-section">
-            <div className="section-header-with-toggle">
-              <div>
-                <h2>📊 Time Utilization Percentage</h2>
-                <p className="chart-description">Percentage of allocated time actually used (100% = perfect match, &gt;100% = overtime)</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationWeek ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationWeek(!showUtilizationWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showUtilizationWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationMonth ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationMonth(!showUtilizationMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showUtilizationMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
-                <button 
-                  onClick={() => {
-                    setModalChartType('utilization' as any);
-                    setShowDetailModal(true);
-                  }}
-                  className="expand-button"
-                >
-                  🔍 View All
-                </button>
-              </div>
-            </div>
-            
-            <div className="unified-comparison-chart">
-              <ResponsiveContainer width="100%" height={500}>
-                <BarChart 
-                  data={(() => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
-                    
-                    return allTasksData
-                      .map((task) => {
-                        const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
-                        const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
-                        const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
-                        
-                        const allocated = task.allocated_minutes / 60;
-                        const todaySpent = (todayTask?.spent_minutes || 0) / 60;
-                        const weeklyAvg = (weekTask?.spent_minutes || 0) / 60 / daysInWeek;
-                        const monthlyAvg = (monthTask?.spent_minutes || 0) / 60 / daysInMonth;
-                        
-                        // Calculate utilization percentages
-                        const todayUtil = allocated > 0 ? (todaySpent / allocated) * 100 : 0;
-                        const weekUtil = allocated > 0 ? (weeklyAvg / allocated) * 100 : 0;
-                        const monthUtil = allocated > 0 ? (monthlyAvg / allocated) * 100 : 0;
-                        
-                        return {
-                          name: task.task_name,
-                          category: task.category_name,
-                          today: todayUtil,
-                          weekly: weekUtil,
-                          monthly: monthUtil,
-                          hasData: allocated > 0 || todaySpent > 0 || weeklyAvg > 0 || monthlyAvg > 0
-                        };
-                      })
-                      .filter(task => task.hasData)
-                      .sort((a, b) => {
-                        // Sort by Daily tab order: category first
-                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
-                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
-                        
-                        if (categoryOrderA !== categoryOrderB) {
-                          return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
-                        }
-                        
-                        // Within same category, sort by task name order
-                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
-                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
-                        
-                        if (taskOrderA !== taskOrderB) {
-                          return taskOrderA - taskOrderB;
-                        }
-                        
-                        return a.name.localeCompare(b.name);
-                      })
-                      .slice(0, 20); // Show top 20 tasks
-                  })()}
-                  barSize={15}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                >
-                  <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
-                  <XAxis 
-                    dataKey="name" 
-                    height={60}
-                    interval={0}
-                    tick={<CustomMultilineLabel />}
-                  />
-                  <YAxis 
-                    label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
-                    style={{ fontSize: '12px' }}
-                    domain={[0, 'auto']}
-                  />
-                  <Legend 
-                    wrapperStyle={{ paddingTop: '10px' }}
-                    iconType="rect"
-                  />
-                  {/* Reference line at 100% */}
-                  <line x1="0" y1="100" x2="100%" y2="100" stroke="#48bb78" strokeWidth={2} strokeDasharray="5 5" />
-                  <Bar 
-                    dataKey="today" 
-                    name="Today %" 
-                    fill="#4299e1" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
-                  />
-                  {showUtilizationWeek && (
-                    <Bar 
-                      dataKey="weekly" 
-                      name="Weekly Avg %" 
-                      fill="#48bb78" 
-                      radius={[4, 4, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
-                    />
-                  )}
-                  {showUtilizationMonth && (
-                    <Bar 
-                      dataKey="monthly" 
-                      name="Monthly Avg %" 
-                      fill="#ed8936" 
-                      radius={[4, 4, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
-                    />
-                  )}
-                </BarChart>
-              </ResponsiveContainer>
-              
-              {/* Utilization Legend */}
-              <div className="utilization-legend">
-                <div className="legend-item">
-                  <span className="legend-color" style={{ backgroundColor: '#cbd5e0' }}></span>
-                  <span>&lt; 50%: Under-utilized</span>
-                </div>
-                <div className="legend-item">
-                  <span className="legend-color" style={{ backgroundColor: '#48bb78' }}></span>
-                  <span>80-120%: Optimal range</span>
-                </div>
-                <div className="legend-item">
-                  <span className="legend-color" style={{ backgroundColor: '#ed8936' }}></span>
-                  <span>&gt; 150%: Significant overtime</span>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -2382,7 +2628,8 @@ export default function Analytics() {
                 {modalChartType === 'pillar' && '🎯 Pillar Time Comparison - Detailed View'}
                 {modalChartType === 'category' && '📂 Category Time Comparison - Detailed View'}
                 {modalChartType === 'task' && '✓ Tasks Time Comparison - Detailed View'}
-                {modalChartType === 'utilization' && '📊 Time Utilization Percentage - All Tasks'}
+                {modalChartType === 'utilization' && '📊 Time Utilization Percentage: Daily Tasks - All Tasks'}
+                {modalChartType === 'utilization-category' && '📊 Time Utilization Percentage: Daily Categories - All Categories'}
                 {modalChartType === 'pillar-simple' && '🎯 Pillar Time Comparison'}
                 {modalChartType === 'category-simple' && '📂 Category Time Comparison'}
                 {modalChartType === 'task-simple' && '✓ Tasks Time Comparison'}
