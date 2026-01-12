@@ -186,9 +186,14 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
         )
     ).all()
 
-    # Get all time entries for this date
+    # Get time entries for this date - ONLY for time-based tasks (exclude one-time tasks)
+    # Join with Task to filter by task properties
+    time_based_task_ids = [task.id for task in time_based_tasks]
     entries = db.query(DailyTimeEntry).filter(
-        func.date(DailyTimeEntry.entry_date) == entry_date
+        and_(
+            func.date(DailyTimeEntry.entry_date) == entry_date,
+            DailyTimeEntry.task_id.in_(time_based_task_ids)
+        )
     ).all()
     
     # Calculate total allocated
@@ -196,16 +201,14 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
     # we sum ALL active daily TIME tasks as they represent what should be in the table
     total_allocated = sum(task.allocated_minutes for task in time_based_tasks)
 
-    # Calculate total spent (using entries already fetched above)
+    # Calculate total spent (only from time-based tasks, excluding one-time tasks)
     total_spent = sum(entry.minutes for entry in entries)
 
     # Check if day is complete
-    # Day is complete if:
-    # 1. Spent >= allocated (overspent is OK, means you did extra work)
-    # 2. OR difference is within 5 minutes tolerance (small rounding errors)
-    # 3. AND total_spent > 0 (not a zero day)
-    difference = abs(total_allocated - total_spent)
-    is_complete = (total_spent >= total_allocated or difference <= 5) and total_spent > 0
+    # Day is complete if spent time equals exactly 1440 minutes (24 hours)
+    # Allow 5 minute tolerance for rounding errors
+    difference = abs(1440 - total_spent)
+    is_complete = difference <= 5 and total_spent > 0
 
     # Get or create daily summary
     summary = db.query(DailySummary).filter(

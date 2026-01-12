@@ -11498,17 +11498,32 @@ export default function Tasks() {
                           }, 0)
                         , 0);
                       const totalHours = totalAllocated / 60;
-                      const isExactly24 = totalHours === 24;
+                      // Check if allocated equals spent time
+                      const isAllocatedEqualSpent = totalAllocated === totalSpent;
                       
                       return (
-                        <tr className={`total-row ${!isExactly24 ? 'total-mismatch' : ''}`}>
-                          <td className={`col-task sticky-col sticky-col-1 ${hoveredColumn === -1 ? 'column-highlight' : ''}`}>
+                        <tr className="total-row">
+                          <td 
+                            className={`col-task sticky-col sticky-col-1 ${!isAllocatedEqualSpent ? 'total-mismatch-cell' : ''} ${hoveredColumn === -1 ? 'column-highlight' : ''}`}
+                            style={{
+                              background: !isAllocatedEqualSpent ? '#fed7d7 !important' : undefined,
+                              color: !isAllocatedEqualSpent ? '#c53030' : undefined
+                            }}
+                          >
                             <strong>Total Time</strong><br/>
-                            <small style={{ fontSize: '11px', color: '#666' }}>
+                            <small style={{ fontSize: '11px', color: !isAllocatedEqualSpent ? '#c53030' : '#666' }}>
                               Allocated: {totalAllocated} min ({totalHours.toFixed(2)}h)
                             </small>
                           </td>
-                          <td className="col-time sticky-col sticky-col-2" style={{ left: '250px' }}>
+                          <td 
+                            className={`col-time sticky-col sticky-col-2 ${!isAllocatedEqualSpent ? 'total-mismatch-cell' : ''}`}
+                            style={{ 
+                              left: '250px',
+                              background: !isAllocatedEqualSpent ? '#fed7d7 !important' : undefined,
+                              color: !isAllocatedEqualSpent ? '#c53030' : undefined,
+                              fontWeight: 'bold'
+                            }}
+                          >
                             <strong>{totalSpent} min</strong>
                           </td>
                           {hourLabels.map(hour => {
@@ -11989,11 +12004,11 @@ export default function Tasks() {
               activeTab,
               incompleteDaysLoaded,
               incompleteDaysLength: incompleteDays.length,
-              shouldShow: incompleteDaysLoaded && incompleteDays.length > 0
+              shouldShow: activeTab === 'daily' && incompleteDaysLoaded && incompleteDays.length > 0
             });
             return null;
           })()}
-          {incompleteDaysLoaded && incompleteDays.length > 0 && (
+          {activeTab === 'daily' && incompleteDaysLoaded && incompleteDays.length > 0 && (
             <div className="incomplete-days-section">
               <div className="incomplete-days-alert">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>

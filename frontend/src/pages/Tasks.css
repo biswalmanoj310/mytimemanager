@@ -787,6 +787,25 @@ td.section-header-cell.boolean-based {
   background: #fed7d7 !important;
 }
 
+/* Red background for individual cells in total row when mismatch */
+.total-row .total-mismatch-cell {
+  background: #fed7d7 !important;
+  color: #c53030 !important;
+}
+
+/* More specific rule to override sticky-col background */
+.daily-table tfoot .total-row .sticky-col-1.total-mismatch-cell,
+.daily-table tfoot .total-row .sticky-col-2.total-mismatch-cell {
+  background: #fed7d7 !important;
+  color: #c53030 !important;
+}
+
+/* Override sticky column rules for total row mismatch */
+.daily-table .total-row .sticky-col-2.total-mismatch-cell {
+  background: #fed7d7 !important;
+  color: #c53030 !important;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .tasks-page {
