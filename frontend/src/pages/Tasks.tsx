@@ -3032,8 +3032,8 @@ export default function Tasks() {
       const yearNumber = selectedYearStart.getFullYear();
       const dateStr = `${yearNumber}-01-01`;
       
-      await api.post(`/api/yearly-time/status/${selectedDailyTaskForQuarterly}`, {
-        year_start_date: dateStr,
+      // year_start_date must be in URL path, not request body
+      await api.post(`/api/yearly-time/status/${selectedDailyTaskForQuarterly}/${dateStr}`, {
         is_completed: false,
         is_na: false
       });

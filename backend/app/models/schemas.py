@@ -180,7 +180,7 @@ class TaskBase(BaseModel):
     sub_category_id: Optional[int] = Field(None, gt=0)
     task_type: str = Field(default='time', description="Type of task: time, count, or boolean")
     allocated_minutes: int = Field(default=0, description="Time allocated in minutes (for time-based tasks)")
-    target_value: Optional[int] = Field(None, description="Target value for count-based tasks")
+    target_value: Optional[float] = Field(None, description="Target value for count-based tasks (supports decimals like 0.3)")
     unit: Optional[str] = Field(None, max_length=50, description="Unit for count-based tasks (e.g., reps, glasses)")
     follow_up_frequency: FollowUpFrequency
     separately_followed: bool = Field(default=False, description="No time bound")
@@ -221,7 +221,7 @@ class TaskUpdate(BaseModel):
     sub_category_id: Optional[int] = Field(None, gt=0)
     task_type: Optional[str] = Field(None, description="Type of task: time, count, or boolean")
     allocated_minutes: Optional[int] = Field(None, description="Time allocated in minutes")
-    target_value: Optional[int] = Field(None, description="Target value for count-based tasks")
+    target_value: Optional[float] = Field(None, description="Target value for count-based tasks (supports decimals like 0.3)")
     unit: Optional[str] = Field(None, max_length=50, description="Unit for count-based tasks")
     follow_up_frequency: Optional[FollowUpFrequency] = None
     separately_followed: Optional[bool] = None

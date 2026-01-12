@@ -177,7 +177,7 @@ class Task(Base):
     # Task type and allocation
     task_type = Column(String(20), nullable=False, default='time')  # 'time', 'count', or 'boolean'
     allocated_minutes = Column(Integer, nullable=False)  # Time in minutes (for time-based tasks)
-    target_value = Column(Integer, nullable=True)  # Target for count-based tasks (e.g., 10 push-ups)
+    target_value = Column(Float, nullable=True)  # Target for count-based tasks (supports decimals like 0.3)
     unit = Column(String(50), nullable=True)  # Unit for count tasks (e.g., 'reps', 'glasses', 'miles')
     spent_minutes = Column(Integer, default=0)  # Actual time spent
     
