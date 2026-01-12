@@ -252,8 +252,8 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         return;
       }
     } else if (formData.task_type === TaskType.COUNT) {
-      if (!formData.target_value || formData.target_value <= 0) {
-        const errorMsg = 'Please enter a valid target count (greater than 0)';
+      if (formData.target_value === null || formData.target_value === undefined || formData.target_value < 0) {
+        const errorMsg = 'Please enter a valid target count (0 or greater)';
         console.error('Validation error:', errorMsg);
         setError(errorMsg);
         alert(errorMsg);
@@ -555,7 +555,8 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
                   value={formData.target_value || ''}
                   onChange={(e) => setFormData({ ...formData, target_value: e.target.value ? Number(e.target.value) : null })}
                   placeholder="10"
-                  min="1"
+                  min="0"
+                  step="any"
                   required
                 />
               </div>
