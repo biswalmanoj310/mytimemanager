@@ -762,6 +762,7 @@ def get_todays_active_habits(db: Session = Depends(get_db)):
             "category_id": habit.category_id,
             "category_name": habit.category.name if habit.category else None,
             "is_positive": habit.is_positive,
+            "stats": stats,  # Include full stats object
             "current_streak": stats.get("current_streak", 0),
             "longest_streak": stats.get("longest_streak", 0),
             "completed_today": completed_today,

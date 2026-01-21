@@ -348,12 +348,53 @@ class HabitService:
         if not habit:
             return {}
         
-        # Get all entries
-        all_entries = db.query(HabitEntry).filter(HabitEntry.habit_id == habit_id).all()
+        # Get habit start date for filtering
+        habit_start_date = habit.start_date.date() if isinstance(habit.start_date, datetime) else habit.start_date
+        
+        # For linked tasks, get entries from daily_time_entries instead of habit_entries
+        if habit.linked_task_id:
+            # Get daily time entries for the linked task ONLY from habit start date onwards
+            from app.models.models import DailyTimeEntry
+            
+            task_entries = db.query(DailyTimeEntry).filter(
+                DailyTimeEntry.task_id == habit.linked_task_id,
+                func.date(DailyTimeEntry.entry_date) >= habit_start_date
+            ).all()
+            
+            # Manually group by date in Python (handling timezones properly)
+            daily_dates = set()
+            for entry in task_entries:
+                if entry.minutes and entry.minutes > 0:
+                    # Extract date in local timezone
+                    if isinstance(entry.entry_date, datetime):
+                        if entry.entry_date.tzinfo:
+                            local_tz = datetime.now().astimezone().tzinfo
+                            entry_date = entry.entry_date.astimezone(local_tz).date()
+                        else:
+                            entry_date = entry.entry_date.date()
+                    else:
+                        entry_date = entry.entry_date
+                    daily_dates.add(entry_date)
+            
+            # Create ONE pseudo entry per unique date
+            all_entries = []
+            for entry_date in daily_dates:
+                class PseudoEntry:
+                    def __init__(self, date_val):
+                        self.entry_date = date_val
+                        self.is_successful = True  # If date is in set, it was successful
+                all_entries.append(PseudoEntry(entry_date))
+        else:
+            # Get all entries from habit_entries table
+            all_entries = db.query(HabitEntry).filter(HabitEntry.habit_id == habit_id).all()
+        
+        # Use local timezone for accurate date comparisons
+        local_tz = datetime.now().astimezone().tzinfo
+        today_local = datetime.now(local_tz).date()
         
         # Calculate date range: from habit start_date to today (or end_date if completed)
         start_date = habit.start_date.date() if isinstance(habit.start_date, datetime) else habit.start_date
-        end_date = date.today()
+        end_date = today_local
         if habit.end_date:
             habit_end = habit.end_date.date() if isinstance(habit.end_date, datetime) else habit.end_date
             end_date = min(end_date, habit_end)
@@ -368,6 +409,8 @@ class HabitService:
                 'total_days': total_days,
                 'successful_entries': 0,
                 'success_rate': 0,
+                'week_success_rate': 0,
+                'month_success_rate': 0,
                 'current_streak': 0,
                 'longest_streak': 0,
                 'top_3_streaks': []
@@ -379,6 +422,8 @@ class HabitService:
                 'total_days': 0,
                 'successful_entries': 0,
                 'success_rate': 0,
+                'week_success_rate': 0,
+                'month_success_rate': 0,
                 'current_streak': 0,
                 'longest_streak': 0,
                 'top_3_streaks': []
@@ -388,6 +433,34 @@ class HabitService:
         
         # Success rate based on total days since start (missing days = failures)
         success_rate = round((successful / total_days) * 100, 1) if total_days > 0 else 0
+        
+        # Calculate this week's success rate (week starts Monday)
+        week_start = today_local - timedelta(days=today_local.weekday())  # Monday
+        week_end = today_local
+        week_total_days = (week_end - max(week_start, start_date)).days + 1 if week_start <= end_date else 0
+        week_successful = 0
+        for e in all_entries:
+            if not e.is_successful:
+                continue
+            # entry_date is already a date object (not datetime) for linked tasks
+            entry_date_local = e.entry_date if isinstance(e.entry_date, date) and not isinstance(e.entry_date, datetime) else (e.entry_date.date() if isinstance(e.entry_date, datetime) else e.entry_date)
+            if week_start <= entry_date_local <= week_end:
+                week_successful += 1
+        week_success_rate = round((week_successful / week_total_days) * 100, 1) if week_total_days > 0 else 0
+        
+        # Calculate this month's success rate
+        month_start = date(today_local.year, today_local.month, 1)
+        month_end = today_local
+        month_total_days = (month_end - max(month_start, start_date)).days + 1 if month_start <= end_date else 0
+        month_successful = 0
+        for e in all_entries:
+            if not e.is_successful:
+                continue
+            # entry_date is already a date object (not datetime) for linked tasks
+            entry_date_local = e.entry_date if isinstance(e.entry_date, date) and not isinstance(e.entry_date, datetime) else (e.entry_date.date() if isinstance(e.entry_date, datetime) else e.entry_date)
+            if month_start <= entry_date_local <= month_end:
+                month_successful += 1
+        month_success_rate = round((month_successful / month_total_days) * 100, 1) if month_total_days > 0 else 0
         
         # Get current streak
         current_streak = HabitService.calculate_current_streak(db, habit_id)
@@ -412,6 +485,8 @@ class HabitService:
             'total_days': total_days,  # Total days since habit start
             'successful_entries': successful,
             'success_rate': success_rate,  # Based on total days, not just entries
+            'week_success_rate': week_success_rate,  # This week's success rate
+            'month_success_rate': month_success_rate,  # This month's success rate
             'current_streak': current_streak,
             'longest_streak': longest_streak,
             'top_3_streaks': top_3_streaks

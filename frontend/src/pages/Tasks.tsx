@@ -490,6 +490,8 @@ export default function Tasks() {
       total_entries: number;
       successful_entries: number;
       success_rate: number;
+      week_success_rate?: number;
+      month_success_rate?: number;
       current_streak: number;
       longest_streak: number;
       top_3_streaks?: HabitStreak[];
@@ -10730,9 +10732,27 @@ export default function Tasks() {
                           gap: '12px',
                           whiteSpace: 'nowrap'
                         }}>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Current:</span> 🔥 {habit.stats?.current_streak || 0}</div>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Best:</span> 🏆 {habit.stats?.longest_streak || 0}</div>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Success:</span> ✅ {habit.stats?.success_rate || 0}%</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Current:</span> {habit.stats?.current_streak || 0}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Best:</span> {habit.stats?.longest_streak || 0}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Overall:</span> {habit.stats?.success_rate || 0}%</div>
+                        </div>
+
+                        {/* Success rates - Week and Month */}
+                        <div style={{ 
+                          padding: '10px 14px',
+                          backgroundColor: '#f0fdf4',
+                          border: '2px solid #bbf7d0',
+                          borderRadius: '8px',
+                          fontSize: '15px',
+                          color: '#166534',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>This Week:</span> {habit.stats?.week_success_rate !== undefined ? habit.stats.week_success_rate : 0}%</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>This Month:</span> {habit.stats?.month_success_rate !== undefined ? habit.stats.month_success_rate : 0}%</div>
                         </div>
 
                         {/* Start date and Days info - one horizontal line, same size */}
@@ -10749,9 +10769,8 @@ export default function Tasks() {
                           gap: '12px',
                           whiteSpace: 'nowrap'
                         }}>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> 📅 {parseDateString(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> 📊 {Math.floor((new Date().getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))}</div>
-                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Entries:</span> ⚡ {habit.stats?.total_entries || 0}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> {parseDateString(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                          <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> {Math.floor((new Date().getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1}</div>
                         </div>
 
                         {/* Date selector and Done/Missed buttons in one row for manual habits */}
