@@ -609,6 +609,14 @@ export default function Tasks() {
     completed_days_this_month?: number;
     total_days_this_month?: number;
     completion_rate?: number;
+    // Stats object with success rates
+    stats?: {
+      success_rate?: number;  // Overall
+      week_success_rate?: number;
+      month_success_rate?: number;
+      current_streak?: number;
+      longest_streak?: number;
+    };
   }
 
   interface TodaysChallenge {
@@ -17126,7 +17134,22 @@ export default function Tasks() {
               
               {todayTabSections.todaysHabits && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {todaysHabits.map(habit => {
+                  {todaysHabits
+                    .sort((a, b) => {
+                      // Sort by pillar-category hierarchy first
+                      const keyA = `${a.pillar_name || 'Other'}|${a.category_name || 'Other'}`;
+                      const keyB = `${b.pillar_name || 'Other'}|${b.category_name || 'Other'}`;
+                      const orderA = hierarchyOrder[keyA] || 999;
+                      const orderB = hierarchyOrder[keyB] || 999;
+                      
+                      if (orderA !== orderB) {
+                        return orderA - orderB;
+                      }
+                      
+                      // If same hierarchy, sort alphabetically by name
+                      return a.name.localeCompare(b.name);
+                    })
+                    .map(habit => {
                     const isInNOW = nowHabits.has(habit.id);
                     return (
                   <div
@@ -17288,11 +17311,24 @@ export default function Tasks() {
                             <strong style={{ color: '#10b981' }}>{habit.completed_days_this_month}/{habit.total_days_this_month}</strong> days this month
                           </span>
                         )}
-                        {habit.completion_rate !== undefined && (
+                        {habit.stats && (
                           <span>
-                            • <strong style={{ color: habit.completion_rate >= 80 ? '#10b981' : habit.completion_rate >= 50 ? '#f59e0b' : '#ef4444' }}>
-                              {habit.completion_rate}%
-                            </strong> completion
+                            • Week: <strong style={{ 
+                              color: (habit.stats.week_success_rate ?? 0) >= 80 ? '#10b981' : 
+                                     (habit.stats.week_success_rate ?? 0) >= 60 ? '#f59e0b' : '#ef4444' 
+                            }}>
+                              {habit.stats.week_success_rate ?? 0}%
+                            </strong>, Month: <strong style={{ 
+                              color: (habit.stats.month_success_rate ?? 0) >= 80 ? '#10b981' : 
+                                     (habit.stats.month_success_rate ?? 0) >= 40 ? '#f59e0b' : '#ef4444' 
+                            }}>
+                              {habit.stats.month_success_rate ?? 0}%
+                            </strong>, Overall: <strong style={{ 
+                              color: (habit.stats.success_rate ?? 0) >= 80 ? '#10b981' : 
+                                     (habit.stats.success_rate ?? 0) >= 50 ? '#f59e0b' : '#ef4444' 
+                            }}>
+                              {habit.stats.success_rate ?? 0}%
+                            </strong>
                           </span>
                         )}
                         {habit.current_streak > 0 && (
@@ -17417,7 +17453,7 @@ export default function Tasks() {
                     )}
                   </div>
                   );
-                })}
+                  })}
                 </div>
               )}
             </div>

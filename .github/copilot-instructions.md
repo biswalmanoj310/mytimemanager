@@ -16,7 +16,7 @@ MyTimeManager is a time and task management application built on the **CANI (Con
 ```
 backend/app/main.py              # Router registration - ALL routes must be added here (lines 70-105)
 backend/app/database/config.py   # DB session factory (get_db dependency injection)
-backend/app/services/            # Business logic layer (25 service files - stateless @staticmethod pattern)
+backend/app/services/            # Business logic layer (24+ service files - stateless @staticmethod pattern)
 backend/app/routes/              # API endpoints (30+ routers - import models for relationship resolution)
 backend/app/models/models.py     # SQLAlchemy models (must import in main.py before routes)
 backend/app/models/schemas.py    # Pydantic schemas for request/response validation
@@ -25,6 +25,7 @@ frontend/src/App.tsx             # Context providers wrap all routes (order matt
 frontend/src/components/PillarCategorySelector.tsx  # Reusable org hierarchy selector
 backend/migrations/              # Database migrations (NNN_*.py or NNN_*.sql)
 backend/database/mytimemanager.db # SQLite database (backup at ~/mytimemanager_backups/)
+*.py (root dir)                  # Utility scripts (backup, recalc, migrations, etc.)
 ```
 
 ## Core Domain Logic
@@ -180,10 +181,11 @@ HabitService.recalculate_streaks(db, habit_id)  # Rebuilds streak data from entr
 
 ### 6. Service Layer Pattern
 Business logic lives in `backend/app/services/` NOT in route handlers. Each entity has a dedicated service:
-- `task_service.py`, `habit_service.py`, `challenge_service.py`, `goal_service.py`, etc.
+- 24+ service files: `task_service.py`, `habit_service.py`, `challenge_service.py`, `goal_service.py`, `goal_project_service.py`, `life_goal_service.py`, `wish_service.py`, `daily_time_service.py`, `weekly_time_service.py`, `monthly_time_service.py`, `yearly_time_service.py`, etc.
 - Routes handle HTTP concerns (validation, status codes), services handle domain logic
 - Example: `HabitService.recalculate_streaks()` for complex streak calculations
 - Services are stateless classes with `@staticmethod` methods taking `db: Session` as first param
+- Pattern: `@staticmethod def operation(db: Session, ...) -> Result`
 
 ## Data Integrity Rules
 
@@ -201,9 +203,10 @@ Business logic lives in `backend/app/services/` NOT in route handlers. Each enti
 4. **Migration Without Backup**: SQLite has no WAL mode - corruption requires restore from `~/mytimemanager_backups/`
 5. **Hardcoded 24-Hour Logic**: System assumes three 8-hour pillars (never hardcode 24 hours)
 6. **Task Without Frequency**: `follow_up_frequency` is required - determines home tab visibility
-7. **Service Layer Bypass**: Don't put business logic in routes - use existing service classes in `backend/app/services/` (25 service files with @staticmethod pattern)
+7. **Service Layer Bypass**: Don't put business logic in routes - use existing service classes in `backend/app/services/` (24+ service files with @staticmethod pattern)
 8. **Direct Session Creation**: Never `Session()` - always use `db: Session = Depends(get_db)` for automatic transaction management
 9. **Forgetting to Import Models**: Must import all models in `main.py` before routes to prevent relationship resolution errors (see lines 22-23)
+10. **Root Script Usage**: Many utility scripts exist in project root (backup_database.sh, recalculate_summaries.py, etc.) - check root before creating new tools
 
 ## UI/UX Standards
 
