@@ -290,6 +290,7 @@ export default function Tasks() {
     created_at: string;
     updated_at: string;
     pillar_name?: string;
+    category_name?: string;
   };
 
   // Life Goals state
@@ -381,6 +382,10 @@ export default function Tasks() {
   const [miscTasks, setMiscTasks] = useState<ProjectTaskData[]>([]);
   const [expandedMiscTasks, setExpandedMiscTasks] = useState<Set<number>>(() => {
     const saved = localStorage.getItem('expandedMiscTasks');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
+  const [expandedMiscCategories, setExpandedMiscCategories] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('expandedMiscCategories');
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
   const [miscSubtaskParentId, setMiscSubtaskParentId] = useState<number | null>(null);
@@ -4138,7 +4143,8 @@ export default function Tasks() {
         completed_at: task.completed_at || null,
         order: 0,
         updated_at: task.updated_at || task.created_at,
-        pillar_name: task.pillar_name, // Include pillar_name for pillar grouping
+        pillar_name: task.pillar_name, // Include pillar_name for category grouping
+        category_name: task.category_name, // Include category_name for category grouping
         pillar_id: task.pillar_id, // Include for inheritance to subtasks
         category_id: task.category_id // Include for inheritance to subtasks
       }));
@@ -9988,26 +9994,116 @@ export default function Tasks() {
               </div>
             ) : (
               <>
-                {/* Hard Work Pillar Section */}
+                {/* Category-Based Sections (Collapsible) */}
                 {(() => {
-                  const pillarTasks = miscTasks.filter(t => !t.parent_task_id && !t.is_completed && t.pillar_name === 'Hard Work').filter(task => {
-                    if (projectTaskFilter === 'all') return true;
-                    if (projectTaskFilter === 'in-progress') return !task.is_completed;
-                    if (projectTaskFilter === 'overdue') {
-                      return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
-                    }
-                    return true;
+                  // Define hierarchy order (same as Daily tab)
+                  const hierarchyOrder: { [key: string]: number } = {
+                    // Hard Work
+                    'Hard Work|Office-Tasks': 1,
+                    'Hard Work|Learning': 2,
+                    'Hard Work|Confidence': 3,
+                    // Calmness
+                    'Calmness|Yoga': 4,
+                    'Calmness|Sleep': 5,
+                    // Family
+                    'Family|My Tasks': 6,
+                    'Family|Home Tasks': 7,
+                    'Family|Time Waste': 8,
+                  };
+
+                  // Group tasks by category
+                  const tasksByCategory = miscTasks
+                    .filter(t => !t.parent_task_id && !t.is_completed)
+                    .filter(task => {
+                      if (projectTaskFilter === 'all') return true;
+                      if (projectTaskFilter === 'in-progress') return !task.is_completed;
+                      if (projectTaskFilter === 'overdue') {
+                        return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
+                      }
+                      return true;
+                    })
+                    .reduce((acc, task) => {
+                      const categoryName = task.category_name || 'Uncategorized';
+                      if (!acc[categoryName]) {
+                        acc[categoryName] = [];
+                      }
+                      acc[categoryName].push(task);
+                      return acc;
+                    }, {} as Record<string, ProjectTaskData[]>);
+
+                  // Sort categories by hierarchy order (same as Daily tab)
+                  const sortedCategories = Object.keys(tasksByCategory).sort((a, b) => {
+                    const aPillarName = tasksByCategory[a][0]?.pillar_name || '';
+                    const bPillarName = tasksByCategory[b][0]?.pillar_name || '';
+                    const keyA = `${aPillarName}|${a}`;
+                    const keyB = `${bPillarName}|${b}`;
+                    const orderA = hierarchyOrder[keyA] || 999;
+                    const orderB = hierarchyOrder[keyB] || 999;
+                    return orderA - orderB;
                   });
-                  
-                  if (pillarTasks.length === 0) return null;
-                  
-                  return (
-                    <div style={{ marginBottom: '30px' }}>
-                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#2563eb', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #3b82f6' }}>
-                        💼 Hard Work ({pillarTasks.length})
-                      </h3>
-                      <div className="task-list">
-                        {pillarTasks.map((task) => (
+
+                  return sortedCategories.map(categoryName => {
+                    const categoryTasks = tasksByCategory[categoryName];
+                    const categoryKey = `${categoryTasks[0]?.pillar_name || ''}|${categoryName}`;
+                    const isExpanded = expandedMiscCategories.has(categoryKey);
+                    
+                    // Get pillar color for the category
+                    const pillarName = categoryTasks[0]?.pillar_name || 'Unknown';
+                    let pillarColor = '#718096';
+                    let pillarIcon = '📋';
+                    
+                    if (pillarName === 'Hard Work') {
+                      pillarColor = '#2563eb';
+                      pillarIcon = '💼';
+                    } else if (pillarName === 'Calmness') {
+                      pillarColor = '#16a34a';
+                      pillarIcon = '🧘';
+                    } else if (pillarName === 'Family') {
+                      pillarColor = '#9333ea';
+                      pillarIcon = '👨‍👩‍👦';
+                    }
+
+                    return (
+                      <div key={categoryKey} style={{ marginBottom: '20px' }}>
+                        <div 
+                          onClick={() => {
+                            const newExpanded = new Set(expandedMiscCategories);
+                            if (isExpanded) {
+                              newExpanded.delete(categoryKey);
+                            } else {
+                              newExpanded.add(categoryKey);
+                            }
+                            setExpandedMiscCategories(newExpanded);
+                            localStorage.setItem('expandedMiscCategories', JSON.stringify(Array.from(newExpanded)));
+                          }}
+                          style={{ 
+                            fontSize: '17px', 
+                            fontWeight: '600', 
+                            color: pillarColor, 
+                            marginBottom: isExpanded ? '15px' : '0', 
+                            paddingBottom: '8px', 
+                            borderBottom: isExpanded ? `2px solid ${pillarColor}` : 'none',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '10px 15px',
+                            background: isExpanded ? 'transparent' : '#f7fafc',
+                            borderRadius: '8px',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          <span>
+                            {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryTasks.length})
+                          </span>
+                          <span style={{ fontSize: '13px', color: '#666', fontWeight: 'normal' }}>
+                            {pillarName}
+                          </span>
+                        </div>
+                        
+                        {isExpanded && (
+                          <div className="task-list">
+                            {categoryTasks.map((task) => (
                   <TaskNode 
                     key={`${task.id}-${task.is_completed}`} 
                     task={task} 
@@ -10096,227 +10192,11 @@ export default function Tasks() {
                     }}
                   />
                 ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Calmness Pillar Section */}
-                {(() => {
-                  const pillarTasks = miscTasks.filter(t => !t.parent_task_id && !t.is_completed && t.pillar_name === 'Calmness').filter(task => {
-                    if (projectTaskFilter === 'all') return true;
-                    if (projectTaskFilter === 'in-progress') return !task.is_completed;
-                    if (projectTaskFilter === 'overdue') {
-                      return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
-                    }
-                    return true;
+                    );
                   });
-                  
-                  if (pillarTasks.length === 0) return null;
-                  
-                  return (
-                    <div style={{ marginBottom: '30px' }}>
-                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#16a34a', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #22c55e' }}>
-                        🧘 Calmness ({pillarTasks.length})
-                      </h3>
-                      <div className="task-list">
-                        {pillarTasks.map((task) => (
-                          <TaskNode 
-                            key={`${task.id}-${task.is_completed}`} 
-                            task={task} 
-                            level={0}
-                            allTasks={miscTasks}
-                            expandedTasks={expandedMiscTasks}
-                            onToggleExpand={(taskId: number) => {
-                              const newExpanded = new Set(expandedMiscTasks);
-                              if (newExpanded.has(taskId)) {
-                                newExpanded.delete(taskId);
-                              } else {
-                                newExpanded.add(taskId);
-                              }
-                              setExpandedMiscTasks(newExpanded);
-                              localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
-                            }}
-                            onToggleComplete={async (taskId: number, currentStatus: boolean) => {
-                              if (!currentStatus) {
-                                const hasIncompleteSubtasks = miscTasks.some(t => 
-                                  t.parent_task_id === taskId && !t.is_completed
-                                );
-                                
-                                if (hasIncompleteSubtasks) {
-                                  alert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.');
-                                  return;
-                                }
-                              }
-                              
-                              try {
-                                await api.put(`/api/tasks/${taskId}`, {
-                                  is_completed: !currentStatus
-                                });
-                                setMiscTasks([]);
-                                await loadMiscTaskGroups();
-                              } catch (err: any) {
-                                console.error('Error toggling task:', err);
-                              }
-                            }}
-                            onEdit={(task: ProjectTaskData) => {
-                              setSelectedTaskId(task.id);
-                              setIsTaskFormOpen(true);
-                            }}
-                            onDelete={async (taskId: number) => {
-                              const hasIncompleteSubtasks = miscTasks.some(t => 
-                                t.parent_task_id === taskId && !t.is_completed
-                              );
-                              
-                              if (hasIncompleteSubtasks) {
-                                alert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.');
-                                return;
-                              }
-                              
-                              if (confirm('Are you sure you want to delete this task? This will also delete all subtasks.')) {
-                                try {
-                                  await api.delete(`/api/tasks/${taskId}`);
-                                  await loadMiscTaskGroups();
-                                } catch (err: any) {
-                                  console.error('Error deleting task:', err);
-                                  console.error('Delete error response:', err.response);
-                                  const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
-                                  alert('Failed to delete task: ' + errorMsg);
-                                }
-                              }
-                            }}
-                            onUpdateDueDate={async (taskId: number, newDueDate: string) => {
-                              try {
-                                await api.put(`/api/tasks/${taskId}`, {
-                                  due_date: newDueDate
-                                });
-                                await loadMiscTaskGroups();
-                              } catch (err: any) {
-                                console.error('Error updating due date:', err);
-                                alert('Failed to update due date. Please try again.');
-                              }
-                            }}
-                            getDueDateColorClass={getDueDateColorClass}
-                            getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
-                            onAddSubtask={(parentTask: ProjectTaskData) => {
-                              console.log('onAddSubtask called for Misc task (Calmness):', parentTask);
-                              setEditingMiscTask(parentTask);
-                              setShowAddMiscTaskModal(true);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Family Pillar Section */}
-                {(() => {
-                  const pillarTasks = miscTasks.filter(t => !t.parent_task_id && !t.is_completed && t.pillar_name === 'Family').filter(task => {
-                    if (projectTaskFilter === 'all') return true;
-                    if (projectTaskFilter === 'in-progress') return !task.is_completed;
-                    if (projectTaskFilter === 'overdue') {
-                      return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
-                    }
-                    return true;
-                  });
-                  
-                  if (pillarTasks.length === 0) return null;
-                  
-                  return (
-                    <div style={{ marginBottom: '30px' }}>
-                      <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#9333ea', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #a855f7' }}>
-                        👨‍👩‍👦 Family ({pillarTasks.length})
-                      </h3>
-                      <div className="task-list">
-                        {pillarTasks.map((task) => (
-                          <TaskNode 
-                            key={`${task.id}-${task.is_completed}`} 
-                            task={task} 
-                            level={0}
-                            allTasks={miscTasks}
-                            expandedTasks={expandedMiscTasks}
-                            onToggleExpand={(taskId: number) => {
-                              const newExpanded = new Set(expandedMiscTasks);
-                              if (newExpanded.has(taskId)) {
-                                newExpanded.delete(taskId);
-                              } else {
-                                newExpanded.add(taskId);
-                              }
-                              setExpandedMiscTasks(newExpanded);
-                              localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
-                            }}
-                            onToggleComplete={async (taskId: number, currentStatus: boolean) => {
-                              if (!currentStatus) {
-                                const hasIncompleteSubtasks = miscTasks.some(t => 
-                                  t.parent_task_id === taskId && !t.is_completed
-                                );
-                                
-                                if (hasIncompleteSubtasks) {
-                                  alert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.');
-                                  return;
-                                }
-                              }
-                              
-                              try {
-                                await api.put(`/api/tasks/${taskId}`, {
-                                  is_completed: !currentStatus
-                                });
-                                setMiscTasks([]);
-                                await loadMiscTaskGroups();
-                              } catch (err: any) {
-                                console.error('Error toggling task:', err);
-                              }
-                            }}
-                            onEdit={(task: ProjectTaskData) => {
-                              setSelectedTaskId(task.id);
-                              setIsTaskFormOpen(true);
-                            }}
-                            onDelete={async (taskId: number) => {
-                              const hasIncompleteSubtasks = miscTasks.some(t => 
-                                t.parent_task_id === taskId && !t.is_completed
-                              );
-                              
-                              if (hasIncompleteSubtasks) {
-                                alert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.');
-                                return;
-                              }
-                              
-                              if (confirm('Are you sure you want to delete this task? This will also delete all subtasks.')) {
-                                try {
-                                  await api.delete(`/api/tasks/${taskId}`);
-                                  await loadMiscTaskGroups();
-                                } catch (err: any) {
-                                  console.error('Error deleting task:', err);
-                                  console.error('Delete error response:', err.response);
-                                  const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
-                                  alert('Failed to delete task: ' + errorMsg);
-                                }
-                              }
-                            }}
-                            onUpdateDueDate={async (taskId: number, newDueDate: string) => {
-                              try {
-                                await api.put(`/api/tasks/${taskId}`, {
-                                  due_date: newDueDate
-                                });
-                                await loadMiscTaskGroups();
-                              } catch (err: any) {
-                                console.error('Error updating due date:', err);
-                                alert('Failed to update due date. Please try again.');
-                              }
-                            }}
-                            getDueDateColorClass={getDueDateColorClass}
-                            getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
-                            onAddSubtask={(parentTask: ProjectTaskData) => {
-                              console.log('onAddSubtask called for Misc task (Family):', parentTask);
-                              setEditingMiscTask(parentTask);
-                              setShowAddMiscTaskModal(true);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  );
                 })()}
               </>
             )}

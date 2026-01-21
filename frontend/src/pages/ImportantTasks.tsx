@@ -46,6 +46,23 @@ interface Category {
   pillar_id: number;
 }
 
+// Helper to generate hash code for strings (for uncategorized tasks)
+String.prototype.hashCode = function() {
+  let hash = 0;
+  for (let i = 0; i < this.length; i++) {
+    const char = this.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash);
+};
+
+declare global {
+  interface String {
+    hashCode(): number;
+  }
+}
+
 const ImportantTasks: React.FC = () => {
   const [tasks, setTasks] = useState<ImportantTask[]>([]);
   const [completedTasks, setCompletedTasks] = useState<ImportantTask[]>([]);
@@ -60,12 +77,17 @@ const ImportantTasks: React.FC = () => {
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [highestGapTaskId, setHighestGapTaskId] = useState<number | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     // Load expanded state from localStorage
     const savedExpanded = localStorage.getItem('importantTasksExpanded');
     if (savedExpanded) {
       setExpandedTasks(new Set(JSON.parse(savedExpanded)));
+    }
+    const savedExpandedCategories = localStorage.getItem('importantTasksExpandedCategories');
+    if (savedExpandedCategories) {
+      setExpandedCategories(new Set(JSON.parse(savedExpandedCategories)));
     }
     loadImportantTasks();
     loadPillarsAndCategories();
@@ -541,112 +563,132 @@ const ImportantTasks: React.FC = () => {
         </div>
       </div>
 
-      {/* Hard Work Pillar Section */}
+      {/* Category-Based Sections (Collapsible) */}
       {(() => {
-        const pillarTasks = getFilteredTasks().filter(t => t.pillar_name === 'Hard Work');
-        if (pillarTasks.length === 0) return null;
-        
-        return (
-          <div style={{ marginBottom: '30px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#2563eb', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #3b82f6' }}>
-              💼 Hard Work ({pillarTasks.length})
-            </h3>
-            <div className="tasks-table-container">
-              <table className="tasks-table important-tasks-table">
-                <thead>
-                  <tr>
-                    <th className="col-number">#</th>
-                    <th className="col-date">Start Date</th>
-                    <th className="col-task-name">Task Name</th>
-                    <th className="col-date">Updated Date</th>
-                    <th className="col-number">Target Gap</th>
-                    <th className="col-number">Days</th>
-                    <th className="col-number">Diff</th>
-                    <th className="col-action">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const counter = { count: 0 };
-                    return pillarTasks.map(task => renderTask(task, 0, counter));
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })()}
+        // Define hierarchy order (same as Daily tab)
+        const hierarchyOrder: { [key: string]: number } = {
+          // Hard Work
+          'Hard Work|Office-Tasks': 1,
+          'Hard Work|Learning': 2,
+          'Hard Work|Confidence': 3,
+          // Calmness
+          'Calmness|Yoga': 4,
+          'Calmness|Sleep': 5,
+          // Family
+          'Family|My Tasks': 6,
+          'Family|Home Tasks': 7,
+          'Family|Time Waste': 8,
+        };
 
-      {/* Calmness Pillar Section */}
-      {(() => {
-        const pillarTasks = getFilteredTasks().filter(t => t.pillar_name === 'Calmness');
-        if (pillarTasks.length === 0) return null;
-        
-        return (
-          <div style={{ marginBottom: '30px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#16a34a', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #22c55e' }}>
-              🧘 Calmness ({pillarTasks.length})
-            </h3>
-            <div className="tasks-table-container">
-              <table className="tasks-table important-tasks-table">
-                <thead>
-                  <tr>
-                    <th className="col-number">#</th>
-                    <th className="col-date">Start Date</th>
-                    <th className="col-task-name">Task Name</th>
-                    <th className="col-date">Updated Date</th>
-                    <th className="col-number">Target Gap</th>
-                    <th className="col-number">Days</th>
-                    <th className="col-number">Diff</th>
-                    <th className="col-action">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const counter = { count: 0 };
-                    return pillarTasks.map(task => renderTask(task, 0, counter));
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        );
-      })()}
+        // Group tasks by category
+        const tasksByCategory = getFilteredTasks().reduce((acc, task) => {
+          const categoryName = task.category_name || 'Uncategorized';
+          if (!acc[categoryName]) {
+            acc[categoryName] = [];
+          }
+          acc[categoryName].push(task);
+          return acc;
+        }, {} as Record<string, ImportantTask[]>);
 
-      {/* Family Pillar Section */}
-      {(() => {
-        const pillarTasks = getFilteredTasks().filter(t => t.pillar_name === 'Family');
-        if (pillarTasks.length === 0) return null;
-        
-        return (
-          <div style={{ marginBottom: '30px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#9333ea', marginBottom: '15px', paddingBottom: '8px', borderBottom: '2px solid #a855f7' }}>
-              👨‍👩‍👦 Family ({pillarTasks.length})
-            </h3>
-            <div className="tasks-table-container">
-              <table className="tasks-table important-tasks-table">
-                <thead>
-                  <tr>
-                    <th className="col-number">#</th>
-                    <th className="col-date">Start Date</th>
-                    <th className="col-task-name">Task Name</th>
-                    <th className="col-date">Updated Date</th>
-                    <th className="col-number">Target Gap</th>
-                    <th className="col-number">Days</th>
-                    <th className="col-number">Diff</th>
-                    <th className="col-action">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const counter = { count: 0 };
-                    return pillarTasks.map(task => renderTask(task, 0, counter));
-                  })()}
-                </tbody>
-              </table>
+        // Sort categories by hierarchy order (same as Daily tab)
+        const sortedCategories = Object.keys(tasksByCategory).sort((a, b) => {
+          const aPillarName = tasksByCategory[a][0]?.pillar_name || '';
+          const bPillarName = tasksByCategory[b][0]?.pillar_name || '';
+          const keyA = `${aPillarName}|${a}`;
+          const keyB = `${bPillarName}|${b}`;
+          const orderA = hierarchyOrder[keyA] || 999;
+          const orderB = hierarchyOrder[keyB] || 999;
+          return orderA - orderB;
+        });
+
+        return sortedCategories.map(categoryName => {
+          const categoryTasks = tasksByCategory[categoryName];
+          const category = categories.find(c => c.name === categoryName);
+          const categoryId = category?.id || categoryName.hashCode(); // Use hash for uncategorized
+          const isExpanded = expandedCategories.has(categoryId);
+          
+          // Get pillar color for the category
+          const pillar = category ? pillars.find(p => p.id === category.pillar_id) : null;
+          const pillarName = categoryTasks[0]?.pillar_name || 'Unknown';
+          let pillarColor = '#718096';
+          let pillarIcon = '📋';
+          
+          if (pillarName === 'Hard Work') {
+            pillarColor = '#2563eb';
+            pillarIcon = '💼';
+          } else if (pillarName === 'Calmness') {
+            pillarColor = '#16a34a';
+            pillarIcon = '🧘';
+          } else if (pillarName === 'Family') {
+            pillarColor = '#9333ea';
+            pillarIcon = '👨‍👩‍👦';
+          }
+
+          return (
+            <div key={categoryId} style={{ marginBottom: '20px' }}>
+              <div 
+                onClick={() => {
+                  const newExpanded = new Set(expandedCategories);
+                  if (isExpanded) {
+                    newExpanded.delete(categoryId);
+                  } else {
+                    newExpanded.add(categoryId);
+                  }
+                  setExpandedCategories(newExpanded);
+                  localStorage.setItem('importantTasksExpandedCategories', JSON.stringify(Array.from(newExpanded)));
+                }}
+                style={{ 
+                  fontSize: '17px', 
+                  fontWeight: '600', 
+                  color: pillarColor, 
+                  marginBottom: isExpanded ? '15px' : '0', 
+                  paddingBottom: '8px', 
+                  borderBottom: isExpanded ? `2px solid ${pillarColor}` : 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 15px',
+                  background: isExpanded ? 'transparent' : '#f7fafc',
+                  borderRadius: '8px',
+                  transition: 'all 0.2s'
+                }}
+              >
+                <span>
+                  {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryTasks.length})
+                </span>
+                <span style={{ fontSize: '13px', color: '#666', fontWeight: 'normal' }}>
+                  {pillarName}
+                </span>
+              </div>
+              
+              {isExpanded && (
+                <div className="tasks-table-container">
+                  <table className="tasks-table important-tasks-table">
+                    <thead>
+                      <tr>
+                        <th className="col-number">#</th>
+                        <th className="col-date">Start Date</th>
+                        <th className="col-task-name">Task Name</th>
+                        <th className="col-date">Updated Date</th>
+                        <th className="col-number">Target Gap</th>
+                        <th className="col-number">Days</th>
+                        <th className="col-number">Diff</th>
+                        <th className="col-action">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const counter = { count: 0 };
+                        return categoryTasks.map(task => renderTask(task, 0, counter));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          </div>
-        );
+          );
+        });
       })()}
 
       {/* Completed Tasks Section */}
