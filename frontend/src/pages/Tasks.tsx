@@ -10754,14 +10754,16 @@ export default function Tasks() {
                           <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Entries:</span> ⚡ {habit.stats?.total_entries || 0}</div>
                         </div>
 
-                        {/* Date selector for manual habits */}
+                        {/* Date selector and Done/Missed buttons in one row for manual habits */}
                         {!habit.linked_task_id && (
                           <div style={{ 
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
                             padding: '4px 8px',
                             backgroundColor: '#f7fafc',
                             border: '1px solid #e2e8f0',
-                            borderRadius: '4px',
-                            fontSize: '10px'
+                            borderRadius: '6px'
                           }}>
                             <input 
                               type="date"
@@ -10773,12 +10775,55 @@ export default function Tasks() {
                               onClick={(e) => e.stopPropagation()}
                               max={formatDateForInput(new Date())}
                               style={{
-                                padding: '3px',
-                                border: 'none',
-                                fontSize: '10px',
-                                backgroundColor: 'transparent'
+                                padding: '4px 6px',
+                                border: '1px solid #cbd5e0',
+                                fontSize: '11px',
+                                borderRadius: '4px',
+                                backgroundColor: 'white'
                               }}
                             />
+                            <button
+                              className="btn btn-sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                                await handleMarkHabitEntry(habit.id, dateStr, true);
+                              }}
+                              style={{ 
+                                padding: '4px 10px',
+                                backgroundColor: '#48bb78',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              ✓ Done
+                            </button>
+                            <button
+                              className="btn btn-sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date());
+                                await handleMarkHabitEntry(habit.id, dateStr, false);
+                              }}
+                              style={{ 
+                                padding: '4px 10px',
+                                backgroundColor: '#fc8181',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              ✗ Missed
+                            </button>
                           </div>
                         )}
 
@@ -10906,54 +10951,6 @@ export default function Tasks() {
                           </button>
                         </div>
                       </div>
-
-                      {/* Done/Missed buttons for manual habits */}
-                      {!habit.linked_task_id && (
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            className="btn btn-sm"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date());
-                              await handleMarkHabitEntry(habit.id, dateStr, true);
-                            }}
-                            style={{ 
-                              flex: 1,
-                              padding: '10px',
-                              backgroundColor: '#48bb78',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ✓ Done
-                          </button>
-                          <button
-                            className="btn btn-sm"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date());
-                              await handleMarkHabitEntry(habit.id, dateStr, false);
-                            }}
-                            style={{ 
-                              flex: 1,
-                              padding: '10px',
-                              backgroundColor: '#fc8181',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              fontSize: '13px',
-                              fontWeight: '600',
-                              cursor: 'pointer'
-                            }}
-                          >
-                            ✗ Missed
-                          </button>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
