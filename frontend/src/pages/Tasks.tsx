@@ -10400,6 +10400,16 @@ export default function Tasks() {
                   return acc;
                 }, {} as Record<string, any[]>);
 
+                // Helper function to check if habit is successful
+                const isHabitSuccessful = (habit: any) => {
+                  const weekRate = habit.stats?.week_success_rate ?? 0;
+                  const monthRate = habit.stats?.month_success_rate ?? 0;
+                  return weekRate > 60 || monthRate > 40;
+                };
+
+                // Calculate successful habits
+                const successfulHabitsCount = activeHabits.filter(isHabitSuccessful).length;
+
                 // Sort categories
                 const sortedCategories = Object.keys(habitsByCategory).sort((a, b) => {
                   const aPillarName = habitsByCategory[a][0]?.pillar_name || '';
@@ -10421,44 +10431,13 @@ export default function Tasks() {
                   }}>
                     <div style={{ 
                       display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '16px'
-                    }}>
-                      <h3 style={{ 
-                        margin: 0,
-                        color: 'white',
-                        fontSize: '18px',
-                        fontWeight: '600'
-                      }}>
-                        📊 Habits Overview
-                      </h3>
-                      <button 
-                        className="btn btn-primary" 
-                        onClick={() => setShowAddHabitModal(true)}
-                        style={{ 
-                          backgroundColor: 'white',
-                          color: '#667eea',
-                          border: 'none',
-                          padding: '8px 16px',
-                          fontSize: '14px',
-                          fontWeight: '600',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                        }}
-                      >
-                        ➕ Add New Habit
-                      </button>
-                    </div>
-                    <div style={{ 
-                      display: 'flex',
                       flexWrap: 'wrap',
                       gap: '12px'
                     }}>
                       {sortedCategories.map(categoryName => {
                         const categoryHabits = habitsByCategory[categoryName];
                         const pillarName = categoryHabits[0]?.pillar_name || 'Unknown';
+                        const categorySuccessfulCount = categoryHabits.filter(isHabitSuccessful).length;
                         let pillarColor = '#718096';
                         let pillarIcon = '📋';
                         
@@ -10500,6 +10479,15 @@ export default function Tasks() {
                                 color: '#666'
                               }}>
                                 {categoryHabits.length} habit{categoryHabits.length !== 1 ? 's' : ''}
+                                {categorySuccessfulCount > 0 && (
+                                  <span style={{ 
+                                    marginLeft: '4px',
+                                    color: '#48bb78',
+                                    fontWeight: '600'
+                                  }}>
+                                    • {categorySuccessfulCount} 🌟
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -10529,10 +10517,50 @@ export default function Tasks() {
                           <div style={{ 
                             fontSize: '20px',
                             fontWeight: '700',
-                            color: '#48bb78'
+                            color: '#48bb78',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
                           }}>
                             {activeHabits.length}
+                            {successfulHabitsCount > 0 && (
+                              <span style={{ 
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                color: '#f59e0b'
+                              }}>
+                                ({successfulHabitsCount} 🌟)
+                              </span>
+                            )}
                           </div>
+                        </div>
+                      </div>
+                      <div style={{ marginLeft: 'auto', display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                        <button 
+                          className="btn btn-primary" 
+                          onClick={() => setShowAddHabitModal(true)}
+                          style={{ 
+                            backgroundColor: 'white',
+                            color: '#667eea',
+                            border: 'none',
+                            padding: '10px 16px',
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                          }}
+                        >
+                          ➕ Add New Habit
+                        </button>
+                        <div 
+                          style={{
+                            fontSize: '11px',
+                            color: '#fef3c7',
+                            fontStyle: 'italic'
+                          }}
+                        >
+                          💡 Success: Week &gt; 60% or Month &gt; 40%
                         </div>
                       </div>
                     </div>
@@ -10577,6 +10605,13 @@ export default function Tasks() {
                   return acc;
                 }, {} as Record<string, any[]>);
 
+                // Helper function to check if habit is successful (for section headers)
+                const isHabitSuccessful = (habit: any) => {
+                  const weekRate = habit.stats?.week_success_rate ?? 0;
+                  const monthRate = habit.stats?.month_success_rate ?? 0;
+                  return weekRate > 60 || monthRate > 40;
+                };
+
                 // Sort categories by hierarchy order
                 const sortedCategories = Object.keys(habitsByCategory).sort((a, b) => {
                   const aPillarName = habitsByCategory[a][0]?.pillar_name || '';
@@ -10593,6 +10628,7 @@ export default function Tasks() {
                   const pillarName = categoryHabits[0]?.pillar_name || 'Unknown';
                   const categoryKey = `${pillarName}|${categoryName}`;
                   const isExpanded = expandedHabitCategories.has(categoryKey);
+                  const categorySuccessfulCount = categoryHabits.filter(isHabitSuccessful).length;
                   
                   let pillarColor = '#718096';
                   let pillarIcon = '📋';
@@ -10641,6 +10677,16 @@ export default function Tasks() {
                       >
                         <span>
                           {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryHabits.length})
+                          {categorySuccessfulCount > 0 && (
+                            <span style={{ 
+                              marginLeft: '8px',
+                              color: '#16a34a',
+                              fontSize: '16px',
+                              fontWeight: '700'
+                            }}>
+                              ✅ {categorySuccessfulCount} success
+                            </span>
+                          )}
                         </span>
                         <span style={{ fontSize: '14px', color: '#666', fontWeight: 'normal' }}>
                           {pillarName}

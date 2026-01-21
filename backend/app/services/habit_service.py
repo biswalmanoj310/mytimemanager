@@ -347,7 +347,6 @@ class HabitService:
         habit = db.query(Habit).filter(Habit.id == habit_id).first()
         if not habit:
             return {}
-        
         # Get habit start date for filtering
         habit_start_date = habit.start_date.date() if isinstance(habit.start_date, datetime) else habit.start_date
         
@@ -361,8 +360,8 @@ class HabitService:
                 func.date(DailyTimeEntry.entry_date) >= habit_start_date
             ).all()
             
-            # Manually group by date in Python (handling timezones properly)
-            daily_dates = set()
+            # Group by date and sum minutes per day, checking against target
+            daily_totals = {}
             for entry in task_entries:
                 if entry.minutes and entry.minutes > 0:
                     # Extract date in local timezone
@@ -374,16 +373,36 @@ class HabitService:
                             entry_date = entry.entry_date.date()
                     else:
                         entry_date = entry.entry_date
-                    daily_dates.add(entry_date)
+                    
+                    # Sum minutes for this date
+                    if entry_date not in daily_totals:
+                        daily_totals[entry_date] = 0
+                    daily_totals[entry_date] += entry.minutes
             
-            # Create ONE pseudo entry per unique date
+            # Create ONE pseudo entry per unique date, checking if target was met
             all_entries = []
-            for entry_date in daily_dates:
+            for entry_date, total_minutes in daily_totals.items():
+                # Check if this day met the target
+                target_met = False
+                if habit.target_value:
+                    if habit.target_comparison == 'at_least':
+                        target_met = total_minutes >= habit.target_value
+                    elif habit.target_comparison == 'at_most':
+                        target_met = total_minutes <= habit.target_value
+                    elif habit.target_comparison == 'exactly':
+                        target_met = total_minutes == habit.target_value
+                    else:
+                        # Default to at_least
+                        target_met = total_minutes >= habit.target_value
+                else:
+                    # No target specified, any minutes counts as successful
+                    target_met = True
+                
                 class PseudoEntry:
-                    def __init__(self, date_val):
+                    def __init__(self, date_val, is_success):
                         self.entry_date = date_val
-                        self.is_successful = True  # If date is in set, it was successful
-                all_entries.append(PseudoEntry(entry_date))
+                        self.is_successful = is_success
+                all_entries.append(PseudoEntry(entry_date, target_met))
         else:
             # Get all entries from habit_entries table
             all_entries = db.query(HabitEntry).filter(HabitEntry.habit_id == habit_id).all()
