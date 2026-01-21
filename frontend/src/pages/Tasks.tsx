@@ -1538,6 +1538,12 @@ export default function Tasks() {
           return false;
         }
         
+        // NEW: Prevent tasks that have EVER been manually completed/NA from reappearing
+        // This applies to both native weekly tasks (frequency='weekly') AND monitoring tasks
+        if (everCompletedTaskIds.has(task.id)) {
+          return false;
+        }
+        
       } else if (activeTab === 'monthly') {
         const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
         
@@ -1790,10 +1796,18 @@ export default function Tasks() {
           return task.task_type === TaskType.TIME && !task.is_daily_one_time && !isCompletedOrNA;
         });
       }
+      // For weekly tab: exclude completed/NA tasks from main table (they show in completed section)
+      if (activeTab === 'weekly') {
+        return filteredTasks.filter(task => {
+          const status = weeklyTaskStatuses[task.id];
+          const isCompletedOrNA = status && (status.is_completed || status.is_na);
+          return task.task_type === TaskType.TIME && !task.is_daily_one_time && !isCompletedOrNA;
+        });
+      }
       return filteredTasks.filter(task => task.task_type === TaskType.TIME && !task.is_daily_one_time);
     }
     return [];
-  }, [activeTab, filteredTasks, dailyStatuses]);
+  }, [activeTab, filteredTasks, dailyStatuses, weeklyTaskStatuses]);
   
   const countBasedTasks = useMemo(() => {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
@@ -1805,10 +1819,18 @@ export default function Tasks() {
           return task.task_type === TaskType.COUNT && !isCompletedOrNA;
         });
       }
+      // For weekly tab: exclude completed/NA tasks from main table
+      if (activeTab === 'weekly') {
+        return filteredTasks.filter(task => {
+          const status = weeklyTaskStatuses[task.id];
+          const isCompletedOrNA = status && (status.is_completed || status.is_na);
+          return task.task_type === TaskType.COUNT && !isCompletedOrNA;
+        });
+      }
       return filteredTasks.filter(task => task.task_type === TaskType.COUNT);
     }
     return [];
-  }, [activeTab, filteredTasks, dailyStatuses]);
+  }, [activeTab, filteredTasks, dailyStatuses, weeklyTaskStatuses]);
   
   const booleanTasks = useMemo(() => {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
@@ -1820,10 +1842,18 @@ export default function Tasks() {
           return task.task_type === TaskType.BOOLEAN && !isCompletedOrNA;
         });
       }
+      // For weekly tab: exclude completed/NA tasks from main table
+      if (activeTab === 'weekly') {
+        return filteredTasks.filter(task => {
+          const status = weeklyTaskStatuses[task.id];
+          const isCompletedOrNA = status && (status.is_completed || status.is_na);
+          return task.task_type === TaskType.BOOLEAN && !isCompletedOrNA;
+        });
+      }
       return filteredTasks.filter(task => task.task_type === TaskType.BOOLEAN);
     }
     return [];
-  }, [activeTab, filteredTasks, dailyStatuses]);
+  }, [activeTab, filteredTasks, dailyStatuses, weeklyTaskStatuses]);
 
   // Early returns for loading and error states (must come AFTER all hooks)
   if (loading) {

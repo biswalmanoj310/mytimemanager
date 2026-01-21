@@ -236,8 +236,17 @@ const WeeklyTasks: React.FC = () => {
   }, [filteredTasks, weeklyTaskStatuses, weeklyDailyEntries]);
 
   const monitoringTasks = useMemo(() => {
-    return filteredTasks.filter(task => task.follow_up_frequency !== 'weekly');
-  }, [filteredTasks]);
+    return filteredTasks.filter(task => {
+      if (task.follow_up_frequency === 'weekly') return false;
+      
+      // Exclude completed/NA monitoring tasks from main table
+      const weeklyStatus = weeklyTaskStatuses[task.id];
+      const isCompleted = weeklyStatus?.is_completed || false;
+      const isNA = weeklyStatus?.is_na || false;
+      
+      return !isCompleted && !isNA;
+    });
+  }, [filteredTasks, weeklyTaskStatuses]);
 
   const completedWeeklyTasks = useMemo(() => {
     const now = new Date();
@@ -245,14 +254,13 @@ const WeeklyTasks: React.FC = () => {
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
     
     return filteredTasks.filter(task => {
-      if (task.follow_up_frequency !== 'weekly') return false;
-      
       const weeklyStatus = weeklyTaskStatuses[task.id];
       if (!weeklyStatus) return false;
       
       const isCompleted = weeklyStatus.is_completed || false;
       const isNA = weeklyStatus.is_na || false;
       
+      // Include both native weekly tasks AND monitoring tasks that are completed/NA
       if (!isCompleted && !isNA) return false;
       
       // Filter out tasks completed/NA more than 1 week ago
