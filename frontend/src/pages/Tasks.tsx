@@ -393,6 +393,10 @@ export default function Tasks() {
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
   const [showCompletedMiscTasks, setShowCompletedMiscTasks] = useState(false);
   const [showCompletedDailyTasks, setShowCompletedDailyTasks] = useState(true); // Default to expanded
+  const [expandedHabitCategories, setExpandedHabitCategories] = useState<Set<string>>(() => {
+    const saved = localStorage.getItem('expandedHabitCategories');
+    return saved ? new Set(JSON.parse(saved)) : new Set();
+  });
   const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean; frequencyTasks: boolean; completedTasks: boolean }>({ milestones: true, allTasks: true, frequencyTasks: true, completedTasks: false });
   const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone'>('all');
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
@@ -10338,13 +10342,6 @@ export default function Tasks() {
         <div className="habits-container">
           <div className="habits-header">
             <h2>🎯 Your Habits</h2>
-            <button 
-              className="btn btn-primary" 
-              onClick={() => setShowAddHabitModal(true)}
-              style={{ marginBottom: '20px' }}
-            >
-              ➕ Add New Habit
-            </button>
           </div>
 
           {habits.length === 0 ? (
@@ -10353,36 +10350,314 @@ export default function Tasks() {
               <p style={{ fontSize: '14px', color: '#666', marginTop: '10px' }}>
                 Track daily habits, build streaks, and develop consistency.
               </p>
+              <button 
+                className="btn btn-primary" 
+                onClick={() => setShowAddHabitModal(true)}
+                style={{ marginTop: '20px' }}
+              >
+                ➕ Add New Habit
+              </button>
             </div>
           ) : (
-            <div 
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
-                width: '100%',
-                marginTop: '20px'
-              }}
-            >
-              {habits.filter((habit) => {
-                // Filter habits: only show ACTIVE habits that were active during the currently viewed month for this habit
-                const habitMonth = habitSelectedMonth[habit.id] || new Date();
-                const selectedMonthStart = new Date(habitMonth.getFullYear(), habitMonth.getMonth(), 1);
-                selectedMonthStart.setHours(0, 0, 0, 0);
-                const selectedMonthEnd = new Date(habitMonth.getFullYear(), habitMonth.getMonth() + 1, 0);
-                selectedMonthEnd.setHours(23, 59, 59, 999);
-                
-                const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
-                const habitEnd = habit.end_date ? parseDateString(habit.end_date) : null;
-                
-                // Exclude habits that ended BEFORE the selected month (only exclude past habits)
-                if (habitEnd && habitEnd < selectedMonthStart) return false;
-                
-                // Show habit if it started before or during the selected month
-                const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;
-                
-                return startedBeforeOrDuringMonth;
-              }).map((habit) => {
+            <>
+              {/* Summary Panel - Habit counts by category */}
+              {(() => {
+                // Define hierarchy order (same as Daily tab)
+                const hierarchyOrder: { [key: string]: number } = {
+                  'Hard Work|Office-Tasks': 1,
+                  'Hard Work|Learning': 2,
+                  'Hard Work|Confidence': 3,
+                  'Calmness|Yoga': 4,
+                  'Calmness|Sleep': 5,
+                  'Family|My Tasks': 6,
+                  'Family|Home Tasks': 7,
+                  'Family|Time Waste': 8,
+                };
+
+                // Filter active habits
+                const activeHabits = habits.filter((habit) => {
+                  const habitMonth = habitSelectedMonth[habit.id] || new Date();
+                  const selectedMonthStart = new Date(habitMonth.getFullYear(), habitMonth.getMonth(), 1);
+                  selectedMonthStart.setHours(0, 0, 0, 0);
+                  const selectedMonthEnd = new Date(habitMonth.getFullYear(), habitMonth.getMonth() + 1, 0);
+                  selectedMonthEnd.setHours(23, 59, 59, 999);
+                  
+                  const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
+                  const habitEnd = habit.end_date ? parseDateString(habit.end_date) : null;
+                  
+                  if (habitEnd && habitEnd < selectedMonthStart) return false;
+                  const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;
+                  return startedBeforeOrDuringMonth;
+                });
+
+                // Group by category
+                const habitsByCategory = activeHabits.reduce((acc, habit) => {
+                  const categoryName = habit.category_name || 'Uncategorized';
+                  if (!acc[categoryName]) {
+                    acc[categoryName] = [];
+                  }
+                  acc[categoryName].push(habit);
+                  return acc;
+                }, {} as Record<string, any[]>);
+
+                // Sort categories
+                const sortedCategories = Object.keys(habitsByCategory).sort((a, b) => {
+                  const aPillarName = habitsByCategory[a][0]?.pillar_name || '';
+                  const bPillarName = habitsByCategory[b][0]?.pillar_name || '';
+                  const keyA = `${aPillarName}|${a}`;
+                  const keyB = `${bPillarName}|${b}`;
+                  const orderA = hierarchyOrder[keyA] || 999;
+                  const orderB = hierarchyOrder[keyB] || 999;
+                  return orderA - orderB;
+                });
+
+                return (
+                  <div style={{ 
+                    marginBottom: '24px',
+                    padding: '16px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                  }}>
+                    <div style={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '16px'
+                    }}>
+                      <h3 style={{ 
+                        margin: 0,
+                        color: 'white',
+                        fontSize: '18px',
+                        fontWeight: '600'
+                      }}>
+                        📊 Habits Overview
+                      </h3>
+                      <button 
+                        className="btn btn-primary" 
+                        onClick={() => setShowAddHabitModal(true)}
+                        style={{ 
+                          backgroundColor: 'white',
+                          color: '#667eea',
+                          border: 'none',
+                          padding: '8px 16px',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        ➕ Add New Habit
+                      </button>
+                    </div>
+                    <div style={{ 
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '12px'
+                    }}>
+                      {sortedCategories.map(categoryName => {
+                        const categoryHabits = habitsByCategory[categoryName];
+                        const pillarName = categoryHabits[0]?.pillar_name || 'Unknown';
+                        let pillarColor = '#718096';
+                        let pillarIcon = '📋';
+                        
+                        if (pillarName === 'Hard Work') {
+                          pillarColor = '#2563eb';
+                          pillarIcon = '💼';
+                        } else if (pillarName === 'Calmness') {
+                          pillarColor = '#16a34a';
+                          pillarIcon = '🧘';
+                        } else if (pillarName === 'Family') {
+                          pillarColor = '#9333ea';
+                          pillarIcon = '👨‍👩‍👦';
+                        }
+
+                        return (
+                          <div 
+                            key={categoryName}
+                            style={{
+                              padding: '10px 16px',
+                              backgroundColor: 'rgba(255,255,255,0.95)',
+                              borderRadius: '8px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                            }}
+                          >
+                            <span style={{ fontSize: '18px' }}>{pillarIcon}</span>
+                            <div>
+                              <div style={{ 
+                                fontSize: '14px',
+                                fontWeight: '600',
+                                color: pillarColor
+                              }}>
+                                {categoryName}
+                              </div>
+                              <div style={{ 
+                                fontSize: '12px',
+                                color: '#666'
+                              }}>
+                                {categoryHabits.length} habit{categoryHabits.length !== 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div 
+                        style={{
+                          padding: '10px 16px',
+                          backgroundColor: 'rgba(255,255,255,0.95)',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                          border: '2px solid #48bb78'
+                        }}
+                      >
+                        <span style={{ fontSize: '18px' }}>✅</span>
+                        <div>
+                          <div style={{ 
+                            fontSize: '14px',
+                            fontWeight: '600',
+                            color: '#2d3748'
+                          }}>
+                            Total Active
+                          </div>
+                          <div style={{ 
+                            fontSize: '20px',
+                            fontWeight: '700',
+                            color: '#48bb78'
+                          }}>
+                            {activeHabits.length}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Category-Based Sections (Collapsible) */}
+              {(() => {
+                // Define hierarchy order (same as Daily tab)
+                const hierarchyOrder: { [key: string]: number } = {
+                  'Hard Work|Office-Tasks': 1,
+                  'Hard Work|Learning': 2,
+                  'Hard Work|Confidence': 3,
+                  'Calmness|Yoga': 4,
+                  'Calmness|Sleep': 5,
+                  'Family|My Tasks': 6,
+                  'Family|Home Tasks': 7,
+                  'Family|Time Waste': 8,
+                };
+
+                // Group habits by category
+                const habitsByCategory = habits.filter((habit) => {
+                  const habitMonth = habitSelectedMonth[habit.id] || new Date();
+                  const selectedMonthStart = new Date(habitMonth.getFullYear(), habitMonth.getMonth(), 1);
+                  selectedMonthStart.setHours(0, 0, 0, 0);
+                  const selectedMonthEnd = new Date(habitMonth.getFullYear(), habitMonth.getMonth() + 1, 0);
+                  selectedMonthEnd.setHours(23, 59, 59, 999);
+                  
+                  const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
+                  const habitEnd = habit.end_date ? parseDateString(habit.end_date) : null;
+                  
+                  if (habitEnd && habitEnd < selectedMonthStart) return false;
+                  const startedBeforeOrDuringMonth = !habitStart || habitStart <= selectedMonthEnd;
+                  return startedBeforeOrDuringMonth;
+                }).reduce((acc, habit) => {
+                  const categoryName = habit.category_name || 'Uncategorized';
+                  if (!acc[categoryName]) {
+                    acc[categoryName] = [];
+                  }
+                  acc[categoryName].push(habit);
+                  return acc;
+                }, {} as Record<string, any[]>);
+
+                // Sort categories by hierarchy order
+                const sortedCategories = Object.keys(habitsByCategory).sort((a, b) => {
+                  const aPillarName = habitsByCategory[a][0]?.pillar_name || '';
+                  const bPillarName = habitsByCategory[b][0]?.pillar_name || '';
+                  const keyA = `${aPillarName}|${a}`;
+                  const keyB = `${bPillarName}|${b}`;
+                  const orderA = hierarchyOrder[keyA] || 999;
+                  const orderB = hierarchyOrder[keyB] || 999;
+                  return orderA - orderB;
+                });
+
+                return sortedCategories.map(categoryName => {
+                  const categoryHabits = habitsByCategory[categoryName];
+                  const pillarName = categoryHabits[0]?.pillar_name || 'Unknown';
+                  const categoryKey = `${pillarName}|${categoryName}`;
+                  const isExpanded = expandedHabitCategories.has(categoryKey);
+                  
+                  let pillarColor = '#718096';
+                  let pillarIcon = '📋';
+                  
+                  if (pillarName === 'Hard Work') {
+                    pillarColor = '#2563eb';
+                    pillarIcon = '💼';
+                  } else if (pillarName === 'Calmness') {
+                    pillarColor = '#16a34a';
+                    pillarIcon = '🧘';
+                  } else if (pillarName === 'Family') {
+                    pillarColor = '#9333ea';
+                    pillarIcon = '👨‍👩‍👦';
+                  }
+
+                  return (
+                    <div key={categoryKey} style={{ marginBottom: '24px' }}>
+                      <div 
+                        onClick={() => {
+                          const newExpanded = new Set(expandedHabitCategories);
+                          if (isExpanded) {
+                            newExpanded.delete(categoryKey);
+                          } else {
+                            newExpanded.add(categoryKey);
+                          }
+                          setExpandedHabitCategories(newExpanded);
+                          localStorage.setItem('expandedHabitCategories', JSON.stringify(Array.from(newExpanded)));
+                        }}
+                        style={{ 
+                          fontSize: '18px', 
+                          fontWeight: '600', 
+                          color: pillarColor, 
+                          marginBottom: isExpanded ? '15px' : '0', 
+                          paddingBottom: '8px', 
+                          borderBottom: isExpanded ? `2px solid ${pillarColor}` : 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          padding: '12px 16px',
+                          background: isExpanded ? 'transparent' : '#f7fafc',
+                          borderRadius: '8px',
+                          transition: 'all 0.2s',
+                          boxShadow: isExpanded ? 'none' : '0 1px 3px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <span>
+                          {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryHabits.length})
+                        </span>
+                        <span style={{ fontSize: '14px', color: '#666', fontWeight: 'normal' }}>
+                          {pillarName}
+                        </span>
+                      </div>
+                      
+                      {isExpanded && (
+                        <div 
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '20px',
+                            width: '100%',
+                            marginTop: '12px'
+                          }}
+                        >
+                          {categoryHabits.map((habit) => {
                 const periodStats = currentPeriodStats[habit.id];
                 const trackingMode = habit.tracking_mode || 'daily_streak';
                 const showPeriodTracking = ['occurrence', 'occurrence_with_value', 'aggregate'].includes(trackingMode);
@@ -10975,9 +11250,15 @@ export default function Tasks() {
                 </div>
               );
             })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
 
-            {/* Completed Habits Section */}
-            {completedHabits.length > 0 && (
+              {/* Completed Habits Section */}
+              {completedHabits.length > 0 && (
               <div style={{ marginTop: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#718096' }}>
@@ -11164,7 +11445,7 @@ export default function Tasks() {
                 )}
               </div>
             )}
-            </div>
+            </>
           )}
         </div>
       ) : filteredTasks.length === 0 ? (
