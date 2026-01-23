@@ -200,7 +200,10 @@ def log_challenge_entry(
         existing.mood = mood or existing.mood
         entry = existing
     else:
-        # Create new entry
+        # Create new entry with snapshots
+        from app.services.snapshot_helper import SnapshotHelper
+        snapshots = SnapshotHelper.get_challenge_snapshots(db, challenge_id)
+        
         entry = ChallengeEntry(
             challenge_id=challenge_id,
             entry_date=entry_date,
@@ -208,7 +211,8 @@ def log_challenge_entry(
             count_value=count_value or 0,
             numeric_value=numeric_value or 0.0,
             note=note,
-            mood=mood
+            mood=mood,
+            **snapshots  # Populate snapshot columns
         )
         db.add(entry)
     
@@ -593,11 +597,15 @@ def mark_day_completed_from_task(db: Session, challenge: Challenge, entry_date: 
         ).first()
         
         if not existing_entry:
+            from app.services.snapshot_helper import SnapshotHelper
+            snapshots = SnapshotHelper.get_challenge_snapshots(db, challenge.id)
+            
             new_entry = ChallengeEntry(
                 challenge_id=challenge.id,
                 entry_date=entry_date,
                 is_completed=True,
-                note=f"Auto-synced from task"
+                note=f"Auto-synced from task",
+                **snapshots  # Populate snapshot columns
             )
             db.add(new_entry)
             

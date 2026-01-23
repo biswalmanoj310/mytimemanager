@@ -117,13 +117,17 @@ class HabitService:
             db.refresh(existing_entry)
             entry = existing_entry
         else:
-            # Create new entry
+            # Create new entry with snapshots
+            from app.services.snapshot_helper import SnapshotHelper
+            snapshots = SnapshotHelper.get_habit_snapshots(db, habit_id)
+            
             entry = HabitEntry(
                 habit_id=habit_id,
                 entry_date=datetime.combine(entry_date, datetime.min.time()),
                 is_successful=is_successful,
                 actual_value=actual_value,
-                note=note
+                note=note,
+                **snapshots  # Populate snapshot columns
             )
             db.add(entry)
             db.commit()
@@ -598,6 +602,10 @@ class HabitService:
         
         period_start, period_end = HabitService.get_period_bounds(period_type, reference_date)
         
+        # Get snapshots for this habit
+        from app.services.snapshot_helper import SnapshotHelper
+        snapshots = SnapshotHelper.get_habit_snapshots(db, habit_id)
+        
         # Create session slots
         for session_num in range(1, habit.target_count_per_period + 1):
             existing = db.query(HabitSession).filter(
@@ -615,7 +623,8 @@ class HabitService:
                     period_start=period_start,
                     period_end=period_end,
                     session_number=session_num,
-                    is_completed=False
+                    is_completed=False,
+                    **snapshots  # Populate snapshot columns
                 )
                 db.add(session)
         

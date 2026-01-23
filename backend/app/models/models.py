@@ -202,6 +202,7 @@ class Task(Base):
     is_completed = Column(Boolean, default=False)
     completed_at = Column(DateTime(timezone=True), nullable=True)
     na_marked_at = Column(DateTime(timezone=True), nullable=True)  # When task was marked as NA
+    deleted_at = Column(DateTime(timezone=True), nullable=True)  # When task was soft-deleted
     
     # Priority (1-10, where 1 is highest priority)
     priority = Column(Integer, default=10, nullable=True)
@@ -733,6 +734,13 @@ class HabitEntry(Base):
     is_successful = Column(Boolean, nullable=False, default=False)
     actual_value = Column(Integer, nullable=True)  # Actual minutes/count achieved
     
+    # Snapshot columns (preserve historical data even if habit is renamed/deleted)
+    habit_name_snapshot = Column(Text, nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(Text, nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(Text, nullable=True)
+    
     # Notes
     note = Column(Text, nullable=True)
     
@@ -796,6 +804,13 @@ class HabitSession(Base):
     value_achieved = Column(Integer, nullable=True)  # For occurrence_with_value mode (e.g., 60 min, 50 pages)
     meets_target = Column(Boolean, nullable=True)  # Did this session meet the individual target?
     notes = Column(Text, nullable=True)
+    
+    # Snapshot columns (preserve historical data even if habit is renamed/deleted)
+    habit_name_snapshot = Column(Text, nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(Text, nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(Text, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -1105,6 +1120,13 @@ class ChallengeEntry(Base):
     is_completed = Column(Boolean, default=False, index=True)
     count_value = Column(Integer, default=0)
     numeric_value = Column(Float, default=0.0)
+    
+    # Snapshot columns (preserve historical data even if challenge is renamed/deleted)
+    challenge_name_snapshot = Column(Text, nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(Text, nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(Text, nullable=True)
     
     # Optional
     note = Column(Text, nullable=True)

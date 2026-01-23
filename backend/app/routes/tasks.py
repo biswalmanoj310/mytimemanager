@@ -228,14 +228,32 @@ def mark_task_completed(task_id: int, db: Session = Depends(get_db)):
 @router.delete("/{task_id}", status_code=204)
 def delete_task(task_id: int, db: Session = Depends(get_db)):
     """
-    Delete a task
-    This will also delete all associated time entries (cascade)
+    Soft delete a task (marks as inactive, preserves historical data)
+    Historical time entries remain intact with snapshot data
+    Use POST /tasks/{task_id}/restore to restore a deleted task
     """
-    success = TaskService.delete_task(db, task_id)
-    if not success:
+    from app.services.task_deletion_service import TaskDeletionService
+    
+    task = TaskDeletionService.soft_delete_task(db, task_id)
+    if not task:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
     
     return None
+
+
+@router.post("/{task_id}/restore", status_code=200)
+def restore_task(task_id: int, db: Session = Depends(get_db)):
+    """
+    Restore a soft-deleted task (reactivates task)
+    Only works for tasks marked with deleted_at timestamp
+    """
+    from app.services.task_deletion_service import TaskDeletionService
+    
+    task = TaskDeletionService.restore_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found or not deleted")
+    
+    return {"message": "Task restored successfully", "task_id": task_id}
 
 
 @router.get("/by-pillar/{pillar_id}/summary")
