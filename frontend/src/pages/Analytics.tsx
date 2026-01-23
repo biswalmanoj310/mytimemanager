@@ -328,10 +328,9 @@ export default function Analytics() {
       const weeklyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${weekStartStr}&end_date=${todayEndStr}`);
       setWeeklyPillarData(weeklyResponse.data.pillars || []);
       
-      // Load This Month's data
+      // Load This Month's data (1st to today, not full month)
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      const monthlyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${formatDateForInput(monthStart)}&end_date=${formatDateForInput(monthEnd)}`);
+      const monthlyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${formatDateForInput(monthStart)}&end_date=${formatDateForInput(today)}`);
       setMonthlyPillarData(monthlyResponse.data.pillars || []);
     } catch (error) {
       console.error('Error loading comparative pillar data:', error);
