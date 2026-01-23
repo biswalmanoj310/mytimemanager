@@ -74,13 +74,10 @@ class AnalyticsService:
         task_allocated_map = {task.id: task.allocated_minutes for task in daily_tasks}
         
         # Build time entry query from DailyTimeEntry table for SPENT time
-        # JOIN with Task to filter only Time-Based Task Table entries
+        # USE SNAPSHOT COLUMNS to include ALL historical entries (even if task deleted/changed)
         spent_query = self.db.query(
-            DailyTimeEntry.task_id,
+            DailyTimeEntry.pillar_id_snapshot,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')
-        ).join(Task, DailyTimeEntry.task_id == Task.id).filter(
-            Task.task_type == 'time',
-            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None))
         )
         
         if start_date:
@@ -88,18 +85,16 @@ class AnalyticsService:
         if end_date:
             spent_query = spent_query.filter(func.date(DailyTimeEntry.entry_date) <= end_date)
         
-        time_by_task = spent_query.group_by(DailyTimeEntry.task_id).all()
+        time_by_pillar = spent_query.group_by(DailyTimeEntry.pillar_id_snapshot).all()
+        time_by_pillar_map = {pillar_id: minutes for pillar_id, minutes in time_by_pillar if pillar_id is not None}
         
         pillar_data = []
         total_allocated = 0
         total_spent = 0
         
         for pillar in pillars:
-            # Calculate spent time - ONLY count time for tasks currently in Daily tab (active daily tasks)
-            spent_minutes = sum(
-                minutes for task_id, minutes in time_by_task
-                if task_id in task_pillar_map and task_pillar_map.get(task_id) == pillar.id
-            )
+            # Calculate spent time from SNAPSHOT COLUMNS - includes ALL historical entries
+            spent_minutes = time_by_pillar_map.get(pillar.id, 0)
             spent_hours = spent_minutes / 60 if spent_minutes else 0
             
             # Use the pillar's allocated_hours (e.g., 8h per day)
