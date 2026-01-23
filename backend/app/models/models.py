@@ -227,6 +227,7 @@ class TimeEntry(Base):
     """
     Individual time tracking entries for tasks
     Tracks time in 30-minute slots
+    Includes snapshot columns to preserve historical data when tasks are modified/deleted
     """
     __tablename__ = "time_entries"
 
@@ -241,6 +242,13 @@ class TimeEntry(Base):
     
     # Notes
     notes = Column(Text, nullable=True)
+    
+    # Snapshot columns - preserve task/pillar/category at time of entry
+    task_name_snapshot = Column(String(255), nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(String(100), nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(String(100), nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -423,6 +431,7 @@ class MonthlyTaskStatus(Base):
 class YearlyTimeEntry(Base):
     """
     Yearly time entries - stores time spent on each task for each month of the year
+    Includes snapshot columns to preserve historical data when tasks are modified/deleted
     """
     __tablename__ = "yearly_time_entries"
 
@@ -431,6 +440,12 @@ class YearlyTimeEntry(Base):
     year_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
     month = Column(Integer, nullable=False)  # 1-12 for Jan-Dec
     minutes = Column(Integer, nullable=False, default=0)
+    # Snapshot columns - preserve task/pillar/category at time of entry
+    task_name_snapshot = Column(String(255), nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(String(100), nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

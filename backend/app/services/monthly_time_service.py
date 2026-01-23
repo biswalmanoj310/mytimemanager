@@ -6,8 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from datetime import datetime, date
 from typing import List, Optional, Dict
-from app.models.models import MonthlyTimeEntry, Task
-
+from app.models.models import MonthlyTimeEntry, Taskfrom app.services.snapshot_helper import SnapshotHelper
 
 def get_monthly_time_entries(db: Session, month_start_date: date, task_id: Optional[int] = None) -> List[MonthlyTimeEntry]:
     """Get all time entries for a specific month"""
@@ -38,12 +37,16 @@ def save_monthly_time_entry(db: Session, task_id: int, month_start_date: date, d
         db.refresh(existing)
         return existing
     else:
-        # Create new entry
+        # Get snapshot data
+        snapshots = SnapshotHelper.get_task_snapshots(db, task_id)
+        
+        # Create new entry with snapshots
         new_entry = MonthlyTimeEntry(
             task_id=task_id,
             month_start_date=datetime.combine(month_start_date, datetime.min.time()),
             day_of_month=day_of_month,
-            minutes=minutes
+            minutes=minutes,
+            **snapshots
         )
         db.add(new_entry)
         db.commit()

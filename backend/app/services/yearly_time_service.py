@@ -6,8 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from datetime import datetime, date
 from typing import List, Optional, Dict
-from app.models.models import YearlyTimeEntry, Task
-
+from app.models.models import YearlyTimeEntry, Taskfrom app.services.snapshot_helper import SnapshotHelper
 
 def get_yearly_time_entries(db: Session, year_start_date: date, task_id: Optional[int] = None) -> List[YearlyTimeEntry]:
     """Get all time entries for a specific year"""
@@ -38,12 +37,16 @@ def save_yearly_time_entry(db: Session, task_id: int, year_start_date: date, mon
         db.refresh(existing)
         return existing
     else:
-        # Create new entry
+        # Get snapshot data
+        snapshots = SnapshotHelper.get_task_snapshots(db, task_id)
+        
+        # Create new entry with snapshots
         new_entry = YearlyTimeEntry(
             task_id=task_id,
             year_start_date=datetime.combine(year_start_date, datetime.min.time()),
             month=month,
-            minutes=minutes
+            minutes=minutes,
+            **snapshots
         )
         db.add(new_entry)
         db.commit()

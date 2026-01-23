@@ -8,6 +8,7 @@ from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
 from app.models.models import WeeklyTimeEntry, WeeklySummary, Task
 from app.models.schemas import WeeklyTimeEntryCreate, WeeklySummaryResponse, IncompleteWeekResponse
+from app.services.snapshot_helper import SnapshotHelper
 
 
 def get_weekly_time_entries(db: Session, week_start_date: date, task_id: Optional[int] = None) -> List[WeeklyTimeEntry]:
@@ -39,12 +40,16 @@ def save_weekly_time_entry(db: Session, entry_data: WeeklyTimeEntryCreate) -> We
         db.refresh(existing)
         return existing
     else:
-        # Create new entry
+        # Get snapshot data
+        snapshots = SnapshotHelper.get_task_snapshots(db, entry_data.task_id)
+        
+        # Create new entry with snapshots
         new_entry = WeeklyTimeEntry(
             task_id=entry_data.task_id,
             week_start_date=entry_data.week_start_date,
             day_of_week=entry_data.day_of_week,
-            minutes=entry_data.minutes
+            minutes=entry_data.minutes,
+            **snapshots
         )
         db.add(new_entry)
         db.commit()
@@ -76,11 +81,15 @@ def bulk_save_weekly_entries(db: Session, week_start_date: date, entries: List[D
                 existing.minutes = minutes
                 existing.updated_at = datetime.utcnow()
             else:
+                # Get snapshot data
+                snapshots = SnapshotHelper.get_task_snapshots(db, task_id)
+                
                 new_entry = WeeklyTimeEntry(
                     task_id=task_id,
                     week_start_date=datetime.combine(week_start_date, datetime.min.time()),
                     day_of_week=day_of_week,
-                    minutes=minutes
+                    minutes=minutes,
+                    **snapshots
                 )
                 db.add(new_entry)
 
