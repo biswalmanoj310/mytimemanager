@@ -74,10 +74,14 @@ class AnalyticsService:
         task_allocated_map = {task.id: task.allocated_minutes for task in daily_tasks}
         
         # Build time entry query from DailyTimeEntry table for SPENT time
-        # USE SNAPSHOT COLUMNS to include ALL historical entries (even if task deleted/changed)
+        # JOIN with Task to filter ONLY Time-Based Task Table entries (task_type=time, is_daily_one_time=False/NULL)
+        # Then use snapshot columns for pillar aggregation (handles renamed/deleted tasks)
         spent_query = self.db.query(
             DailyTimeEntry.pillar_id_snapshot,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')
+        ).join(Task, DailyTimeEntry.task_id == Task.id).filter(
+            Task.task_type == 'time',
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None))
         )
         
         if start_date:
