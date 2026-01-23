@@ -854,8 +854,8 @@ export default function Analytics() {
                         name: pillar.pillar_name,
                         allocated: pillar.allocated_hours, // Daily allocation
                         today: pillar.spent_hours,
-                        weekly: weekData ? (weekData.spent_hours / daysInWeek) : 0,
-                        monthly: monthData ? (monthData.spent_hours / daysInMonth) : 0,
+                        weekly: weekData ? Math.round((weekData.spent_hours / daysInWeek) * 10) / 10 : 0,
+                        monthly: monthData ? Math.round((monthData.spent_hours / daysInMonth) * 10) / 10 : 0,
                         color: pillar.color_code
                       };
                     });
