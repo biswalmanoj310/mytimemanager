@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from datetime import datetime, date
 from typing import List, Optional, Dict
-from app.models.models import MonthlyTimeEntry, Taskfrom app.services.snapshot_helper import SnapshotHelper
+from app.models.models import MonthlyTimeEntry, Task
+from app.services.snapshot_helper import SnapshotHelper
 
 def get_monthly_time_entries(db: Session, month_start_date: date, task_id: Optional[int] = None) -> List[MonthlyTimeEntry]:
     """Get all time entries for a specific month"""
