@@ -256,6 +256,7 @@ class TimeEntry(Base):
 class DailyTimeEntry(Base):
     """
     Stores actual time spent on each task for each hour of each day
+    Includes snapshot columns to preserve historical data when tasks are modified/deleted
     """
     __tablename__ = "daily_time_entries"
 
@@ -264,6 +265,12 @@ class DailyTimeEntry(Base):
     entry_date = Column(DateTime(timezone=True), nullable=False, index=True)
     hour = Column(Integer, nullable=False)  # 0-23
     minutes = Column(Integer, nullable=False, default=0)
+    # Snapshot columns - preserve task/pillar/category at time of entry
+    task_name_snapshot = Column(String(255), nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(String(100), nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -298,6 +305,7 @@ class DailySummary(Base):
 class WeeklyTimeEntry(Base):
     """
     Weekly time entries - stores time spent on each task for each day of the week
+    Includes snapshot columns to preserve historical data when tasks are modified/deleted
     """
     __tablename__ = "weekly_time_entries"
 
@@ -306,6 +314,12 @@ class WeeklyTimeEntry(Base):
     week_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
     day_of_week = Column(Integer, nullable=False)  # 0=Sunday, 6=Saturday
     minutes = Column(Integer, nullable=False, default=0)
+    # Snapshot columns - preserve task/pillar/category at time of entry
+    task_name_snapshot = Column(String(255), nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(String(100), nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -359,6 +373,7 @@ class WeeklyTaskStatus(Base):
 class MonthlyTimeEntry(Base):
     """
     Monthly time entries - stores time spent on each task for each day of the month
+    Includes snapshot columns to preserve historical data when tasks are modified/deleted
     """
     __tablename__ = "monthly_time_entries"
 
@@ -367,6 +382,12 @@ class MonthlyTimeEntry(Base):
     month_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
     day_of_month = Column(Integer, nullable=False)  # 1-31
     minutes = Column(Integer, nullable=False, default=0)
+    # Snapshot columns - preserve task/pillar/category at time of entry
+    task_name_snapshot = Column(String(255), nullable=True)
+    pillar_id_snapshot = Column(Integer, nullable=True)
+    pillar_name_snapshot = Column(String(100), nullable=True)
+    category_id_snapshot = Column(Integer, nullable=True)
+    category_name_snapshot = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

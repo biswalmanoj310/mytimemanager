@@ -44,12 +44,21 @@ def save_daily_time_entry(db: Session, entry_data: DailyTimeEntryCreate) -> Dail
         
         return existing
     else:
-        # Create new entry
+        # Get task details for snapshot
+        task = db.query(Task).filter(Task.id == entry_data.task_id).first()
+        
+        # Create new entry with snapshot data
         new_entry = DailyTimeEntry(
             task_id=entry_data.task_id,
             entry_date=entry_data.entry_date,
             hour=entry_data.hour,
-            minutes=entry_data.minutes
+            minutes=entry_data.minutes,
+            # Store snapshot data
+            task_name_snapshot=task.name if task else None,
+            pillar_id_snapshot=task.pillar_id if task else None,
+            pillar_name_snapshot=task.pillar.name if task and task.pillar else None,
+            category_id_snapshot=task.category_id if task else None,
+            category_name_snapshot=task.category.name if task and task.category else None
         )
         db.add(new_entry)
         db.commit()
@@ -92,11 +101,20 @@ def bulk_save_daily_entries(db: Session, entry_date: date, entries: List[Dict]) 
                     existing.minutes = minutes
                     existing.updated_at = datetime.now()
                 else:
+                    # Get task details for snapshot
+                    task = db.query(Task).filter(Task.id == task_id).first()
+                    
                     new_entry = DailyTimeEntry(
                         task_id=task_id,
                         entry_date=datetime.combine(entry_date, datetime.min.time()),
                         hour=hour,
-                        minutes=minutes
+                        minutes=minutes,
+                        # Store snapshot data
+                        task_name_snapshot=task.name if task else None,
+                        pillar_id_snapshot=task.pillar_id if task else None,
+                        pillar_name_snapshot=task.pillar.name if task and task.pillar else None,
+                        category_id_snapshot=task.category_id if task else None,
+                        category_name_snapshot=task.category.name if task and task.category else None
                     )
                     db.add(new_entry)
 
