@@ -261,13 +261,17 @@ export default function Dashboard() {
             <span>🎯</span>
             <span>Create Goal</span>
           </button>
-          <button className="action-btn">
+          <button className="action-btn" onClick={() => window.location.href = '/my-day-design'}>
+            <span>🎨</span>
+            <span>My Day Design</span>
+          </button>
+          <button className="action-btn" onClick={() => window.location.href = '/calendar'}>
+            <span>📅</span>
+            <span>Calendar</span>
+          </button>
+          <button className="action-btn" onClick={() => window.location.href = '/time-tracking'}>
             <span>⏱️</span>
             <span>Track Time</span>
-          </button>
-          <button className="action-btn">
-            <span>📊</span>
-            <span>View Analytics</span>
           </button>
         </div>
       </section>

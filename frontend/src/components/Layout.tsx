@@ -15,7 +15,8 @@ import {
   CheckCircle2,
   Trophy,
   Menu,
-  X
+  X,
+  Settings
 } from 'lucide-react';
 import { useState } from 'react';
 import './Layout.css';
@@ -32,11 +33,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: <LayoutDashboard size={20} /> },
-  { path: '/calendar', label: 'Calendar', icon: <Calendar size={20} /> },
   { path: '/tasks', label: 'Tasks', icon: <CheckSquare size={20} /> },
   { path: '/goals', label: 'Goals', icon: <Target size={20} /> },
   { path: '/challenges', label: 'Challenges', icon: <Trophy size={20} /> },
-  { path: '/time-tracking', label: 'Time Tracking', icon: <Clock size={20} /> },
   { path: '/analytics', label: 'Analytics', icon: <BarChart3 size={20} /> },
   { path: '/completed', label: 'Completed', icon: <CheckCircle2 size={20} /> },
 ];

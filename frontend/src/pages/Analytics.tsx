@@ -25,54 +25,26 @@ import {
 import apiClient from '../services/api';
 import './Analytics.css';
 
-// Shared ordering configuration (matches Daily tab hierarchy)
-const PILLAR_ORDER = ['Hard Work', 'Calmness', 'Family'];
+// Dynamic pillar/category configuration (loaded from API)
+interface PillarConfig {
+  id: number;
+  name: string;
+  order: number;
+}
 
-const CATEGORY_ORDER = [
-  'Office-Tasks',  // Hard Work
-  'Learning',      // Hard Work
-  'Confidence',    // Hard Work
-  'Yoga',          // Calmness
-  'Sleep',         // Calmness
-  'My Tasks',      // Family
-  'Home Tasks',    // Family
-  'Time Waste'     // Family
-];
+interface CategoryConfig {
+  id: number;
+  name: string;
+  pillar_id: number;
+  order: number;
+}
 
-const TASK_NAME_ORDER: { [key: string]: number } = {
-  'cd-Mails-Tickets': 1,
-  'Code Coverage': 2,
-  'Code - Scripts': 3,
-  'Cloud': 4,
-  'LLM GenAI': 5,
-  'Git Jenkin Tools': 6,
-  'Interview Q/A': 7,
-  'Interview Talk': 8,
-  'Life Coach & NLP': 9,
-  'Toastmaster Task': 10,
-  'Yoga - Dhyan': 11,
-  'Sleep': 12,
-  'Planning': 13,
-  'Stocks': 14,
-  'Task (Bank/ mail)': 15,
-  'Commute': 16,
-  'Nature Needs': 17,
-  'Eating': 18,
-  'My Games': 19,
-  'Parent Talk': 20,
-  'Home Task': 21,
-  'Task Trishna': 22,
-  'Task Divyanshi': 23,
-  'Daughter Sports': 24,
-  'Shopping': 25,
-  'Family Friends': 26,
-  'Youtube': 27,
-  'TV': 28,
-  'Facebook': 29,
-  'Nextdoor': 30,
-  'News': 31,
-  'Dark Future': 32,
-};
+interface TaskConfig {
+  id: number;
+  name: string;
+  category_id: number;
+  order: number;
+}
 
 // Custom multi-line label component for long task names
 const CustomMultilineLabel = ({ x, y, payload, index }: any) => {
@@ -204,6 +176,11 @@ export default function Analytics() {
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
   
+  // Dynamic configuration from database
+  const [pillarsConfig, setPillarsConfig] = useState<PillarConfig[]>([]);
+  const [categoriesConfig, setCategoriesConfig] = useState<CategoryConfig[]>([]);
+  const [tasksConfig, setTasksConfig] = useState<TaskConfig[]>([]);
+  
   // Get initial viewMode from URL params or default to 'overview'
   const getInitialViewMode = (): 'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed' => {
     const params = new URLSearchParams(window.location.search);
@@ -276,6 +253,11 @@ export default function Analytics() {
   const [modalWeekDate, setModalWeekDate] = useState(formatDateForInput(new Date()));
   const [modalMonth, setModalMonth] = useState(formatDateForInput(new Date()).substring(0, 7)); // YYYY-MM format
 
+  // Load dynamic configuration on mount
+  useEffect(() => {
+    loadConfiguration();
+  }, []);
+
   useEffect(() => {
     loadAnalyticsData();
     loadStreakData();
@@ -312,6 +294,64 @@ export default function Analytics() {
       setDateRange('custom');
     }
   }, [viewMode, detailedDate, detailedPeriodType]);
+
+  // Load pillars, categories, and tasks configuration from API
+  const loadConfiguration = async () => {
+    try {
+      // Load pillars
+      const pillarsResponse = await apiClient.get('/api/pillars/');
+      const pillars = pillarsResponse.data.map((p: any, index: number) => ({
+        id: p.id,
+        name: p.name,
+        order: index // Use array order from database
+      }));
+      setPillarsConfig(pillars);
+      
+      // Load categories
+      const categoriesResponse = await apiClient.get('/api/categories/');
+      const categories = categoriesResponse.data.map((c: any, index: number) => ({
+        id: c.id,
+        name: c.name,
+        pillar_id: c.pillar_id,
+        order: index // Use array order from database
+      }));
+      setCategoriesConfig(categories);
+      
+      // Load all tasks for ordering
+      const tasksResponse = await apiClient.get('/api/tasks?limit=1000');
+      const tasks = tasksResponse.data.map((t: any, index: number) => ({
+        id: t.id,
+        name: t.name,
+        category_id: t.category_id,
+        order: index // Use array order from database
+      }));
+      setTasksConfig(tasks);
+      
+      console.log('Loaded configuration:', {
+        pillars: pillars.length,
+        categories: categories.length,
+        tasks: tasks.length
+      });
+    } catch (error) {
+      console.error('Error loading configuration:', error);
+    }
+  };
+  
+  // Helper functions for sorting based on configuration
+  const getPillarOrder = (pillarName: string): number => {
+    const pillar = pillarsConfig.find(p => p.name === pillarName);
+    return pillar ? pillar.order : 999;
+  };
+  
+  const getCategoryOrder = (categoryName: string): number => {
+    const category = categoriesConfig.find(c => c.name === categoryName);
+    return category ? category.order : 999;
+  };
+  
+  const getTaskOrder = (taskName: string): number => {
+    const task = tasksConfig.find(t => t.name === taskName);
+    return task ? task.order : 999;
+  };
 
   const loadComparativePillarData = async () => {
     try {
@@ -862,9 +902,9 @@ export default function Analytics() {
                     
                     // Sort by Daily tab order
                     return pillarDataWithValues.sort((a, b) => {
-                      const orderA = PILLAR_ORDER.indexOf(a.name);
-                      const orderB = PILLAR_ORDER.indexOf(b.name);
-                      return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+                      const orderA = getPillarOrder(a.name);
+                      const orderB = getPillarOrder(b.name);
+                      return orderA - orderB;
                     });
                   })()}
                   barSize={35}
@@ -1000,16 +1040,16 @@ export default function Analytics() {
                       .filter(task => task.hasData)
                       .sort((a, b) => {
                         // Sort by Daily tab order: category first
-                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
-                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
+                        const categoryOrderA = getCategoryOrder(a.category);
+                        const categoryOrderB = getCategoryOrder(b.category);
                         
                         if (categoryOrderA !== categoryOrderB) {
-                          return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                          return categoryOrderA - categoryOrderB;
                         }
                         
                         // Within same category, sort by task name order
-                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
-                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
+                        const taskOrderA = getTaskOrder(a.name);
+                        const taskOrderB = getTaskOrder(b.name);
                         
                         if (taskOrderA !== taskOrderB) {
                           return taskOrderA - taskOrderB;
@@ -1241,9 +1281,9 @@ export default function Analytics() {
                       .filter(cat => cat.hasData)
                       .sort((a, b) => {
                         // Sort by Daily tab category order
-                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.name);
-                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.name);
-                        return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                        const categoryOrderA = getCategoryOrder(a.name);
+                        const categoryOrderB = getCategoryOrder(b.name);
+                        return categoryOrderA - categoryOrderB;
                       });
                   })()}
                   barSize={25}
@@ -1436,16 +1476,16 @@ export default function Analytics() {
                       .filter(task => task.hasData)
                       .sort((a, b) => {
                         // Sort by Daily tab order: category first
-                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
-                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
+                        const categoryOrderA = getCategoryOrder(a.category);
+                        const categoryOrderB = getCategoryOrder(b.category);
                         
                         if (categoryOrderA !== categoryOrderB) {
-                          return (categoryOrderA === -1 ? 999 : categoryOrderA) - (categoryOrderB === -1 ? 999 : categoryOrderB);
+                          return categoryOrderA - categoryOrderB;
                         }
                         
                         // Within same category, sort by task name order
-                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
-                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
+                        const taskOrderA = getTaskOrder(a.name);
+                        const taskOrderB = getTaskOrder(b.name);
                         
                         if (taskOrderA !== taskOrderB) {
                           return taskOrderA - taskOrderB;
@@ -1639,7 +1679,7 @@ export default function Analytics() {
                           today: todayData?.spent_hours || 0,
                           weekAvg: weekData ? (weekData.spent_hours / daysInWeek) : 0,
                           monthAvg: monthData ? (monthData.spent_hours / daysInMonth) : 0,
-                          sortOrder: CATEGORY_ORDER.indexOf(category.category_name)
+                          sortOrder: getCategoryOrder(category.category_name)
                         };
                         
                         console.log(`Category: ${category.category_name} (ID: ${category.category_id})`, result);
@@ -1784,8 +1824,8 @@ export default function Analytics() {
                       .filter(task => task.allocated > 0 || task.totalSpent > 0) // Only tasks with allocation or time spent
                       .sort((a, b) => {
                         // Sort by Daily tab order: category first (which groups by pillar), then task name
-                        const categoryOrderA = CATEGORY_ORDER.indexOf(a.category);
-                        const categoryOrderB = CATEGORY_ORDER.indexOf(b.category);
+                        const categoryOrderA = getCategoryOrder(a.category);
+                        const categoryOrderB = getCategoryOrder(b.category);
                         
                         // Compare categories first
                         if (categoryOrderA !== categoryOrderB) {
@@ -1793,8 +1833,8 @@ export default function Analytics() {
                         }
                         
                         // Within same category, sort by task name order, or alphabetically if not in list
-                        const taskOrderA = TASK_NAME_ORDER[a.name] || 999;
-                        const taskOrderB = TASK_NAME_ORDER[b.name] || 999;
+                        const taskOrderA = getTaskOrder(a.name);
+                        const taskOrderB = getTaskOrder(b.name);
                         
                         if (taskOrderA !== taskOrderB) {
                           return taskOrderA - taskOrderB;
@@ -2024,9 +2064,9 @@ export default function Analytics() {
             {dailyPillarData
               .sort((a, b) => {
                 // Sort by Daily tab pillar order
-                const orderA = PILLAR_ORDER.indexOf(a.pillar_name);
-                const orderB = PILLAR_ORDER.indexOf(b.pillar_name);
-                return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+                const orderA = getPillarOrder(a.pillar_name);
+                const orderB = getPillarOrder(b.pillar_name);
+                return orderA - orderB;
               })
               .filter(pillar => pillar.spent_hours > 0)
               .map((pillar) => {
@@ -2055,9 +2095,9 @@ export default function Analytics() {
                   .filter(cat => cat.totalSpent > 0 || cat.allocated > 0)
                   .sort((a, b) => {
                     // Sort by Daily tab category order
-                    const orderA = CATEGORY_ORDER.indexOf(a.category_name);
-                    const orderB = CATEGORY_ORDER.indexOf(b.category_name);
-                    return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
+                    const orderA = getCategoryOrder(a.category_name);
+                    const orderB = getCategoryOrder(b.category_name);
+                    return orderA - orderB;
                   });
 
                 if (pillarCategories.length === 0) return null;
