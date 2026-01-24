@@ -9554,9 +9554,17 @@ export default function Tasks() {
                     'Family|Time Waste': 8,
                   };
 
-                  // Group tasks by category
+                  // Helper to check if all children are completed
+                  const allChildrenCompleted = (taskId: number): boolean => {
+                    const children = miscTasks.filter(t => t.parent_task_id === taskId);
+                    if (children.length === 0) return true;
+                    return children.every(child => child.is_completed && allChildrenCompleted(child.id));
+                  };
+
+                  // Group tasks by category - exclude completed tasks with all children completed
                   const tasksByCategory = miscTasks
-                    .filter(t => !t.parent_task_id && !t.is_completed)
+                    .filter(t => !t.parent_task_id)
+                    .filter(t => !(t.is_completed && allChildrenCompleted(t.id))) // Exclude fully completed hierarchies
                     .filter(task => {
                       if (projectTaskFilter === 'all') return true;
                       if (projectTaskFilter === 'in-progress') return !task.is_completed;
@@ -9746,34 +9754,60 @@ export default function Tasks() {
           </div>
 
           {/* Completed Misc Tasks Section */}
-          {miscTasks.filter(t => t.is_completed && !t.parent_task_id).length > 0 && (
-            <div style={{ marginTop: '40px' }}>
-              <h3 
-                onClick={() => setShowCompletedMiscTasks(!showCompletedMiscTasks)}
-                style={{ 
-                  marginBottom: '15px', 
-                  color: '#666', 
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  userSelect: 'none',
-                  fontSize: '18px',
-                  fontWeight: '600'
-                }}
-              >
-                {showCompletedMiscTasks ? '▼' : '▶'} ✅ Completed Tasks ({miscTasks.filter(t => t.is_completed && !t.parent_task_id).length})
-              </h3>
-              {showCompletedMiscTasks && (
-                <div className="project-tasks-tree" style={{ 
-                  marginTop: '20px',
-                  opacity: 0.8,
-                  backgroundColor: '#f9fafb',
-                  padding: '20px',
-                  borderRadius: '8px'
-                }}>
-                  <div className="task-list">
-                    {miscTasks.filter(t => !t.parent_task_id && t.is_completed).map((task) => (
+          {(() => {
+            // Helper to check if all children are completed
+            const allChildrenCompleted = (taskId: number): boolean => {
+              const children = miscTasks.filter(t => t.parent_task_id === taskId);
+              if (children.length === 0) return true;
+              return children.every(child => child.is_completed && allChildrenCompleted(child.id));
+            };
+            
+            // Get root completed tasks (completed with all children completed)
+            const rootCompletedTasks = miscTasks.filter(t => 
+              !t.parent_task_id && t.is_completed && allChildrenCompleted(t.id)
+            );
+            
+            if (rootCompletedTasks.length === 0) return null;
+            
+            return (
+              <div style={{ marginTop: '40px' }}>
+                <h3 
+                  onClick={() => setShowCompletedMiscTasks(!showCompletedMiscTasks)}
+                  style={{ 
+                    marginBottom: '15px', 
+                    color: '#666', 
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    userSelect: 'none',
+                    fontSize: '18px',
+                    fontWeight: '600'
+                  }}
+                >
+                  {showCompletedMiscTasks ? '▼' : '▶'} ✅ Completed Tasks ({(() => {
+                    let count = 0;
+                    const countTasks = (tasks: ProjectTaskData[]) => {
+                      tasks.forEach(task => {
+                        count++;
+                        const children = miscTasks.filter(t => t.parent_task_id === task.id);
+                        countTasks(children);
+                      });
+                    };
+                    countTasks(rootCompletedTasks);
+                    return count;
+                  })()})
+                </h3>
+                {showCompletedMiscTasks && (
+                  <div className="project-tasks-tree" style={{ 
+                    marginTop: '20px',
+                    opacity: 0.8,
+                    backgroundColor: '#f9fafb',
+                    padding: '20px',
+                    borderRadius: '8px'
+                  }}>
+                    <div className="task-list">
+                      {rootCompletedTasks.map((task) => (
                       <TaskNode 
                         key={`${task.id}-${task.is_completed}`} 
                         task={task} 
@@ -9843,7 +9877,8 @@ export default function Tasks() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
       ) : activeTab === 'habits' ? (
         <div className="habits-container">
