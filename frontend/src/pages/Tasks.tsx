@@ -167,7 +167,7 @@ export default function Tasks() {
   // Daily aggregates for monthly view - key format: "taskId-dayOfMonth"
   const [monthlyDailyAggregates, setMonthlyDailyAggregates] = useState<Record<string, number>>({});
   // Monthly task statuses - key format: "taskId", value: {is_completed, is_na}
-  const [monthlyTaskStatuses, setMonthlyTaskStatuses] = useState<Record<number, {is_completed: boolean, is_na: boolean}>>({});
+  const [monthlyTaskStatuses, setMonthlyTaskStatuses] = useState<Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}>>({});
   // Selected month start date for monthly tab
   const [selectedMonthStart, setSelectedMonthStart] = useState<Date>(() => {
     const today = new Date();
@@ -183,7 +183,7 @@ export default function Tasks() {
   // Monthly aggregates for yearly view - key format: "taskId-month"
   const [yearlyMonthlyAggregates, setYearlyMonthlyAggregates] = useState<Record<string, number>>({});
   // Yearly task statuses - key format: "taskId", value: {is_completed, is_na}
-  const [yearlyTaskStatuses, setYearlyTaskStatuses] = useState<Record<number, {is_completed: boolean, is_na: boolean}>>({});
+  const [yearlyTaskStatuses, setYearlyTaskStatuses] = useState<Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}>>({});
   // Selected year start date for yearly tab
   const [selectedYearStart, setSelectedYearStart] = useState<Date>(() => {
     const today = new Date();
@@ -2675,7 +2675,8 @@ export default function Tasks() {
         statusData.forEach((status: any) => {
           statusMap[status.task_id] = {
             is_completed: status.is_completed,
-            is_na: status.is_na
+            is_na: status.is_na,
+            created_at: status.created_at // When monitoring started
           }
         });
       }
@@ -2726,13 +2727,14 @@ export default function Tasks() {
                 // Reload statuses after copying
                 const newStatusResponse: any = await api.get(`/api/monthly-time/status/${dateStr}`);
                 const newStatusData = Array.isArray(newStatusResponse) ? newStatusResponse : (newStatusResponse.data || []);
-                const newStatusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {}
+                const newStatusMap: Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}> = {}
                 
                 if (Array.isArray(newStatusData)) {
                   newStatusData.forEach((status: any) => {
                     newStatusMap[status.task_id] = {
                       is_completed: status.is_completed,
-                      is_na: status.is_na
+                      is_na: status.is_na,
+                      created_at: status.created_at
                     }
                   });
                 }
@@ -2959,7 +2961,8 @@ export default function Tasks() {
         statusData.forEach((status: any) => {
           statusMap[status.task_id] = {
             is_completed: status.is_completed || false,
-            is_na: status.is_na || false
+            is_na: status.is_na || false,
+            created_at: status.created_at // When monitoring started
           }
         });
       }
@@ -4988,23 +4991,42 @@ export default function Tasks() {
       totalSpent += getMonthlyTime(task.id, day);
     }
     
-    // Determine how many days have elapsed in the current month (including today)
+    // Determine how many days have elapsed since monitoring started (or month start, whichever is later)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const monthStart = new Date(selectedMonthStart);
     monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+    monthEnd.setHours(0, 0, 0, 0);
     
-    // Calculate days elapsed: if today is within this month, count up to today; otherwise use full month
-    let daysElapsed = daysInMonth; // Default to full month
-    if (today >= monthStart) {
-      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-      monthEnd.setHours(0, 0, 0, 0);
-      
+    // Get monitoring start date from monthly task status
+    const taskStatus = monthlyTaskStatuses[task.id];
+    let monitoringStart = monthStart;
+    if (taskStatus?.created_at) {
+      const createdAt = new Date(taskStatus.created_at);
+      createdAt.setHours(0, 0, 0, 0);
+      // Use the later of month start or monitoring start
+      monitoringStart = createdAt > monthStart ? createdAt : monthStart;
+    }
+    
+    // Calculate days elapsed from monitoring start to today (or month end if past month)
+    let daysElapsed = 0;
+    if (today >= monitoringStart && monitoringStart <= monthEnd) {
       if (today <= monthEnd) {
-        // Current month: count days from month start to today (inclusive)
-        const diffTime = today.getTime() - monthStart.getTime();
+        // Current month: from monitoring start to today
+        const diffTime = today.getTime() - monitoringStart.getTime();
+        daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+      } else {
+        // Past month: from monitoring start to month end
+        const diffTime = monthEnd.getTime() - monitoringStart.getTime();
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
+    } else if (monitoringStart > monthEnd) {
+      // Monitoring started after this month ended - no expectation
+      return '';
+    } else {
+      // Default to full month if monitoring started before month
+      daysElapsed = daysInMonth;
     }
     
     // Calculate expected target based on task type, follow-up frequency, and days elapsed
@@ -5051,62 +5073,77 @@ export default function Tasks() {
       totalSpent += getYearlyTime(task.id, month);
     }
     
-    // Determine how many months have elapsed in the current year (including this month)
+    // Determine how many days have elapsed since monitoring started (or year start, whichever is later)
     const today = new Date();
     const yearStart = new Date(selectedYearStart);
     yearStart.setHours(0, 0, 0, 0);
     
-    // Calculate months elapsed: if today is within this year, count up to this month; otherwise use full 12 months
-    let monthsElapsed = 12; // Default to full year
-    if (today.getFullYear() === yearStart.getFullYear()) {
-      // Current year: count months from year start to today (inclusive)
-      monthsElapsed = today.getMonth() + 1; // getMonth() returns 0-11, so add 1
-    } else if (today.getFullYear() < yearStart.getFullYear()) {
-      // Future year: no months elapsed yet
-      monthsElapsed = 0;
+    // Get monitoring start date from yearly task status
+    const taskStatus = yearlyTaskStatuses[task.id];
+    let monitoringStart = yearStart;
+    if (taskStatus?.created_at) {
+      const createdAt = new Date(taskStatus.created_at);
+      createdAt.setHours(0, 0, 0, 0);
+      // Use the later of year start or monitoring start
+      monitoringStart = createdAt > yearStart ? createdAt : yearStart;
     }
     
-    // Calculate expected target based on task type, follow-up frequency, and months elapsed
+    // Calculate days elapsed from monitoring start to today
+    let daysElapsed = 0;
+    if (today >= monitoringStart) {
+      daysElapsed = Math.ceil((today.getTime() - monitoringStart.getTime()) / (1000 * 60 * 60 * 24)) + 1; // +1 to include today
+    } else {
+      // Future date: no days elapsed
+      daysElapsed = 0;
+    }
+    
+    // Calculate expected target based on task type, follow-up frequency, and days elapsed
     let expectedTarget = 0;
     if (task.task_type === TaskType.COUNT) {
       if (task.follow_up_frequency === 'daily') {
-        // Daily habits: target per day * days elapsed (estimate 30 days per month)
-        expectedTarget = (task.target_value || 0) * monthsElapsed * 30;
+        // Daily habits: target per day * days elapsed
+        expectedTarget = (task.target_value || 0) * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
-        // Weekly tasks: target per week * weeks elapsed (estimate 4 weeks per month)
-        expectedTarget = (task.target_value || 0) * monthsElapsed * 4;
+        // Weekly tasks: target per week * weeks elapsed
+        const weeksElapsed = daysElapsed / 7;
+        expectedTarget = (task.target_value || 0) * weeksElapsed;
       } else if (task.follow_up_frequency === 'monthly') {
-        // Monthly tasks: target per month * months elapsed
+        // Monthly tasks: target per month * months elapsed (approximate)
+        const monthsElapsed = daysElapsed / 30;
         expectedTarget = (task.target_value || 0) * monthsElapsed;
       } else {
-        // Yearly tasks: target for entire year * (months elapsed / 12)
-        expectedTarget = (task.target_value || 0) * (monthsElapsed / 12);
+        // Yearly tasks: target for entire year * (days elapsed / 365)
+        expectedTarget = (task.target_value || 0) * (daysElapsed / 365);
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
       // For boolean tasks: depends on frequency
       if (task.follow_up_frequency === 'daily') {
-        expectedTarget = monthsElapsed * 30; // ~30 days per month
+        expectedTarget = daysElapsed; // One completion per day
       } else if (task.follow_up_frequency === 'weekly') {
-        expectedTarget = monthsElapsed * 4; // ~4 weeks per month
+        const weeksElapsed = daysElapsed / 7;
+        expectedTarget = weeksElapsed;
       } else if (task.follow_up_frequency === 'monthly') {
+        const monthsElapsed = daysElapsed / 30;
         expectedTarget = monthsElapsed;
       } else {
-        expectedTarget = monthsElapsed / 12; // Yearly tasks
+        expectedTarget = daysElapsed / 365; // Yearly tasks
       }
     } else {
       // TIME tasks
       if (task.follow_up_frequency === 'daily') {
         // Daily habits: allocated minutes per day * days elapsed
-        expectedTarget = task.allocated_minutes * monthsElapsed * 30;
+        expectedTarget = task.allocated_minutes * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
         // Weekly tasks: allocated minutes per week * weeks elapsed
-        expectedTarget = task.allocated_minutes * monthsElapsed * 4;
+        const weeksElapsed = daysElapsed / 7;
+        expectedTarget = task.allocated_minutes * weeksElapsed;
       } else if (task.follow_up_frequency === 'monthly') {
-        // Monthly tasks: allocated minutes per month * months elapsed
+        // Monthly tasks: allocated minutes per month * months elapsed (approximate)
+        const monthsElapsed = daysElapsed / 30;
         expectedTarget = task.allocated_minutes * monthsElapsed;
       } else {
-        // Yearly tasks: allocated minutes for entire year * (months elapsed / 12)
-        expectedTarget = task.allocated_minutes * (monthsElapsed / 12);
+        // Yearly tasks: allocated minutes for entire year * (days elapsed / 365)
+        expectedTarget = task.allocated_minutes * (daysElapsed / 365);
       }
     }
     
@@ -5150,18 +5187,45 @@ export default function Tasks() {
       return '';
     }
     
+    // Get monitoring start date from yearly task status
+    const taskStatus = yearlyTaskStatuses[task.id];
+    let monitoringStart = yearStart;
+    if (taskStatus?.created_at) {
+      const createdAt = new Date(taskStatus.created_at);
+      createdAt.setHours(0, 0, 0, 0);
+      monitoringStart = createdAt > yearStart ? createdAt : yearStart;
+    }
+    
     // Get actual value for this month
     const actualValue = getYearlyTime(task.id, month);
     
-    // Calculate days elapsed in this month
+    // Calculate days elapsed in this month (from monitoring start or month start, whichever is later)
+    const monthStartDate = new Date(currentYear, month - 1, 1); // First day of this month
+    const monthEndDate = new Date(currentYear, month, 0); // Last day of this month
+    
     let daysElapsed = 0;
-    if (today.getFullYear() === currentYear && today.getMonth() + 1 === month) {
-      // Current month: use today's date
-      daysElapsed = today.getDate();
+    if (monitoringStart > monthEndDate) {
+      // Monitoring started after this month ended - no expectation
+      return '';
+    } else if (monitoringStart >= monthStartDate) {
+      // Monitoring started during this month
+      const startDay = monitoringStart.getDate();
+      if (today.getFullYear() === currentYear && today.getMonth() + 1 === month) {
+        // Current month: from monitoring start to today
+        daysElapsed = today.getDate() - startDay + 1;
+      } else {
+        // Past month: from monitoring start to month end
+        daysElapsed = monthEndDate.getDate() - startDay + 1;
+      }
     } else {
-      // Past month: use full month days
-      const daysInMonth = new Date(currentYear, month, 0).getDate();
-      daysElapsed = daysInMonth;
+      // Monitoring started before this month
+      if (today.getFullYear() === currentYear && today.getMonth() + 1 === month) {
+        // Current month: use today's date
+        daysElapsed = today.getDate();
+      } else {
+        // Past month: use full month days
+        daysElapsed = monthEndDate.getDate();
+      }
     }
     
     // Calculate expected value for this month based on task type and frequency
