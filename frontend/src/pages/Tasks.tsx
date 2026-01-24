@@ -8342,8 +8342,54 @@ export default function Tasks() {
                   fontWeight: '600',
                   margin: 0
                 }}>{selectedProject.name}</h2>
-                <div style={{ width: '150px' }}></div> {/* Spacer for balance */}
+                {selectedProject.goal_id && (() => {
+                  const linkedGoal = lifeGoals.find(g => g.id === selectedProject.goal_id);
+                  return linkedGoal ? (
+                    <button
+                      className="btn btn-primary"
+                      onClick={() => navigate(`/goals?goal=${linkedGoal.id}`)}
+                      style={{
+                        padding: '8px 16px',
+                        fontSize: '14px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        border: 'none',
+                        color: 'white',
+                        fontWeight: '600',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        boxShadow: '0 2px 8px rgba(102, 126, 234, 0.4)',
+                        minWidth: '150px'
+                      }}
+                    >
+                      🎯 Goal: {linkedGoal.name}
+                    </button>
+                  ) : <div style={{ width: '150px' }}></div>;
+                })() || <div style={{ width: '150px' }}></div>}
               </div>
+
+              {selectedProject.goal_id && (() => {
+                const linkedGoal = lifeGoals.find(g => g.id === selectedProject.goal_id);
+                return linkedGoal && (
+                  <div style={{ 
+                    padding: '12px 20px',
+                    background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)',
+                    borderRadius: '8px',
+                    border: '2px solid #667eea40',
+                    marginBottom: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}>
+                    <span style={{ fontSize: '24px' }}>🎯</span>
+                    <div>
+                      <div style={{ fontSize: '12px', color: '#718096', fontWeight: '600' }}>LINKED GOAL</div>
+                      <div style={{ fontSize: '16px', color: '#2d3748', fontWeight: '600' }}>{linkedGoal.name}</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {selectedProject.description && (
                 <p className="project-detail-description">{selectedProject.description}</p>
