@@ -106,6 +106,20 @@ const ImportantTasks: React.FC = () => {
     }
   };
 
+  /**
+   * Count total tasks including all children recursively
+   */
+  const countTasksWithChildren = (tasks: ImportantTask[]): number => {
+    let count = 0;
+    tasks.forEach(task => {
+      count++; // Count the task itself
+      if (task.children && task.children.length > 0) {
+        count += countTasksWithChildren(task.children); // Count all children recursively
+      }
+    });
+    return count;
+  };
+
   const loadImportantTasks = async () => {
     try {
       const response = await axios.get('http://localhost:8000/api/important-tasks');
@@ -655,7 +669,7 @@ const ImportantTasks: React.FC = () => {
                 }}
               >
                 <span>
-                  {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryTasks.length})
+                  {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({countTasksWithChildren(categoryTasks)})
                 </span>
                 <span style={{ fontSize: '13px', color: '#666', fontWeight: 'normal' }}>
                   {pillarName}
