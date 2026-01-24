@@ -8080,9 +8080,6 @@ export default function Tasks() {
             </>
           ) : selectedProject ? (
             // Project Detail View with Tasks
-                                </span>
-                              </div>
-                              <span style={{ fontSize: '18px' }}>{collapsedProjectSections['overdue'] ? '▶' : '▼'}</span>
                             </div>
                             {!collapsedProjectSections['overdue'] && (
                             <div className="projects-grid">
