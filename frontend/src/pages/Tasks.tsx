@@ -8578,6 +8578,18 @@ export default function Tasks() {
                         {(() => {
                           const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
                           
+                          // Helper to check if all children are completed
+                          const allChildrenCompleted = (taskId: number): boolean => {
+                            const children = thisProjectTasks.filter(t => t.parent_task_id === taskId);
+                            if (children.length === 0) return true;
+                            return children.every(child => child.is_completed && allChildrenCompleted(child.id));
+                          };
+                          
+                          // Helper to check if task should be hidden (completed with all children completed)
+                          const shouldHideTask = (task: ProjectTaskData): boolean => {
+                            return task.is_completed && allChildrenCompleted(task.id);
+                          };
+                          
                           // Helper to check if task or any descendant matches filter
                           const taskMatchesFilter = (task: ProjectTaskData, filter: string): boolean => {
                             if (filter === 'all') return true;
@@ -8594,8 +8606,10 @@ export default function Tasks() {
                             );
                           }
                           
-                          // Get root tasks for this project
-                          let rootTasks = getTasksByParentId(null).filter(task => task.project_id === selectedProject.id);
+                          // Get root tasks for this project, excluding fully completed hierarchies
+                          let rootTasks = getTasksByParentId(null)
+                            .filter(task => task.project_id === selectedProject.id)
+                            .filter(task => !shouldHideTask(task));
                           
                           // Apply filter - show root if it matches OR if any descendant matches
                           if (projectTaskFilter !== 'all') {
@@ -8603,6 +8617,10 @@ export default function Tasks() {
                               taskMatchesFilter(task, projectTaskFilter) || 
                               hasMatchingDescendant(task.id, projectTaskFilter)
                             );
+                          }
+                          
+                          if (rootTasks.length === 0) {
+                            return <div className="empty-state"><p>No active tasks. All tasks are completed!</p></div>;
                           }
                           
                           return rootTasks.map((task) => (
@@ -9147,15 +9165,99 @@ export default function Tasks() {
               {/* Completed Tasks Section */}
               {(() => {
                 const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                // Check both global completion AND daily status completion
-                const completedTasks = thisProjectTasks.filter(t => {
-                  if (t.is_completed) return true; // Globally completed
-                  const dailyStatus = dailyStatuses.get(t.id);
-                  if (dailyStatus && dailyStatus.is_completed) return true; // Completed today
-                  return false;
-                });
                 
-                if (completedTasks.length === 0) return null;
+                // Helper to check if all children are completed
+                const allChildrenCompleted = (taskId: number): boolean => {
+                  const children = thisProjectTasks.filter(t => t.parent_task_id === taskId);
+                  if (children.length === 0) return true;
+                  return children.every(child => child.is_completed && allChildrenCompleted(child.id));
+                };
+                
+                // Get root completed tasks (completed with all children completed)
+                const rootCompletedTasks = thisProjectTasks.filter(t => 
+                  !t.parent_task_id && t.is_completed && allChildrenCompleted(t.id)
+                );
+                
+                if (rootCompletedTasks.length === 0) return null;
+                
+                // Helper to render completed task with hierarchy
+                const renderCompletedTask = (task: ProjectTaskData, level: number = 0) => {
+                  const children = thisProjectTasks.filter(t => t.parent_task_id === task.id);
+                  const hasChildren = children.length > 0;
+                  const indentPx = level * 20;
+                  
+                  return (
+                    <div key={task.id} style={{ marginLeft: `${indentPx}px` }}>
+                      <div style={{ 
+                        padding: '12px', 
+                        marginBottom: '8px',
+                        background: 'white', 
+                        borderRadius: '6px',
+                        borderLeft: '3px solid #48bb78',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                            <span style={{ fontSize: '16px' }}>✅</span>
+                            <span style={{ 
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              textDecoration: 'line-through',
+                              color: '#666'
+                            }}>
+                              {task.name}
+                            </span>
+                            {hasChildren && (
+                              <span style={{ fontSize: '11px', color: '#718096', marginLeft: '4px' }}>
+                                ({children.length} subtask{children.length > 1 ? 's' : ''})
+                              </span>
+                            )}
+                          </div>
+                          {task.completed_at && (
+                            <div style={{ fontSize: '10px', color: '#718096', marginLeft: '24px' }}>
+                              ⏰ Completed: {new Date(task.completed_at).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className="btn btn-sm"
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await axios.put(`http://localhost:8000/api/tasks/${task.id}`, {
+                                ...task,
+                                is_completed: false,
+                                completed_at: null
+                              });
+                              showAlert(`Task "${task.name}" restored successfully!`, 'success');
+                              refreshTasks();
+                            } catch (error) {
+                              console.error('Error restoring task:', error);
+                              showAlert('Failed to restore task', 'error');
+                            }
+                          }}
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '12px',
+                            background: '#3182ce',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontWeight: '500'
+                          }}
+                          title="Mark as incomplete"
+                        >
+                          ↶ Restore
+                        </button>
+                      </div>
+                      {hasChildren && children.map(child => renderCompletedTask(child, level + 1))}
+                    </div>
+                  );
+                };
                 
                 return (
                   <div className="project-completed-section" style={{ marginTop: '30px', marginBottom: '30px' }}>
@@ -9165,63 +9267,36 @@ export default function Tasks() {
                         justifyContent: 'space-between', 
                         alignItems: 'center', 
                         marginBottom: '15px',
-                        cursor: 'pointer' 
+                        cursor: 'pointer',
+                        borderBottom: '2px solid #48bb78',
+                        paddingBottom: '10px'
                       }}
                       onClick={() => setExpandedSections(prev => ({ ...prev, completedTasks: !prev.completedTasks }))}
                     >
-                      <h3 style={{ margin: 0, color: '#48bb78' }}>
-                        {expandedSections.completedTasks ? '▼' : '▶'} ✅ Completed Tasks ({completedTasks.length})
+                      <h3 style={{ margin: 0, color: '#48bb78', fontSize: '20px' }}>
+                        {expandedSections.completedTasks ? '▼' : '▶'} ✅ Completed Tasks ({(() => {
+                          let count = 0;
+                          const countTasks = (tasks: ProjectTaskData[]) => {
+                            tasks.forEach(task => {
+                              count++;
+                              const children = thisProjectTasks.filter(t => t.parent_task_id === task.id);
+                              countTasks(children);
+                            });
+                          };
+                          countTasks(rootCompletedTasks);
+                          return count;
+                        })()})
                       </h3>
                     </div>
                     
                     {expandedSections.completedTasks && (
                       <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-                        gap: '15px',
                         padding: '15px',
                         background: '#f0fff4',
                         borderRadius: '8px',
                         border: '2px solid #48bb78'
                       }}>
-                        {completedTasks.map(task => (
-                          <div key={task.id} style={{ 
-                            padding: '12px', 
-                            background: 'white', 
-                            borderRadius: '6px',
-                            borderLeft: '3px solid #48bb78',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                              <span style={{ fontSize: '16px' }}>✅</span>
-                              <span style={{ 
-                                fontSize: '14px',
-                                fontWeight: '600',
-                                textDecoration: 'line-through',
-                                color: '#666',
-                                flex: 1
-                              }}>
-                                {task.name}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px' }}>
-                              {task.pillar_name} - {task.category_name}
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#718096' }}>
-                              Frequency: {task.follow_up_frequency}
-                            </div>
-                            {task.allocated_minutes > 0 && (
-                              <div style={{ fontSize: '11px', color: '#666', marginTop: '4px' }}>
-                                ⏱️ {task.allocated_minutes} minutes
-                              </div>
-                            )}
-                            <div style={{ fontSize: '10px', color: '#718096', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #e2e8f0' }}>
-                              {task.completed_at && (
-                                <>⏰ Completed: {new Date(task.completed_at).toLocaleString()}</>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                        {rootCompletedTasks.map(task => renderCompletedTask(task, 0))}
                       </div>
                     )}
                   </div>
