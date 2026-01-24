@@ -540,7 +540,7 @@ const DreamTasksDisplay = ({ selectedWish, onEditTask, onAddSubtask, onTasksLoad
 };
 
 // Wish Activities Component - Shows tasks, projects, goals for a wish
-const WishActivitiesSection = ({ selectedWish, showToast }: { selectedWish: WishData, showToast: (message: string, type?: 'success' | 'error' | 'info') => void }) => {
+const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selectedWish: WishData, showToast: (message: string, type?: 'success' | 'error' | 'info') => void, navigate: any }) => {
   const [activities, setActivities] = useState<{ tasks: any[], projects: any[], goals: any[], reflections: any[], explorationSteps: any[], completedItems: any[], linkedTasks: any[], supportingTasks: { daily: any[], weekly: any[], monthly: any[], yearly: any[] } }>({ 
     tasks: [], projects: [], goals: [], reflections: [], explorationSteps: [], completedItems: [], linkedTasks: [], supportingTasks: { daily: [], weekly: [], monthly: [], yearly: [] } 
   });
@@ -1258,7 +1258,7 @@ const WishActivitiesSection = ({ selectedWish, showToast }: { selectedWish: Wish
                         // Store wish context in session storage for back navigation
                         sessionStorage.setItem('fromWishId', selectedWish.id);
                         sessionStorage.setItem('fromWishName', selectedWish.wish_name || selectedWish.name);
-                        // Navigate to Tasks page with project tab
+                        // Navigate to Tasks page with project tab and project selected
                         navigate(`/tasks?tab=projects&project=${project.id}`);
                       }}
                       style={{ 
@@ -1271,7 +1271,7 @@ const WishActivitiesSection = ({ selectedWish, showToast }: { selectedWish: Wish
                         cursor: 'pointer',
                         fontWeight: '600'
                       }}
-                      title="View/Edit"
+                      title="View project details"
                     >
                       → View
                     </button>
@@ -8008,7 +8008,7 @@ return (
               )}
 
               {/* Actual Task/Project/Goal Lists */}
-              <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} showToast={showToast} />
+              <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} showToast={showToast} navigate={navigate} />
 
               {/* 🚀 Bottom Actions */}
               <div style={{ 
