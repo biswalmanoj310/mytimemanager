@@ -1079,14 +1079,11 @@ const WeeklyTasks: React.FC = () => {
       {nativeWeeklyTasks.length > 0 && (
         <div className="row mb-4">
           <div className="col">
-            <div className="alert" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '16px 20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
-              <h5 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                <i className="fas fa-calendar-week me-3"></i>
-                📅 Weekly Tasks - Home Tab ({nativeWeeklyTasks.length} tasks)
-              </h5>
-              <p style={{ margin: '8px 0 0 0', fontSize: '13px', opacity: 0.95 }}>
-                These are your weekly tasks. Track progress day-by-day (Mon-Sun) or mark complete/NA for the entire week.
-              </p>
+            <div className="alert" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                <i className="fas fa-calendar-week me-2"></i>
+                📅 Weekly Tasks - Home Tab ({nativeWeeklyTasks.length} tasks) - Track progress day-by-day (Mon-Sun) or mark complete/NA for the entire week.
+              </div>
             </div>
             {renderTaskSection('⏱️ Time-Based Weekly Tasks', '⏱️', 'time-based', tasksByType.time)}
             {renderTaskSection('🔢 Count-Based Weekly Tasks', '🔢', 'count-based', tasksByType.count)}
@@ -1099,14 +1096,11 @@ const WeeklyTasks: React.FC = () => {
       {monitoringTasks.length > 0 && (
         <div className="row mb-4">
           <div className="col">
-            <div className="alert alert-info" style={{ marginBottom: '24px', padding: '16px 20px', borderRadius: '12px' }}>
-              <h5 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                <i className="fas fa-chart-line me-3"></i>
-                📊 Weekly Monitoring - Read-Only ({monitoringTasks.length} tasks)
-              </h5>
-              <p style={{ margin: '8px 0 0 0', fontSize: '13px' }}>
-                These are Daily/Monthly tasks being monitored at weekly level. Values are aggregated from their home tabs.
-              </p>
+            <div className="alert alert-info" style={{ marginBottom: '24px', padding: '12px 16px', borderRadius: '8px' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                <i className="fas fa-chart-line me-2"></i>
+                📊 Weekly Monitoring - Read-Only ({monitoringTasks.length} tasks) - Daily/Monthly tasks monitored at weekly level. Values aggregated from their home tabs.
+              </div>
             </div>
             {renderTaskSection('⏱️ Time-Based (Monitoring)', '⏱️', 'time-based', monitoringTasksByType.time, '(Auto-calculated from Daily)')}
             {renderTaskSection('🔢 Count-Based (Monitoring)', '🔢', 'count-based', monitoringTasksByType.count, '(Auto-calculated from Daily)')}
