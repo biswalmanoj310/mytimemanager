@@ -93,6 +93,9 @@ class LifeGoalTask(Base):
     is_completed = Column(Boolean, default=False)
     completed_at = Column(Date, nullable=True)
     
+    # Hierarchical task support
+    parent_task_id = Column(Integer, ForeignKey("life_goal_tasks.id", ondelete="CASCADE"), nullable=True, index=True)
+    
     # Task type support (TIME, COUNT, BOOLEAN)
     task_type = Column(String, default='time')  # 'time', 'count', 'boolean'
     target_value = Column(Integer, nullable=True)  # For COUNT type (e.g., 5 courses)

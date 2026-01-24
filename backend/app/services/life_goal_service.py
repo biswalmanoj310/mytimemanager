@@ -347,7 +347,8 @@ def create_goal_task(
     unit: Optional[str] = None,
     allocated_minutes: Optional[int] = None,
     time_allocated_hours: float = 0.0,
-    order: int = 0
+    order: int = 0,
+    parent_task_id: Optional[int] = None
 ) -> LifeGoalTask:
     """
     Create a task specific to a goal
@@ -371,6 +372,7 @@ def create_goal_task(
         allocated_minutes=allocated_minutes,
         time_allocated_hours=time_allocated_hours,
         order=order,
+        parent_task_id=parent_task_id,
         is_completed=False,
         created_at=date.today()
     )

@@ -87,6 +87,7 @@ class GoalTaskCreate(BaseModel):
     allocated_minutes: Optional[int] = None  # For TIME type
     time_allocated_hours: float = 0.0  # Legacy support
     order: int = 0
+    parent_task_id: Optional[int] = None  # For hierarchical subtasks
 
 
 class GoalTaskUpdate(BaseModel):
@@ -104,6 +105,7 @@ class GoalTaskUpdate(BaseModel):
     time_allocated_hours: Optional[float] = None
     time_spent_hours: Optional[float] = None
     order: Optional[int] = None
+    parent_task_id: Optional[int] = None  # For hierarchical subtasks
     
     # Pillar/Category organization
     pillar_id: Optional[int] = None
@@ -456,7 +458,8 @@ def create_goal_task(goal_id: int, task_data: GoalTaskCreate, db: Session = Depe
         unit=task_data.unit,
         allocated_minutes=task_data.allocated_minutes,
         time_allocated_hours=task_data.time_allocated_hours,
-        order=task_data.order
+        order=task_data.order,
+        parent_task_id=task_data.parent_task_id
     )
     return task
 

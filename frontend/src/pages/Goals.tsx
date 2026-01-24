@@ -4,7 +4,7 @@
  * Supports hierarchical goals, milestones, task linking, and progress tracking
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import './Goals.css'; // Goals page styling
@@ -91,6 +91,7 @@ interface GoalTaskData {
   time_spent_hours: number;
   priority: string;
   order: number;
+  parent_task_id: number | null; // For hierarchical task structure
   created_at: string;
   updated_at: string | null;
 }
@@ -1091,6 +1092,260 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
   );
 };
 
+// Goal Task Node Component (similar to TaskNode for Misc Tasks)
+const GoalTaskNode: React.FC<{
+  task: GoalTaskData;
+  allTasks: GoalTaskData[];
+  onToggleComplete: (taskId: number, currentStatus: boolean) => void;
+  onDelete: (taskId: number) => void;
+  onAddSubtask: (parentTask: GoalTaskData) => void;
+  onEdit: (task: GoalTaskData) => void;
+  level?: number;
+}> = ({ task, allTasks, onToggleComplete, onDelete, onAddSubtask, onEdit, level = 0 }) => {
+  // Persist expand/collapse state in localStorage
+  const expandStateKey = `goal-task-expand-${task.id}`;
+  const [isExpanded, setIsExpanded] = useState(() => {
+    const saved = localStorage.getItem(expandStateKey);
+    return saved !== null ? saved === 'true' : false; // Default collapsed
+  });
+  
+  // Date edit state
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  
+  // Auto-open date picker when input is shown
+  useEffect(() => {
+    if (showDatePicker && dateInputRef.current) {
+      dateInputRef.current.showPicker?.();
+    }
+  }, [showDatePicker]);
+  
+  const toggleExpand = () => {
+    const newState = !isExpanded;
+    setIsExpanded(newState);
+    localStorage.setItem(expandStateKey, String(newState));
+  };
+  
+  const handleDateChange = async (newDate: string) => {
+    try {
+      const response = await fetch(`/api/life-goals/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ due_date: newDate || null })
+      });
+      if (response.ok) {
+        task.due_date = newDate;
+        setShowDatePicker(false);
+        window.location.reload(); // Refresh to show updated date
+      }
+    } catch (error) {
+      console.error('Failed to update due date:', error);
+    }
+  };
+  
+  const subtasks = allTasks.filter(t => t.parent_task_id === task.id);
+  const hasSubtasks = subtasks.length > 0;
+  
+  // Check if task or any subtask is overdue
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const isOverdue = (t: GoalTaskData) => {
+    if (!t.due_date || t.is_completed) return false;
+    const dueDate = new Date(t.due_date);
+    dueDate.setHours(0, 0, 0, 0);
+    return dueDate < today;
+  };
+  
+  const hasOverdueSubtask = (taskId: number): boolean => {
+    const children = allTasks.filter(t => t.parent_task_id === taskId);
+    return children.some(child => isOverdue(child) || hasOverdueSubtask(child.id));
+  };
+  
+  const taskIsOverdue = isOverdue(task);
+  const hasOverdueChild = hasOverdueSubtask(task.id);
+  const anySubtaskIncomplete = subtasks.some(st => !st.is_completed);
+  
+  // Determine background color
+  let backgroundColor = 'white';
+  if (taskIsOverdue || hasOverdueChild) {
+    backgroundColor = '#fee2e2'; // Red for overdue
+  } else if (task.is_completed && !anySubtaskIncomplete) {
+    backgroundColor = '#d1fae5'; // Brighter green for completed
+  }
+  
+  const taskType = task.task_type || 'time';
+  let progressInfo = '';
+  
+  if (taskType === 'count' && task.target_value) {
+    progressInfo = `${task.current_value || 0}/${task.target_value} ${task.unit || ''}`;
+  } else if (taskType === 'time' && task.allocated_minutes) {
+    progressInfo = `${task.allocated_minutes} minutes allocated`;
+  } else if (taskType === 'boolean') {
+    progressInfo = task.is_completed ? '✅ Done' : '⏳ Pending';
+  }
+  
+  return (
+    <div style={{ marginLeft: `${level * 30}px` }}>
+      <div 
+        className={`goal-task-item ${task.is_completed ? 'completed' : ''}`}
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: '12px',
+          padding: '8px 12px',
+          background: backgroundColor,
+          border: '1px solid #e5e7eb',
+          borderRadius: '8px',
+          marginBottom: '6px'
+        }}
+      >
+        {/* Expand/Collapse Button */}
+        {hasSubtasks && (
+          <button
+            onClick={toggleExpand}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '4px',
+              fontSize: '14px',
+              color: '#666'
+            }}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
+        )}
+        {!hasSubtasks && <div style={{ width: '22px' }}></div>}
+        
+        {/* Checkbox */}
+        <input
+          type="checkbox"
+          checked={task.is_completed}
+          onChange={() => onToggleComplete(task.id, task.is_completed)}
+          style={{ marginTop: '4px', cursor: 'pointer' }}
+        />
+        
+        {/* Task Content */}
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <strong style={{ fontSize: '14px', color: task.is_completed ? '#059669' : '#2d3748' }}>
+              {task.name}
+            </strong>
+            <span style={{
+              padding: '2px 8px',
+              borderRadius: '12px',
+              fontSize: '11px',
+              fontWeight: '600',
+              backgroundColor: taskType === 'time' ? '#edf2f7' : 
+                             taskType === 'count' ? '#e6f7ff' : '#f0f5ff',
+              color: '#4a5568'
+            }}>
+              {taskType === 'time' ? '⏱️ TIME' : taskType === 'count' ? '🔢 COUNT' : '✅ YES/NO'}
+            </span>
+          </div>
+          {progressInfo && (
+            <div style={{ color: '#718096', fontSize: '13px', marginBottom: '4px' }}>
+              {progressInfo}
+            </div>
+          )}
+          {task.description && (
+            <p style={{ fontSize: '13px', color: '#666', margin: '4px 0 0 0' }}>
+              {task.description}
+            </p>
+          )}
+        </div>
+        
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          {/* Due Date Button with inline picker */}
+          {!showDatePicker ? (
+            <button
+              className="btn btn-sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowDatePicker(true);
+              }}
+              style={{ 
+                padding: '4px 10px', 
+                fontSize: '11px',
+                background: task.due_date ? (taskIsOverdue ? '#fee2e2' : '#fef3c7') : '#f3f4f6',
+                color: task.due_date ? (taskIsOverdue ? '#dc2626' : '#92400e') : '#6b7280',
+                border: '1px solid',
+                borderColor: task.due_date ? (taskIsOverdue ? '#fca5a5' : '#fde68a') : '#d1d5db',
+                fontWeight: '600',
+                whiteSpace: 'nowrap',
+                cursor: 'pointer'
+              }}
+              title="Click to change due date"
+            >
+              📅 {task.due_date ? new Date(task.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No date'}
+            </button>
+          ) : (
+            <input
+              ref={dateInputRef}
+              type="date"
+              defaultValue={task.due_date || ''}
+              onChange={(e) => handleDateChange(e.target.value)}
+              onBlur={() => setShowDatePicker(false)}
+              autoFocus
+              style={{
+                padding: '4px 8px',
+                fontSize: '11px',
+                border: '2px solid #3b82f6',
+                borderRadius: '4px',
+                fontWeight: '600'
+              }}
+            />
+          )}
+          
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => onEdit(task)}
+            style={{ padding: '4px 12px', fontSize: '12px' }}
+            title="Edit task"
+          >
+            ✏️ Edit
+          </button>
+          <button
+            className="btn btn-sm btn-secondary"
+            onClick={() => onAddSubtask(task)}
+            style={{ padding: '4px 12px', fontSize: '12px' }}
+            title="Add subtask"
+          >
+            ➕ Sub
+          </button>
+          <button
+            className="btn btn-sm btn-danger"
+            onClick={() => onDelete(task.id)}
+            style={{ padding: '4px 12px', fontSize: '12px' }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+      
+      {/* Render Subtasks */}
+      {isExpanded && hasSubtasks && (
+        <div>
+          {subtasks.map(subtask => (
+            <GoalTaskNode
+              key={subtask.id}
+              task={subtask}
+              allTasks={allTasks}
+              onToggleComplete={onToggleComplete}
+              onDelete={onDelete}
+              onAddSubtask={onAddSubtask}
+              onEdit={onEdit}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function Goals() {
   // Navigation
   const navigate = useNavigate();
@@ -1111,6 +1366,38 @@ export default function Goals() {
     setAlertModalOpen(true);
   };
   
+  // Section collapse state with localStorage persistence
+  const [collapsedSections, setCollapsedSections] = useState<{[key: string]: boolean}>(() => {
+    const saved = localStorage.getItem('goalDetailSectionsCollapsed');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return {};
+      }
+    }
+    // Default: all sections collapsed on first visit
+    return {
+      'goal-tasks': true,
+      'projects': true,
+      'milestones': true,
+      'description': true,
+      'why-statements': true,
+      'supporting-tasks': true,
+      'linked-tasks': true,
+      'tracking-projects': true,
+      'challenges': true
+    };
+  });
+  
+  const toggleSection = (sectionKey: string) => {
+    setCollapsedSections(prev => {
+      const newState = { ...prev, [sectionKey]: !prev[sectionKey] };
+      localStorage.setItem('goalDetailSectionsCollapsed', JSON.stringify(newState));
+      return newState;
+    });
+  };
+  
   // Goals State
   const [lifeGoals, setLifeGoals] = useState<LifeGoalData[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<LifeGoalData | null>(null);
@@ -1128,6 +1415,7 @@ export default function Goals() {
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [showAddGoalTaskModal, setShowAddGoalTaskModal] = useState(false);
+  const [editingGoalTask, setEditingGoalTask] = useState<GoalTaskData | null>(null); // For adding subtasks
   const [showLinkTaskModal, setShowLinkTaskModal] = useState(false);
   const [showCreateTrackingProjectModal, setShowCreateTrackingProjectModal] = useState(false); // NEW
   const [showLinkProjectsModal, setShowLinkProjectsModal] = useState(false); // Link projects to milestone
@@ -1136,8 +1424,8 @@ export default function Goals() {
   const [showAddProjectToGoalModal, setShowAddProjectToGoalModal] = useState(false); // Dedicated Add Project modal
   const [goalProjectPillarId, setGoalProjectPillarId] = useState<number | null>(null);
   
-  // Section collapse state - load from localStorage, default all collapsed
-  const [collapsedSections, setCollapsedSections] = useState<{[key: string]: boolean}>(() => {
+  // Category collapse state for goals list view - load from localStorage, default all collapsed
+  const [collapsedGoalCategories, setCollapsedGoalCategories] = useState<{[key: string]: boolean}>(() => {
     const saved = localStorage.getItem('collapsedGoalSections');
     if (saved) {
       try {
@@ -1295,6 +1583,32 @@ export default function Goals() {
       setSelectedGoal(null);
     }
   }, [location.search, lifeGoals]);
+
+  // Save scroll position on scroll
+  useEffect(() => {
+    const saveScrollPosition = () => {
+      sessionStorage.setItem('goalsScrollPosition', String(window.scrollY));
+    };
+
+    window.addEventListener('scroll', saveScrollPosition);
+    
+    return () => {
+      window.removeEventListener('scroll', saveScrollPosition);
+      saveScrollPosition();
+    };
+  }, []);
+
+  // Restore scroll position after content loads
+  useEffect(() => {
+    if (!loading && lifeGoals.length > 0) {
+      const savedScrollPosition = sessionStorage.getItem('goalsScrollPosition');
+      if (savedScrollPosition) {
+        requestAnimationFrame(() => {
+          window.scrollTo(0, parseInt(savedScrollPosition));
+        });
+      }
+    }
+  }, [loading, lifeGoals.length]);
 
   // Load tasks when task type is selected
   const loadTasksByType = async (taskType: string) => {
@@ -1611,10 +1925,11 @@ export default function Goals() {
       'monthly': 'monthly',
       'quarterly': 'quarterly',
       'yearly': 'yearly',
+      'one_time': 'onetime',
       'onetime': 'onetime'
     };
     
-    const tab = tabMap[taskType] || 'daily';
+    const tab = tabMap[taskType] || 'onetime';
     navigate(`/tasks?tab=${tab}`);
   };
 
@@ -3547,14 +3862,14 @@ return (
                       {sortedCategories.map(categoryKey => {
                         const categoryGoals = goalsByCategory[categoryKey];
                         const [pillarName, categoryName] = categoryKey.split('|');
-                        const isCollapsed = collapsedSections[categoryKey] !== false; // Default collapsed
+                        const isCollapsed = collapsedGoalCategories[categoryKey] !== false; // Default collapsed
 
                         return (
                           <div key={categoryKey} style={{ marginBottom: '32px' }}>
                             <h3 
                               onClick={() => {
-                                const newState = { ...collapsedSections, [categoryKey]: !isCollapsed };
-                                setCollapsedSections(newState);
+                                const newState = { ...collapsedGoalCategories, [categoryKey]: !isCollapsed };
+                                setCollapsedGoalCategories(newState);
                                 localStorage.setItem('collapsedGoalSections', JSON.stringify(newState));
                               }}
                               style={{
@@ -3590,8 +3905,8 @@ return (
                         <div style={{ marginBottom: '32px' }}>
                           <h3 
                             onClick={() => {
-                              const newState = { ...collapsedSections, 'uncategorized': !collapsedSections['uncategorized'] };
-                              setCollapsedSections(newState);
+                              const newState = { ...collapsedGoalCategories, 'uncategorized': !collapsedGoalCategories['uncategorized'] };
+                              setCollapsedGoalCategories(newState);
                               localStorage.setItem('collapsedGoalSections', JSON.stringify(newState));
                             }}
                             style={{
@@ -3610,9 +3925,9 @@ return (
                             }}
                           >
                             <span>🌟 Goal and Dream Goals ({uncategorizedGoals.length})</span>
-                            <span>{collapsedSections['uncategorized'] !== false ? '▶' : '▼'}</span>
+                            <span>{collapsedGoalCategories['uncategorized'] !== false ? '▶' : '▼'}</span>
                           </h3>
-                          {collapsedSections['uncategorized'] === false && (
+                          {collapsedGoalCategories['uncategorized'] === false && (
                             <div className="goals-grid">
                               {uncategorizedGoals.map((goal, index) => renderGoalCard(goal, index))}
                             </div>
@@ -3628,8 +3943,8 @@ return (
                   <div style={{ marginBottom: '32px' }}>
                     <h3 
                       onClick={() => {
-                        const newState = { ...collapsedSections, 'completed': !collapsedSections['completed'] };
-                        setCollapsedSections(newState);
+                        const newState = { ...collapsedGoalCategories, 'completed': !collapsedGoalCategories['completed'] };
+                        setCollapsedGoalCategories(newState);
                         localStorage.setItem('collapsedGoalSections', JSON.stringify(newState));
                       }}
                       style={{
@@ -3647,9 +3962,9 @@ return (
                         alignItems: 'center'
                       }}>
                       <span>🏆 Goals: Completed ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length})</span>
-                      <span>{collapsedSections['completed'] ? '▶' : '▼'}</span>
+                      <span>{collapsedGoalCategories['completed'] ? '▶' : '▼'}</span>
                     </h3>
-                    {!collapsedSections['completed'] && (
+                    {!collapsedGoalCategories['completed'] && (
                       <div className="goals-grid">
                         {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'completed').map((goal, index) => renderGoalCard(goal, index))}
                       </div>
@@ -3811,7 +4126,93 @@ return (
             </div>
 
             <div className="goal-detail-body">
-              {/* Projects Section - Moved to top */}
+              {/* Goal-Specific Tasks - Moved to top for priority */}
+              <div className="goal-section tasks-section" style={{
+                background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #0ea5e9',
+                marginBottom: '20px'
+              }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', cursor: 'pointer' }} onClick={() => toggleSection('goal-tasks')}>
+                  <h3 style={{ color: '#075985', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{collapsedSections['goal-tasks'] ? '▶' : '▼'}</span>
+                    ✅ Goal Tasks ({goalTasks.length})
+                  </h3>
+                  <button
+                    className="btn btn-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowAddGoalTaskModal(true);
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                      color: 'white',
+                      border: '2px solid #075985',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    ➕ Add Task
+                  </button>
+                </div>
+                {!collapsedSections['goal-tasks'] && (
+                  <>
+                    {goalTasks.length === 0 ? (
+                      <div className="empty-section">
+                        <p>No goal-specific tasks. Add tasks that belong uniquely to this goal!</p>
+                      </div>
+                    ) : (
+                      <div className="goal-tasks-tree" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {goalTasks.filter(t => !t.parent_task_id).map(task => (
+                      <GoalTaskNode
+                        key={task.id}
+                        task={task}
+                        allTasks={goalTasks}
+                        onToggleComplete={(taskId, currentStatus) => {
+                          // Check for incomplete subtasks before marking complete
+                          if (!currentStatus) {
+                            const hasIncompleteSubtasks = goalTasks.some(t => 
+                              t.parent_task_id === taskId && !t.is_completed
+                            );
+                            if (hasIncompleteSubtasks) {
+                              showAlert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.', 'warning');
+                              return;
+                            }
+                          }
+                          handleUpdateGoalTask(taskId, { is_completed: !currentStatus });
+                        }}
+                        onDelete={async (taskId) => {
+                          // Check for incomplete subtasks before deleting
+                          const hasIncompleteSubtasks = goalTasks.some(t => 
+                            t.parent_task_id === taskId && !t.is_completed
+                          );
+                          if (hasIncompleteSubtasks) {
+                            showAlert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.', 'warning');
+                            return;
+                          }
+                          if (window.confirm('Are you sure you want to delete this task and all its subtasks?')) {
+                            await handleDeleteGoalTask(taskId);
+                          }
+                        }}
+                        onAddSubtask={(parentTask) => {
+                          setEditingGoalTask(parentTask);
+                          setShowAddGoalTaskModal(true);
+                        }}
+                        onEdit={(task) => {
+                          setEditingGoalTask(task);
+                          setShowAddGoalTaskModal(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Projects Section */}
               {goalProjects.length > 0 && (
                 <div className="goal-section projects-section" style={{
                   background: '#fffef0',
@@ -3819,9 +4220,13 @@ return (
                   borderRadius: '12px',
                   marginBottom: '20px'
                 }}>
-                  <div className="section-header" style={{ marginBottom: '16px' }}>
-                    <h3 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>📁 Projects</h3>
+                  <div className="section-header" style={{ marginBottom: '16px', cursor: 'pointer' }} onClick={() => toggleSection('projects')}>
+                    <h3 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{collapsedSections['projects'] ? '▶' : '▼'}</span>
+                      📁 Projects
+                    </h3>
                   </div>
+                  {!collapsedSections['projects'] && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {goalProjects.map((project: any) => {
                       const taskProgress = project.completed_tasks || 0;
@@ -3975,6 +4380,7 @@ return (
                       );
                     })}
                   </div>
+                  )}
                 </div>
               )}
 
@@ -3987,12 +4393,17 @@ return (
                   border: '3px solid #f59e0b',
                   marginBottom: '20px'
                 }}>
-                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px' }}>💡 Why This Goal Matters</h3>
+                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('why-statements')}>
+                    <span>{collapsedSections['why-statements'] ? '▶' : '▼'}</span>
+                    💡 Why This Goal Matters
+                  </h3>
+                  {!collapsedSections['why-statements'] && (
                   <ul className="why-statements-list" style={{ color: '#78350f', fontSize: '15px' }}>
                     {selectedGoal.why_statements.map((why, index) => (
                       <li key={index}>{why}</li>
                     ))}
                   </ul>
+                  )}
                 </div>
               )}
 
@@ -4005,10 +4416,296 @@ return (
                   border: '3px solid #8b5cf6',
                   marginBottom: '20px'
                 }}>
-                  <h3 style={{ color: '#5b21b6', fontWeight: 'bold', fontSize: '18px' }}>📝 Description</h3>
+                  <h3 style={{ color: '#5b21b6', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('description')}>
+                    <span>{collapsedSections['description'] ? '▶' : '▼'}</span>
+                    📝 Description
+                  </h3>
+                  {!collapsedSections['description'] && (
                   <p style={{ color: '#4c1d95', fontSize: '15px' }}>{selectedGoal.description}</p>
+                  )}
                 </div>
               )}
+
+              {/* Linked Tasks (Misc/Important Tasks) */}
+              <div className="goal-section linked-section" style={{
+                background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #f59e0b',
+                marginBottom: '20px'
+              }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', cursor: 'pointer' }} onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest('button')) {
+                    toggleSection('linked-tasks');
+                  }
+                }}>
+                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{collapsedSections['linked-tasks'] ? '▶' : '▼'}</span>
+                    📋 Linked Tasks (Important Tasks)
+                  </h3>
+                  <button
+                    className="btn btn-primary"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowLinkTaskModal(true);
+                    }}
+                    style={{
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: 'white',
+                      border: '2px solid #92400e',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontWeight: '600'
+                    }}
+                  >
+                    🔗 Link Task
+                  </button>
+                </div>
+
+                {!collapsedSections['linked-tasks'] && (
+                  <>
+                {linkedTasks.length === 0 ? (
+                  <div className="empty-section">
+                    <p>No linked tasks. Connect existing Important Tasks to this goal!</p>
+                  </div>
+                ) : (
+                  <div>
+                    {linkedTasks.map((link: any) => (
+                      <div key={link.id} style={{
+                        padding: '12px',
+                        marginBottom: '8px',
+                        background: 'white',
+                        borderRadius: '8px',
+                        borderLeft: '4px solid #f59e0b',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                      onClick={() => handleNavigateToTask(link.task_type)}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
+                        e.currentTarget.style.transform = 'translateX(4px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = 'none';
+                        e.currentTarget.style.transform = 'translateX(0)';
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '16px' }}>📌</span>
+                            <span style={{ fontWeight: '600', color: '#1f2937', fontSize: '15px' }}>
+                              {link.task?.name || 'Task'}
+                            </span>
+                            <span style={{
+                              fontSize: '11px',
+                              padding: '2px 8px',
+                              borderRadius: '12px',
+                              background: '#fef3c7',
+                              color: '#92400e',
+                              fontWeight: '600'
+                            }}>
+                              {link.task_type === 'one_time' ? 'Important Task' : link.task_type}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginLeft: '24px' }}>
+                            {link.completion_count}/{link.expected_count} completed ({link.completion_percentage?.toFixed(0) || 0}%)
+                            {link.link_start_date && (
+                              <> • Started: {new Date(link.link_start_date).toLocaleDateString()}</>
+                            )}
+                            {link.last_completed && (
+                              <> • Last: {new Date(link.last_completed).toLocaleDateString()}</>
+                            )}
+                          </div>
+                          {link.notes && (
+                            <div style={{ fontSize: '12px', color: '#78716c', fontStyle: 'italic', marginLeft: '24px', marginTop: '4px' }}>
+                              💭 {link.notes}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          className="btn btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUnlinkTask(link.id);
+                          }}
+                          style={{
+                            padding: '4px 12px',
+                            fontSize: '12px',
+                            background: '#fee2e2',
+                            color: '#991b1b',
+                            border: '1px solid #fca5a5',
+                            borderRadius: '6px',
+                            fontWeight: '600'
+                          }}
+                        >
+                          Unlink
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                  </>
+                )}
+              </div>
+
+              {/* Supporting Tasks by Frequency */}
+              <div className="goal-section supporting-tasks-section" style={{
+                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                padding: '20px',
+                borderRadius: '12px',
+                border: '3px solid #10b981',
+                marginBottom: '20px'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', cursor: 'pointer' }} onClick={() => toggleSection('supporting-tasks')}>
+                  <div style={{ flex: 1 }}>
+                    <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{collapsedSections['supporting-tasks'] ? '▶' : '▼'}</span>
+                      📅 Supporting Tasks by Frequency
+                    </h3>
+                    <div style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic', marginBottom: '12px' }}>
+                      Tasks created with Goal link - organized by frequency (Daily, Weekly, etc.)
+                    </div>
+                  </div>
+                </div>
+
+                {!collapsedSections['supporting-tasks'] && (
+                  <>
+                {linkedTasks.length === 0 ? (
+                  <div className="empty-section">
+                    <p>No supporting tasks yet. Create tasks and select this goal to track your daily/weekly/monthly efforts!</p>
+                  </div>
+                ) : (
+                  <div>
+                    {(() => {
+                      // Group linked tasks by frequency - only show active tasks (not 100% complete)
+                      const activeTasks = linkedTasks.filter(link => link.completion_percentage !== 100);
+                      
+                      const tasksByFrequency: Record<string, any[]> = {
+                        daily: [],
+                        weekly: [],
+                        monthly: [],
+                        yearly: [],
+                        one_time: []
+                      };
+                      
+                      activeTasks.forEach(link => {
+                        const freq = link.task_type || 'one_time';
+                        if (tasksByFrequency[freq]) {
+                          tasksByFrequency[freq].push(link);
+                        } else {
+                          tasksByFrequency['one_time'].push(link);
+                        }
+                      });
+                      
+                      const frequencyOrder = ['daily', 'weekly', 'monthly', 'yearly', 'one_time'];
+                      const frequencyLabels: Record<string, string> = {
+                        daily: '📆 Daily Tasks',
+                        weekly: '📅 Weekly Tasks',
+                        monthly: '📊 Monthly Tasks',
+                        yearly: '🎯 Yearly Tasks',
+                        one_time: '📋 One-Time Tasks'
+                      };
+                      
+                      return frequencyOrder.map(freq => {
+                        const tasks = tasksByFrequency[freq];
+                        if (tasks.length === 0) return null;
+                        
+                        return (
+                          <div key={freq} style={{ marginBottom: '16px' }}>
+                            <h4 style={{ 
+                              color: '#065f46', 
+                              fontSize: '15px',
+                              fontWeight: '700',
+                              marginBottom: '8px'
+                            }}>
+                              {frequencyLabels[freq]}:
+                            </h4>
+                            <ul style={{ 
+                              listStyle: 'none', 
+                              padding: 0, 
+                              margin: 0,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px'
+                            }}>
+                              {tasks.map(link => (
+                                <li key={link.id} style={{
+                                  padding: '8px 12px',
+                                  background: 'white',
+                                  borderRadius: '6px',
+                                  borderLeft: '3px solid #10b981',
+                                  fontSize: '14px'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span>•</span>
+                                    <span style={{ fontWeight: '600', color: '#1f2937', flex: 1 }}>
+                                      {link.task?.name || 'Task'}
+                                    </span>
+                                    <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                                      {link.completion_count}/{link.expected_count} ({link.completion_percentage?.toFixed(0) || 0}%)
+                                    </span>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+
+                {/* Completed Supporting Tasks Section */}
+                {(() => {
+                  const completedTasks = linkedTasks.filter(link => link.completion_percentage === 100);
+                  
+                  if (completedTasks.length === 0) return null;
+                  
+                  return (
+                    <div style={{
+                      background: 'rgba(240, 253, 244, 0.5)',
+                      padding: '16px',
+                      borderRadius: '8px',
+                      border: '2px solid #48bb78',
+                      marginTop: '16px'
+                    }}>
+                      <h4 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '15px', marginBottom: '12px' }}>
+                        ✅ Completed Supporting Tasks ({completedTasks.length})
+                      </h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+                        {completedTasks.map(link => (
+                          <div key={link.id} style={{
+                            padding: '10px',
+                            background: 'white',
+                            borderRadius: '6px',
+                            borderLeft: '3px solid #48bb78',
+                            fontSize: '13px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                              <span>✅</span>
+                              <span style={{ 
+                                fontWeight: '600', 
+                                color: '#666',
+                                textDecoration: 'line-through',
+                                flex: 1
+                              }}>
+                                {link.task?.name || 'Task'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#718096' }}>
+                              {link.task_type} • {link.completion_count}/{link.expected_count} (100%)
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                  </>
+                )}
+              </div>
 
               {/* Milestones */}
               <div className="goal-section milestones-section" style={{
@@ -4018,11 +4715,21 @@ return (
                 border: '3px solid #10b981',
                 marginBottom: '20px'
               }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>🎯 Milestones</h3>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', cursor: 'pointer' }} onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest('button')) {
+                    toggleSection('milestones');
+                  }
+                }}>
+                  <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{collapsedSections['milestones'] ? '▶' : '▼'}</span>
+                    🎯 Milestones
+                  </h3>
                   <button
                     className="btn btn-primary"
-                    onClick={() => setShowAddMilestoneModal(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowAddMilestoneModal(true);
+                    }}
                     style={{
                       background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                       color: 'white',
@@ -4036,6 +4743,8 @@ return (
                   </button>
                 </div>
 
+                {!collapsedSections['milestones'] && (
+                  <>
                 {/* Milestone Breakdown Summary */}
                 {selectedGoal?.stats?.milestones && (
                   <div style={{
@@ -4146,425 +4855,34 @@ return (
                     )})}
                   </div>
                 )}
-              </div>
-
-              {/* Goal-Specific Tasks */}
-              <div className="goal-section tasks-section" style={{
-                background: 'linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #ec4899',
-                marginBottom: '20px'
-              }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ color: '#9f1239', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>✅ Goal Tasks</h3>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setShowAddGoalTaskModal(true)}
-                    style={{
-                      background: 'linear-gradient(135deg, #db2777 0%, #be185d 100%)',
-                      color: 'white',
-                      border: '2px solid #9f1239',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      fontWeight: '600'
-                    }}
-                  >
-                    ➕ Add Task
-                  </button>
-                </div>
-                {goalTasks.length === 0 ? (
-                  <div className="empty-section">
-                    <p>No goal-specific tasks. Add tasks that belong uniquely to this goal!</p>
-                  </div>
-                ) : (
-                  <div className="goal-tasks-list">
-                    {goalTasks.map(task => {
-                      const taskType = task.task_type || 'time';
-                      let progressInfo = '';
-                      
-                      if (taskType === 'count' && task.target_value) {
-                        progressInfo = `${task.current_value || 0}/${task.target_value} ${task.unit || ''}`;
-                      } else if (taskType === 'time' && task.allocated_minutes) {
-                        progressInfo = `${task.allocated_minutes} minutes allocated`;
-                      } else if (taskType === 'boolean') {
-                        progressInfo = task.is_completed ? '✅ Done' : '⏳ Pending';
-                      }
-                      
-                      return (
-                        <div key={task.id} className={`goal-task-item ${task.is_completed ? 'completed' : ''}`}>
-                          <input
-                            type="checkbox"
-                            checked={task.is_completed}
-                            onChange={(e) => handleUpdateGoalTask(task.id, { is_completed: e.target.checked })}
-                          />
-                          <div className="goal-task-content">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <strong>{task.name}</strong>
-                              <span className="task-type-badge" style={{
-                                padding: '2px 8px',
-                                borderRadius: '12px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                backgroundColor: taskType === 'time' ? '#edf2f7' : 
-                                               taskType === 'count' ? '#e6f7ff' : '#f0f5ff',
-                                color: '#4a5568'
-                              }}>
-                                {taskType === 'time' ? '⏱️ TIME' : taskType === 'count' ? '🔢 COUNT' : '✅ YES/NO'}
-                              </span>
-                            </div>
-                            {progressInfo && (
-                              <span style={{ color: '#718096', fontSize: '14px', marginTop: '4px' }}>
-                                {progressInfo}
-                              </span>
-                            )}
-                            {task.due_date && (
-                              <span className="task-due-date">
-                                📅 Due: {new Date(task.due_date).toLocaleDateString()}
-                              </span>
-                            )}
-                            {task.description && <p className="task-description">{task.description}</p>}
-                          </div>
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={() => handleDeleteGoalTask(task.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Supporting Tasks by Frequency - NEW */}
-              <div className="goal-section supporting-tasks-section" style={{
-                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #10b981',
-                marginBottom: '20px'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '8px' }}>
-                      📅 Supporting Tasks by Frequency
-                    </h3>
-                    <div style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic', marginBottom: '12px' }}>
-                      Tasks created with Goal link - organized by frequency (Daily, Weekly, etc.)
-                    </div>
-                  </div>
-                </div>
-                {linkedTasks.length === 0 ? (
-                  <div className="empty-section">
-                    <p>No supporting tasks yet. Create tasks and select this goal to track your daily/weekly/monthly efforts!</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                    {(() => {
-                      // Group linked tasks by frequency - separate active and completed
-                      const activeTasks = linkedTasks.filter(link => link.completion_percentage !== 100);
-                      const completedTasks = linkedTasks.filter(link => link.completion_percentage === 100);
-                      
-                      const tasksByFrequency: Record<string, any[]> = {};
-                      activeTasks.forEach(link => {
-                        const freq = link.task_type || 'unknown';
-                        if (!tasksByFrequency[freq]) {
-                          tasksByFrequency[freq] = [];
-                        }
-                        tasksByFrequency[freq].push(link);
-                      });
-                      
-                      const frequencyConfig: Record<string, {label: string; icon: string; color: string; bgColor: string}> = {
-                        daily: { label: 'Daily Tasks', icon: '📆', color: '#065f46', bgColor: '#d1fae5' },
-                        weekly: { label: 'Weekly Tasks', icon: '📅', color: '#92400e', bgColor: '#fed7aa' },
-                        monthly: { label: 'Monthly Tasks', icon: '📊', color: '#581c87', bgColor: '#e9d5ff' },
-                        yearly: { label: 'Yearly Tasks', icon: '🎯', color: '#7c2d12', bgColor: '#fecaca' },
-                        project_task: { label: 'Project Tasks', icon: '📁', color: '#1e40af', bgColor: '#dbeafe' }
-                      };
-                      
-                      return Object.entries(tasksByFrequency).map(([freq, tasks]) => {
-                        const config = frequencyConfig[freq] || { label: freq, icon: '📋', color: '#374151', bgColor: '#f3f4f6' };
-                        const totalExpected = tasks.reduce((sum, t) => sum + (t.expected_count || 0), 0);
-                        const totalCompleted = tasks.reduce((sum, t) => sum + (t.completion_count || 0), 0);
-                        const avgCompletion = totalExpected > 0 ? (totalCompleted / totalExpected) * 100 : 0;
-                        
-                        return (
-                          <div key={freq} style={{
-                            padding: '14px',
-                            background: config.bgColor,
-                            borderRadius: '8px',
-                            border: `2px solid ${config.color}`
-                          }}>
-                            <div style={{ 
-                              display: 'flex', 
-                              justifyContent: 'space-between', 
-                              alignItems: 'center',
-                              marginBottom: '12px'
-                            }}>
-                              <h4 style={{ 
-                                margin: 0, 
-                                color: config.color, 
-                                fontSize: '15px',
-                                fontWeight: '700'
-                              }}>
-                                {config.icon} {config.label}
-                              </h4>
-                              <span style={{ 
-                                fontSize: '13px', 
-                                fontWeight: '600',
-                                color: config.color,
-                                background: 'white',
-                                padding: '3px 8px',
-                                borderRadius: '12px'
-                              }}>
-                                {tasks.length}
-                              </span>
-                            </div>
-                            
-                            <div style={{ 
-                              fontSize: '12px', 
-                              color: '#4b5563',
-                              marginBottom: '10px',
-                              padding: '8px',
-                              background: 'white',
-                              borderRadius: '6px'
-                            }}>
-                              <div>Progress: {totalCompleted} / {totalExpected}</div>
-                              <div style={{ marginTop: '4px' }}>
-                                <div style={{
-                                  width: '100%',
-                                  height: '6px',
-                                  background: '#e5e7eb',
-                                  borderRadius: '3px',
-                                  overflow: 'hidden'
-                                }}>
-                                  <div style={{
-                                    width: `${Math.min(avgCompletion, 100)}%`,
-                                    height: '100%',
-                                    background: avgCompletion >= 70 ? '#10b981' : avgCompletion >= 40 ? '#f59e0b' : '#ef4444',
-                                    transition: 'width 0.3s ease'
-                                  }} />
-                                </div>
-                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>
-                                  {avgCompletion.toFixed(0)}% complete
-                                </div>
-                              </div>
-                            </div>
-                            
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {tasks.map(link => {
-                                return (
-                                  <div key={link.id} style={{
-                                    padding: '8px',
-                                    background: 'white',
-                                    borderRadius: '4px',
-                                    fontSize: '12px',
-                                    borderLeft: `3px solid ${config.color}`
-                                  }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                                      🔄
-                                      <span style={{ fontWeight: '600', color: '#1f2937', flex: 1 }}>
-                                        {link.task?.name || 'Task'}
-                                      </span>
-                                    </div>
-                                    <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '3px' }}>
-                                      Progress: {link.completion_count}/{link.expected_count} 
-                                      ({link.completion_percentage?.toFixed(0) || 0}%)
-                                      {link.link_start_date && (
-                                        <> • Started: {new Date(link.link_start_date).toLocaleDateString()}</>
-                                      )}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                )}
-              </div>
-
-              {/* Completed Supporting Tasks Section */}
-              {(() => {
-                const completedTasks = linkedTasks.filter(link => link.completion_percentage === 100);
-                
-                if (completedTasks.length === 0) return null;
-                
-                return (
-                  <div className="goal-section completed-tasks-section" style={{
-                    background: 'linear-gradient(135deg, #f0fff4 0%, #dcfce7 100%)',
-                    padding: '20px',
-                    borderRadius: '12px',
-                    border: '3px solid #48bb78',
-                    marginBottom: '20px'
-                  }}>
-                    <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '12px' }}>
-                      ✅ Completed Supporting Tasks ({completedTasks.length})
-                    </h3>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
-                      {completedTasks.map(link => (
-                        <div key={link.id} style={{
-                          padding: '12px',
-                          background: 'white',
-                          borderRadius: '6px',
-                          borderLeft: '3px solid #48bb78',
-                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                            <span style={{ fontSize: '16px' }}>✅</span>
-                            <span style={{ 
-                              fontWeight: '600', 
-                              color: '#666',
-                              textDecoration: 'line-through',
-                              flex: 1,
-                              fontSize: '14px'
-                            }}>
-                              {link.task?.name || 'Task'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px' }}>
-                            Frequency: {link.task_type}
-                          </div>
-                          <div style={{ fontSize: '11px', color: '#718096' }}>
-                            Completed: {link.completion_count}/{link.expected_count} (100%)
-                          </div>
-                          {link.link_start_date && (
-                            <div style={{ fontSize: '10px', color: '#718096', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #e2e8f0' }}>
-                              Started: {new Date(link.link_start_date).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Linked Tasks */}
-              <div className="goal-section linked-section" style={{
-                background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #6366f1',
-                marginBottom: '20px'
-              }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                  <h3 style={{ color: '#3730a3', fontWeight: 'bold', fontSize: '18px', margin: 0 }}>🔗 Linked Tasks</h3>
-                  <button
-                    className="btn btn-primary"
-                    onClick={() => setShowLinkTaskModal(true)}
-                    style={{
-                      background: 'linear-gradient(135deg, #4f46e5 0%, #4338ca 100%)',
-                      color: 'white',
-                      border: '2px solid #3730a3',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      fontWeight: '600'
-                    }}
-                  >
-                    🔗 Link Task
-                  </button>
-                </div>
-                {linkedTasks.length === 0 ? (
-                  <div className="empty-section">
-                    <p>No linked tasks. Connect existing daily/weekly/monthly tasks to this goal!</p>
-                  </div>
-                ) : (
-                  <div className="linked-tasks-list">
-                    {linkedTasks.map((link: any) => {
-                      const completionPercentage = link.completion_percentage || 0;
-                      const recentTrend = link.recent_trend || 0;
-                      const trendColor = recentTrend >= 80 ? '#48bb78' : recentTrend >= 60 ? '#ed8936' : '#e53e3e';
-                      
-                      return (
-                        <div key={link.id} className="linked-task-item">
-                          <div 
-                            className="linked-task-content clickable" 
-                            onClick={() => handleNavigateToTask(link.task_type)}
-                            title="Click to view this task"
-                          >
-                            <div className="linked-task-header">
-                              <strong>{link.task?.name || 'Task'} →</strong>
-                              <span className="task-type-badge">{link.task_type}</span>
-                            </div>
-                            
-                            {link.link_start_date && (
-                              <div className="linked-task-stats">
-                                <div className="stat-row">
-                                  <span className="stat-label">Tracking since:</span>
-                                  <span className="stat-value">
-                                    {new Date(link.link_start_date).toLocaleDateString()} 
-                                    ({link.days_tracked} days)
-                                  </span>
-                                </div>
-                                
-                                <div className="stat-row progress-row">
-                                  <span className="stat-label">Overall Progress:</span>
-                                  <div className="stat-progress">
-                                    <div className="progress-bar-container">
-                                      <div 
-                                        className="progress-bar-fill" 
-                                        style={{ 
-                                          width: `${completionPercentage}%`,
-                                          backgroundColor: completionPercentage >= 70 ? '#48bb78' : completionPercentage >= 40 ? '#ed8936' : '#e53e3e'
-                                        }} 
-                                      />
-                                    </div>
-                                    <span className="progress-text">
-                                      {link.completion_count}/{link.expected_count} ({completionPercentage.toFixed(1)}%)
-                                    </span>
-                                  </div>
-                                </div>
-                                
-                                <div className="stat-row">
-                                  <span className="stat-label">Last 30 days:</span>
-                                  <span className="stat-value" style={{ color: trendColor, fontWeight: 600 }}>
-                                    {recentTrend.toFixed(1)}% 
-                                    {recentTrend >= completionPercentage ? ' 📈' : ' 📉'}
-                                  </span>
-                                </div>
-                                
-                                {link.last_completed && (
-                                  <div className="stat-row">
-                                    <span className="stat-label">Last completed:</span>
-                                    <span className="stat-value">
-                                      {new Date(link.last_completed).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            
-                            {link.notes && <p className="task-notes">💭 {link.notes}</p>}
-                          </div>
-                          <button
-                            className="btn btn-sm btn-danger"
-                            onClick={() => handleUnlinkTask(link.id)}
-                          >
-                            Unlink
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  </>
                 )}
               </div>
 
               {/* Goal Projects Section - Tracking Dashboards */}
               <div className="goal-section goal-projects-section">
-                <div className="section-header">
-                  <h3>📊 Performance Tracking</h3>
+                <div className="section-header" style={{ cursor: 'pointer' }} onClick={(e) => {
+                  if (!(e.target as HTMLElement).closest('button')) {
+                    toggleSection('tracking-projects');
+                  }
+                }}>
+                  <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>{collapsedSections['tracking-projects'] ? '▶' : '▼'}</span>
+                    📊 Performance Tracking
+                  </h3>
                   <button
                     className="btn btn-primary"
-                    onClick={() => setShowCreateTrackingProjectModal(true)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCreateTrackingProjectModal(true);
+                    }}
                   >
                     ➕ Create Tracking Dashboard
                   </button>
                 </div>
+
+                {!collapsedSections['tracking-projects'] && (
+                  <>
                 <p style={{ color: '#718096', fontSize: '14px', marginBottom: '16px' }}>
                   Monitor daily/weekly/monthly task performance against your goals with time-bounded tracking and visual progress indicators.
                 </p>
@@ -4647,14 +4965,20 @@ return (
                     })}
                   </div>
                 )}
+                  </>
+                )}
               </div>
-            </div>
             
             {/* Challenges Section */}
             <div className="goal-section challenges-section">
-              <div className="section-header">
-                <h3>🏆 Challenges</h3>
+              <div className="section-header" style={{ cursor: 'pointer' }} onClick={() => toggleSection('challenges')}>
+                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>{collapsedSections['challenges'] ? '▶' : '▼'}</span>
+                  🏆 Challenges
+                </h3>
               </div>
+
+              {!collapsedSections['challenges'] && (
               <div className="section-content">
                 {goalChallenges && (
                   <RelatedChallengesList
@@ -4670,7 +4994,9 @@ return (
                   </p>
                 )}
               </div>
+              )}
             </div>
+          </div>
           </div>
         )}
         </div>
@@ -5173,18 +5499,26 @@ return (
         </div>
       )}
 
-      {/* Add Goal Task Modal */}
+      {/* Add/Edit Goal Task Modal */}
       {showAddGoalTaskModal && selectedGoal && (
         <div className="modal-overlay" onClick={() => {
           setShowAddGoalTaskModal(false);
           setCreateAsProject(false);
+          setEditingGoalTask(null);
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Add Task to {selectedGoal.name}</h2>
+              <h2>{
+                editingGoalTask && editingGoalTask.parent_task_id !== undefined && !editingGoalTask.is_completed 
+                  ? `Add Subtask to "${editingGoalTask.name}"`
+                  : editingGoalTask 
+                  ? `Edit Task: "${editingGoalTask.name}"`
+                  : `Add Task to ${selectedGoal.name}`
+              }</h2>
               <button className="btn-close" onClick={() => {
                 setShowAddGoalTaskModal(false);
                 setCreateAsProject(false);
+                setEditingGoalTask(null);
               }}>×</button>
             </div>
             <div className="modal-body">
@@ -5192,8 +5526,35 @@ return (
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 
+                const isEditMode = editingGoalTask && editingGoalTask.parent_task_id !== undefined && editingGoalTask.is_completed !== undefined;
+                const isSubtaskMode = editingGoalTask && !isEditMode;
+                
                 try {
-                  if (createAsProject) {
+                  if (isEditMode) {
+                    // Update existing task
+                    const taskType = formData.get('task_type') as string || 'time';
+                    const updateData: any = {
+                      name: formData.get('name'),
+                      description: formData.get('description') || null,
+                      start_date: formData.get('start_date') || null,
+                      due_date: formData.get('due_date') || null,
+                      priority: formData.get('priority') || 'medium',
+                      task_type: taskType
+                    };
+                    
+                    // Add type-specific fields
+                    if (taskType === 'count') {
+                      updateData.target_value = parseInt(formData.get('target_value') as string) || null;
+                      updateData.unit = formData.get('unit') || null;
+                    } else if (taskType === 'time') {
+                      updateData.time_allocated_hours = parseFloat(formData.get('time_allocated_hours') as string) || 0;
+                    }
+                    
+                    await handleUpdateGoalTask(editingGoalTask.id, updateData);
+                    showAlert('Task updated successfully!', 'success');
+                    setShowAddGoalTaskModal(false);
+                    setEditingGoalTask(null);
+                  } else if (createAsProject && !isSubtaskMode) {
                     // Create as a new Project linked to this goal
                     const startDate = formData.get('start_date') as string;
                     const dueDate = formData.get('due_date') as string;
@@ -5242,29 +5603,37 @@ return (
                     }
                     // BOOLEAN type needs no additional fields
                     
+                    // Add parent_task_id if this is a subtask
+                    if (isSubtaskMode) {
+                      taskData.parent_task_id = editingGoalTask.id;
+                    }
+                    
                     await handleCreateGoalTask(selectedGoal.id, taskData);
+                    setEditingGoalTask(null);
                   }
                 } catch (err: any) {
-                  console.error('Error creating task/project:', err);
-                  showAlert('Failed to create task/project', 'error');
+                  console.error('Error creating/updating task/project:', err);
+                  showAlert('Failed to create/update task/project', 'error');
                 }
               }}>
-                <div className="form-group">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={createAsProject}
-                      onChange={(e) => setCreateAsProject(e.target.checked)}
-                      style={{ width: '18px', height: '18px' }}
-                    />
-                    <span style={{ fontWeight: 600, color: '#2d3748' }}>
-                      Create as Project (for complex tasks with sub-tasks)
-                    </span>
-                  </label>
-                  <small className="form-text">
-                    Check this if the task needs multiple sub-tasks or detailed project management
-                  </small>
-                </div>
+                {!editingGoalTask && (
+                  <div className="form-group">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={createAsProject}
+                        onChange={(e) => setCreateAsProject(e.target.checked)}
+                        style={{ width: '18px', height: '18px' }}
+                      />
+                      <span style={{ fontWeight: 600, color: '#2d3748' }}>
+                        Create as Project (for complex tasks with sub-tasks)
+                      </span>
+                    </label>
+                    <small className="form-text">
+                      Check this if the task needs multiple sub-tasks or detailed project management
+                    </small>
+                  </div>
+                )}
                 
                 <div className="form-group">
                   <label htmlFor="goal-task-name">
@@ -5276,6 +5645,7 @@ return (
                     name="name"
                     className="form-control"
                     required
+                    defaultValue={editingGoalTask?.name || ''}
                     placeholder={createAsProject ? 'e.g., Build Personal Website' : 'e.g., Complete leadership course'}
                   />
                 </div>
@@ -5287,6 +5657,7 @@ return (
                     name="description"
                     className="form-control"
                     rows={3}
+                    defaultValue={editingGoalTask?.description || ''}
                     placeholder={createAsProject ? 'Project description and objectives' : 'Optional task description'}
                   />
                 </div>
@@ -5315,7 +5686,7 @@ return (
                       id="goal-task-type"
                       name="task_type"
                       className="form-control"
-                      defaultValue="time"
+                      defaultValue={editingGoalTask?.task_type || "time"}
                       onChange={(e) => {
                         const form = e.target.form;
                         if (form) {
@@ -5345,7 +5716,7 @@ return (
                 )}
                 
                 {!createAsProject && (
-                  <div id="goal-task-target" className="form-group" style={{ display: 'none' }}>
+                  <div id="goal-task-target" className="form-group" style={{ display: editingGoalTask?.task_type === 'count' ? 'block' : 'none' }}>
                     <label>Target *</label>
                     <div className="form-row">
                       <div className="form-group" style={{ flex: 1 }}>
@@ -5354,6 +5725,7 @@ return (
                           name="target_value"
                           className="form-control"
                           min="1"
+                          defaultValue={editingGoalTask?.target_value || ''}
                           placeholder="e.g., 5"
                         />
                       </div>
@@ -5362,6 +5734,7 @@ return (
                           type="text"
                           name="unit"
                           className="form-control"
+                          defaultValue={editingGoalTask?.unit || ''}
                           placeholder="e.g., courses, deals, books"
                         />
                       </div>
@@ -5382,7 +5755,7 @@ return (
                           id="goal-task-start-date"
                           name="start_date"
                           className="form-control"
-                          defaultValue={new Date().toISOString().split('T')[0]}
+                          defaultValue={editingGoalTask?.start_date || new Date().toISOString().split('T')[0]}
                         />
                         <small className="form-text">
                           When did/will you start working on this?
@@ -5398,6 +5771,7 @@ return (
                           id="goal-task-due-date"
                           name="due_date"
                           className="form-control"
+                          defaultValue={editingGoalTask?.due_date || ''}
                         />
                       </div>
                     </div>
@@ -5410,7 +5784,7 @@ return (
                         id="goal-task-priority"
                         name="priority"
                         className="form-control"
-                        defaultValue="medium"
+                        defaultValue={editingGoalTask?.priority || "medium"}
                       >
                         <option value="high">High</option>
                         <option value="medium">Medium</option>
@@ -5421,7 +5795,7 @@ return (
                 )}
                 
                 {!createAsProject && (
-                  <div id="goal-task-time-field" className="form-group">
+                  <div id="goal-task-time-field" className="form-group" style={{ display: !editingGoalTask || editingGoalTask.task_type === 'time' ? 'block' : 'none' }}>
                     <label htmlFor="goal-task-time">Estimated Time (hours)</label>
                     <input
                       type="number"
@@ -5430,6 +5804,7 @@ return (
                       className="form-control"
                       min="0"
                       step="0.5"
+                      defaultValue={editingGoalTask?.time_allocated_hours || ''}
                       placeholder="e.g., 2.5"
                     />
                     <small className="form-text">
@@ -5450,7 +5825,11 @@ return (
                     Cancel
                   </button>
                   <button type="submit" className="btn btn-primary">
-                    {createAsProject ? 'Create Project' : 'Add Task'}
+                    {editingGoalTask && editingGoalTask.parent_task_id !== undefined && editingGoalTask.is_completed !== undefined
+                      ? 'Save Changes'
+                      : createAsProject
+                      ? 'Create Project'
+                      : 'Add Task'}
                   </button>
                 </div>
               </form>
