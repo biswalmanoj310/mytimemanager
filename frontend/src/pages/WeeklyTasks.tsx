@@ -420,10 +420,15 @@ const WeeklyTasks: React.FC = () => {
       expectedTarget = task.follow_up_frequency === 'daily' ? daysElapsed : (daysElapsed / 7);
     } else {
       // TIME tasks
-      // Both daily and weekly tasks need the same cumulative total by each day
-      // Daily: strict daily requirement, Weekly: flexible distribution
-      // Example: 60 min/day task → by day 4, need 240 min whether daily or weekly
-      expectedTarget = task.allocated_minutes * daysElapsed;
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: allocated_minutes is per-day, multiply by days elapsed
+        // Example: 60 min/day → by day 4, need 240 min
+        expectedTarget = task.allocated_minutes * daysElapsed;
+      } else {
+        // Weekly task: allocated_minutes is per-week, divide by 7 then multiply by days
+        // Example: 420 min/week (60/day) → by day 4, need 420 * (4/7) = 240 min
+        expectedTarget = task.allocated_minutes * (daysElapsed / 7);
+      }
     }
     
     // Return color based on progress
@@ -461,9 +466,14 @@ const WeeklyTasks: React.FC = () => {
     } else if (task.task_type === TaskType.BOOLEAN) {
       expectedValue = task.follow_up_frequency === 'daily' ? 1 : 1 / 7;
     } else {
-      expectedValue = task.follow_up_frequency === 'daily' 
-        ? task.allocated_minutes 
-        : task.allocated_minutes / 7;
+      // TIME tasks: per-day expectation
+      if (task.follow_up_frequency === 'daily') {
+        // Daily task: allocated_minutes is already per-day
+        expectedValue = task.allocated_minutes;
+      } else {
+        // Weekly task: allocated_minutes is per-week, divide by 7 for per-day expectation
+        expectedValue = task.allocated_minutes / 7;
+      }
     }
     
     // Return color based on achievement
@@ -612,16 +622,93 @@ const WeeklyTasks: React.FC = () => {
   // ============================================================================
   
   /**
+   * Handle keyboard navigation in table cells
+   */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, taskId: number, dayIndex: number) => {
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(e.key)) {
+      return;
+    }
+
+    e.preventDefault();
+    
+    const input = e.currentTarget;
+    const cell = input.closest('td');
+    const row = cell?.closest('tr');
+    const tbody = row?.closest('tbody');
+    
+    if (!cell || !row || !tbody) return;
+
+    let targetCell: HTMLTableCellElement | null = null;
+
+    switch (e.key) {
+      case 'ArrowLeft':
+        // Move to previous cell in same row
+        targetCell = cell.previousElementSibling as HTMLTableCellElement;
+        // Skip sticky columns (first 4 columns)
+        while (targetCell && targetCell.classList.contains('sticky-col')) {
+          targetCell = targetCell.previousElementSibling as HTMLTableCellElement;
+        }
+        break;
+
+      case 'ArrowRight':
+      case 'Enter':
+        // Move to next cell in same row
+        targetCell = cell.nextElementSibling as HTMLTableCellElement;
+        // Skip action column (last column)
+        if (targetCell && targetCell.classList.contains('col-status')) {
+          targetCell = null;
+        }
+        break;
+
+      case 'ArrowUp':
+        // Move to same cell in previous row
+        const prevRow = row.previousElementSibling as HTMLTableRowElement;
+        if (prevRow) {
+          const cellIndex = Array.from(row.children).indexOf(cell);
+          targetCell = prevRow.children[cellIndex] as HTMLTableCellElement;
+        }
+        break;
+
+      case 'ArrowDown':
+        // Move to same cell in next row
+        const nextRow = row.nextElementSibling as HTMLTableRowElement;
+        if (nextRow) {
+          const cellIndex = Array.from(row.children).indexOf(cell);
+          targetCell = nextRow.children[cellIndex] as HTMLTableCellElement;
+        }
+        break;
+    }
+
+    // Focus the input in the target cell
+    if (targetCell) {
+      const targetInput = targetCell.querySelector('input[type="number"]') as HTMLInputElement;
+      if (targetInput && !targetInput.disabled) {
+        targetInput.focus();
+        targetInput.select(); // Select all text for easy overwriting
+      }
+    }
+  };
+
+  /**
    * Format value display based on task type
    */
   const formatValue = (task: Task, value: number): string => {
     if (task.task_type === TaskType.TIME) {
-      return `${value} min`;
+      return `${value >= 10 ? Math.round(value) : value.toFixed(1)} min`;
     } else if (task.task_type === TaskType.COUNT) {
-      return `${value} ${task.unit}`;
+      return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${task.unit}`;
     } else {
-      return value > 0 ? 'Yes' : 'No';
+      // For boolean tasks, show as fraction (e.g., "5/7 days")
+      return `${Math.round(value)}/7 days`;
     }
+  };
+
+  /**
+   * Format average display for boolean tasks as percentage
+   */
+  const formatBooleanPercentage = (daysCompleted: number, totalDays: number = 7): string => {
+    const percentage = Math.round((daysCompleted / totalDays) * 100);
+    return `${percentage}%`;
   };
 
   // ============================================================================
@@ -661,8 +748,8 @@ const WeeklyTasks: React.FC = () => {
     
     // Calculate target and averages
     const weeklyTarget = task.task_type === TaskType.COUNT 
-      ? (task.target_value || 0) * 7 
-      : task.allocated_minutes * 7;
+      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) * 7 : (task.target_value || 0))
+      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes * 7 : task.allocated_minutes);
     
     // Calculate days elapsed and remaining
     const today = new Date();
@@ -688,9 +775,9 @@ const WeeklyTasks: React.FC = () => {
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Include today
     }
     
-    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+    const avgSpentPerDay = totalSpent / daysElapsed;
     const remaining = weeklyTarget - totalSpent;
-    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+    const avgRemainingPerDay = daysRemaining > 0 ? remaining / daysRemaining : 0;
     
     // Get colors
     const rowColorClass = getWeeklyRowColorClass(task, totalSpent);
@@ -725,28 +812,37 @@ const WeeklyTasks: React.FC = () => {
           </div>
         </td>
         
-        {/* Ideal Average/Day - Sticky Column 2 */}
+        {/* Ideal Avg/Day - Sticky Column 2 */}
         <td 
           className={`col-time sticky-col sticky-col-2 ${rowColorClass}`}
           style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
-          {formatValue(task, task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes)}
+          {task.task_type === TaskType.BOOLEAN 
+            ? '1/1 day' 
+            : formatValue(task, weeklyTarget / 7)
+          }
         </td>
         
-        {/* Actual Average/Day - Sticky Column 3 */}
+        {/* Actual Avg/Day - Sticky Column 3 */}
         <td 
           className={`col-time sticky-col sticky-col-3 ${rowColorClass}`}
           style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
-          {formatValue(task, avgSpentPerDay)}
+          {task.task_type === TaskType.BOOLEAN 
+            ? `${formatBooleanPercentage(totalSpent, 7)} (${totalSpent}/7)` 
+            : formatValue(task, avgSpentPerDay)
+          }
         </td>
         
-        {/* Needed Average/Day - Sticky Column 4 */}
+        {/* Needed Avg/Day - Sticky Column 4 */}
         <td 
           className={`col-time sticky-col sticky-col-4 ${rowColorClass}`}
           style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
-          {formatValue(task, avgRemainingPerDay)}
+          {task.task_type === TaskType.BOOLEAN 
+            ? `${formatBooleanPercentage(7 - totalSpent, 7)} (${7 - totalSpent}/7)`
+            : formatValue(task, avgRemainingPerDay)
+          }
         </td>
         
         {/* 7 Day Columns */}
@@ -792,6 +888,7 @@ const WeeklyTasks: React.FC = () => {
                   step={task.task_type === TaskType.TIME ? "1" : "0.1"}
                   value={displayValue || ''}
                   onChange={(e) => handleCellChange(task.id, day.dateString, 0, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(e, task.id, day.index)}
                   style={{
                     width: '100%',
                     border: hasPending ? '2px solid #f59e0b' : '1px solid #e2e8f0',
@@ -932,13 +1029,13 @@ const WeeklyTasks: React.FC = () => {
                   Task
                 </th>
                 <th className="col-time sticky-col sticky-col-2" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>
-                  Ideal<br/>Average/Day
+                  Ideal<br/>Avg/Day
                 </th>
                 <th className="col-time sticky-col sticky-col-3" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>
-                  Actual<br/>Average/Day
+                  Actual<br/>Avg/Day
                 </th>
                 <th className="col-time sticky-col sticky-col-4" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>
-                  Needed<br/>Average/Day
+                  Needed<br/>Avg/Day
                 </th>
                 {weekDays.map(day => (
                   <th key={day.index} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>
@@ -978,26 +1075,6 @@ const WeeklyTasks: React.FC = () => {
 
   return (
     <>
-      {/* Monitoring Section - Daily/Monthly tasks tracked weekly */}
-      {monitoringTasks.length > 0 && (
-        <div className="row mb-4">
-          <div className="col">
-            <div className="alert alert-info" style={{ marginBottom: '24px', padding: '16px 20px', borderRadius: '12px' }}>
-              <h5 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
-                <i className="fas fa-chart-line me-3"></i>
-                📊 Weekly Monitoring - Read-Only ({monitoringTasks.length} tasks)
-              </h5>
-              <p style={{ margin: '8px 0 0 0', fontSize: '13px' }}>
-                These are Daily/Monthly tasks being monitored at weekly level. Values are aggregated from their home tabs.
-              </p>
-            </div>
-            {renderTaskSection('⏱️ Time-Based (Monitoring)', '⏱️', 'time-based', monitoringTasksByType.time, '(Auto-calculated from Daily)')}
-            {renderTaskSection('🔢 Count-Based (Monitoring)', '🔢', 'count-based', monitoringTasksByType.count, '(Auto-calculated from Daily)')}
-            {renderTaskSection('✅ Yes/No (Monitoring)', '✅', 'boolean-based', monitoringTasksByType.boolean, '(Auto-calculated from Daily)')}
-          </div>
-        </div>
-      )}
-
       {/* Native Weekly Tasks Section - Tasks with follow_up_frequency='weekly' */}
       {nativeWeeklyTasks.length > 0 && (
         <div className="row mb-4">
@@ -1014,6 +1091,26 @@ const WeeklyTasks: React.FC = () => {
             {renderTaskSection('⏱️ Time-Based Weekly Tasks', '⏱️', 'time-based', tasksByType.time)}
             {renderTaskSection('🔢 Count-Based Weekly Tasks', '🔢', 'count-based', tasksByType.count)}
             {renderTaskSection('✅ Yes/No Weekly Tasks', '✅', 'boolean-based', tasksByType.boolean)}
+          </div>
+        </div>
+      )}
+
+      {/* Monitoring Section - Daily/Monthly tasks tracked weekly */}
+      {monitoringTasks.length > 0 && (
+        <div className="row mb-4">
+          <div className="col">
+            <div className="alert alert-info" style={{ marginBottom: '24px', padding: '16px 20px', borderRadius: '12px' }}>
+              <h5 style={{ margin: 0, fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                <i className="fas fa-chart-line me-3"></i>
+                📊 Weekly Monitoring - Read-Only ({monitoringTasks.length} tasks)
+              </h5>
+              <p style={{ margin: '8px 0 0 0', fontSize: '13px' }}>
+                These are Daily/Monthly tasks being monitored at weekly level. Values are aggregated from their home tabs.
+              </p>
+            </div>
+            {renderTaskSection('⏱️ Time-Based (Monitoring)', '⏱️', 'time-based', monitoringTasksByType.time, '(Auto-calculated from Daily)')}
+            {renderTaskSection('🔢 Count-Based (Monitoring)', '🔢', 'count-based', monitoringTasksByType.count, '(Auto-calculated from Daily)')}
+            {renderTaskSection('✅ Yes/No (Monitoring)', '✅', 'boolean-based', monitoringTasksByType.boolean, '(Auto-calculated from Daily)')}
           </div>
         </div>
       )}

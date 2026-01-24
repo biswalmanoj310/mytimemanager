@@ -295,8 +295,8 @@ const MonthlyTasks: React.FC = () => {
 
 
   const formatValue = (task: Task, value: number): string => {
-    if (task.task_type === TaskType.TIME) return `${value} min`;
-    else if (task.task_type === TaskType.COUNT) return `${value} ${task.unit}`;
+    if (task.task_type === TaskType.TIME) return `${value >= 10 ? Math.round(value) : value.toFixed(1)} min`;
+    else if (task.task_type === TaskType.COUNT) return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${task.unit}`;
     else return value > 0 ? 'Yes' : 'No';
   };
 
@@ -323,9 +323,9 @@ const MonthlyTasks: React.FC = () => {
       const diffTime = monthEnd.getTime() - today.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     }
-    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+    const avgSpentPerDay = totalSpent / daysElapsed;
     const remaining = monthlyTarget - totalSpent;
-    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+    const avgRemainingPerDay = daysRemaining > 0 ? remaining / daysRemaining : 0;
     const rowColorClass = getMonthlyRowColorClass(task, totalSpent);
     const monthlyStatus = monthlyTaskStatuses[task.id];
     const isMonthlyCompleted = monthlyStatus?.is_completed || false;
@@ -419,9 +419,9 @@ const MonthlyTasks: React.FC = () => {
       const diffTime = monthEnd.getTime() - today.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     }
-    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+    const avgSpentPerDay = totalSpent / daysElapsed;
     const remaining = monthlyTarget - totalSpent;
-    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
+    const avgRemainingPerDay = daysRemaining > 0 ? remaining / daysRemaining : 0;
     const monthlyStatus = monthlyTaskStatuses[task.id];
     const isMonthlyCompleted = monthlyStatus?.is_completed || false;
     const isMonthlyNA = monthlyStatus?.is_na || false;

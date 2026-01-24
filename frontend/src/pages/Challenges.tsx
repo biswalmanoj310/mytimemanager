@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { formatDateForInput } from '../utils/dateHelpers';
 import './Challenges.css';
 import { AddChallengeModal } from '../components/AddChallengeModal';
 
@@ -93,7 +94,7 @@ export default function Challenges() {
   const [showLogModal, setShowLogModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
-  const [logDate, setLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [logDate, setLogDate] = useState<string>(formatDateForInput(new Date()));
   const [logCompleted, setLogCompleted] = useState(false);
   const [logCountValue, setLogCountValue] = useState<number>(0);
   const [logNumericValue, setLogNumericValue] = useState<number>(0);
@@ -125,7 +126,7 @@ export default function Challenges() {
               const today = new Date();
               const startDate = new Date(challenge.start_date);
               const entries = await api.get<ChallengeEntry[]>(
-                `/api/challenges/${challenge.id}/entries?start_date=${startDate.toISOString().split('T')[0]}&end_date=${today.toISOString().split('T')[0]}`
+                `/api/challenges/${challenge.id}/entries?start_date=${formatDateForInput(startDate)}&end_date=${formatDateForInput(today)}`
               );
               entriesMap.set(challenge.id, Array.isArray(entries) ? entries : []);
             } catch (err) {
@@ -179,8 +180,8 @@ export default function Challenges() {
     
     await fetchChallengeEntries(
       challenge.id,
-      startDate.toISOString().split('T')[0],
-      today.toISOString().split('T')[0]
+      formatDateForInput(startDate),
+      formatDateForInput(today)
     );
   };
 
@@ -195,7 +196,7 @@ export default function Challenges() {
     // Calculate days from start to today
     let currentDate = new Date(startDate);
     while (currentDate <= today && days.length < 21) {
-      days.push(currentDate.toISOString().split('T')[0]);
+      days.push(formatDateForInput(currentDate));
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
@@ -238,8 +239,8 @@ export default function Challenges() {
       const startDate = new Date(selectedChallenge.start_date);
       await fetchChallengeEntries(
         selectedChallenge.id,
-        startDate.toISOString().split('T')[0],
-        today.toISOString().split('T')[0]
+        formatDateForInput(startDate),
+        formatDateForInput(today)
       );
 
       setShowQuickLogModal(false);
@@ -252,7 +253,7 @@ export default function Challenges() {
   const openLogModal = (challenge: Challenge) => {
     setSelectedChallenge(challenge);
     setShowLogModal(true);
-    setLogDate(new Date().toISOString().split('T')[0]);
+    setLogDate(formatDateForInput(new Date()));
     setLogCompleted(false);
     setLogCountValue(0);
     setLogNumericValue(0);

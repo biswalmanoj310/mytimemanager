@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { formatDateForInput } from '../utils/dateHelpers';
 import { PillarCategorySelector } from './PillarCategorySelector';
 
 interface LifeGoal {
@@ -90,7 +91,7 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
       const goalData = {
         name: formData.get('name'),
         parent_goal_id: formData.get('parent_goal_id') ? parseInt(formData.get('parent_goal_id') as string) : null,
-        start_date: formData.get('start_date') || new Date().toISOString().split('T')[0],
+        start_date: formData.get('start_date') || formatDateForInput(new Date()),
         target_date: formData.get('target_date'),
         category: formData.get('category') || null,
         priority: formData.get('priority') || 'medium',
@@ -228,7 +229,7 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
                   name="start_date"
                   className="form-control"
                   required
-                  defaultValue={editingGoal?.start_date || new Date().toISOString().split('T')[0]}
+                  defaultValue={editingGoal?.start_date || formatDateForInput(new Date())}
                 />
                 <small className="form-text">
                   When did/will you start working on this goal?

@@ -528,18 +528,36 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
           {/* Conditional: Time allocated */}
           {formData.task_type === TaskType.TIME && (
             <div className="form-row-inline">
-              <label htmlFor="allocated_time" className="inline-label-short">Minutes: <span className="required">*</span></label>
+              <label htmlFor="allocated_time" className="inline-label-short">
+                Minutes
+                {formData.follow_up_frequency === FollowUpFrequency.DAILY && '/Day'}
+                {formData.follow_up_frequency === FollowUpFrequency.WEEKLY && '/Week'}
+                {formData.follow_up_frequency === FollowUpFrequency.MONTHLY && '/Month'}
+                {formData.follow_up_frequency === FollowUpFrequency.YEARLY && '/Year'}
+                : <span className="required">*</span>
+              </label>
               <input
                 type="number"
                 id="allocated_time"
                 value={formData.allocated_minutes === 0 ? '' : formData.allocated_minutes}
                 onChange={(e) => setFormData({ ...formData, allocated_minutes: e.target.value ? Number(e.target.value) : 0 })}
-                placeholder="60"
+                placeholder={
+                  formData.follow_up_frequency === FollowUpFrequency.DAILY ? "60" :
+                  formData.follow_up_frequency === FollowUpFrequency.WEEKLY ? "420" :
+                  formData.follow_up_frequency === FollowUpFrequency.MONTHLY ? "1800" :
+                  "60"
+                }
                 required
                 className="small-input"
               />
               {formData.allocated_minutes > 0 && (
-                <span className="inline-hint">{(formData.allocated_minutes / 60).toFixed(1)}h</span>
+                <span className="inline-hint">
+                  {(formData.allocated_minutes / 60).toFixed(1)}h
+                  {formData.follow_up_frequency === FollowUpFrequency.DAILY && ' per day'}
+                  {formData.follow_up_frequency === FollowUpFrequency.WEEKLY && ' per week'}
+                  {formData.follow_up_frequency === FollowUpFrequency.MONTHLY && ' per month'}
+                  {formData.follow_up_frequency === FollowUpFrequency.YEARLY && ' per year'}
+                </span>
               )}
             </div>
           )}
@@ -548,7 +566,14 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
           {formData.task_type === TaskType.COUNT && (
             <div className="form-row-dual">
               <div className="form-col">
-                <label htmlFor="target_value">Target: <span className="required">*</span></label>
+                <label htmlFor="target_value">
+                  Target
+                  {formData.follow_up_frequency === FollowUpFrequency.DAILY && '/Day'}
+                  {formData.follow_up_frequency === FollowUpFrequency.WEEKLY && '/Week'}
+                  {formData.follow_up_frequency === FollowUpFrequency.MONTHLY && '/Month'}
+                  {formData.follow_up_frequency === FollowUpFrequency.YEARLY && '/Year'}
+                  : <span className="required">*</span>
+                </label>
                 <input
                   type="number"
                   id="target_value"

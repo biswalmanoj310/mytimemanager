@@ -32,6 +32,33 @@ interface Category {
   pillar_name?: string;
 }
 
+interface TimeBlock {
+  id?: number;
+  block_order: number;
+  start_hour: number;
+  end_hour: number;
+  label: string | null;
+  color_code: string;
+}
+
+interface TimeBlockConfig {
+  id: number;
+  profile_name: string;
+  config_name: string;
+  is_active: boolean;
+  time_format: string;
+  created_at: string;
+  updated_at: string;
+  blocks: TimeBlock[];
+}
+
+interface TimeBlockTemplate {
+  name: string;
+  description: string;
+  time_format: string;
+  blocks: TimeBlock[];
+}
+
 const PILLAR_ICONS: Record<string, string> = {
   'Hard Work': '💼',
   'Calmness': '🧘',
@@ -46,7 +73,7 @@ const MyDayDesign: React.FC = () => {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | 'warning' } | null>(null);
   
   // Active section
-  const [activeSection, setActiveSection] = useState<'pillars' | 'categories' | 'profiles'>('pillars');
+  const [activeSection, setActiveSection] = useState<'pillars' | 'categories' | 'profiles' | 'timeblocks'>('pillars');
   
   // Pillar states
   const [pillars, setPillars] = useState<Pillar[]>([]);
@@ -60,11 +87,25 @@ const MyDayDesign: React.FC = () => {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [newCategory, setNewCategory] = useState({ name: '', pillar_id: 0 });
 
+  // Time Blocks states
+  const [timeBlockConfigs, setTimeBlockConfigs] = useState<TimeBlockConfig[]>([]);
+  const [activeConfig, setActiveConfig] = useState<TimeBlockConfig | null>(null);
+  const [isCreatingConfig, setIsCreatingConfig] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<TimeBlockConfig | null>(null);
+  const [newConfig, setNewConfig] = useState({
+    config_name: '',
+    time_format: '12h',
+    blocks: [] as TimeBlock[]
+  });
+  const [templates, setTemplates] = useState<{ templates: TimeBlockTemplate[] }>({ templates: [] });
+
   useEffect(() => {
     loadPillars();
     loadCategories();
     loadProfiles();
     loadCurrentProfile();
+    loadTimeBlockConfigs();
+    loadTemplates();
   }, []);
 
   // Pillar Management Functions
@@ -232,6 +273,110 @@ const MyDayDesign: React.FC = () => {
     }
   };
 
+  // Time Blocks Management Functions
+  const loadTimeBlockConfigs = async () => {
+    try {
+      const profile = currentProfile?.profile || 'production';
+      const response = await apiClient.get(`/api/time-blocks/configs?profile_name=${profile}`);
+      setTimeBlockConfigs(response.data);
+      
+      // Find active config
+      const active = response.data.find((c: TimeBlockConfig) => c.is_active);
+      setActiveConfig(active || null);
+    } catch (error) {
+      console.error('Error loading time block configs:', error);
+    }
+  };
+
+  const loadTemplates = async () => {
+    try {
+      const response = await apiClient.get('/api/time-blocks/templates');
+      setTemplates(response.data);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  };
+
+  const handleCreateConfig = async () => {
+    if (!newConfig.config_name.trim()) {
+      setMessage({ text: 'Configuration name is required', type: 'error' });
+      return;
+    }
+
+    if (newConfig.blocks.length === 0) {
+      setMessage({ text: 'At least one time block is required', type: 'error' });
+      return;
+    }
+
+    try {
+      const profile = currentProfile?.profile || 'production';
+      await apiClient.post('/api/time-blocks/configs', {
+        profile_name: profile,
+        config_name: newConfig.config_name,
+        time_format: newConfig.time_format,
+        blocks: newConfig.blocks
+      });
+      
+      setMessage({ text: 'Configuration created successfully!', type: 'success' });
+      setNewConfig({ config_name: '', time_format: '12h', blocks: [] });
+      setIsCreatingConfig(false);
+      await loadTimeBlockConfigs();
+    } catch (error: any) {
+      setMessage({ text: error.response?.data?.detail || 'Failed to create configuration', type: 'error' });
+    }
+  };
+
+  const handleActivateConfig = async (configId: number) => {
+    try {
+      await apiClient.put(`/api/time-blocks/configs/${configId}`, {
+        is_active: true
+      });
+      
+      setMessage({ text: 'Configuration activated!', type: 'success' });
+      await loadTimeBlockConfigs();
+    } catch (error: any) {
+      setMessage({ text: error.response?.data?.detail || 'Failed to activate configuration', type: 'error' });
+    }
+  };
+
+  const handleDeleteConfig = async (configId: number, configName: string) => {
+    if (!confirm(`Delete configuration "${configName}"?`)) {
+      return;
+    }
+
+    try {
+      await apiClient.delete(`/api/time-blocks/configs/${configId}`);
+      setMessage({ text: 'Configuration deleted successfully!', type: 'success' });
+      await loadTimeBlockConfigs();
+    } catch (error: any) {
+      setMessage({ text: error.response?.data?.detail || 'Failed to delete configuration', type: 'error' });
+    }
+  };
+
+  const handleLoadTemplate = (template: TimeBlockTemplate) => {
+    setNewConfig({
+      config_name: template.name,
+      time_format: template.time_format,
+      blocks: template.blocks.map((b, idx) => ({
+        ...b,
+        block_order: idx + 1
+      }))
+    });
+    setIsCreatingConfig(true);
+  };
+
+  const formatTimeForDisplay = (hour: number, format: string): string => {
+    if (format === '24h') {
+      return `${hour}:00`;
+    }
+    
+    // 12h format with AM/PM
+    if (hour === 0) return '12 AM';
+    if (hour < 12) return `${hour} AM`;
+    if (hour === 12) return '12 PM';
+    return `${hour - 12} PM`;
+  };
+
   return (
     <div className="my-day-design-container">
       <div className="design-header">
@@ -252,6 +397,12 @@ const MyDayDesign: React.FC = () => {
           onClick={() => setActiveSection('categories')}
         >
           📁 Categories
+        </button>
+        <button 
+          className={`tab-button ${activeSection === 'timeblocks' ? 'active' : ''}`}
+          onClick={() => setActiveSection('timeblocks')}
+        >
+          ⏰ Time Blocks
         </button>
         <button 
           className={`tab-button ${activeSection === 'profiles' ? 'active' : ''}`}
@@ -548,6 +699,265 @@ const MyDayDesign: React.FC = () => {
             <code>./import_database.sh daughter ~/Downloads/backup.db.gz</code>
             <p className="hint">Then refresh this page to see the new profile.</p>
           </div>
+        </div>
+      )}
+
+      {/* Time Blocks Section */}
+      {activeSection === 'timeblocks' && (
+        <div className="section-content">
+          <div className="section-header">
+            <h2>⏰ Time Blocks Configuration</h2>
+            <button className="add-button" onClick={() => setIsCreatingConfig(true)}>
+              ➕ Create Custom Configuration
+            </button>
+          </div>
+
+          {/* Explanation */}
+          <div className="info-box">
+            <h3>📖 About Time Blocks</h3>
+            <p>
+              Time blocks are <strong>semantic labels</strong> for grouping hours in your Daily tab. 
+              They don't restrict data entry - you can enter time in all blocks.
+            </p>
+            <p className="hint">
+              <strong>Default:</strong> Standard 24-hour view (current system unchanged)<br/>
+              <strong>Custom:</strong> Group hours like "School (8-15)" or "Work (9-17)" for family-friendly tracking
+            </p>
+          </div>
+
+          {/* Active Configuration */}
+          {activeConfig && (
+            <div className="current-profile-card production">
+              <div className="profile-info">
+                <div className="profile-icon">⏰</div>
+                <div className="profile-details">
+                  <h3>Active: {activeConfig.config_name}</h3>
+                  <p className="profile-size">
+                    {activeConfig.time_format === '24h' ? '24-Hour Format' : '12-Hour AM/PM Format'}
+                  </p>
+                  <p className="hint">
+                    {activeConfig.blocks.length === 0 
+                      ? 'Standard 24-hour view (hour-by-hour monitoring)'
+                      : `${activeConfig.blocks.length} custom blocks`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Preset Templates */}
+          <h3 className="subsection-title">📋 Preset Templates</h3>
+          <div className="profiles-grid">
+            {templates.templates.map((template) => (
+              <div key={template.name} className="profile-card">
+                <div className="profile-header">
+                  <div className="profile-icon-small">
+                    {template.name.includes('School') ? '🎓' : 
+                     template.name.includes('Work') ? '💼' : 
+                     template.name.includes('Teaching') ? '👨‍🏫' : '⏰'}
+                  </div>
+                  <h3>{template.name}</h3>
+                </div>
+                
+                <p className="item-meta">{template.description}</p>
+                <div className="profile-stats">
+                  <span>
+                    {template.blocks.length === 0 ? '24 hours' : `${template.blocks.length} blocks`} • 
+                    {template.time_format === '24h' ? ' 24h' : ' AM/PM'}
+                  </span>
+                </div>
+
+                <button
+                  className="switch-button"
+                  onClick={() => handleLoadTemplate(template)}
+                >
+                  Use Template
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Create Configuration Form */}
+          {isCreatingConfig && (
+            <div className="form-card">
+              <h3>Create Custom Configuration</h3>
+              
+              <div className="form-group">
+                <label>Configuration Name *</label>
+                <input
+                  type="text"
+                  value={newConfig.config_name}
+                  onChange={(e) => setNewConfig({ ...newConfig, config_name: e.target.value })}
+                  placeholder="e.g., My Custom Schedule"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Time Format *</label>
+                <select
+                  value={newConfig.time_format}
+                  onChange={(e) => setNewConfig({ ...newConfig, time_format: e.target.value })}
+                >
+                  <option value="24h">24-Hour (0-23)</option>
+                  <option value="12h">12-Hour (AM/PM)</option>
+                </select>
+              </div>
+
+              <h4>Time Blocks</h4>
+              {newConfig.blocks.map((block, idx) => (
+                <div key={idx} className="block-row">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={block.start_hour}
+                    onChange={(e) => {
+                      const blocks = [...newConfig.blocks];
+                      blocks[idx].start_hour = parseInt(e.target.value) || 0;
+                      setNewConfig({ ...newConfig, blocks });
+                    }}
+                    placeholder="Start"
+                  />
+                  <span>to</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="24"
+                    value={block.end_hour}
+                    onChange={(e) => {
+                      const blocks = [...newConfig.blocks];
+                      blocks[idx].end_hour = parseInt(e.target.value) || 0;
+                      setNewConfig({ ...newConfig, blocks });
+                    }}
+                    placeholder="End"
+                  />
+                  <input
+                    type="text"
+                    value={block.label || ''}
+                    onChange={(e) => {
+                      const blocks = [...newConfig.blocks];
+                      blocks[idx].label = e.target.value;
+                      setNewConfig({ ...newConfig, blocks });
+                    }}
+                    placeholder="Label (optional)"
+                  />
+                  <input
+                    type="color"
+                    value={block.color_code}
+                    onChange={(e) => {
+                      const blocks = [...newConfig.blocks];
+                      blocks[idx].color_code = e.target.value;
+                      setNewConfig({ ...newConfig, blocks });
+                    }}
+                  />
+                  <button
+                    className="delete-btn-small"
+                    onClick={() => {
+                      const blocks = newConfig.blocks.filter((_, i) => i !== idx);
+                      setNewConfig({ ...newConfig, blocks });
+                    }}
+                  >
+                    ✗
+                  </button>
+                </div>
+              ))}
+
+              <button
+                className="add-button-small"
+                onClick={() => {
+                  const lastBlock = newConfig.blocks[newConfig.blocks.length - 1];
+                  const startHour = lastBlock ? lastBlock.end_hour : 6;
+                  setNewConfig({
+                    ...newConfig,
+                    blocks: [...newConfig.blocks, {
+                      block_order: newConfig.blocks.length + 1,
+                      start_hour: startHour,
+                      end_hour: startHour + 2,
+                      label: null,
+                      color_code: '#3b82f6'
+                    }]
+                  });
+                }}
+              >
+                ➕ Add Block
+              </button>
+
+              <div className="form-actions">
+                <button className="save-btn" onClick={handleCreateConfig}>
+                  💾 Create Configuration
+                </button>
+                <button className="cancel-btn" onClick={() => {
+                  setIsCreatingConfig(false);
+                  setNewConfig({ config_name: '', time_format: '12h', blocks: [] });
+                }}>
+                  ✗ Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Saved Configurations */}
+          <h3 className="subsection-title">💾 Your Configurations</h3>
+          <div className="profiles-grid">
+            {timeBlockConfigs.map((config) => (
+              <div 
+                key={config.id}
+                className={`profile-card ${config.is_active ? 'active' : ''}`}
+              >
+                <div className="profile-header">
+                  <div className="profile-icon-small">⏰</div>
+                  <h3>{config.config_name}</h3>
+                  {config.is_active && <span className="active-badge">Active</span>}
+                </div>
+                
+                <p className="item-meta">
+                  {config.blocks.length === 0 ? '24 hours' : `${config.blocks.length} blocks`} • 
+                  {config.time_format === '24h' ? ' 24h' : ' AM/PM'}
+                </p>
+
+                {config.blocks.length > 0 && (
+                  <div className="block-preview">
+                    {config.blocks.map((block) => (
+                      <div 
+                        key={block.id} 
+                        className="block-chip"
+                        style={{ backgroundColor: block.color_code }}
+                      >
+                        {formatTimeForDisplay(block.start_hour, config.time_format)}-
+                        {formatTimeForDisplay(block.end_hour, config.time_format)}
+                        {block.label && ` (${block.label})`}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="card-actions">
+                  {!config.is_active && (
+                    <button
+                      className="switch-button"
+                      onClick={() => handleActivateConfig(config.id)}
+                    >
+                      Activate
+                    </button>
+                  )}
+                  {config.config_name !== 'Standard 24-hour' && (
+                    <button
+                      className="delete-btn"
+                      onClick={() => handleDeleteConfig(config.id, config.config_name)}
+                    >
+                      🗑️
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {timeBlockConfigs.length === 0 && (
+            <div className="empty-state">
+              <p>No configurations yet. Start with a template or create your own!</p>
+            </div>
+          )}
         </div>
       )}
     </div>

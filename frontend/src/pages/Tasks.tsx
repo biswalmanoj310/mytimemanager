@@ -12103,7 +12103,7 @@ export default function Tasks() {
                                     onClick={() => handleRemoveFromTracking(task.id)}
                                     title="Remove from tracking for this date"
                                   >
-                                    ➖ Untrack
+                                    🗑️ Delete
                                   </button>
                                 )}
                               </div>
@@ -12130,8 +12130,8 @@ export default function Tasks() {
                   <thead>
                     <tr>
                       <th style={{ width: '250px' }}>Task</th>
-                      <th className="col-time" style={{ width: '100px' }}>Completed</th>
-                      <th className="col-actions" style={{ width: '200px' }}>Actions</th>
+                      <th className="col-time" style={{ width: '100px' }}>Yes ✓</th>
+                      <th className="col-actions" style={{ width: '200px' }}>Done</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -12190,7 +12190,7 @@ export default function Tasks() {
                           <td className="col-actions">
                             {dailyStatus?.is_completed ? (
                               <div className="action-buttons">
-                                <span className="completed-text">✓ Yes (Hidden)</span>
+                                <span className="completed-text">✓ Done (Hidden)</span>
                                 <button 
                                   className="btn-undo"
                                   onClick={() => handleUndoComplete(task.id)}
@@ -12202,7 +12202,7 @@ export default function Tasks() {
                               </div>
                             ) : dailyStatus?.is_na ? (
                               <div className="action-buttons">
-                                <span className="na-text">No (Hidden)</span>
+                                <span className="na-text">Inactive (Hidden)</span>
                                 <button 
                                   className="btn-undo"
                                   onClick={() => handleUndoComplete(task.id)}
@@ -12218,17 +12218,17 @@ export default function Tasks() {
                                   className="btn-complete"
                                   onClick={() => handleTaskComplete(task.id)}
                                   disabled={isFutureDate(selectedDate)}
-                                  title="Yes - Task complete, won't appear tomorrow"
+                                  title="Done - Task complete, won't appear tomorrow"
                                 >
-                                  Yes
+                                  Done
                                 </button>
                                 <button 
                                   className="btn-na"
                                   onClick={() => handleTaskNA(task.id)}
                                   disabled={isFutureDate(selectedDate)}
-                                  title="No - Mark inactive, won't appear tomorrow"
+                                  title="Inactive - Mark inactive, won't appear tomorrow"
                                 >
-                                  No
+                                  Inactive
                                 </button>
                                 {dailyStatus?.is_tracked === false ? (
                                   <button 

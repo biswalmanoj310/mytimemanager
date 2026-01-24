@@ -358,8 +358,8 @@ const YearlyTasks: React.FC = () => {
 
 
   const formatValue = (task: Task, value: number): string => {
-    if (task.task_type === TaskType.TIME) return `${Math.round(value)} min`;
-    else if (task.task_type === TaskType.COUNT) return `${Math.round(value)} ${task.unit}`;
+    if (task.task_type === TaskType.TIME) return `${value >= 10 ? Math.round(value) : value.toFixed(1)} min`;
+    else if (task.task_type === TaskType.COUNT) return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${task.unit}`;
     else return value > 0 ? 'Yes' : 'No';
   };
 

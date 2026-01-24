@@ -669,23 +669,23 @@ export default function Analytics() {
       start = customStartDate;
       end = customEndDate;
     } else if (dateRange === 'today') {
-      start = today.toISOString().split('T')[0];
-      end = today.toISOString().split('T')[0];
+      start = formatDateForInput(today);
+      end = formatDateForInput(today);
     } else if (dateRange === 'week') {
       const weekAgo = new Date(today);
       weekAgo.setDate(today.getDate() - 7);
-      start = weekAgo.toISOString().split('T')[0];
-      end = today.toISOString().split('T')[0];
+      start = formatDateForInput(weekAgo);
+      end = formatDateForInput(today);
     } else if (dateRange === 'month') {
       const monthAgo = new Date(today);
       monthAgo.setMonth(today.getMonth() - 1);
-      start = monthAgo.toISOString().split('T')[0];
-      end = today.toISOString().split('T')[0];
+      start = formatDateForInput(monthAgo);
+      end = formatDateForInput(today);
     } else if (dateRange === '4weeks') {
       const fourWeeksAgo = new Date(today);
       fourWeeksAgo.setDate(today.getDate() - 28);
-      start = fourWeeksAgo.toISOString().split('T')[0];
-      end = today.toISOString().split('T')[0];
+      start = formatDateForInput(fourWeeksAgo);
+      end = formatDateForInput(today);
     }
 
     return { start, end };
