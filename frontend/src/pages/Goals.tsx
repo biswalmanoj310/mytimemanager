@@ -541,12 +541,14 @@ const DreamTasksDisplay = ({ selectedWish, onEditTask, onAddSubtask, onTasksLoad
 
 // Wish Activities Component - Shows tasks, projects, goals for a wish
 const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => {
-  const [activities, setActivities] = useState<{ tasks: any[], projects: any[], goals: any[], reflections: any[], explorationSteps: any[], completedItems: any[] }>({ 
-    tasks: [], projects: [], goals: [], reflections: [], explorationSteps: [], completedItems: [] 
+  const [activities, setActivities] = useState<{ tasks: any[], projects: any[], goals: any[], reflections: any[], explorationSteps: any[], completedItems: any[], linkedTasks: any[], supportingTasks: { daily: any[], weekly: any[], monthly: any[], yearly: any[] } }>({ 
+    tasks: [], projects: [], goals: [], reflections: [], explorationSteps: [], completedItems: [], linkedTasks: [], supportingTasks: { daily: [], weekly: [], monthly: [], yearly: [] } 
   });
   const [showCompleted, setShowCompleted] = useState(false);
   const [showActiveTasks, setShowActiveTasks] = useState(false);
   const [showExplorationSteps, setShowExplorationSteps] = useState(false);
+  const [showLinkedTasks, setShowLinkedTasks] = useState(false);
+  const [showSupportingTasks, setShowSupportingTasks] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const reloadActivities = async () => {
@@ -571,6 +573,16 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
       const activeProjects = projects.filter((p: any) => p.status !== 'completed');
       const activeGoals = goals.filter((g: any) => g.status !== 'completed' && g.status !== 'abandoned');
       const activeSteps = explorationSteps.filter((s: any) => !s.is_completed);
+      
+      // Separate linked tasks (important/one-time) and supporting tasks (by frequency)
+      const linkedTasks = activeTasks.filter((t: any) => t.follow_up_frequency === 'one_time');
+      const supportingTasks = {
+        daily: activeTasks.filter((t: any) => t.follow_up_frequency === 'daily'),
+        weekly: activeTasks.filter((t: any) => t.follow_up_frequency === 'weekly'),
+        monthly: activeTasks.filter((t: any) => t.follow_up_frequency === 'monthly'),
+        yearly: activeTasks.filter((t: any) => t.follow_up_frequency === 'yearly')
+      };
+      
       const completedItems = [
         ...tasks.filter((t: any) => t.is_completed).map((t: any) => ({ ...t, type: 'task', name: t.task_name || t.name })),
         ...projects.filter((p: any) => p.status === 'completed').map((p: any) => ({ ...p, type: 'project', name: p.project_name || p.name })),
@@ -578,7 +590,7 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
         ...explorationSteps.filter((s: any) => s.is_completed).map((s: any) => ({ ...s, type: 'step', name: s.step_title || s.name }))
       ];
       
-      setActivities({ tasks: activeTasks, projects: activeProjects, goals: activeGoals, reflections, explorationSteps: activeSteps, completedItems });
+      setActivities({ tasks: activeTasks, projects: activeProjects, goals: activeGoals, reflections, explorationSteps: activeSteps, completedItems, linkedTasks, supportingTasks });
     } catch (err) {
       console.error('Error loading activities:', err);
     } finally {
@@ -1111,6 +1123,142 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
                 </div>
               </div>
             ))}
+          </div>
+          )}
+        </div>
+      )}
+
+      {/* Linked Tasks (Important Tasks) */}
+      {activities.linkedTasks.length > 0 && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '10px', border: '2px solid #f59e0b' }}>
+          <div 
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showLinkedTasks ? '12px' : '0' }}
+            onClick={() => setShowLinkedTasks(!showLinkedTasks)}
+          >
+            <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#78350f', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📋 Linked Tasks (Important Tasks) ({activities.linkedTasks.length})
+            </h5>
+            <span style={{ fontSize: '18px', color: '#78350f' }}>{showLinkedTasks ? '▼' : '▶'}</span>
+          </div>
+          {showLinkedTasks && (
+            <div style={{ display: 'grid', gap: '8px' }}>
+            {activities.linkedTasks.map((task: any) => (
+              <div key={task.id} style={{ 
+                padding: '10px 12px', 
+                background: 'white', 
+                borderRadius: '6px', 
+                border: '1px solid #f59e0b',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#78350f' }}>{task.name}</span>
+                  {task.allocated_minutes && <span style={{ fontSize: '12px', color: '#92400e', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                </div>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button 
+                    onClick={() => handleCompleteTask(task.id)}
+                    style={{ 
+                      padding: '3px 8px', 
+                      background: '#10b981', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: '4px', 
+                      fontSize: '11px',
+                      cursor: 'pointer',
+                      fontWeight: '600'
+                    }}
+                    title="Complete task"
+                  >
+                    ✓
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          )}
+        </div>
+      )}
+
+      {/* Supporting Tasks by Frequency */}
+      {(activities.supportingTasks.daily.length > 0 || activities.supportingTasks.weekly.length > 0 || activities.supportingTasks.monthly.length > 0 || activities.supportingTasks.yearly.length > 0) && (
+        <div style={{ padding: '14px', background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)', borderRadius: '10px', border: '2px solid #3b82f6' }}>
+          <div 
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showSupportingTasks ? '12px' : '0' }}
+            onClick={() => setShowSupportingTasks(!showSupportingTasks)}
+          >
+            <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#1e40af', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              📅 Supporting Tasks by Frequency ({activities.supportingTasks.daily.length + activities.supportingTasks.weekly.length + activities.supportingTasks.monthly.length + activities.supportingTasks.yearly.length})
+            </h5>
+            <span style={{ fontSize: '18px', color: '#1e40af' }}>{showSupportingTasks ? '▼' : '▶'}</span>
+          </div>
+          {showSupportingTasks && (
+            <div style={{ display: 'grid', gap: '12px' }}>
+            {activities.supportingTasks.daily.length > 0 && (
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Daily Tasks ({activities.supportingTasks.daily.length})</div>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  {activities.supportingTasks.daily.map((task: any) => (
+                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
+                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                      </div>
+                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {activities.supportingTasks.weekly.length > 0 && (
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Weekly Tasks ({activities.supportingTasks.weekly.length})</div>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  {activities.supportingTasks.weekly.map((task: any) => (
+                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
+                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                      </div>
+                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {activities.supportingTasks.monthly.length > 0 && (
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Monthly Tasks ({activities.supportingTasks.monthly.length})</div>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  {activities.supportingTasks.monthly.map((task: any) => (
+                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
+                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                      </div>
+                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {activities.supportingTasks.yearly.length > 0 && (
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Yearly Tasks ({activities.supportingTasks.yearly.length})</div>
+                <div style={{ display: 'grid', gap: '6px' }}>
+                  {activities.supportingTasks.yearly.map((task: any) => (
+                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
+                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                      </div>
+                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           )}
         </div>
