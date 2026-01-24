@@ -7774,6 +7774,36 @@ export default function Tasks() {
           {!selectedProject ? (
             // Projects List View
             <>
+              {/* Back to Dream button if coming from wish */}
+              {sessionStorage.getItem('fromWishId') && (
+                <div style={{ marginBottom: '16px' }}>
+                  <button
+                    onClick={() => {
+                      const wishId = sessionStorage.getItem('fromWishId');
+                      const wishName = sessionStorage.getItem('fromWishName');
+                      sessionStorage.removeItem('fromWishId');
+                      sessionStorage.removeItem('fromWishName');
+                      navigate(`/goals?tab=dreams&wishId=${wishId}`);
+                    }}
+                    style={{
+                      padding: '10px 16px',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)'
+                    }}
+                  >
+                    ← Back to Dream: {sessionStorage.getItem('fromWishName')}
+                  </button>
+                </div>
+              )}
               {/* Compact Header with Inline Stats */}
               <div style={{
                 display: 'flex',

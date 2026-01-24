@@ -540,7 +540,7 @@ const DreamTasksDisplay = ({ selectedWish, onEditTask, onAddSubtask, onTasksLoad
 };
 
 // Wish Activities Component - Shows tasks, projects, goals for a wish
-const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => {
+const WishActivitiesSection = ({ selectedWish, showToast }: { selectedWish: WishData, showToast: (message: string, type?: 'success' | 'error' | 'info') => void }) => {
   const [activities, setActivities] = useState<{ tasks: any[], projects: any[], goals: any[], reflections: any[], explorationSteps: any[], completedItems: any[], linkedTasks: any[], supportingTasks: { daily: any[], weekly: any[], monthly: any[], yearly: any[] } }>({ 
     tasks: [], projects: [], goals: [], reflections: [], explorationSteps: [], completedItems: [], linkedTasks: [], supportingTasks: { daily: [], weekly: [], monthly: [], yearly: [] } 
   });
@@ -550,6 +550,15 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
   const [showLinkedTasks, setShowLinkedTasks] = useState(false);
   const [showSupportingTasks, setShowSupportingTasks] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+  const [showTaskFormModal, setShowTaskFormModal] = useState(false);
+  const [showSubtaskModal, setShowSubtaskModal] = useState(false);
+  const [subtaskParent, setSubtaskParent] = useState<any | null>(null);
+  const [editingTask, setEditingTask] = useState<any | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const lastSubmitTimeRef = useRef(0);
+  const lastSubmittedTaskNameRef = useRef('');
 
   const reloadActivities = async () => {
     try {
@@ -563,7 +572,20 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
       ]);
       
       // Filter by related_wish_id (same pattern as loadWishStats)
-      const tasks = (Array.isArray(allTasks) ? allTasks : []).filter((t: any) => t.related_wish_id === selectedWish.id);
+      const directlyLinkedTasks = (Array.isArray(allTasks) ? allTasks : []).filter((t: any) => t.related_wish_id === selectedWish.id);
+      
+      // Include child tasks whose parents are linked to this dream
+      const allTasksList = Array.isArray(allTasks) ? allTasks : [];
+      const linkedTaskIds = new Set(directlyLinkedTasks.map((t: any) => t.id));
+      const childTasks = allTasksList.filter((t: any) => 
+        t.parent_task_id && 
+        linkedTaskIds.has(t.parent_task_id) &&
+        t.related_wish_id !== selectedWish.id  // Exclude if already in directlyLinkedTasks
+      );
+      
+      // Combine directly linked tasks and their children (no duplicates now)
+      const tasks = [...directlyLinkedTasks, ...childTasks];
+      
       const projects = (Array.isArray(allProjects) ? allProjects : []).filter((p: any) => p.related_wish_id === selectedWish.id);
       const goals = (Array.isArray(allGoals) ? allGoals : []).filter((g: any) => g.related_wish_id === selectedWish.id);
       const reflections = Array.isArray(allReflections) ? allReflections : [];
@@ -612,6 +634,186 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
       </div>
     );
   }
+
+  // Helper function to render task with children recursively
+  const renderTaskWithChildren = (task: any, allTasks: any[], level: number = 0) => {
+    const children = allTasks.filter((t: any) => t.parent_task_id === task.id);
+    const hasChildren = children.length > 0;
+    const isExpanded = expandedTasks.has(task.id);
+    
+    return (
+      <div key={task.id} style={{ marginBottom: '4px' }}>
+        <div style={{ 
+          padding: '10px 12px', 
+          background: 'white', 
+          borderRadius: '6px', 
+          border: '1px solid #10b981',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginLeft: `${level * 24}px`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+            {hasChildren && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setExpandedTasks(prev => {
+                    const next = new Set(prev);
+                    if (next.has(task.id)) {
+                      next.delete(task.id);
+                    } else {
+                      next.add(task.id);
+                    }
+                    return next;
+                  });
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0',
+                  fontSize: '14px',
+                  color: '#065f46',
+                  width: '20px',
+                  height: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                title={isExpanded ? 'Collapse' : 'Expand'}
+              >
+                {isExpanded ? '▼' : '▶'}
+              </button>
+            )}
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#064e3b' }}>
+              {level > 0 && <span style={{ marginRight: '8px', color: '#9ca3af' }}>↳</span>}
+              {task.name}
+            </span>
+            {task.allocated_minutes && <span style={{ fontSize: '12px', color: '#047857', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+          </div>
+          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+            <input
+              type="date"
+              value={task.due_date ? task.due_date.split('T')[0] : ''}
+              onChange={async (e) => {
+                e.stopPropagation();
+                try {
+                  await api.put(`/api/tasks/${task.id}`, { due_date: e.target.value });
+                  showToast('Date updated', 'success');
+                  await reloadActivities();
+                } catch (err: any) {
+                  console.error('Error updating date:', err);
+                  showToast('Failed to update date: ' + (err.response?.data?.detail || err.message), 'error');
+                }
+              }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ 
+                padding: '3px 6px', 
+                border: '1px solid #10b981', 
+                borderRadius: '4px', 
+                fontSize: '11px',
+                fontWeight: '500'
+              }}
+              title="Due date"
+            />
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setEditingTask(task);
+                setShowTaskFormModal(true);
+              }}
+              style={{ 
+                padding: '3px 8px', 
+                background: '#3b82f6', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Edit task"
+            >
+              Edit
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setSubtaskParent(task);
+                setShowSubtaskModal(true);
+              }}
+              style={{ 
+                padding: '3px 8px', 
+                background: '#8b5cf6', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Add subtask"
+            >
+              Sub
+            </button>
+            <button 
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (confirm('Delete this task and all its subtasks?')) {
+                  try {
+                    await api.delete(`/api/tasks/${task.id}`);
+                    showToast('Task deleted', 'success');
+                    await reloadActivities();
+                  } catch (err: any) {
+                    console.error('Error deleting task:', err);
+                    showToast('Failed to delete task: ' + (err.response?.data?.detail || err.message), 'error');
+                  }
+                }
+              }}
+              style={{ 
+                padding: '3px 8px', 
+                background: '#ef4444', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Delete task"
+            >
+              Delete
+            </button>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCompleteTask(task.id);
+              }}
+              style={{ 
+                padding: '3px 8px', 
+                background: '#10b981', 
+                color: 'white', 
+                border: 'none', 
+                borderRadius: '4px', 
+                fontSize: '11px',
+                cursor: 'pointer',
+                fontWeight: '600'
+              }}
+              title="Complete task"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+        {hasChildren && isExpanded && (
+          <div style={{ marginTop: '4px' }}>
+            {children.map(child => renderTaskWithChildren(child, allTasks, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const handleCompleteGoal = async (goalId: number) => {
     if (confirm('Mark this goal as complete?')) {
@@ -1052,7 +1254,13 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
                       ✓ Complete
                     </button>
                     <button 
-                      onClick={() => navigate('/projects')}
+                      onClick={() => {
+                        // Store wish context in session storage for back navigation
+                        sessionStorage.setItem('fromWishId', selectedWish.id);
+                        sessionStorage.setItem('fromWishName', selectedWish.wish_name || selectedWish.name);
+                        // Navigate to Tasks page with project tab
+                        navigate(`/tasks?tab=projects&project=${project.id}`);
+                      }}
                       style={{ 
                         padding: '6px 12px', 
                         background: '#6b7280', 
@@ -1075,7 +1283,7 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
         </div>
       )}
 
-      {/* Active Tasks */}
+      {/* Linked Important/Misc Tasks (from Misc tab linked to this dream) */}
       {activities.tasks.length > 0 && (
         <div style={{ padding: '14px', background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', borderRadius: '10px', border: '2px solid #10b981' }}>
           <div 
@@ -1083,47 +1291,16 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
             onClick={() => setShowActiveTasks(!showActiveTasks)}
           >
             <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#065f46', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              ✅ Active Tasks ({activities.tasks.length})
+              ✅ Linked Important/Misc Tasks ({activities.tasks.length})
             </h5>
             <span style={{ fontSize: '18px', color: '#065f46' }}>{showActiveTasks ? '▼' : '▶'}</span>
           </div>
           {showActiveTasks && (
             <div style={{ display: 'grid', gap: '8px' }}>
-            {activities.tasks.map((task: any) => (
-              <div key={task.id} style={{ 
-                padding: '10px 12px', 
-                background: 'white', 
-                borderRadius: '6px', 
-                border: '1px solid #10b981',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#064e3b' }}>{task.name}</span>
-                  {task.allocated_minutes && <span style={{ fontSize: '12px', color: '#047857', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button 
-                    onClick={() => handleCompleteTask(task.id)}
-                    style={{ 
-                      padding: '3px 8px', 
-                      background: '#10b981', 
-                      color: 'white', 
-                      border: 'none', 
-                      borderRadius: '4px', 
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      fontWeight: '600'
-                    }}
-                    title="Complete task"
-                  >
-                    ✓
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              {activities.tasks.filter((t: any) => !t.parent_task_id).map((task: any) => 
+                renderTaskWithChildren(task, activities.tasks, 0)
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1136,47 +1313,16 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
             onClick={() => setShowLinkedTasks(!showLinkedTasks)}
           >
             <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#78350f', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              📋 Linked Tasks (Important Tasks) ({activities.linkedTasks.length})
+              📋 Linked Tasks (Important) ({activities.linkedTasks.length})
             </h5>
             <span style={{ fontSize: '18px', color: '#78350f' }}>{showLinkedTasks ? '▼' : '▶'}</span>
           </div>
           {showLinkedTasks && (
             <div style={{ display: 'grid', gap: '8px' }}>
-            {activities.linkedTasks.map((task: any) => (
-              <div key={task.id} style={{ 
-                padding: '10px 12px', 
-                background: 'white', 
-                borderRadius: '6px', 
-                border: '1px solid #f59e0b',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}>
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#78350f' }}>{task.name}</span>
-                  {task.allocated_minutes && <span style={{ fontSize: '12px', color: '#92400e', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button 
-                    onClick={() => handleCompleteTask(task.id)}
-                    style={{ 
-                      padding: '3px 8px', 
-                      background: '#10b981', 
-                      color: 'white', 
-                      border: 'none', 
-                      borderRadius: '4px', 
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      fontWeight: '600'
-                    }}
-                    title="Complete task"
-                  >
-                    ✓
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
+              {activities.linkedTasks.filter((t: any) => !t.parent_task_id).map((task: any) => 
+                renderTaskWithChildren(task, activities.linkedTasks, 0)
+              )}
+            </div>
           )}
         </div>
       )}
@@ -1465,6 +1611,323 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
             </div>
           )}
         </div>
+      )}
+      
+      {/* Simple Subtask Form Modal (similar to Misc tab) */}
+      {showSubtaskModal && subtaskParent && (
+        <div className="modal-overlay" onClick={() => {
+          if (!isSubmitting) {
+            setShowSubtaskModal(false);
+            setSubtaskParent(null);
+            setIsSubmitting(false);
+            lastSubmittedTaskNameRef.current = '';
+          }
+        }} style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
+            backgroundColor: 'white',
+            padding: '0',
+            borderRadius: '12px',
+            width: '90%',
+            maxWidth: '600px',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
+          }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+              padding: '16px 24px',
+              borderTopLeftRadius: '12px',
+              borderTopRightRadius: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '20px' }}>✅</span>
+              <h3 style={{ margin: 0, color: 'white', fontSize: '18px', fontWeight: '600' }}>
+                Add Subtask to "{subtaskParent.name}"
+              </h3>
+            </div>
+            <div style={{
+              padding: '16px 24px',
+              background: '#f8fafc',
+              borderBottom: '1px solid #e2e8f0'
+            }}>
+              <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>
+                Parent Task: <span style={{ color: '#0f172a' }}>{subtaskParent.name}</span>
+              </div>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              
+              // Store form reference immediately (React synthetic events become null after async)
+              const form = e.currentTarget;
+              
+              // Prevent duplicate submissions with multiple checks
+              const now = Date.now();
+              if (isSubmitting || submittingRef.current || (now - lastSubmitTimeRef.current) < 2000) {
+                console.log('Duplicate submission prevented');
+                return;
+              }
+              
+              // Set ALL guards immediately
+              setIsSubmitting(true);
+              submittingRef.current = true;
+              lastSubmitTimeRef.current = now;
+              
+              try {
+                const formData = new FormData(form);
+                const taskName = formData.get('name') as string;
+                
+                // Check if we're trying to submit the exact same task name
+                if (taskName === lastSubmittedTaskNameRef.current) {
+                  console.log('Duplicate task name prevented:', taskName);
+                  setIsSubmitting(false);
+                  submittingRef.current = false;
+                  return;
+                }
+                
+                lastSubmittedTaskNameRef.current = taskName;
+                
+                const dueDate = formData.get('due_date');
+                const priorityValue = formData.get('priority');
+                
+                const taskPayload: any = {
+                  name: taskName,
+                  description: formData.get('description') || '',
+                  parent_task_id: subtaskParent.id,
+                  related_wish_id: selectedWish.id,
+                  pillar_id: subtaskParent.pillar_id || 1,
+                  category_id: subtaskParent.category_id || 1,
+                  task_type: 'time',
+                  allocated_minutes: 30,
+                  follow_up_frequency: subtaskParent.follow_up_frequency || 'one_time',
+                  separately_followed: false,
+                  is_daily_one_time: false,
+                  priority: priorityValue ? parseInt(priorityValue as string) : 5
+                };
+
+                if (dueDate && dueDate !== '') {
+                  taskPayload.due_date = dueDate + 'T00:00:00';
+                }
+
+                await api.post('/api/tasks/', taskPayload);
+                showToast('Subtask created successfully!', 'success');
+                
+                // Reset form using stored reference (not e.currentTarget)
+                form.reset();
+                
+                // DON'T close modal - just reload activities to show new subtask
+                // setShowSubtaskModal(false);
+                // setSubtaskParent(null);
+                
+                // Reload activities to show the new subtask
+                await reloadActivities();
+                await reloadActivities();
+                
+                // Clear the last submitted task name after a delay
+                setTimeout(() => {
+                  lastSubmittedTaskNameRef.current = '';
+                }, 2000);
+              } catch (err: any) {
+                console.error('Error creating subtask:', err);
+                showToast('Failed to create subtask: ' + (err.response?.data?.detail || err.message), 'error');
+              } finally {
+                // Reset all guards
+                setIsSubmitting(false);
+                setTimeout(() => {
+                  submittingRef.current = false;
+                }, 100);
+              }
+            }}>
+              <div style={{ padding: '24px' }}>
+                {/* Task Information Section */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #f472b6 0%, #ec4899 100%)',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <span style={{ fontSize: '16px' }}>📋</span>
+                  <span style={{ color: 'white', fontWeight: '600', fontSize: '14px' }}>Task Information</span>
+                </div>
+                
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px', color: '#0f172a' }}>
+                  Task Name <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  required
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #cbd5e0',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px', color: '#0f172a' }}>
+                  Description
+                </label>
+                <textarea
+                  name="description"
+                  rows={3}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #cbd5e0',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{
+                background: 'linear-gradient(135deg, #34d399 0%, #10b981 100%)',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                marginBottom: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{ fontSize: '16px' }}>🎯</span>
+                <span style={{ color: 'white', fontWeight: '600', fontSize: '14px' }}>Planning & Priority</span>
+              </div>
+
+              <div style={{ marginBottom: '16px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px', color: '#0f172a' }}>
+                  Due Date
+                </label>
+                <input
+                  type="date"
+                  name="due_date"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #cbd5e0',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', marginBottom: '6px', fontWeight: '600', fontSize: '14px', color: '#0f172a' }}>
+                  Priority
+                </label>
+                <select
+                  name="priority"
+                  defaultValue="5"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    border: '1px solid #cbd5e0',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="1">1 - Critical</option>
+                  <option value="2">2 - High</option>
+                  <option value="3">3 - Above Normal</option>
+                  <option value="4">4 - Medium</option>
+                  <option value="5">5 - Normal</option>
+                  <option value="6">6 - Below Normal</option>
+                  <option value="7">7 - Low</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isSubmitting) {
+                      setShowSubtaskModal(false);
+                      setSubtaskParent(null);
+                      setIsSubmitting(false);
+                      lastSubmittedTaskNameRef.current = '';
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    backgroundColor: '#e2e8f0',
+                    color: '#475569',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    fontWeight: '600',
+                    opacity: isSubmitting ? 0.7 : 1
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    background: isSubmitting ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: isSubmitting ? 'not-allowed' : 'pointer',
+                    fontWeight: '600',
+                    opacity: isSubmitting ? 0.7 : 1
+                  }}
+                >
+                  {isSubmitting ? 'Creating...' : 'Create Subtask'}
+                </button>
+              </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
+      {/* Full Task Form Modal for Editing */}
+      {editingTask && (
+        <TaskForm
+          isOpen={showTaskFormModal}
+          taskId={editingTask.id}
+          onClose={() => {
+            setShowTaskFormModal(false);
+            setEditingTask(null);
+          }}
+          onSuccess={async () => {
+            showToast('Task updated successfully!', 'success');
+            setShowTaskFormModal(false);
+            setEditingTask(null);
+            await reloadActivities();
+          }}
+        />
       )}
     </div>
   );
@@ -1944,10 +2407,20 @@ export default function Goals() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
+    const wishId = params.get('wishId');
     
     if (tab === 'wishes') {
       setActiveTab('wishes');
-      loadWishes();
+      loadWishes().then((loadedWishes) => {
+        // Check if wishId parameter exists to reopen modal after refresh
+        if (wishId && loadedWishes) {
+          const wish = loadedWishes.find((w: WishData) => w.id === parseInt(wishId));
+          if (wish) {
+            setSelectedWish(wish);
+            setShowWishDetailsModal(true);
+          }
+        }
+      });
     } else {
       setActiveTab('goals');
       loadLifeGoals();
@@ -2034,9 +2507,12 @@ export default function Goals() {
       
       // Load stats for each wish
       await loadWishStats(wishesList);
+      
+      return wishesList; // Return wishes for immediate use
     } catch (err: any) {
       console.error('Error loading wishes:', err);
       setWishes([]);
+      return []; // Return empty array on error
     } finally {
       setLoading(false);
     }
@@ -3085,6 +3561,10 @@ export default function Goals() {
                           onClick={() => {
                             setSelectedWish(wish);
                             setShowWishDetailsModal(true);
+                            // Add URL parameter for persistence on refresh
+                            const url = new URL(window.location.href);
+                            url.searchParams.set('wishId', wish.id.toString());
+                            window.history.pushState({}, '', url.toString());
                           }}>
                             <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
                               <div style={{ fontSize: '42px', lineHeight: 1 }}>{theme.symbol}</div>
@@ -7245,6 +7725,10 @@ return (
           setShowWishDetailsModal(false);
           setSelectedWish(null);
           setShowDreamTaskModal(false);
+          // Clear URL parameter
+          const url = new URL(window.location.href);
+          url.searchParams.delete('wishId');
+          window.history.pushState({}, '', url.toString());
         }} style={{ zIndex: 9999 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '90vh', overflow: 'auto' }}>
             {/* Beautiful Header */}
@@ -7322,14 +7806,7 @@ return (
                   transition: 'transform 0.2s'
                 }}
                 onClick={async () => {
-                  try {
-                    const response = await api.get(`/api/wishes/${selectedWish.id}/tasks`);
-                    setDreamTasks(response.data || response || []);
-                    const allTaskIds = (response.data || response || []).map((t: any) => t.id);
-                    setExpandedDreamTasks(new Set(allTaskIds));
-                  } catch (err) {
-                    setDreamTasks([]);
-                  }
+                  // Just open modal - DreamTasksSection already has the data
                   setShowDreamTaskModal(true);
                   setShowDreamTasksList(false); // Collapse list when opening modal
                 }}
@@ -7354,7 +7831,6 @@ return (
                   transition: 'transform 0.2s'
                 }}
                 onClick={() => {
-                  setShowWishDetailsModal(false);
                   setShowInlineProjectModal(true);
                   setCurrentExplorationWish(selectedWish);
                 }}
@@ -7532,7 +8008,7 @@ return (
               )}
 
               {/* Actual Task/Project/Goal Lists */}
-              <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} />
+              <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} showToast={showToast} />
 
               {/* 🚀 Bottom Actions */}
               <div style={{ 
@@ -7739,15 +8215,16 @@ return (
                       }
                     }
                     
-                    // Reload tasks using the refresh function
+                    // Reset form and close modal first
+                    form.reset();
+                    setShowDreamTaskModal(false);
+                    setSelectedParentDreamTask(null);
+                    setEditingDreamTask(null);
+                    
+                    // Reload tasks using the refresh function (after modal closed)
                     if (dreamTasksRefreshRef.current) {
                       await dreamTasksRefreshRef.current();
                     }
-                    
-                    setSelectedParentDreamTask(null);
-                    setEditingDreamTask(null);
-                    form.reset(); // Use stored form reference
-                    setShowDreamTaskModal(false); // Close modal after successful creation/update
                   } catch (err: any) {
                     showAlert('Failed to save dream task: ' + (err.response?.data?.detail || err.message), 'error');
                   }
@@ -8599,7 +9076,15 @@ return (
                   showToast('✅ Project created and linked to dream!', 'success');
                   setShowInlineProjectModal(false);
                   setCurrentExplorationWish(null);
-                  // Optionally reload wish details to show the new project
+                  const updatedWishes = await loadWishes(); // Reload wishes to update stats
+                  // Keep wish details modal open and update selectedWish to trigger activities reload
+                  if (selectedWish && updatedWishes) {
+                    // Find the updated wish from the freshly loaded wishes list
+                    const updatedWish = updatedWishes.find((w: WishData) => w.id === selectedWish.id);
+                    if (updatedWish) {
+                      setSelectedWish(updatedWish); // This will trigger WishActivitiesSection useEffect
+                    }
+                  }
                 } catch (err: any) {
                   console.error('Error creating project:', err);
                   showToast('Failed to create project: ' + (err.response?.data?.detail || err.message), 'error');
