@@ -545,6 +545,8 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
     tasks: [], projects: [], goals: [], reflections: [], explorationSteps: [], completedItems: [] 
   });
   const [showCompleted, setShowCompleted] = useState(false);
+  const [showActiveTasks, setShowActiveTasks] = useState(false);
+  const [showExplorationSteps, setShowExplorationSteps] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const reloadActivities = async () => {
@@ -1064,10 +1066,17 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
       {/* Active Tasks */}
       {activities.tasks.length > 0 && (
         <div style={{ padding: '14px', background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', borderRadius: '10px', border: '2px solid #10b981' }}>
-          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#065f46', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            ✅ Active Tasks ({activities.tasks.length})
-          </h5>
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <div 
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showActiveTasks ? '12px' : '0' }}
+            onClick={() => setShowActiveTasks(!showActiveTasks)}
+          >
+            <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#065f46', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              ✅ Active Tasks ({activities.tasks.length})
+            </h5>
+            <span style={{ fontSize: '18px', color: '#065f46' }}>{showActiveTasks ? '▼' : '▶'}</span>
+          </div>
+          {showActiveTasks && (
+            <div style={{ display: 'grid', gap: '8px' }}>
             {activities.tasks.map((task: any) => (
               <div key={task.id} style={{ 
                 padding: '10px 12px', 
@@ -1103,6 +1112,7 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -1158,10 +1168,17 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
       {/* Exploration Steps */}
       {activities.explorationSteps.length > 0 && (
         <div style={{ padding: '14px', background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', borderRadius: '10px', border: '2px solid #8b5cf6' }}>
-          <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#5b21b6', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            🔍 Exploration Steps ({activities.explorationSteps.length})
-          </h5>
-          <div style={{ display: 'grid', gap: '8px' }}>
+          <div 
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', marginBottom: showExplorationSteps ? '12px' : '0' }}
+            onClick={() => setShowExplorationSteps(!showExplorationSteps)}
+          >
+            <h5 style={{ fontSize: '15px', fontWeight: '700', color: '#5b21b6', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              🔍 Exploration Steps ({activities.explorationSteps.length})
+            </h5>
+            <span style={{ fontSize: '18px', color: '#5b21b6' }}>{showExplorationSteps ? '▼' : '▶'}</span>
+          </div>
+          {showExplorationSteps && (
+            <div style={{ display: 'grid', gap: '8px' }}>
             {activities.explorationSteps.map((step: any) => (
               <div key={step.id} style={{ 
                 padding: '10px 12px', 
@@ -1221,6 +1238,7 @@ const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => 
               </div>
             ))}
           </div>
+          )}
         </div>
       )}
 
@@ -7368,24 +7386,42 @@ return (
               {/* Actual Task/Project/Goal Lists */}
               <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} />
 
-              {/* REFLECTION & ACHIEVEMENT BUTTONS */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: '10px',
-                marginBottom: '16px'
+              {/* 🚀 Bottom Actions */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '10px', 
+                paddingTop: '16px', 
+                borderTop: '2px solid #e2e8f0'
               }}>
                 <button 
                   className="btn"
+                  onClick={() => {
+                    setShowWishDetailsModal(false);
+                    setSelectedWish(null);
+                  }}
                   style={{
-                    padding: '12px',
+                    padding: '8px 12px',
+                    fontSize: '12px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: '600'
+                  }}
+                >
+                  ← Back
+                </button>
+                <button 
+                  className="btn"
+                  style={{
+                    padding: '8px 14px',
                     background: 'linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%)',
                     color: '#1e3a8a',
                     border: '2px solid #3b82f6',
                     borderRadius: '8px',
                     cursor: 'pointer',
                     fontWeight: '600',
-                    fontSize: '14px'
+                    fontSize: '12px'
                   }}
                   onClick={async () => {
                     const text = prompt("✍️ What are your thoughts about this dream?");
@@ -7404,76 +7440,47 @@ return (
                 >
                   ✍️ Reflect
                 </button>
-
                 {selectedWish.status !== 'achieved' && selectedWish.status !== 'released' && (
-                    <button 
-                      className="btn"
-                      style={{
-                        padding: '12px',
-                        background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                        color: 'white',
-                        border: 'none',
-                        borderRadius: '8px',
-                        cursor: 'pointer',
-                        fontWeight: '700',
-                        fontSize: '14px',
-                        boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
-                      }}
-                      onClick={async () => {
-                        const notes = prompt("🎉 Congratulations! How did this dream come true?");
-                        if (notes !== null) {
-                          try {
-                            await api.post(`/api/wishes/${selectedWish.id}/mark-achieved`, null, {
-                              params: { achievement_notes: notes || 'Dream manifested!' }
-                            });
-                            confetti({
-                              particleCount: 100,
-                              spread: 70,
-                              origin: { y: 0.6 },
-                              colors: ['#ffd700', '#ff69b4', '#87ceeb', '#98fb98', '#dda0dd']
-                            });
-                            setTimeout(() => confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ffd700', '#ff1493', '#00bfff'] }), 200);
-                            setTimeout(() => confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ffd700', '#ff1493', '#00bfff'] }), 400);
-                            showToast('✨ Dream achieved! Celebrating!', 'success');
-                            await loadWishes();
-                            setShowWishDetailsModal(false);
-                          } catch (err) {
-                            showToast('Failed to mark as achieved', 'error');
-                          }
+                  <button 
+                    className="btn"
+                    style={{
+                      padding: '8px 14px',
+                      background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontWeight: '700',
+                      fontSize: '12px',
+                      boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)'
+                    }}
+                    onClick={async () => {
+                      const notes = prompt("🎉 Congratulations! How did this dream come true?");
+                      if (notes !== null) {
+                        try {
+                          await api.post(`/api/wishes/${selectedWish.id}/mark-achieved`, null, {
+                            params: { achievement_notes: notes || 'Dream manifested!' }
+                          });
+                          confetti({
+                            particleCount: 100,
+                            spread: 70,
+                            origin: { y: 0.6 },
+                            colors: ['#ffd700', '#ff69b4', '#87ceeb', '#98fb98', '#dda0dd']
+                          });
+                          setTimeout(() => confetti({ particleCount: 50, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#ffd700', '#ff1493', '#00bfff'] }), 200);
+                          setTimeout(() => confetti({ particleCount: 50, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#ffd700', '#ff1493', '#00bfff'] }), 400);
+                          showToast('✨ Dream achieved! Celebrating!', 'success');
+                          await loadWishes();
+                          setShowWishDetailsModal(false);
+                        } catch (err) {
+                          showToast('Failed to mark as achieved', 'error');
                         }
-                      }}
-                    >
-                      ✨ Achieved!
-                    </button>
-                  )}
-              </div>
-
-              {/* 🚀 Bottom Actions */}
-              <div style={{ 
-                display: 'flex', 
-                gap: '10px', 
-                paddingTop: '16px', 
-                borderTop: '2px solid #e2e8f0'
-              }}>
-                <button 
-                  className="btn"
-                  onClick={() => {
-                    setShowWishDetailsModal(false);
-                    setSelectedWish(null);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    fontSize: '14px',
-                    background: '#3b82f6',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: '600'
-                  }}
-                >
-                  ← Back to Dreams
-                </button>
+                      }
+                    }}
+                  >
+                    ✨ Achieved!
+                  </button>
+                )}
                 <button 
                   className="btn"
                   onClick={async () => {
@@ -7491,8 +7498,8 @@ return (
                     }
                   }}
                   style={{
-                    padding: '12px 20px',
-                    fontSize: '14px',
+                    padding: '8px 14px',
+                    fontSize: '12px',
                     backgroundColor: '#e2e8f0',
                     color: '#64748b',
                     border: 'none',
