@@ -4212,220 +4212,6 @@ return (
                 )}
               </div>
 
-              {/* Projects Section */}
-              {goalProjects.length > 0 && (
-                <div className="goal-section projects-section" style={{
-                  background: '#fffef0',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  marginBottom: '20px'
-                }}>
-                  <div className="section-header" style={{ marginBottom: '16px', cursor: 'pointer' }} onClick={() => toggleSection('projects')}>
-                    <h3 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>{collapsedSections['projects'] ? '▶' : '▼'}</span>
-                      📁 Projects
-                    </h3>
-                  </div>
-                  {!collapsedSections['projects'] && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {goalProjects.map((project: any) => {
-                      const taskProgress = project.completed_tasks || 0;
-                      const totalTasks = project.total_tasks || 0;
-                      const taskPercentage = totalTasks > 0 ? (taskProgress / totalTasks) * 100 : 0;
-                      
-                      const milestoneProgress = project.milestones?.filter((m: any) => m.is_completed).length || 0;
-                      const totalMilestones = project.milestones?.length || 0;
-                      const milestonePercentage = totalMilestones > 0 ? (milestoneProgress / totalMilestones) * 100 : 0;
-                      
-                      return (
-                        <div 
-                          key={project.id} 
-                          style={{ 
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '12px', 
-                            padding: '16px 24px', 
-                            minHeight: '110px',
-                            background: '#fffef0',
-                            borderRadius: '8px',
-                            border: '1px solid #e5e3d0',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => navigate(`/tasks?tab=projects&project=${project.id}`)}
-                        >
-                          {/* Top Row */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                            {/* Left: Icon & Title */}
-                            <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
-                              <div style={{ flex: 1 }}>
-                                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
-                                <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
-                                  {project.is_completed ? '✅ Completed' : '▶️ ' + (project.status || 'not_started').replace('_', ' ')}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Center: Circular Progress (Tasks & Milestones side by side) */}
-                            <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
-                              {/* Task Progress Circle */}
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
-                                  <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{taskProgress}/{totalTasks}</span>
-                                </div>
-                                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                                  <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                                  <circle 
-                                    cx="40" 
-                                    cy="40" 
-                                    r="32" 
-                                    fill="none" 
-                                    stroke="#10b981" 
-                                    strokeWidth="8"
-                                    strokeDasharray={`${2 * Math.PI * 32}`}
-                                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - taskPercentage / 100)}`}
-                                    strokeLinecap="round"
-                                    style={{ transition: 'stroke-dashoffset 0.3s' }}
-                                  />
-                                </svg>
-                              </div>
-                              {/* Milestone Progress Circle */}
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
-                                  <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{milestoneProgress}/{totalMilestones}</span>
-                                </div>
-                                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                                  <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                                  <circle 
-                                    cx="40" 
-                                    cy="40" 
-                                    r="32" 
-                                    fill="none" 
-                                    stroke="#3b82f6" 
-                                    strokeWidth="8"
-                                    strokeDasharray={`${2 * Math.PI * 32}`}
-                                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - milestonePercentage / 100)}`}
-                                    strokeLinecap="round"
-                                    style={{ transition: 'stroke-dashoffset 0.3s' }}
-                                  />
-                                </svg>
-                              </div>
-                            </div>
-
-                            {/* Right: Dates & Days Left */}
-                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                              <div style={{ fontSize: '12px' }}>
-                                <div style={{ marginBottom: '8px' }}>
-                                  <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
-                                  <input
-                                    type="date"
-                                    value={project.start_date || ''}
-                                    onChange={(e) => { e.stopPropagation(); /* Add update handler if needed */ }}
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
-                                  />
-                                </div>
-                                <div>
-                                  <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
-                                  <input
-                                    type="date"
-                                    value={project.target_completion_date || ''}
-                                    onChange={(e) => { e.stopPropagation(); /* Add update handler if needed */ }}
-                                    onClick={(e) => e.stopPropagation()}
-                                    style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
-                                  />
-                                </div>
-                              </div>
-                              {project.target_completion_date && (() => {
-                                const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                                const isOverdue = daysLeft < 0;
-                                return (
-                                  <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
-                                    <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
-                                    <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
-                                  </div>
-                                );
-                              })()}
-                            </div>
-                          </div>
-
-                          {/* Bottom Row: Stats */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
-                            <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '14px' }}>⏳</span>
-                                <span style={{ color: '#718096' }}>Active Tasks:</span>
-                                <span style={{ fontWeight: '600', color: '#2d3748' }}>{totalTasks - taskProgress}</span>
-                              </div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '14px' }}>✅</span>
-                                <span style={{ color: '#718096' }}>Completed:</span>
-                                <span style={{ fontWeight: '600', color: '#10b981' }}>{taskProgress}</span>
-                              </div>
-                            </div>
-                            <button
-                              className="btn btn-sm btn-primary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/tasks?tab=projects&project=${project.id}`);
-                              }}
-                              style={{ minWidth: '100px', padding: '8px 14px', fontSize: '13px' }}
-                            >
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  )}
-                </div>
-              )}
-
-              {/* Why Statements */}
-              {selectedGoal.why_statements && selectedGoal.why_statements.length > 0 && (
-                <div className="goal-section why-section" style={{
-                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  border: '3px solid #f59e0b',
-                  marginBottom: '20px'
-                }}>
-                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('why-statements')}>
-                    <span>{collapsedSections['why-statements'] ? '▶' : '▼'}</span>
-                    💡 Why This Goal Matters
-                  </h3>
-                  {!collapsedSections['why-statements'] && (
-                  <ul className="why-statements-list" style={{ color: '#78350f', fontSize: '15px' }}>
-                    {selectedGoal.why_statements.map((why, index) => (
-                      <li key={index}>{why}</li>
-                    ))}
-                  </ul>
-                  )}
-                </div>
-              )}
-
-              {/* Description */}
-              {selectedGoal.description && (
-                <div className="goal-section description-section" style={{
-                  background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  border: '3px solid #8b5cf6',
-                  marginBottom: '20px'
-                }}>
-                  <h3 style={{ color: '#5b21b6', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('description')}>
-                    <span>{collapsedSections['description'] ? '▶' : '▼'}</span>
-                    📝 Description
-                  </h3>
-                  {!collapsedSections['description'] && (
-                  <p style={{ color: '#4c1d95', fontSize: '15px' }}>{selectedGoal.description}</p>
-                  )}
-                </div>
-              )}
-
               {/* Linked Tasks (Misc/Important Tasks) */}
               <div className="goal-section linked-section" style={{
                 background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
@@ -4707,6 +4493,178 @@ return (
                 )}
               </div>
 
+              {/* Projects Section */}
+              {goalProjects.length > 0 && (
+                <div className="goal-section projects-section" style={{
+                  background: '#fffef0',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  marginBottom: '20px'
+                }}>
+                  <div className="section-header" style={{ marginBottom: '16px', cursor: 'pointer' }} onClick={() => toggleSection('projects')}>
+                    <h3 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>{collapsedSections['projects'] ? '▶' : '▼'}</span>
+                      📁 Projects
+                    </h3>
+                  </div>
+                  {!collapsedSections['projects'] && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {goalProjects.map((project: any) => {
+                      const taskProgress = project.completed_tasks || 0;
+                      const totalTasks = project.total_tasks || 0;
+                      const taskPercentage = totalTasks > 0 ? (taskProgress / totalTasks) * 100 : 0;
+                      
+                      const milestoneProgress = project.milestones?.filter((m: any) => m.is_completed).length || 0;
+                      const totalMilestones = project.milestones?.length || 0;
+                      const milestonePercentage = totalMilestones > 0 ? (milestoneProgress / totalMilestones) * 100 : 0;
+                      
+                      return (
+                        <div 
+                          key={project.id} 
+                          style={{ 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '12px', 
+                            padding: '16px 24px', 
+                            minHeight: '110px',
+                            background: '#fffef0',
+                            borderRadius: '8px',
+                            border: '1px solid #e5e3d0',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => navigate(`/tasks?tab=projects&project=${project.id}`)}
+                        >
+                          {/* Top Row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                            {/* Left: Icon & Title */}
+                            <div style={{ display: 'flex', gap: '12px', minWidth: '280px', maxWidth: '280px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '32px', lineHeight: 1 }}>📊</span>
+                              <div style={{ flex: 1 }}>
+                                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '600', color: '#2d3748', lineHeight: 1.3 }}>{project.name}</h3>
+                                <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>
+                                  {project.is_completed ? '✅ Completed' : '▶️ ' + (project.status || 'not_started').replace('_', ' ')}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Center: Circular Progress (Tasks & Milestones side by side) */}
+                            <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
+                              {/* Task Progress Circle */}
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📋 Tasks</span>
+                                  <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{taskProgress}/{totalTasks}</span>
+                                </div>
+                                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                  <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                  <circle 
+                                    cx="40" 
+                                    cy="40" 
+                                    r="32" 
+                                    fill="none" 
+                                    stroke="#10b981" 
+                                    strokeWidth="8"
+                                    strokeDasharray={`${2 * Math.PI * 32}`}
+                                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - taskPercentage / 100)}`}
+                                    strokeLinecap="round"
+                                    style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                  />
+                                </svg>
+                              </div>
+                              {/* Milestone Progress Circle */}
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Milestones</span>
+                                  <span style={{ fontSize: '16px', color: '#2d3748', fontWeight: '700' }}>{milestoneProgress}/{totalMilestones}</span>
+                                </div>
+                                <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                                  <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                                  <circle 
+                                    cx="40" 
+                                    cy="40" 
+                                    r="32" 
+                                    fill="none" 
+                                    stroke="#3b82f6" 
+                                    strokeWidth="8"
+                                    strokeDasharray={`${2 * Math.PI * 32}`}
+                                    strokeDashoffset={`${2 * Math.PI * 32 * (1 - milestonePercentage / 100)}`}
+                                    strokeLinecap="round"
+                                    style={{ transition: 'stroke-dashoffset 0.3s' }}
+                                  />
+                                </svg>
+                              </div>
+                            </div>
+
+                            {/* Right: Dates & Days Left */}
+                            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                              <div style={{ fontSize: '12px' }}>
+                                <div style={{ marginBottom: '8px' }}>
+                                  <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Start</label>
+                                  <input
+                                    type="date"
+                                    value={project.start_date || ''}
+                                    onChange={(e) => { e.stopPropagation(); /* Add update handler if needed */ }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label style={{ display: 'block', color: '#718096', marginBottom: '2px', fontSize: '11px' }}>Target End</label>
+                                  <input
+                                    type="date"
+                                    value={project.target_completion_date || ''}
+                                    onChange={(e) => { e.stopPropagation(); /* Add update handler if needed */ }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ padding: '4px 8px', border: '1px solid #cbd5e0', borderRadius: '4px', fontSize: '11px', width: '120px' }}
+                                  />
+                                </div>
+                              </div>
+                              {project.target_completion_date && (() => {
+                                const daysLeft = Math.ceil((new Date(project.target_completion_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                                const isOverdue = daysLeft < 0;
+                                return (
+                                  <div style={{ textAlign: 'center', padding: '12px 16px', backgroundColor: isOverdue ? '#fee2e2' : '#dbeafe', borderRadius: '8px', minWidth: '85px' }}>
+                                    <div style={{ fontSize: '24px', fontWeight: '700', color: isOverdue ? '#dc2626' : '#2563eb', lineHeight: 1 }}>{Math.abs(daysLeft)}</div>
+                                    <div style={{ fontSize: '10px', color: '#718096', textTransform: 'uppercase', marginTop: '4px' }}>{isOverdue ? 'overdue' : 'days left'}</div>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Bottom Row: Stats */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
+                            <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '14px' }}>⏳</span>
+                                <span style={{ color: '#718096' }}>Active Tasks:</span>
+                                <span style={{ fontWeight: '600', color: '#2d3748' }}>{totalTasks - taskProgress}</span>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ fontSize: '14px' }}>✅</span>
+                                <span style={{ color: '#718096' }}>Completed:</span>
+                                <span style={{ fontWeight: '600', color: '#10b981' }}>{taskProgress}</span>
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn-sm btn-primary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/tasks?tab=projects&project=${project.id}`);
+                              }}
+                              style={{ minWidth: '100px', padding: '8px 14px', fontSize: '13px' }}
+                            >
+                              View Details
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  )}
+                </div>
+              )}
+
               {/* Milestones */}
               <div className="goal-section milestones-section" style={{
                 background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
@@ -4968,6 +4926,48 @@ return (
                   </>
                 )}
               </div>
+
+              {/* Why Statements */}
+              {selectedGoal.why_statements && selectedGoal.why_statements.length > 0 && (
+                <div className="goal-section why-section" style={{
+                  background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  border: '3px solid #f59e0b',
+                  marginBottom: '20px'
+                }}>
+                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('why-statements')}>
+                    <span>{collapsedSections['why-statements'] ? '▶' : '▼'}</span>
+                    💡 Why This Goal Matters
+                  </h3>
+                  {!collapsedSections['why-statements'] && (
+                  <ul className="why-statements-list" style={{ color: '#78350f', fontSize: '15px' }}>
+                    {selectedGoal.why_statements.map((why, index) => (
+                      <li key={index}>{why}</li>
+                    ))}
+                  </ul>
+                  )}
+                </div>
+              )}
+
+              {/* Description */}
+              {selectedGoal.description && (
+                <div className="goal-section description-section" style={{
+                  background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  border: '3px solid #8b5cf6',
+                  marginBottom: '20px'
+                }}>
+                  <h3 style={{ color: '#5b21b6', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('description')}>
+                    <span>{collapsedSections['description'] ? '▶' : '▼'}</span>
+                    📝 Description
+                  </h3>
+                  {!collapsedSections['description'] && (
+                  <p style={{ color: '#4c1d95', fontSize: '15px' }}>{selectedGoal.description}</p>
+                  )}
+                </div>
+              )}
             
             {/* Challenges Section */}
             <div className="goal-section challenges-section">

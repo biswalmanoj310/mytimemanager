@@ -399,7 +399,22 @@ export default function Tasks() {
     const saved = localStorage.getItem('expandedHabitCategories');
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
-  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean; frequencyTasks: boolean; completedTasks: boolean }>({ milestones: true, allTasks: true, frequencyTasks: true, completedTasks: false });
+  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean; frequencyTasks: boolean; completedTasks: boolean; linkedTasks: boolean }>(() => {
+    const saved = localStorage.getItem('projectDetailSectionsExpanded');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse projectDetailSectionsExpanded:', e);
+      }
+    }
+    return { milestones: true, allTasks: false, frequencyTasks: true, completedTasks: false, linkedTasks: true };
+  });
+  
+  useEffect(() => {
+    localStorage.setItem('projectDetailSectionsExpanded', JSON.stringify(expandedSections));
+  }, [expandedSections]);
+  
   const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone'>('all');
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
@@ -8327,285 +8342,315 @@ export default function Tasks() {
           ) : selectedProject ? (
             // Project Detail View with Tasks
             <>
-              <div className="project-detail-header" style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <button 
-                  className="btn btn-secondary" 
-                  onClick={handleBackToProjects}
-                >
-                  ← Back to Projects
-                </button>
-                <h2 style={{ 
-                  flex: 1, 
-                  textAlign: 'center', 
-                  color: '#2c5282',
-                  fontSize: '28px',
-                  fontWeight: '600',
-                  margin: 0
-                }}>{selectedProject.name}</h2>
-                {selectedProject.goal_id && (() => {
-                  const linkedGoal = lifeGoals.find(g => g.id === selectedProject.goal_id);
-                  return linkedGoal ? (
-                    <button
-                      className="btn btn-primary"
-                      onClick={() => navigate(`/goals?goal=${linkedGoal.id}`)}
-                      style={{
-                        padding: '8px 16px',
-                        fontSize: '14px',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        border: 'none',
-                        color: 'white',
-                        fontWeight: '600',
-                        borderRadius: '8px',
+              <div className="project-detail-header" style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '20px',
+                padding: '20px',
+                background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                borderRadius: '12px',
+                border: '2px solid #0ea5e9',
+                marginBottom: '20px'
+              }}>
+                <div style={{ minWidth: 'fit-content' }}>
+                  <h2 style={{ 
+                    color: '#0c4a6e',
+                    fontSize: '24px',
+                    fontWeight: '700',
+                    margin: 0
+                  }}>{selectedProject.name}</h2>
+                  {selectedProject.goal_id && (() => {
+                    const linkedGoal = lifeGoals.find(g => g.id === selectedProject.goal_id);
+                    return linkedGoal && (
+                      <div style={{ 
+                        marginTop: '6px',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
-                        boxShadow: '0 2px 8px rgba(102, 126, 234, 0.4)',
-                        minWidth: '150px'
-                      }}
-                    >
-                      🎯 Goal: {linkedGoal.name}
-                    </button>
-                  ) : <div style={{ width: '150px' }}></div>;
-                })() || <div style={{ width: '150px' }}></div>}
-              </div>
-
-              {selectedProject.goal_id && (() => {
-                const linkedGoal = lifeGoals.find(g => g.id === selectedProject.goal_id);
-                return linkedGoal && (
-                  <div style={{ 
-                    padding: '12px 20px',
-                    background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)',
-                    borderRadius: '8px',
-                    border: '2px solid #667eea40',
-                    marginBottom: '16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px'
-                  }}>
-                    <span style={{ fontSize: '24px' }}>🎯</span>
-                    <div>
-                      <div style={{ fontSize: '12px', color: '#718096', fontWeight: '600' }}>LINKED GOAL</div>
-                      <div style={{ fontSize: '16px', color: '#2d3748', fontWeight: '600' }}>{linkedGoal.name}</div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {selectedProject.description && (
-                <p className="project-detail-description">{selectedProject.description}</p>
-              )}
-
-              {/* Overall Project Progress Summary */}
-              <div className="project-progress-summary" style={{ 
-                marginBottom: '30px', 
-                padding: '20px', 
-                background: '#f8f9fa', 
-                borderRadius: '8px',
-                border: '1px solid #e0e0e0'
-              }}>
-                <h3 style={{ margin: '0 0 15px 0', fontSize: '18px', color: '#333' }}>
-                  📊 Project Overview
-                </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
-                  {(() => {
-                    // Filter tasks for THIS project only
-                    const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                    return (
-                      <>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Total Tasks (All Levels)</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#2c3e50' }}>
-                            {thisProjectTasks.length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Completed</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#48BB78' }}>
-                            {thisProjectTasks.filter(t => t.is_completed).length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>In Progress</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#4299E1' }}>
-                            {thisProjectTasks.filter(t => !t.is_completed).length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Root Tasks</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#805AD5' }}>
-                            {thisProjectTasks.filter(t => !t.parent_task_id).length}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>Sub-tasks</div>
-                          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#ED8936' }}>
-                            {thisProjectTasks.filter(t => t.parent_task_id).length}
-                          </div>
-                        </div>
-                      </>
+                        gap: '8px'
+                      }}>
+                        <span style={{ fontSize: '13px', color: '#667eea', fontWeight: '600' }}>🎯 Goal: {linkedGoal.name}</span>
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => navigate(`/goals?goal=${linkedGoal.id}`)}
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '11px',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            border: 'none',
+                            color: 'white',
+                            fontWeight: '600',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 4px rgba(102, 126, 234, 0.4)'
+                          }}
+                        >
+                          View Goal →
+                        </button>
+                      </div>
                     );
                   })()}
                 </div>
-                <div style={{ marginTop: '15px' }}>
-                  <div className="progress-bar" style={{ height: '12px', borderRadius: '6px' }}>
-                    <div 
-                      className="progress-fill" 
-                      style={{ 
-                        width: `${selectedProject.progress.progress_percentage}%`,
-                        height: '100%',
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </div>
-                  <div style={{ marginTop: '8px', fontSize: '14px', color: '#666', textAlign: 'center' }}>
-                    Overall Progress: {selectedProject.progress.progress_percentage}%
-                  </div>
-                </div>
+                
+                {/* Project Overview Stats - Inline */}
+                {(() => {
+                  const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                  const completedTasks = thisProjectTasks.filter(t => t.is_completed).length;
+                  const inProgressTasks = thisProjectTasks.filter(t => !t.is_completed).length;
+                  const rootTasks = thisProjectTasks.filter(t => !t.parent_task_id).length;
+                  const subTasks = thisProjectTasks.filter(t => t.parent_task_id).length;
+                  
+                  return (
+                    <div style={{ 
+                      flex: 1, 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '20px',
+                      justifyContent: 'center',
+                      paddingLeft: '20px',
+                      paddingRight: '20px'
+                    }}>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Total Tasks (All Levels)</div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#0f172a' }}>
+                          {thisProjectTasks.length}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Completed</div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#10b981' }}>
+                          {completedTasks}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>In Progress</div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#3b82f6' }}>
+                          {inProgressTasks}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Root Tasks</div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#8b5cf6' }}>
+                          {rootTasks}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Sub-tasks</div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f97316' }}>
+                          {subTasks}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={handleBackToProjects}
+                  style={{
+                    padding: '10px 20px',
+                    fontSize: '14px',
+                    background: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+                    border: 'none',
+                    color: 'white',
+                    fontWeight: '600',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+                    minWidth: 'fit-content',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  ← Back to Projects
+                </button>
               </div>
 
-              {/* Project Milestones Section */}
-              <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', cursor: 'pointer' }}
-                  onClick={() => setExpandedSections(prev => ({ ...prev, milestones: !prev.milestones }))}
-                >
-                  <h3 style={{ margin: 0 }}>
-                    {expandedSections.milestones ? '▼' : '▶'} 🎯 Milestones: {projectMilestones.length} (Total Tasks: {(() => {
-                      // Calculate total tasks across all milestones
-                      return projectMilestones.reduce((sum, milestone) => {
-                        return sum + projectTasks.filter(task => task.milestone_id === milestone.id).length;
-                      }, 0);
-                    })()})
-                  </h3>
+              {/* All Tasks Section */}
+              <div className="project-all-tasks-section" style={{ marginBottom: '30px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  marginBottom: '15px',
+                  borderBottom: '2px solid #3182ce',
+                  paddingBottom: '10px'
+                }}>
+                  <div 
+                    style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }}
+                    onClick={() => setExpandedSections(prev => ({ ...prev, allTasks: !prev.allTasks }))}
+                  >
+                    <h3 style={{ margin: 0, fontSize: '20px', color: '#2c3e50' }}>
+                      {expandedSections.allTasks ? '▼' : '▶'} 📋 All Tasks
+                    </h3>
+                    <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
+                      {(() => {
+                        const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                        return `${thisProjectTasks.filter(t => t.is_completed).length} / ${thisProjectTasks.length} completed`;
+                      })()}
+                    </span>
+                  </div>
                   <button 
-                    className="btn btn-secondary" 
+                    className="btn btn-primary" 
                     onClick={(e) => {
                       e.stopPropagation();
-                      setShowAddProjectMilestoneModal(true);
+                      setShowAddTaskModal(true);
                     }}
+                    style={{ fontSize: '14px', padding: '8px 16px' }}
                   >
-                    ➕ Add Milestone
+                    ➕ Add Project Task
                   </button>
                 </div>
-                
-                {expandedSections.milestones && (
-                  !projectMilestones || projectMilestones.length === 0 ? (
-                    <div className="empty-state" style={{ padding: '20px', fontSize: '14px' }}>
-                      <p>No milestones yet. Add milestones to track project phases.</p>
-                    </div>
-                  ) : (
-                    <div className="milestones-list">
-                      {projectMilestones.map((milestone, index) => {
-                      // Calculate all tasks for this milestone
-                      const milestoneTasks = projectTasks.filter(task => task.milestone_id === milestone.id);
-                      const completedTasks = milestoneTasks.filter(task => task.is_completed).length;
-                      const totalTasks = milestoneTasks.length;
+
+                {/* Filter Buttons */}
+                {expandedSections.allTasks && (
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '10px', 
+                    marginBottom: '15px',
+                    flexWrap: 'wrap',
+                    padding: '10px',
+                    background: '#f8f9fa',
+                    borderRadius: '6px'
+                  }}>
+                    {(() => {
+                      // Helper function to get all tasks including subtasks recursively
+                      const getAllTasksRecursive = (taskList: ProjectTaskData[]): ProjectTaskData[] => {
+                        const result: ProjectTaskData[] = [];
+                        const addTaskAndChildren = (task: ProjectTaskData) => {
+                          result.push(task);
+                          const children = taskList.filter(t => t.parent_task_id === task.id);
+                          children.forEach(child => addTaskAndChildren(child));
+                        }
+                        taskList.filter(t => !t.parent_task_id).forEach(root => addTaskAndChildren(root));
+                        return result;
+                      }
+                      
+                      const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                      const allTasksRecursive = getAllTasksRecursive(thisProjectTasks);
+                      const totalCount = allTasksRecursive.length;
+                      const inProgressCount = allTasksRecursive.filter(t => !t.is_completed).length;
+                      const completedCount = allTasksRecursive.filter(t => t.is_completed).length;
+                      const noMilestoneCount = allTasksRecursive.filter(t => !t.milestone_id).length;
                       
                       return (
-                        <div 
-                          key={milestone.id} 
-                          style={{ 
-                            display: 'flex',
-                            alignItems: 'center', 
-                            justifyContent: 'space-between',
-                            padding: '10px 15px', 
-                            background: milestone.is_completed ? '#e6f7ed' : '#f8f9fa',
-                            border: `1px solid ${milestone.is_completed ? '#9ae6b4' : '#e0e0e0'}`,
-                            borderRadius: '6px',
-                            marginBottom: '8px',
-                            fontSize: '13px',
-                            gap: '15px'
-                          }}
-                        >
-                          {/* Left side: Checkbox + Number + Name (fixed width) + Stats + Date (aligned columns) */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
-                            <input
-                              type="checkbox"
-                              checked={milestone.is_completed}
-                              onChange={() => handleToggleProjectMilestone(milestone.id, !milestone.is_completed)}
-                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                            />
-                            <span style={{ fontWeight: 'bold', color: '#666', minWidth: '25px' }}>#{index + 1}</span>
-                            <span 
-                              onClick={() => {
-                                setSelectedMilestone(milestone);
-                                setShowMilestoneDetailModal(true);
-                              }}
-                              style={{ 
-                                fontWeight: '600', 
-                                color: '#3182ce', 
-                                fontSize: '14px', 
-                                width: '280px',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                cursor: 'pointer',
-                                textDecoration: 'underline'
-                              }}
-                              title={`Click to view details: ${milestone.name}`}
-                            >
-                              {milestone.name}
-                            </span>
-                            <span style={{ color: '#805ad5', fontWeight: '500', minWidth: '80px' }}>Tasks: {completedTasks}/{totalTasks}</span>
-                            <span style={{ color: '#666', minWidth: '100px' }}>
-                              {parseDateString(milestone.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </span>
-                          </div>
-                          
-                          {/* Right side: Overdue badge + Action Buttons */}
-                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            {parseDateString(milestone.target_date) < new Date() && !milestone.is_completed && (
-                              <span style={{ 
-                                color: '#fff',
-                                background: '#f56565',
-                                padding: '2px 8px',
-                                borderRadius: '4px',
-                                fontSize: '11px',
-                                fontWeight: 'bold'
-                              }}>
-                                ⚠️ Overdue
-                              </span>
-                            )}
-                            <button
-                              onClick={() => {
-                                setEditingMilestone(milestone);
-                                setShowEditProjectMilestoneModal(true);
-                              }}
-                              style={{ 
-                                padding: '5px 10px', 
-                                fontSize: '12px',
-                                background: '#4299e1', 
-                                color: 'white', 
-                                border: 'none', 
-                                borderRadius: '4px', 
-                                cursor: 'pointer',
-                                fontWeight: '500'
-                              }}
-                              title="Edit milestone"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteProjectMilestone(milestone.id)}
-                              style={{ 
-                                padding: '5px 10px', 
-                                fontSize: '12px',
-                                background: '#f56565', 
-                                color: 'white', 
-                                border: 'none', 
-                                borderRadius: '4px', 
-                                cursor: 'pointer',
-                                fontWeight: '500'
-                              }}
-                              title="Delete milestone"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
+                        <>
+                          <button
+                            className={`btn ${projectTaskFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setProjectTaskFilter('all')}
+                            style={{ fontSize: '13px', padding: '6px 12px' }}
+                          >
+                            👁️ Show All ({totalCount})
+                          </button>
+                          <button
+                            className={`btn ${projectTaskFilter === 'in-progress' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setProjectTaskFilter('in-progress')}
+                            style={{ fontSize: '13px', padding: '6px 12px' }}
+                          >
+                            🔵 In Progress ({inProgressCount})
+                          </button>
+                          <button
+                            className={`btn ${projectTaskFilter === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setProjectTaskFilter('completed')}
+                            style={{ fontSize: '13px', padding: '6px 12px' }}
+                          >
+                            ✅ Completed ({completedCount})
+                          </button>
+                          <button
+                            className={`btn ${projectTaskFilter === 'no-milestone' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setProjectTaskFilter('no-milestone')}
+                            style={{ fontSize: '13px', padding: '6px 12px' }}
+                          >
+                            🎯 No Milestone ({noMilestoneCount})
+                          </button>
+                        </>
                       );
-                    })}
+                    })()}
                   </div>
-                  )
+                )}
+                
+                {expandedSections.allTasks && (
+                  <div className="project-tasks-tree">
+                    {!projectTasks || projectTasks.length === 0 ? (
+                      <div className="empty-state">
+                        <p>No tasks yet. Click "Add Project Task" to get started.</p>
+                      </div>
+                    ) : (
+                      <div className="task-list">
+                        {(() => {
+                          const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                          
+                          // Helper to check if task or any descendant matches filter
+                          const taskMatchesFilter = (task: ProjectTaskData, filter: string): boolean => {
+                            if (filter === 'all') return true;
+                            if (filter === 'in-progress') return !task.is_completed;
+                            if (filter === 'completed') return task.is_completed;
+                            if (filter === 'no-milestone') return !task.milestone_id;
+                            return true;
+                          }
+                          
+                          const hasMatchingDescendant = (taskId: number, filter: string): boolean => {
+                            const children = thisProjectTasks.filter(t => t.parent_task_id === taskId);
+                            return children.some(child => 
+                              taskMatchesFilter(child, filter) || hasMatchingDescendant(child.id, filter)
+                            );
+                          }
+                          
+                          // Get root tasks for this project
+                          let rootTasks = getTasksByParentId(null).filter(task => task.project_id === selectedProject.id);
+                          
+                          // Apply filter - show root if it matches OR if any descendant matches
+                          if (projectTaskFilter !== 'all') {
+                            rootTasks = rootTasks.filter(task => 
+                              taskMatchesFilter(task, projectTaskFilter) || 
+                              hasMatchingDescendant(task.id, projectTaskFilter)
+                            );
+                          }
+                          
+                          return rootTasks.map((task) => (
+                            <TaskNode 
+                              key={task.id} 
+                              task={task} 
+                              level={0}
+                              allTasks={thisProjectTasks}
+                              expandedTasks={expandedTasks}
+                              onToggleExpand={toggleTaskExpansion}
+                              onToggleComplete={(taskId, currentStatus) => handleToggleTaskCompletion(taskId, currentStatus, 'project')}
+                              onDelete={handleDeleteTask}
+                              onEdit={handleEditTask}
+                              onUpdateDueDate={handleUpdateTaskDueDate}
+                              getDueDateColorClass={getDueDateColorClass}
+                              getTasksByParentId={getTasksByParentId}
+                              projectTaskFilter={projectTaskFilter}
+                            />
+                          ));
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Linked Tasks (Important/Misc) Section - NEW */}
+              <div className="project-linked-tasks-section" style={{ marginBottom: '30px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  marginBottom: '15px',
+                  cursor: 'pointer' 
+                }}
+                  onClick={() => setExpandedSections(prev => ({ ...prev, linkedTasks: !prev.linkedTasks }))}
+                >
+                  <h3 style={{ margin: 0 }}>
+                    {expandedSections.linkedTasks ? '▼' : '▶'} 📋 Linked Important/Misc Tasks
+                  </h3>
+                </div>
+                
+                {expandedSections.linkedTasks && (
+                  <div style={{ padding: '15px', background: '#fef3c7', borderRadius: '8px', border: '2px solid #f59e0b' }}>
+                    <p style={{ fontSize: '13px', color: '#92400e', fontStyle: 'italic', marginBottom: '12px' }}>
+                      Important and Misc tasks linked to this project will appear here once the linking feature is implemented.
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -8953,6 +8998,152 @@ export default function Tasks() {
                 )}
               </div>
 
+              {/* Tasks by Frequency Section - NEW */}
+              <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', cursor: 'pointer' }}
+                  onClick={() => setExpandedSections(prev => ({ ...prev, milestones: !prev.milestones }))}
+                >
+                  <h3 style={{ margin: 0 }}>
+                    {expandedSections.milestones ? '▼' : '▶'} 🎯 Milestones: {projectMilestones.length} (Total Tasks: {(() => {
+                      // Calculate total tasks across all milestones
+                      return projectMilestones.reduce((sum, milestone) => {
+                        return sum + projectTasks.filter(task => task.milestone_id === milestone.id).length;
+                      }, 0);
+                    })()})
+                  </h3>
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowAddProjectMilestoneModal(true);
+                    }}
+                  >
+                    ➕ Add Milestone
+                  </button>
+                </div>
+                
+                {expandedSections.milestones && (
+                  !projectMilestones || projectMilestones.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '20px', fontSize: '14px' }}>
+                      <p>No milestones yet. Add milestones to track project phases.</p>
+                    </div>
+                  ) : (
+                    <div className="milestones-list">
+                      {projectMilestones.map((milestone, index) => {
+                      // Calculate all tasks for this milestone
+                      const milestoneTasks = projectTasks.filter(task => task.milestone_id === milestone.id);
+                      const completedTasks = milestoneTasks.filter(task => task.is_completed).length;
+                      const totalTasks = milestoneTasks.length;
+                      
+                      return (
+                        <div 
+                          key={milestone.id} 
+                          style={{ 
+                            display: 'flex',
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            padding: '10px 15px', 
+                            background: milestone.is_completed ? '#e6f7ed' : '#f8f9fa',
+                            border: `1px solid ${milestone.is_completed ? '#9ae6b4' : '#e0e0e0'}`,
+                            borderRadius: '6px',
+                            marginBottom: '8px',
+                            fontSize: '13px',
+                            gap: '15px'
+                          }}
+                        >
+                          {/* Left side: Checkbox + Number + Name (fixed width) + Stats + Date (aligned columns) */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                            <input
+                              type="checkbox"
+                              checked={milestone.is_completed}
+                              onChange={() => handleToggleProjectMilestone(milestone.id, !milestone.is_completed)}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            <span style={{ fontWeight: 'bold', color: '#666', minWidth: '25px' }}>#{index + 1}</span>
+                            <span 
+                              onClick={() => {
+                                setSelectedMilestone(milestone);
+                                setShowMilestoneDetailModal(true);
+                              }}
+                              style={{ 
+                                fontWeight: '600', 
+                                color: '#3182ce', 
+                                fontSize: '14px', 
+                                width: '280px',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                cursor: 'pointer',
+                                textDecoration: 'underline'
+                              }}
+                              title={`Click to view details: ${milestone.name}`}
+                            >
+                              {milestone.name}
+                            </span>
+                            <span style={{ color: '#805ad5', fontWeight: '500', minWidth: '80px' }}>Tasks: {completedTasks}/{totalTasks}</span>
+                            <span style={{ color: '#666', minWidth: '100px' }}>
+                              {parseDateString(milestone.target_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </span>
+                          </div>
+                          
+                          {/* Right side: Overdue badge + Action Buttons */}
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            {parseDateString(milestone.target_date) < new Date() && !milestone.is_completed && (
+                              <span style={{ 
+                                color: '#fff',
+                                background: '#f56565',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 'bold'
+                              }}>
+                                ⚠️ Overdue
+                              </span>
+                            )}
+                            <button
+                              onClick={() => {
+                                setEditingMilestone(milestone);
+                                setShowEditProjectMilestoneModal(true);
+                              }}
+                              style={{ 
+                                padding: '5px 10px', 
+                                fontSize: '12px',
+                                background: '#4299e1', 
+                                color: 'white', 
+                                border: 'none', 
+                                borderRadius: '4px', 
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                              }}
+                              title="Edit milestone"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProjectMilestone(milestone.id)}
+                              style={{ 
+                                padding: '5px 10px', 
+                                fontSize: '12px',
+                                background: '#f56565', 
+                                color: 'white', 
+                                border: 'none', 
+                                borderRadius: '4px', 
+                                cursor: 'pointer',
+                                fontWeight: '500'
+                              }}
+                              title="Delete milestone"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  )
+                )}
+              </div>
+
               {/* Completed Tasks Section */}
               {(() => {
                 const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
@@ -9037,171 +9228,25 @@ export default function Tasks() {
                 );
               })()}
 
-              {/* All Tasks Section */}
-              <div className="project-all-tasks-section" style={{ marginTop: '30px' }}>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
-                  alignItems: 'center', 
-                  marginBottom: '15px',
-                  borderBottom: '2px solid #3182ce',
-                  paddingBottom: '10px'
-                }}>
-                  <div 
-                    style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }}
-                    onClick={() => setExpandedSections(prev => ({ ...prev, allTasks: !prev.allTasks }))}
-                  >
-                    <h3 style={{ margin: 0, fontSize: '20px', color: '#2c3e50' }}>
-                      {expandedSections.allTasks ? '▼' : '▶'} 📋 All Tasks
-                    </h3>
-                    <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
-                      {(() => {
-                        const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                        return `${thisProjectTasks.filter(t => t.is_completed).length} / ${thisProjectTasks.length} completed`;
-                      })()}
-                    </span>
-                  </div>
-                  <button 
-                    className="btn btn-primary" 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowAddTaskModal(true);
-                    }}
-                    style={{ fontSize: '14px', padding: '8px 16px' }}
-                  >
-                    ➕ Add Project Task
-                  </button>
+              {/* Description Section - Moved to End */}
+              {selectedProject.description && (
+                <div className="project-description-section" style={{ marginBottom: '30px' }}>
+                  <h3 style={{ margin: '0 0 12px 0', fontSize: '16px', fontWeight: '600', color: '#2d3748' }}>
+                    📝 Description
+                  </h3>
+                  <p className="project-detail-description" style={{ 
+                    padding: '12px 16px',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0',
+                    margin: 0,
+                    color: '#475569',
+                    fontSize: '14px',
+                    lineHeight: '1.6'
+                  }}>{selectedProject.description}</p>
                 </div>
+              )}
 
-                {/* Filter Buttons */}
-                {expandedSections.allTasks && (
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '10px', 
-                    marginBottom: '15px',
-                    flexWrap: 'wrap',
-                    padding: '10px',
-                    background: '#f8f9fa',
-                    borderRadius: '6px'
-                  }}>
-                    {(() => {
-                      // Helper function to get all tasks including subtasks recursively
-                      const getAllTasksRecursive = (taskList: ProjectTaskData[]): ProjectTaskData[] => {
-                        const result: ProjectTaskData[] = [];
-                        const addTaskAndChildren = (task: ProjectTaskData) => {
-                          result.push(task);
-                          const children = taskList.filter(t => t.parent_task_id === task.id);
-                          children.forEach(child => addTaskAndChildren(child));
-                        }
-                        taskList.filter(t => !t.parent_task_id).forEach(root => addTaskAndChildren(root));
-                        return result;
-                      }
-                      
-                      const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                      const allTasksRecursive = getAllTasksRecursive(thisProjectTasks);
-                      const totalCount = allTasksRecursive.length;
-                      const inProgressCount = allTasksRecursive.filter(t => !t.is_completed).length;
-                      const completedCount = allTasksRecursive.filter(t => t.is_completed).length;
-                      const noMilestoneCount = allTasksRecursive.filter(t => !t.milestone_id).length;
-                      
-                      return (
-                        <>
-                          <button
-                            className={`btn ${projectTaskFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setProjectTaskFilter('all')}
-                            style={{ fontSize: '13px', padding: '6px 12px' }}
-                          >
-                            👁️ Show All ({totalCount})
-                          </button>
-                          <button
-                            className={`btn ${projectTaskFilter === 'in-progress' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setProjectTaskFilter('in-progress')}
-                            style={{ fontSize: '13px', padding: '6px 12px' }}
-                          >
-                            🔵 In Progress ({inProgressCount})
-                          </button>
-                          <button
-                            className={`btn ${projectTaskFilter === 'completed' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setProjectTaskFilter('completed')}
-                            style={{ fontSize: '13px', padding: '6px 12px' }}
-                          >
-                            ✅ Completed ({completedCount})
-                          </button>
-                          <button
-                            className={`btn ${projectTaskFilter === 'no-milestone' ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setProjectTaskFilter('no-milestone')}
-                            style={{ fontSize: '13px', padding: '6px 12px' }}
-                          >
-                            🎯 No Milestone ({noMilestoneCount})
-                          </button>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-                
-                {expandedSections.allTasks && (
-                  <div className="project-tasks-tree">
-                    {!projectTasks || projectTasks.length === 0 ? (
-                      <div className="empty-state">
-                        <p>No tasks yet. Click "Add Project Task" to get started.</p>
-                      </div>
-                    ) : (
-                      <div className="task-list">
-                        {(() => {
-                          const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
-                          
-                          // Helper to check if task or any descendant matches filter
-                          const taskMatchesFilter = (task: ProjectTaskData, filter: string): boolean => {
-                            if (filter === 'all') return true;
-                            if (filter === 'in-progress') return !task.is_completed;
-                            if (filter === 'completed') return task.is_completed;
-                            if (filter === 'no-milestone') return !task.milestone_id;
-                            return true;
-                          }
-                          
-                          const hasMatchingDescendant = (taskId: number, filter: string): boolean => {
-                            const children = thisProjectTasks.filter(t => t.parent_task_id === taskId);
-                            return children.some(child => 
-                              taskMatchesFilter(child, filter) || hasMatchingDescendant(child.id, filter)
-                            );
-                          }
-                          
-                          // Get root tasks for this project
-                          let rootTasks = getTasksByParentId(null).filter(task => task.project_id === selectedProject.id);
-                          
-                          // Apply filter - show root if it matches OR if any descendant matches
-                          if (projectTaskFilter !== 'all') {
-                            rootTasks = rootTasks.filter(task => 
-                              taskMatchesFilter(task, projectTaskFilter) || 
-                              hasMatchingDescendant(task.id, projectTaskFilter)
-                            );
-                          }
-                          
-                          return rootTasks.map((task) => (
-                            <TaskNode 
-                              key={task.id} 
-                              task={task} 
-                              level={0}
-                              allTasks={thisProjectTasks}
-                              expandedTasks={expandedTasks}
-                              onToggleExpand={toggleTaskExpansion}
-                              onToggleComplete={(taskId, currentStatus) => handleToggleTaskCompletion(taskId, currentStatus, 'project')}
-                              onDelete={handleDeleteTask}
-                              onEdit={handleEditTask}
-                              onUpdateDueDate={handleUpdateTaskDueDate}
-                              getDueDateColorClass={getDueDateColorClass}
-                              getTasksByParentId={getTasksByParentId}
-                              projectTaskFilter={projectTaskFilter}
-                            />
-                          ));
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              
               {/* Challenges Section */}
               <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
