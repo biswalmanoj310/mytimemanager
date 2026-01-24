@@ -55,15 +55,15 @@ export default function Layout({ children }: LayoutProps) {
         <button className="menu-button" onClick={toggleSidebar}>
           {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
-        <h1 className="app-title">MyTimeManager</h1>
+        <h1 className="app-title">MakingMeHappier</h1>
         <div className="header-spacer"></div>
       </header>
 
       {/* Sidebar */}
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2 className="sidebar-title">MyTimeManager</h2>
-          <p className="sidebar-subtitle">CANI - Constant And Never-ending Improvement</p>
+          <h2 className="sidebar-title">MakingMeHappier</h2>
+          <p className="sidebar-subtitle">Balance • Growth • Joy</p>
         </div>
 
         <nav className="sidebar-nav">

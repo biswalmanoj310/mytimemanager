@@ -172,7 +172,7 @@ export default function Dashboard() {
     <div className="dashboard">
       <header className="dashboard-header">
         <h1>Dashboard</h1>
-        <p className="subtitle">Welcome to MyTimeManager - Your CANI journey starts here</p>
+        <p className="subtitle">Welcome to MakingMeHappier - Your journey to a balanced, joyful life</p>
       </header>
 
       {/* Overall Stats */}
