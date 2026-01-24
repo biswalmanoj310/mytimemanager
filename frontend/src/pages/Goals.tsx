@@ -533,19 +533,8 @@ const DreamTasksDisplay = ({ selectedWish, onEditTask, onAddSubtask, onTasksLoad
   const topLevelTasks = dreamTasks.filter(t => !t.parent_task_id);
 
   return (
-    <div style={{
-      marginBottom: '20px',
-      padding: '16px',
-      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-      borderRadius: '12px',
-      border: '3px solid #f59e0b'
-    }}>
-      <h4 style={{ margin: '0 0 12px 0', color: '#78350f', fontSize: '16px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        📝 Dream Tasks ({topLevelTasks.length})
-      </h4>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        {topLevelTasks.map(task => renderTask(task, 0))}
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {topLevelTasks.map(task => renderTask(task, 0))}
     </div>
   );
 };
@@ -1686,6 +1675,7 @@ export default function Goals() {
   const [expandedDreamTasks, setExpandedDreamTasks] = useState<Set<number>>(new Set());
   const [editingDreamTask, setEditingDreamTask] = useState<any>(null);
   const dreamTasksRefreshRef = useRef<(() => void) | null>(null);
+  const [showDreamTasksList, setShowDreamTasksList] = useState(false); // Collapsed by default
 
   // Project management state
   interface ProjectTaskData {
@@ -7175,6 +7165,7 @@ return (
                     setDreamTasks([]);
                   }
                   setShowDreamTaskModal(true);
+                  setShowDreamTasksList(false); // Collapse list when opening modal
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
@@ -7272,6 +7263,65 @@ return (
             </div>
 
             <div className="modal-body" style={{ padding: '32px' }}>
+              {/* DREAM TASKS DISPLAY - Expandable section */}
+              <div style={{ marginBottom: '24px' }}>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowDreamTasksList(!showDreamTasksList);
+                  }}
+                  type="button"
+                  style={{
+                    width: '100%',
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    border: '2px solid #f59e0b',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontWeight: '600',
+                    fontSize: '15px',
+                    color: '#78350f',
+                    transition: 'all 0.2s',
+                    position: 'sticky',
+                    top: 0,
+                    zIndex: 10
+                  }}
+                >
+                  <span>📋 Dream Tasks ({dreamTasks.length})</span>
+                  <span style={{ fontSize: '18px' }}>{showDreamTasksList ? '▼' : '▶'}</span>
+                </button>
+                
+                <div style={{
+                  maxHeight: showDreamTasksList ? '2000px' : '0',
+                  overflow: 'hidden',
+                  transition: 'max-height 0.4s ease-in-out',
+                  transformOrigin: 'top'
+                }}>
+                  <div style={{ paddingTop: '12px' }}>
+                    <DreamTasksDisplay 
+                      selectedWish={selectedWish} 
+                      onEditTask={(task) => {
+                        setEditingDreamTask(task);
+                        setSelectedParentDreamTask(null);
+                        setShowDreamTaskModal(true);
+                      }}
+                      onAddSubtask={(parentTask) => {
+                        setSelectedParentDreamTask(parentTask);
+                        setEditingDreamTask(null);
+                        setShowDreamTaskModal(true);
+                      }}
+                      onTasksLoaded={(tasks) => {
+                        setDreamTasks(tasks);
+                      }}
+                      refreshRef={dreamTasksRefreshRef}
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Description */}
               {selectedWish.description && (
                 <p style={{ margin: '0 0 24px 0', fontSize: '16px', color: '#4a5568', lineHeight: '1.7' }}>
@@ -7317,25 +7367,6 @@ return (
 
               {/* Actual Task/Project/Goal Lists */}
               <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} />
-
-              {/* DREAM TASKS DISPLAY - Shows existing tasks in wish detail panel */}
-              <DreamTasksDisplay 
-                selectedWish={selectedWish} 
-                onEditTask={(task) => {
-                  setEditingDreamTask(task);
-                  setSelectedParentDreamTask(null);
-                  setShowDreamTaskModal(true);
-                }}
-                onAddSubtask={(parentTask) => {
-                  setSelectedParentDreamTask(parentTask);
-                  setEditingDreamTask(null);
-                  setShowDreamTaskModal(true);
-                }}
-                onTasksLoaded={(tasks) => {
-                  setDreamTasks(tasks); // Keep parent in sync with loaded tasks
-                }}
-                refreshRef={dreamTasksRefreshRef}
-              />
 
               {/* REFLECTION & ACHIEVEMENT BUTTONS */}
               <div style={{
