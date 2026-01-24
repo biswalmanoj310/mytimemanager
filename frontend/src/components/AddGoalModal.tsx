@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { formatDateForInput } from '../utils/dateHelpers';
 import { PillarCategorySelector } from './PillarCategorySelector';
+import { AlertModal } from './AlertModal';
 
 interface LifeGoal {
   id: number;
@@ -49,6 +50,28 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [subCategoryId, setSubCategoryId] = useState<number | null>(null);
   const [whyCount, setWhyCount] = useState(3);
+  
+  // Alert Modal State
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
+  const [shouldCloseAfterAlert, setShouldCloseAfterAlert] = useState(false);
+  
+  const showAlert = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success', closeAfter: boolean = false) => {
+    setAlertMessage(message);
+    setAlertType(type);
+    setAlertModalOpen(true);
+    setShouldCloseAfterAlert(closeAfter);
+  };
+  
+  const handleAlertClose = () => {
+    setAlertModalOpen(false);
+    if (shouldCloseAfterAlert) {
+      setShouldCloseAfterAlert(false);
+      onSuccess();
+      onClose();
+    }
+  };
 
   // Initialize values when editing
   useEffect(() => {
@@ -111,14 +134,13 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
       
       if (editingGoal && editingGoal.id) {
         await api.put(`/api/life-goals/${editingGoal.id}`, goalData);
-        alert('Goal updated successfully!');
+        showAlert('Goal updated successfully!', 'success', true);
       } else {
         await api.post('/api/life-goals/', goalData);
-        alert('Goal created successfully!');
+        showAlert('Goal created successfully!', 'success', true);
       }
       
-      onSuccess();
-      onClose();
+      // Don't close immediately - wait for alert to be dismissed
     } catch (err: any) {
       console.error('Error saving goal:', err);
       const errorMessage = err.response?.data?.detail 
@@ -126,7 +148,7 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
           ? err.response.data.detail 
           : JSON.stringify(err.response.data.detail))
         : err.message || 'Unknown error';
-      alert('Failed to save goal: ' + errorMessage);
+      showAlert('Failed to save goal: ' + errorMessage, 'error');
     }
   };
 
@@ -344,6 +366,14 @@ export const AddGoalModal: React.FC<AddGoalModalProps> = ({
           </form>
         </div>
       </div>
+      
+      {/* Centered Alert Modal */}
+      <AlertModal
+        isOpen={alertModalOpen}
+        message={alertMessage}
+        type={alertType}
+        onClose={handleAlertClose}
+      />
     </div>
   );
 };

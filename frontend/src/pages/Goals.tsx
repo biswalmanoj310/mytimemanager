@@ -14,6 +14,7 @@ import TaskForm from '../components/TaskForm';
 import { AddGoalModal } from '../components/AddGoalModal';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
+import { AlertModal } from '../components/AlertModal';
 
 // Life Goals interfaces
 interface LifeGoalData {
@@ -1098,6 +1099,18 @@ export default function Goals() {
   // Tab State
   const [activeTab, setActiveTab] = useState<TabType>('goals');
   
+  // Alert Modal State
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [alertType, setAlertType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
+  
+  // Helper function to show centered alert
+  const showAlert = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    setAlertMessage(message);
+    setAlertType(type);
+    setAlertModalOpen(true);
+  };
+  
   // Goals State
   const [lifeGoals, setLifeGoals] = useState<LifeGoalData[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<LifeGoalData | null>(null);
@@ -1108,6 +1121,10 @@ export default function Goals() {
   const [goalProjects, setGoalProjects] = useState<any[]>([]); // Standalone projects
   const [goalTrackingProjects, setGoalTrackingProjects] = useState<GoalProjectData[]>([]); // NEW: Tracking dashboards
   const [goalChallenges, setGoalChallenges] = useState<{direct_challenges: any[], project_challenges: any[]} | null>(null); // Challenges related to goal
+  
+  // Pillars and Categories for organization
+  const [goalPillars, setGoalPillars] = useState<any[]>([]);
+  const [goalCategories, setGoalCategories] = useState<any[]>([]);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [showAddGoalTaskModal, setShowAddGoalTaskModal] = useState(false);
@@ -1119,13 +1136,19 @@ export default function Goals() {
   const [showAddProjectToGoalModal, setShowAddProjectToGoalModal] = useState(false); // Dedicated Add Project modal
   const [goalProjectPillarId, setGoalProjectPillarId] = useState<number | null>(null);
   
-  // Section collapse state - all sections expanded by default
-  const [collapsedSections, setCollapsedSections] = useState<{[key: string]: boolean}>({
-    'on_track': false,
-    'at_risk': false,
-    'behind': false,
-    'completed': false,
-    'not_started': false
+  // Section collapse state - load from localStorage, default all collapsed
+  const [collapsedSections, setCollapsedSections] = useState<{[key: string]: boolean}>(() => {
+    const saved = localStorage.getItem('collapsedGoalSections');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Failed to parse collapsedGoalSections from localStorage:', e);
+      }
+    }
+    // Default: all sections collapsed (true = collapsed, undefined = collapsed)
+    // Categories will use format: "Hard Work|Office-Tasks", "Hard Work|Learning", etc.
+    return {};
   });
   const [goalProjectCategoryId, setGoalProjectCategoryId] = useState<number | null>(null);
   const [goalProjectSubCategoryId, setGoalProjectSubCategoryId] = useState<number | null>(null);
@@ -1390,7 +1413,7 @@ export default function Goals() {
       setShowWishDetailsModal(false);
     } catch (err: any) {
       console.error('Error archiving wish:', err);
-      alert('Failed to archive wish: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to archive wish: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -1404,19 +1427,27 @@ export default function Goals() {
       }
     } catch (err: any) {
       console.error('Error updating wish status:', err);
-      alert('Failed to update status: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to update status: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
   
   const loadLifeGoals = async () => {
     try {
       setLoading(true);
-      const response = await api.get<LifeGoalData[]>('/api/life-goals/?include_completed=true');
-      console.log('Life goals loaded:', response);
-      setLifeGoals(response);
+      const [goalsResponse, pillarsResponse, categoriesResponse] = await Promise.all([
+        api.get<LifeGoalData[]>('/api/life-goals/?include_completed=true'),
+        api.get<any[]>('/api/pillars/'),
+        api.get<any[]>('/api/categories/')
+      ]);
+      console.log('Life goals loaded:', goalsResponse);
+      console.log('Pillars loaded:', pillarsResponse);
+      console.log('Categories loaded:', categoriesResponse);
+      setLifeGoals(goalsResponse);
+      setGoalPillars(pillarsResponse);
+      setGoalCategories(categoriesResponse);
     } catch (error) {
       console.error('Error loading life goals:', error);
-      alert('Failed to load life goals');
+      showAlert('Failed to load life goals', 'error');
     } finally {
       setLoading(false);
     }
@@ -1486,7 +1517,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error updating life goal:', error);
-      alert('Failed to update goal');
+      showAlert('Failed to update goal', 'error');
     }
   };
 
@@ -1502,7 +1533,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error deleting life goal:', error);
-      alert('Failed to delete goal');
+      showAlert('Failed to delete goal', 'error');
     }
   };
 
@@ -1513,7 +1544,7 @@ export default function Goals() {
       setShowAddMilestoneModal(false);
     } catch (error) {
       console.error('Error creating milestone:', error);
-      alert('Failed to create milestone');
+      showAlert('Failed to create milestone', 'error');
     }
   };
 
@@ -1525,7 +1556,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error toggling milestone:', error);
-      alert('Failed to update milestone');
+      showAlert('Failed to update milestone', 'error');
     }
   };
 
@@ -1540,7 +1571,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error deleting milestone:', error);
-      alert('Failed to delete milestone');
+      showAlert('Failed to delete milestone', 'error');
     }
   };
 
@@ -1568,7 +1599,7 @@ export default function Goals() {
       setAvailableTasks([]);
     } catch (error) {
       console.error('Error linking task:', error);
-      alert('Failed to link task');
+      showAlert('Failed to link task', 'error');
     }
   };
 
@@ -1598,7 +1629,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error unlinking task:', error);
-      alert('Failed to unlink task');
+      showAlert('Failed to unlink task', 'error');
     }
   };
 
@@ -1609,7 +1640,7 @@ export default function Goals() {
       setShowAddGoalTaskModal(false);
     } catch (error) {
       console.error('Error creating goal task:', error);
-      alert('Failed to create task');
+      showAlert('Failed to create task', 'error');
     }
   };
 
@@ -1627,7 +1658,7 @@ export default function Goals() {
       });
     } catch (err: any) {
       console.error('Error loading project tasks:', err);
-      alert('Failed to load project tasks: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to load project tasks: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -1681,7 +1712,7 @@ export default function Goals() {
       setSelectedProjectForTask(null);
     } catch (err: any) {
       console.error('Error creating project task:', err);
-      alert('Failed to create task: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to create task: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -1705,7 +1736,7 @@ export default function Goals() {
       setEditingProjectTask(null);
     } catch (err: any) {
       console.error('Error updating project task:', err);
-      alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to update task: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -1725,7 +1756,7 @@ export default function Goals() {
       }
     } catch (err: any) {
       console.error('Error toggling task completion:', err);
-      alert('Failed to update task: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to update task: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -1747,7 +1778,7 @@ export default function Goals() {
       }
     } catch (err: any) {
       console.error('Error deleting project task:', err);
-      alert('Failed to delete task: ' + (err.response?.data?.detail || err.message));
+      showAlert('Failed to delete task: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
 
@@ -1770,7 +1801,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error updating goal task:', error);
-      alert('Failed to update task');
+      showAlert('Failed to update task', 'error');
     }
   };
 
@@ -1785,7 +1816,7 @@ export default function Goals() {
       }
     } catch (error) {
       console.error('Error deleting goal task:', error);
-      alert('Failed to delete task');
+      showAlert('Failed to delete task', 'error');
     }
   };
 
@@ -2006,7 +2037,7 @@ export default function Goals() {
                     await loadLifeGoals();
                   } catch (err) {
                     console.error('Error completing goal:', err);
-                    alert('Failed to complete goal');
+                    showAlert('Failed to complete goal', 'error');
                   }
                 }}
                 style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px', backgroundColor: '#10b981', border: 'none' }}
@@ -2026,7 +2057,7 @@ export default function Goals() {
                     await loadLifeGoals();
                   } catch (err) {
                     console.error('Error reopening goal:', err);
-                    alert('Failed to reopen goal');
+                    showAlert('Failed to reopen goal', 'error');
                   }
                 }}
                 style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px', backgroundColor: '#f59e0b', border: 'none' }}
@@ -3336,131 +3367,271 @@ return (
               </div>
             ) : (
               <>
-                {/* � Active & On Track Section */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 
-                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'on_track': !prev['on_track'] }))}
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: '#059669',
-                        marginBottom: '16px',
-                        padding: '8px 12px',
-                        background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                        borderRadius: '8px',
-                        border: '2px solid #10b981',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                      <span>🚀 Goals: Active & On Track ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'on_track').length})</span>
-                      <span>{collapsedSections['on_track'] ? '▶' : '▼'}</span>
-                    </h3>
-                    {!collapsedSections['on_track'] && (
-                      <div className="goals-grid">
-                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'on_track').map((goal, index) => renderGoalCard(goal, index))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                {/* Summary Panel - Goal counts by category */}
+                {(() => {
+                  // Define hierarchy order (same as Projects and Daily tabs)
+                  const hierarchyOrder: { [key: string]: number } = {
+                    'Hard Work|Office-Tasks': 1,
+                    'Hard Work|Learning': 2,
+                    'Hard Work|Confidence': 3,
+                    'Calmness|Yoga': 4,
+                    'Calmness|Sleep': 5,
+                    'Family|My Tasks': 6,
+                    'Family|Home Tasks': 7,
+                    'Family|Time Waste': 8
+                  };
 
-                {/* ⚠️ At Risk Section - Needs Attention */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 
-                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'at_risk': !prev['at_risk'] }))}
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: '#d97706',
-                        marginBottom: '16px',
-                        padding: '8px 12px',
-                        background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                        borderRadius: '8px',
-                        border: '2px solid #f59e0b',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                      <span>⚠️ Goals: At Risk ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'at_risk').length})</span>
-                      <span>{collapsedSections['at_risk'] ? '▶' : '▼'}</span>
-                    </h3>
-                    {!collapsedSections['at_risk'] && (
-                      <div className="goals-grid">
-                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'at_risk').map((goal, index) => renderGoalCard(goal, index))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  // Group goals by category (pillar_id + category_id)
+                  const goalsByCategory: { [key: string]: LifeGoalData[] } = {};
+                  const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed');
+                  
+                  activeGoals.forEach(goal => {
+                    if (goal.pillar_id && goal.category_id) {
+                      const pillar = goalPillars.find(p => p.id === goal.pillar_id);
+                      const category = goalCategories.find(c => c.id === goal.category_id);
+                      if (pillar && category) {
+                        const key = `${pillar.name}|${category.name}`;
+                        if (!goalsByCategory[key]) {
+                          goalsByCategory[key] = [];
+                        }
+                        goalsByCategory[key].push(goal);
+                      }
+                    }
+                  });
 
-                {/* � Behind Schedule Section - Urgent */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 
-                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'behind': !prev['behind'] }))}
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: '#dc2626',
-                        marginBottom: '16px',
-                        padding: '8px 12px',
-                        background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-                        borderRadius: '8px',
-                        border: '2px solid #ef4444',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}>
-                      <span>� Goals: Behind Schedule ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'behind').length})</span>
-                      <span>{collapsedSections['behind'] ? '▶' : '▼'}</span>
-                    </h3>
-                    {!collapsedSections['behind'] && (
-                      <div className="goals-grid">
-                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'behind').map((goal, index) => renderGoalCard(goal, index))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                  // Sort categories by hierarchy
+                  const sortedCategories = Object.keys(goalsByCategory).sort((a, b) => {
+                    const orderA = hierarchyOrder[a] || 999;
+                    const orderB = hierarchyOrder[b] || 999;
+                    return orderA - orderB;
+                  });
 
-                {/* 📋 Not Started Section - Planned */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length > 0 && (
-                  <div style={{ marginBottom: '32px' }}>
-                    <h3 
-                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'not_started': !prev['not_started'] }))}
-                      style={{
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: '#64748b',
-                        marginBottom: '16px',
-                        padding: '8px 12px',
-                        background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
-                        borderRadius: '8px',
-                        border: '2px solid #94a3b8',
-                        cursor: 'pointer',
+                  return (
+                    <div style={{ 
+                      marginBottom: '24px',
+                      padding: '16px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}>
+                      <div style={{ 
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
+                        flexWrap: 'wrap',
+                        gap: '12px'
                       }}>
-                      <span>📋 Goals: Not Started ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'not_started').length})</span>
-                      <span>{collapsedSections['not_started'] ? '▶' : '▼'}</span>
-                    </h3>
-                    {!collapsedSections['not_started'] && (
-                      <div className="goals-grid">
-                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'not_started').map((goal, index) => renderGoalCard(goal, index))}
+                        {sortedCategories.map(categoryKey => {
+                          const goals = goalsByCategory[categoryKey];
+                          const [pillarName, categoryName] = categoryKey.split('|');
+                          
+                          // Get pillar emoji
+                          const pillarEmojis: { [key: string]: string } = {
+                            'Hard Work': '💼',
+                            'Calmness': '🧘',
+                            'Family': '👨‍👩‍👦'
+                          };
+                          const emoji = pillarEmojis[pillarName] || '🎯';
+
+                          return (
+                            <div 
+                              key={categoryKey}
+                              style={{
+                                padding: '10px 16px',
+                                backgroundColor: 'rgba(255,255,255,0.95)',
+                                borderRadius: '8px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                              }}
+                              title={`${pillarName} - ${categoryName}`}
+                            >
+                              <span style={{ fontSize: '18px' }}>{emoji}</span>
+                              <div>
+                                <div style={{ 
+                                  fontSize: '14px',
+                                  fontWeight: '600',
+                                  color: '#2d3748'
+                                }}>
+                                  {categoryName}
+                                </div>
+                                <div style={{ 
+                                  fontSize: '12px',
+                                  color: '#666'
+                                }}>
+                                  {goals.length} goal{goals.length !== 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div 
+                          style={{
+                            padding: '10px 16px',
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                            border: '2px solid #48bb78'
+                          }}
+                        >
+                          <span style={{ fontSize: '18px' }}>🎯</span>
+                          <div>
+                            <div style={{ 
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              color: '#2d3748'
+                            }}>
+                              Total Goals
+                            </div>
+                            <div style={{ 
+                              fontSize: '20px',
+                              fontWeight: '700',
+                              color: '#48bb78'
+                            }}>
+                              {lifeGoals.filter(g => !g.parent_goal_id).length}
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
+                  );
+                })()}
+
+                {/* Goal Sections - Category-based (matching Projects tab) */}
+                {(() => {
+                  // Define hierarchy order (same as Projects and Daily tabs)
+                  const hierarchyOrder: { [key: string]: number } = {
+                    'Hard Work|Office-Tasks': 1,
+                    'Hard Work|Learning': 2,
+                    'Hard Work|Confidence': 3,
+                    'Calmness|Yoga': 4,
+                    'Calmness|Sleep': 5,
+                    'Family|My Tasks': 6,
+                    'Family|Home Tasks': 7,
+                    'Family|Time Waste': 8
+                  };
+
+                  // Group active goals by category
+                  const goalsByCategory: { [key: string]: LifeGoalData[] } = {};
+                  const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed');
+                  
+                  activeGoals.forEach(goal => {
+                    if (goal.pillar_id && goal.category_id) {
+                      const pillar = goalPillars.find(p => p.id === goal.pillar_id);
+                      const category = goalCategories.find(c => c.id === goal.category_id);
+                      if (pillar && category) {
+                        const key = `${pillar.name}|${category.name}`;
+                        if (!goalsByCategory[key]) {
+                          goalsByCategory[key] = [];
+                        }
+                        goalsByCategory[key].push(goal);
+                      }
+                    }
+                  });
+
+                  // Goals without category organization (Goal and Dream Goals)
+                  const uncategorizedGoals = activeGoals.filter(g => !g.pillar_id || !g.category_id);
+
+                  // Sort categories by hierarchy
+                  const sortedCategories = Object.keys(goalsByCategory).sort((a, b) => {
+                    const orderA = hierarchyOrder[a] || 999;
+                    const orderB = hierarchyOrder[b] || 999;
+                    return orderA - orderB;
+                  });
+
+                  return (
+                    <>
+                      {/* Category Sections */}
+                      {sortedCategories.map(categoryKey => {
+                        const categoryGoals = goalsByCategory[categoryKey];
+                        const [pillarName, categoryName] = categoryKey.split('|');
+                        const isCollapsed = collapsedSections[categoryKey] !== false; // Default collapsed
+
+                        return (
+                          <div key={categoryKey} style={{ marginBottom: '32px' }}>
+                            <h3 
+                              onClick={() => {
+                                const newState = { ...collapsedSections, [categoryKey]: !isCollapsed };
+                                setCollapsedSections(newState);
+                                localStorage.setItem('collapsedGoalSections', JSON.stringify(newState));
+                              }}
+                              style={{
+                                fontSize: '18px',
+                                fontWeight: '700',
+                                color: '#2d3748',
+                                marginBottom: '16px',
+                                padding: '12px 16px',
+                                background: 'linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%)',
+                                borderRadius: '8px',
+                                border: '2px solid #e2e8f0',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center'
+                              }}
+                              title={`${pillarName} - ${categoryName}`}
+                            >
+                              <span>{pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {categoryName} ({categoryGoals.length})</span>
+                              <span>{isCollapsed ? '▶' : '▼'}</span>
+                            </h3>
+                            {!isCollapsed && (
+                              <div className="goals-grid">
+                                {categoryGoals.map((goal, index) => renderGoalCard(goal, index))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* Uncategorized Goals (Goal and Dream Goals) */}
+                      {uncategorizedGoals.length > 0 && (
+                        <div style={{ marginBottom: '32px' }}>
+                          <h3 
+                            onClick={() => {
+                              const newState = { ...collapsedSections, 'uncategorized': !collapsedSections['uncategorized'] };
+                              setCollapsedSections(newState);
+                              localStorage.setItem('collapsedGoalSections', JSON.stringify(newState));
+                            }}
+                            style={{
+                              fontSize: '18px',
+                              fontWeight: '700',
+                              color: '#7c3aed',
+                              marginBottom: '16px',
+                              padding: '12px 16px',
+                              background: 'linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%)',
+                              borderRadius: '8px',
+                              border: '2px solid #a78bfa',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <span>🌟 Goal and Dream Goals ({uncategorizedGoals.length})</span>
+                            <span>{collapsedSections['uncategorized'] !== false ? '▶' : '▼'}</span>
+                          </h3>
+                          {collapsedSections['uncategorized'] === false && (
+                            <div className="goals-grid">
+                              {uncategorizedGoals.map((goal, index) => renderGoalCard(goal, index))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* 🏆 Completed Section - Achieved */}
                 {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length > 0 && (
                   <div style={{ marginBottom: '32px' }}>
                     <h3 
-                      onClick={() => setCollapsedSections(prev => ({ ...prev, 'completed': !prev['completed'] }))}
+                      onClick={() => {
+                        const newState = { ...collapsedSections, 'completed': !collapsedSections['completed'] };
+                        setCollapsedSections(newState);
+                        localStorage.setItem('collapsedGoalSections', JSON.stringify(newState));
+                      }}
                       style={{
                         fontSize: '18px',
                         fontWeight: '700',
@@ -3619,7 +3790,9 @@ return (
                     fontSize: '13px',
                     background: '#7c3aed',
                     color: 'white'
-                  }}>{selectedGoal.category}</span>
+                  }}>
+                    {typeof selectedGoal.category === 'string' ? selectedGoal.category : (selectedGoal.category as any).name}
+                  </span>
                 )}
                 {selectedGoal.priority && (
                   <span className={`priority-badge priority-${selectedGoal.priority}`} style={{
@@ -4560,7 +4733,7 @@ return (
                 if (goalProjectCategoryId) projectData.category_id = goalProjectCategoryId;
                 
                 await api.post('/api/projects/', projectData);
-                alert('Project created successfully!');
+                showAlert('Project created successfully!', 'success');
                 setShowAddProjectToGoalModal(false);
                 // Reset form state
                 setGoalProjectPillarId(null);
@@ -4569,7 +4742,7 @@ return (
                 await loadGoalDetails(selectedGoal.id);
               } catch (err: any) {
                 console.error('Error creating project:', err);
-                alert('Failed to create project: ' + (err.response?.data?.detail || err.message));
+                showAlert('Failed to create project: ' + (err.response?.data?.detail || err.message), 'error');
               }
             }}>
               <div style={{
@@ -4939,7 +5112,7 @@ return (
                               setGoalProjects(response.data);
                             } catch (err) {
                               console.error('Error linking project:', err);
-                              alert('Failed to link project');
+                              showAlert('Failed to link project', 'error');
                             }
                           }}
                         >
@@ -5073,7 +5246,7 @@ return (
                   }
                 } catch (err: any) {
                   console.error('Error creating task/project:', err);
-                  alert('Failed to create task/project');
+                  showAlert('Failed to create task/project', 'error');
                 }
               }}>
                 <div className="form-group">
@@ -7639,6 +7812,14 @@ return (
           />
         </div>
       )}
+      
+      {/* Centered Alert Modal */}
+      <AlertModal
+        isOpen={alertModalOpen}
+        message={alertMessage}
+        type={alertType}
+        onClose={() => setAlertModalOpen(false)}
+      />
     </div>
   );
 }
