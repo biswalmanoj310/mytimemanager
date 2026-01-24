@@ -11100,7 +11100,7 @@ export default function Tasks() {
             </>
           )}
         </div>
-      ) : filteredTasks.length === 0 ? (
+      ) : filteredTasks.length === 0 && activeTab !== 'today' ? (
         <div className="empty-state">
           <p>No {activeTab} tasks yet.</p>
           <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
