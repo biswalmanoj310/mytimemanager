@@ -327,6 +327,102 @@ interface WishData {
 
 type TabType = 'goals' | 'wishes';
 
+// Dream Tasks Display Component - Shows dream tasks in wish detail panel
+const DreamTasksDisplay = ({ selectedWish }: { selectedWish: WishData }) => {
+  const [dreamTasks, setDreamTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const loadDreamTasks = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/api/wishes/${selectedWish.id}/tasks`);
+      setDreamTasks(response.data || response || []);
+    } catch (err) {
+      console.error('Error loading dream tasks:', err);
+      setDreamTasks([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDreamTasks();
+  }, [selectedWish.id]);
+
+  if (loading) return null;
+  if (dreamTasks.length === 0) return null;
+
+  const topLevelTasks = dreamTasks.filter(t => !t.parent_task_id);
+
+  return (
+    <div style={{
+      marginBottom: '20px',
+      padding: '16px',
+      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+      borderRadius: '12px',
+      border: '3px solid #f59e0b'
+    }}>
+      <h4 style={{ margin: '0 0 12px 0', color: '#78350f', fontSize: '16px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        📝 Dream Tasks ({topLevelTasks.length})
+      </h4>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {topLevelTasks.map(task => (
+          <div key={task.id} style={{
+            padding: '10px 12px',
+            background: 'white',
+            borderRadius: '8px',
+            border: '2px solid #fbbf24',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            <input 
+              type="checkbox" 
+              checked={task.is_completed}
+              onChange={async () => {
+                try {
+                  await api.put(`/api/wishes/${selectedWish.id}/tasks/${task.id}`, {
+                    is_completed: !task.is_completed
+                  });
+                  loadDreamTasks();
+                } catch (err) {
+                  console.error('Error updating task:', err);
+                }
+              }}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontSize: '14px', 
+                fontWeight: '600', 
+                color: task.is_completed ? '#6b7280' : '#1f2937',
+                textDecoration: task.is_completed ? 'line-through' : 'none'
+              }}>
+                {task.name}
+              </div>
+              {task.description && (
+                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                  {task.description}
+                </div>
+              )}
+              {task.due_date && (
+                <div style={{ fontSize: '11px', color: '#92400e', marginTop: '4px' }}>
+                  📅 Due: {new Date(task.due_date).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+            {task.priority && (
+              <span style={{ fontSize: '12px', fontWeight: '600' }}>
+                {task.priority === 'high' ? '⭐' : task.priority === 'medium' ? '◉' : '○'}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // Wish Activities Component - Shows tasks, projects, goals for a wish
 const WishActivitiesSection = ({ selectedWish }: { selectedWish: WishData }) => {
   const [activities, setActivities] = useState<{ tasks: any[], projects: any[], goals: any[], reflections: any[], explorationSteps: any[], completedItems: any[] }>({ 
@@ -1456,6 +1552,12 @@ export default function Goals() {
   const [wishCategoryId, setWishCategoryId] = useState<number | null>(null);
   const [wishSubCategoryId, setWishSubCategoryId] = useState<number | null>(null);
 
+  // Dream Task state (parent-child tasks for wishes)
+  const [showDreamTaskModal, setShowDreamTaskModal] = useState(false);
+  const [dreamTasks, setDreamTasks] = useState<any[]>([]);
+  const [selectedParentDreamTask, setSelectedParentDreamTask] = useState<any>(null);
+  const [expandedDreamTasks, setExpandedDreamTasks] = useState<Set<number>>(new Set());
+
   // Project management state
   interface ProjectTaskData {
     id: number;
@@ -1744,7 +1846,148 @@ export default function Goals() {
       showAlert('Failed to update status: ' + (err.response?.data?.detail || err.message), 'error');
     }
   };
-  
+
+  // ============================================================================
+  // DREAM TASKS FUNCTIONS (parent-child tasks for wishes)
+  // ============================================================================
+
+  // Render dream task with hierarchy (recursive)
+  const renderDreamTask = (task: any, allTasks: any[], level: number): JSX.Element => {
+    const subtasks = allTasks.filter(t => t.parent_task_id === task.id);
+    const isExpanded = expandedDreamTasks.has(task.id);
+
+    return (
+      <div style={{ marginLeft: level > 0 ? '24px' : '0', marginBottom: '12px' }}>
+        <div style={{
+          background: task.is_completed ? '#f0fdf4' : 'white',
+          border: task.is_completed ? '2px solid #86efac' : '2px solid #e5e7eb',
+          borderRadius: '8px',
+          padding: '12px',
+          display: 'flex',
+          alignItems: 'start',
+          gap: '12px'
+        }}>
+          {subtasks.length > 0 && (
+            <button
+              onClick={() => {
+                setExpandedDreamTasks(prev => {
+                  const newSet = new Set(prev);
+                  if (newSet.has(task.id)) {
+                    newSet.delete(task.id);
+                  } else {
+                    newSet.add(task.id);
+                  }
+                  return newSet;
+                });
+              }}
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '14px',
+                padding: '2px',
+                minWidth: '20px'
+              }}
+            >
+              {isExpanded ? '▼' : '▶'}
+            </button>
+          )}
+          
+          <input
+            type="checkbox"
+            checked={task.is_completed}
+            onChange={async () => {
+              try {
+                await api.put(`/api/wishes/${task.wish_id}/tasks/${task.id}`, {
+                  is_completed: !task.is_completed
+                });
+                const response = await api.get(`/api/wishes/${task.wish_id}/tasks`);
+                setDreamTasks(response.data || response || []);
+              } catch (err) {
+                showAlert('Failed to update task', 'error');
+              }
+            }}
+            style={{ width: '18px', height: '18px', cursor: 'pointer', marginTop: '2px' }}
+          />
+
+          <div style={{ flex: 1 }}>
+            <div style={{
+              fontWeight: level === 0 ? '600' : 'normal',
+              fontSize: level === 0 ? '15px' : '14px',
+              textDecoration: task.is_completed ? 'line-through' : 'none',
+              color: task.is_completed ? '#6b7280' : '#1f2937',
+              marginBottom: task.description || task.due_date ? '4px' : '0'
+            }}>
+              {task.name}
+            </div>
+            {task.description && (
+              <div style={{ fontSize: '13px', color: '#6b7280', marginBottom: '4px' }}>
+                {task.description}
+              </div>
+            )}
+            {task.due_date && (
+              <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                📅 Due: {new Date(task.due_date).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              onClick={() => setSelectedParentDreamTask(task)}
+              style={{
+                padding: '6px 12px',
+                background: '#e0e7ff',
+                border: '1px solid #c7d2fe',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: '#3730a3'
+              }}
+              title="Add subtask"
+            >
+              ➕ Sub
+            </button>
+            <button
+              onClick={async () => {
+                if (confirm('Delete this task and all its subtasks?')) {
+                  try {
+                    await api.delete(`/api/wishes/${task.wish_id}/tasks/${task.id}`);
+                    const response = await api.get(`/api/wishes/${task.wish_id}/tasks`);
+                    setDreamTasks(response.data || response || []);
+                    showToast('Task deleted', 'info');
+                  } catch (err) {
+                    showAlert('Failed to delete task', 'error');
+                  }
+                }
+              }}
+              style={{
+                padding: '6px 12px',
+                background: '#fee2e2',
+                border: '1px solid #fecaca',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                color: '#991b1b'
+              }}
+              title="Delete task"
+            >
+              🗑️
+            </button>
+          </div>
+        </div>
+
+        {/* Render subtasks */}
+        {isExpanded && subtasks.length > 0 && (
+          <div>
+            {subtasks.map(subtask => renderDreamTask(subtask, allTasks, level + 1))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const loadLifeGoals = async () => {
     try {
       setLoading(true);
@@ -6716,6 +6959,7 @@ return (
         <div className="modal-overlay" onClick={() => {
           setShowWishDetailsModal(false);
           setSelectedWish(null);
+          setShowDreamTaskModal(false);
         }} style={{ zIndex: 9999 }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '90vh', overflow: 'auto' }}>
             {/* Beautiful Header */}
@@ -6759,6 +7003,7 @@ return (
               <button className="btn-close" onClick={() => {
                 setShowWishDetailsModal(false);
                 setSelectedWish(null);
+                setShowDreamTaskModal(false);
               }} style={{ color: 'white', fontSize: '32px', top: '16px', right: '16px' }}>×</button>
             </div>
 
@@ -6832,13 +7077,20 @@ return (
                       fontWeight: '600',
                       fontSize: '14px'
                     }}
-                    onClick={() => {
-                      setTaskFormWishId(selectedWish.id);
-                      setShowWishDetailsModal(false); // Close wish modal
-                      setShowTaskFormModal(true);
+                    onClick={async () => {
+                      // Load dream tasks for form modal
+                      try {
+                        const response = await api.get(`/api/wishes/${selectedWish.id}/tasks`);
+                        setDreamTasks(response.data || response || []);
+                        const allTaskIds = (response.data || response || []).map((t: any) => t.id);
+                        setExpandedDreamTasks(new Set(allTaskIds));
+                      } catch (err) {
+                        setDreamTasks([]);
+                      }
+                      setShowDreamTaskModal(true);
                     }}
                   >
-                    ✅ Add Task
+                    📝 Add Dream Task
                   </button>
 
                   <button 
@@ -6920,6 +7172,9 @@ return (
                   </button>
                 </div>
               </div>
+
+              {/* DREAM TASKS DISPLAY - Shows existing tasks in wish detail panel */}
+              <DreamTasksDisplay selectedWish={selectedWish} />
 
               {/* REFLECTION & ACHIEVEMENT BUTTONS */}
               <div style={{
@@ -7055,6 +7310,152 @@ return (
                 >
                   🗄️ Archive
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DREAM TASK CREATION MODAL - Separate modal for creating dream tasks */}
+      {showDreamTaskModal && selectedWish && (
+        <div className="modal-overlay" onClick={() => {
+          setShowDreamTaskModal(false);
+          setSelectedParentDreamTask(null);
+        }} style={{ zIndex: 10001 }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ width: '75%', maxWidth: '700px', maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="modal-header" style={{
+              background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+              color: 'white',
+              padding: '20px'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
+                📝 Dream Tasks
+              </h2>
+              <button className="btn-close" onClick={() => {
+                setShowDreamTaskModal(false);
+                setSelectedParentDreamTask(null);
+              }} style={{ color: 'white' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: '24px' }}>
+              <p style={{ 
+                marginBottom: '20px', 
+                color: '#92400e', 
+                fontSize: '15px', 
+                fontWeight: '600', 
+                background: '#fef3c7', 
+                padding: '12px', 
+                borderRadius: '8px', 
+                border: '2px solid #fbbf24' 
+              }}>
+                💡 Break down your dream into actionable tasks with subtasks! Click "➕ Sub" on any task to create nested subtasks.
+              </p>
+
+              {/* Add New Dream Task Form */}
+              <div style={{
+                background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                padding: '16px',
+                borderRadius: '12px',
+                border: '2px solid #f59e0b',
+                marginBottom: '24px'
+              }}>
+                <h3 style={{ marginTop: 0, marginBottom: '12px', color: '#78350f', fontSize: '16px', fontWeight: '600' }}>
+                  {selectedParentDreamTask ? `➕ Add Subtask to "${selectedParentDreamTask.name}"` : '➕ Add New Task'}
+                </h3>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  const formData = new FormData(e.currentTarget);
+                  try {
+                    await api.post(`/api/wishes/${selectedWish.id}/tasks`, {
+                      name: formData.get('name'),
+                      description: formData.get('description') || null,
+                      parent_task_id: selectedParentDreamTask?.id || null,
+                      start_date: formData.get('start_date') || null,
+                      due_date: formData.get('due_date') || null,
+                      priority: formData.get('priority') || 'medium'
+                    });
+                    showToast('✨ Dream task created!', 'success');
+                    // Reload tasks
+                    const response = await api.get(`/api/wishes/${selectedWish.id}/tasks`);
+                    setDreamTasks(response.data || response || []);
+                    setSelectedParentDreamTask(null);
+                    e.currentTarget.reset();
+                  } catch (err: any) {
+                    showAlert('Failed to create dream task: ' + (err.response?.data?.detail || err.message), 'error');
+                  }
+                }}>
+                  {/* Task Name - Row 1 */}
+                  <input
+                    type="text"
+                    name="name"
+                    placeholder="Add new Task"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: '14px',
+                      border: '2px solid #fbbf24',
+                      borderRadius: '6px',
+                      marginBottom: '10px'
+                    }}
+                  />
+                  
+                  {/* Description - Row 2 */}
+                  <input
+                    type="text"
+                    name="description"
+                    placeholder="Description"
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      fontSize: '14px',
+                      border: '2px solid #fbbf24',
+                      borderRadius: '6px',
+                      marginBottom: '10px'
+                    }}
+                  />
+                  
+                  {/* Start Date, End Date, Create Button - Row 3 */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'center' }}>
+                    <input
+                      type="date"
+                      name="start_date"
+                      placeholder="Start date"
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '14px',
+                        border: '2px solid #fbbf24',
+                        borderRadius: '6px'
+                      }}
+                    />
+                    <input
+                      type="date"
+                      name="due_date"
+                      placeholder="End date"
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '14px',
+                        border: '2px solid #fbbf24',
+                        borderRadius: '6px'
+                      }}
+                    />
+                    <button type="submit" style={{
+                      padding: '10px 24px',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: 'white',
+                      fontWeight: '600',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      ✨ Create
+                    </button>
+                  </div>
+                  
+                  {/* Hidden priority field with default medium */}
+                  <input type="hidden" name="priority" value="medium" />
+                </form>
               </div>
             </div>
           </div>

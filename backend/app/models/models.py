@@ -927,6 +927,7 @@ class Wish(Base):
     reflections = relationship("WishReflection", back_populates="wish", cascade="all, delete-orphan")
     exploration_steps = relationship("WishExplorationStep", back_populates="wish", cascade="all, delete-orphan")
     inspirations = relationship("WishInspiration", back_populates="wish", cascade="all, delete-orphan")
+    dream_tasks = relationship("WishTask", back_populates="wish", cascade="all, delete-orphan")
 
     def to_dict(self):
         """Convert wish to dictionary for JSON serialization"""
@@ -1036,6 +1037,51 @@ class WishInspiration(Base):
 
     def __repr__(self):
         return f"<WishInspiration(wish_id={self.wish_id}, type='{self.inspiration_type}')>"
+
+
+class WishTask(Base):
+    """
+    Dream Tasks - Hierarchical tasks for wishes (similar to project tasks)
+    Supports parent-child structure for organizing dream-related actions
+    """
+    __tablename__ = "wish_tasks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    wish_id = Column(Integer, ForeignKey('wishes.id', ondelete='CASCADE'), nullable=False, index=True)
+    parent_task_id = Column(Integer, ForeignKey('wish_tasks.id', ondelete='CASCADE'), nullable=True, index=True)
+    name = Column(String(300), nullable=False)
+    description = Column(Text, nullable=True)
+    due_date = Column(DateTime(timezone=True), nullable=True, index=True)
+    priority = Column(String(10), nullable=False, default="medium")  # high, medium, low
+    is_completed = Column(Boolean, nullable=False, default=False, index=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    order = Column(Integer, nullable=False, default=0)  # For manual sorting
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    wish = relationship("Wish", back_populates="dream_tasks")
+    parent_task = relationship("WishTask", remote_side=[id], backref="sub_tasks")
+
+    def to_dict(self):
+        """Convert wish task to dictionary for JSON serialization"""
+        return {
+            'id': self.id,
+            'wish_id': self.wish_id,
+            'parent_task_id': self.parent_task_id,
+            'name': self.name,
+            'description': self.description,
+            'due_date': self.due_date.isoformat() if self.due_date else None,
+            'priority': self.priority,
+            'is_completed': self.is_completed,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'order': self.order,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self):
+        return f"<WishTask(id={self.id}, wish_id={self.wish_id}, name='{self.name}', completed={self.is_completed})>"
 
 
 class Challenge(Base):

@@ -13,6 +13,7 @@ from datetime import date
 
 from app.database.config import get_db
 from app.services.wish_service import WishService
+from app.models.models import Wish
 
 
 router = APIRouter(prefix="/api/wishes", tags=["wishes"])
@@ -459,6 +460,139 @@ def get_inspirations(wish_id: int, db: Session = Depends(get_db)):
     """Get all inspirations for a wish"""
     inspirations = WishService.get_inspirations(db, wish_id)
     return inspirations
+
+
+# ============================================================================
+# DREAM TASKS ENDPOINTS (parent-child hierarchical tasks for wishes)
+# ============================================================================
+
+class WishTaskCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parent_task_id: Optional[int] = None
+    due_date: Optional[date] = None
+    priority: Optional[str] = 'medium'
+
+
+class WishTaskUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    parent_task_id: Optional[int] = None
+    due_date: Optional[date] = None
+    priority: Optional[str] = None
+    is_completed: Optional[bool] = None
+    order: Optional[int] = None
+
+
+@router.post("/{wish_id}/tasks", status_code=201)
+def create_dream_task(
+    wish_id: int, 
+    task_data: WishTaskCreate, 
+    db: Session = Depends(get_db)
+):
+    """
+    Create a new dream task for a wish
+    Supports parent-child hierarchy like project tasks
+    """
+    # Verify wish exists
+    wish = db.query(Wish).filter(Wish.id == wish_id).first()
+    if not wish:
+        raise HTTPException(status_code=404, detail="Wish not found")
+    
+    # Create task
+    from app.models.models import WishTask
+    new_task = WishTask(
+        wish_id=wish_id,
+        name=task_data.name,
+        description=task_data.description,
+        parent_task_id=task_data.parent_task_id,
+        due_date=task_data.due_date,
+        priority=task_data.priority or 'medium'
+    )
+    db.add(new_task)
+    db.commit()
+    db.refresh(new_task)
+    return new_task.to_dict()
+
+
+@router.get("/{wish_id}/tasks")
+def get_dream_tasks(wish_id: int, db: Session = Depends(get_db)):
+    """
+    Get all dream tasks for a wish
+    Returns tasks in hierarchical structure
+    """
+    # Verify wish exists
+    wish = db.query(Wish).filter(Wish.id == wish_id).first()
+    if not wish:
+        raise HTTPException(status_code=404, detail="Wish not found")
+    
+    from app.models.models import WishTask
+    tasks = db.query(WishTask).filter(WishTask.wish_id == wish_id).order_by(WishTask.order).all()
+    return [task.to_dict() for task in tasks]
+
+
+@router.put("/{wish_id}/tasks/{task_id}")
+def update_dream_task(
+    wish_id: int,
+    task_id: int,
+    task_data: WishTaskUpdate,
+    db: Session = Depends(get_db)
+):
+    """
+    Update a dream task
+    """
+    from app.models.models import WishTask
+    task = db.query(WishTask).filter(
+        WishTask.id == task_id,
+        WishTask.wish_id == wish_id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Dream task not found")
+    
+    # Update fields
+    if task_data.name is not None:
+        task.name = task_data.name
+    if task_data.description is not None:
+        task.description = task_data.description
+    if task_data.parent_task_id is not None:
+        task.parent_task_id = task_data.parent_task_id
+    if task_data.due_date is not None:
+        task.due_date = task_data.due_date
+    if task_data.priority is not None:
+        task.priority = task_data.priority
+    if task_data.is_completed is not None:
+        task.is_completed = task_data.is_completed
+        if task_data.is_completed:
+            from datetime import datetime
+            task.completed_at = datetime.now()
+        else:
+            task.completed_at = None
+    if task_data.order is not None:
+        task.order = task_data.order
+    
+    db.commit()
+    db.refresh(task)
+    return task.to_dict()
+
+
+@router.delete("/{wish_id}/tasks/{task_id}", status_code=204)
+def delete_dream_task(wish_id: int, task_id: int, db: Session = Depends(get_db)):
+    """
+    Delete a dream task
+    """
+    from app.models.models import WishTask
+    task = db.query(WishTask).filter(
+        WishTask.id == task_id,
+        WishTask.wish_id == wish_id
+    ).first()
+    
+    if not task:
+        raise HTTPException(status_code=404, detail="Dream task not found")
+    
+    db.delete(task)
+    db.commit()
+    return None
 
 
 # ============================================================================
