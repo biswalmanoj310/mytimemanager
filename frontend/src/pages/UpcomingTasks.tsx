@@ -122,16 +122,33 @@ export default function UpcomingTasks() {
     try {
       const endpoint = taskType === 'project' 
         ? `/api/projects/tasks/${taskId}`
-        : taskType === 'misc'
-        ? `/api/misc-tasks/items/${taskId}`
         : `/api/tasks/${taskId}`;
       
-      await api.patch(endpoint, { due_date: newDate });
+      await api.put(endpoint, { due_date: newDate });
       await loadData();
       await refreshAll();
     } catch (error) {
       console.error('Error updating task due date:', error);
       alert('Failed to update due date');
+    }
+  };
+
+  const handleDeleteTask = async (taskId: number, taskType: string, taskName: string) => {
+    if (!confirm(`Are you sure you want to delete "${taskName}"?`)) {
+      return;
+    }
+    
+    try {
+      const endpoint = taskType === 'project' 
+        ? `/api/projects/tasks/${taskId}`
+        : `/api/tasks/${taskId}`;
+      
+      await api.delete(endpoint);
+      await loadData();
+      await refreshAll();
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      alert('Failed to delete task');
     }
   };
 
@@ -150,7 +167,7 @@ export default function UpcomingTasks() {
         ? `/api/projects/tasks/${editingTaskId}`
         : `/api/tasks/${editingTaskId}`;
       
-      await api.patch(endpoint, {
+      await api.put(endpoint, {
         name: editName,
         due_date: editDueDate
       });
@@ -297,7 +314,7 @@ export default function UpcomingTasks() {
                   textAlign: 'center', 
                   fontWeight: '600', 
                   color: `${pillarColor}`,
-                  width: '200px' 
+                  width: '280px' 
                 }}>
                   Action
                 </th>
@@ -449,8 +466,9 @@ export default function UpcomingTasks() {
                               cursor: 'pointer',
                               fontWeight: '600'
                             }}
+                            title="Edit task name and date"
                           >
-                            Edit
+                            ✏️ Edit
                           </button>
                           <button
                             onClick={() => handleCompleteTask(task.id, taskType)}
@@ -464,8 +482,25 @@ export default function UpcomingTasks() {
                               cursor: 'pointer',
                               fontWeight: '600'
                             }}
+                            title="Mark as complete"
                           >
-                            Done
+                            ✅ Done
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTask(task.id, taskType, task.name)}
+                            style={{
+                              padding: '4px 10px',
+                              fontSize: '11px',
+                              backgroundColor: '#ef4444',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontWeight: '600'
+                            }}
+                            title="Delete task"
+                          >
+                            🗑️ Delete
                           </button>
                         </div>
                       )}
