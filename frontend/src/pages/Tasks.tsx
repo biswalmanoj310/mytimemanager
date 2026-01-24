@@ -8010,35 +8010,76 @@ export default function Tasks() {
 
                     return (
                       <>
-                        {/* OVERDUE Section */}
-                        {overdueProjects.length > 0 && (
-                          <div style={{ marginBottom: '40px' }}>
-                            <div 
-                              onClick={() => setCollapsedProjectSections(prev => ({ ...prev, 'overdue': !prev['overdue'] }))}
-                              style={{ 
-                                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                                color: 'white',
-                                padding: '16px 24px',
-                                borderRadius: '12px',
-                                marginBottom: '20px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: '12px',
-                                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)',
-                                cursor: 'pointer'
-                              }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <span style={{ fontSize: '24px' }}>🚨</span>
-                                <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>Overdue</h2>
-                                <span style={{ 
-                                  background: 'rgba(255,255,255,0.3)', 
-                                  padding: '4px 12px', 
+                        {/* Category-based sections */}
+                        {sortedCategories.map(categoryName => {
+                          const categoryProjects = projectsByCategory[categoryName];
+                          const category = categories.find(c => c.name === categoryName);
+                          const pillar = category ? pillars.find(p => p.id === category.pillar_id) : null;
+                          const pillarColor = pillar ? (
+                            pillar.name.includes('Work') ? '#3b82f6' :
+                            pillar.name.includes('Calm') ? '#10b981' :
+                            '#a855f7'
+                          ) : '#64748b';
+
+                          return (
+                            <div key={categoryName} style={{ marginBottom: '40px' }}>
+                              <div 
+                                onClick={() => setCollapsedProjectSections(prev => ({ ...prev, [categoryName]: !prev[categoryName] }))}
+                                style={{ 
+                                  background: `linear-gradient(135deg, ${pillarColor} 0%, ${pillarColor}dd 100%)`,
+                                  color: 'white',
+                                  padding: '16px 24px',
                                   borderRadius: '12px',
-                                  fontSize: '14px',
-                                  fontWeight: 'bold'
+                                  marginBottom: '20px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  gap: '12px',
+                                  boxShadow: `0 4px 12px ${pillarColor}40`,
+                                  cursor: 'pointer'
                                 }}>
-                                  {overdueProjects.length}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{ fontSize: '24px' }}>📂</span>
+                                  <h2 style={{ margin: 0, fontSize: '22px', fontWeight: 'bold' }}>{categoryName}</h2>
+                                  <span style={{ 
+                                    background: 'rgba(255,255,255,0.3)', 
+                                    padding: '4px 12px', 
+                                    borderRadius: '12px',
+                                    fontSize: '14px',
+                                    fontWeight: 'bold'
+                                  }}>
+                                    {categoryProjects.length}
+                                  </span>
+                                  {pillar && (
+                                    <span style={{ 
+                                      background: 'rgba(255,255,255,0.2)', 
+                                      padding: '4px 10px', 
+                                      borderRadius: '10px',
+                                      fontSize: '12px',
+                                      opacity: 0.9
+                                    }}>
+                                      {pillar.name}
+                                    </span>
+                                  )}
+                                </div>
+                                <span style={{ fontSize: '18px' }}>{collapsedProjectSections[categoryName] ? '▶' : '▼'}</span>
+                              </div>
+                              {!collapsedProjectSections[categoryName] && (
+                                <div className="projects-grid">
+                                  {categoryProjects.map(project => renderProjectCard(project))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </>
+              )}
+            </>
+          ) : selectedProject ? (
+            // Project Detail View with Tasks
                                 </span>
                               </div>
                               <span style={{ fontSize: '18px' }}>{collapsedProjectSections['overdue'] ? '▶' : '▼'}</span>
