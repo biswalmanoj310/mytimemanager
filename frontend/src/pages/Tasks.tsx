@@ -8614,7 +8614,15 @@ export default function Tasks() {
                     style={{ display: 'flex', alignItems: 'center', gap: '15px', cursor: 'pointer' }}
                     onClick={() => setExpandedSections(prev => ({ ...prev, allTasks: !prev.allTasks }))}
                   >
-                    <h3 style={{ margin: 0, fontSize: '20px', color: '#2c3e50' }}>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: '22px', 
+                      fontWeight: '700',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text'
+                    }}>
                       {expandedSections.allTasks ? '▼' : '▶'} 📋 All Tasks
                     </h3>
                     <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
@@ -8783,7 +8791,8 @@ export default function Tasks() {
                 )}
               </div>
 
-              {/* Linked Tasks (Important/Misc) Section - NEW */}
+              {/* Linked Tasks (Important/Misc) Section - Hidden until feature is implemented */}
+              {false && (
               <div className="project-linked-tasks-section" style={{ marginBottom: '30px' }}>
                 <div style={{ 
                   display: 'flex', 
@@ -8794,7 +8803,15 @@ export default function Tasks() {
                 }}
                   onClick={() => setExpandedSections(prev => ({ ...prev, linkedTasks: !prev.linkedTasks }))}
                 >
-                  <h3 style={{ margin: 0 }}>
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: '22px', 
+                    fontWeight: '700',
+                    background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text'
+                  }}>
                     {expandedSections.linkedTasks ? '▼' : '▶'} 📋 Linked Important/Misc Tasks
                   </h3>
                 </div>
@@ -8807,8 +8824,24 @@ export default function Tasks() {
                   </div>
                 )}
               </div>
+              )}
 
               {/* Tasks by Frequency Section - NEW */}
+              {(() => {
+                const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                const activeTasks = thisProjectTasks.filter(t => {
+                  if (t.is_completed) return false;
+                  const dailyStatus = dailyStatuses.get(t.id);
+                  if (dailyStatus && dailyStatus.is_completed) return false;
+                  return true;
+                });
+                const hasFrequencyTasks = activeTasks.some(t => 
+                  ['project_task', 'daily', 'weekly', 'monthly', 'yearly', 'one_time'].includes(t.follow_up_frequency || '')
+                );
+                
+                if (!hasFrequencyTasks) return null;
+                
+                return (
               <div className="project-frequency-tasks-section" style={{ marginTop: '30px', marginBottom: '30px' }}>
                 <div style={{ 
                   display: 'flex', 
@@ -8819,7 +8852,15 @@ export default function Tasks() {
                 }}
                   onClick={() => setExpandedSections(prev => ({ ...prev, frequencyTasks: !prev.frequencyTasks }))}
                 >
-                  <h3 style={{ margin: 0 }}>
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: '22px', 
+                    fontWeight: '700',
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text'
+                  }}>
                     {expandedSections.frequencyTasks ? '▼' : '▶'} 📅 Tasks by Frequency
                   </h3>
                 </div>
@@ -9151,13 +9192,26 @@ export default function Tasks() {
                   </div>
                 )}
               </div>
+                );
+              })()}
 
-              {/* Tasks by Frequency Section - NEW */}
+              {/* Milestones Section */}
+              {(() => {
+                if (!projectMilestones || projectMilestones.length === 0) return null;
+                return (
               <div className="project-milestones-section" style={{ marginBottom: '30px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', cursor: 'pointer' }}
                   onClick={() => setExpandedSections(prev => ({ ...prev, milestones: !prev.milestones }))}
                 >
-                  <h3 style={{ margin: 0 }}>
+                  <h3 style={{ 
+                    margin: 0, 
+                    fontSize: '22px', 
+                    fontWeight: '700',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    backgroundClip: 'text'
+                  }}>
                     {expandedSections.milestones ? '▼' : '▶'} 🎯 Milestones: {projectMilestones.length} (Total Tasks: {(() => {
                       // Calculate total tasks across all milestones
                       return projectMilestones.reduce((sum, milestone) => {
@@ -9297,6 +9351,8 @@ export default function Tasks() {
                   )
                 )}
               </div>
+                );
+              })()}
 
               {/* Completed Tasks Section */}
               {(() => {
