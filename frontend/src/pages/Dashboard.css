@@ -23,6 +23,46 @@
 .subtitle {
   color: var(--text-secondary);
   font-size: var(--text-lg);
+  margin-bottom: 12px;
+}
+
+.emotion-tags {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.emotion-tag {
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.emotion-tag:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.25);
+}
+
+.emotion-tag.fulfillment {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 2px solid #764ba2;
+}
+
+.emotion-tag.bliss {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  border: 2px solid #f5576c;
+}
+
+.emotion-tag.joy {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  border: 2px solid #00f2fe;
 }
 
 .dashboard-loading,
@@ -314,12 +354,25 @@
   margin-bottom: 32px;
 }
 
+/* Pomodoro Section */
+.pomodoro-section {
+  margin-bottom: 32px;
+  max-width: 350px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 768px) {
+  .pomodoro-section {
+    max-width: 400px;
+  }
+}
+
 /* Grouped Stats Panels */
 .stats-panels-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 16px;
-  margin-bottom: 32px;
 }
 
 .stats-panel {

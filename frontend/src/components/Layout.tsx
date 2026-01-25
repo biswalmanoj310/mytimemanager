@@ -19,6 +19,7 @@ import {
   Settings
 } from 'lucide-react';
 import { useState } from 'react';
+import PomodoroTree from './PomodoroTree';
 import './Layout.css';
 
 interface LayoutProps {
@@ -63,7 +64,13 @@ export default function Layout({ children }: LayoutProps) {
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <h2 className="sidebar-title">MakingMeHappier</h2>
-          <p className="sidebar-subtitle">Balance • Growth • Joy</p>
+          <p className="sidebar-subtitle">
+            <span className="subtitle-balance">Balance</span> • <span className="subtitle-growth">Growth</span> • <span className="subtitle-joy">Joy</span>
+          </p>
+          <div className="emotion-tags-header">
+            <span className="emotion-tag-small fulfillment">✨ Fulfillment</span>
+            <span className="emotion-tag-small bliss">💫 Bliss</span>
+          </div>
         </div>
 
         <nav className="sidebar-nav">
@@ -79,6 +86,11 @@ export default function Layout({ children }: LayoutProps) {
             </Link>
           ))}
         </nav>
+
+        {/* Pomodoro Tree in Sidebar */}
+        <div className="sidebar-pomodoro">
+          <PomodoroTree />
+        </div>
 
         <div className="sidebar-footer">
           <div className="pillar-legend">

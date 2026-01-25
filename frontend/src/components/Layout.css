@@ -40,6 +40,58 @@
   font-size: var(--text-sm);
   color: var(--text-secondary);
   line-height: 1.4;
+  margin-bottom: 12px;
+}
+
+.subtitle-balance {
+  color: #4CAF50;
+  font-weight: 700;
+}
+
+.subtitle-growth {
+  color: #FF9800;
+  font-weight: 700;
+}
+
+.subtitle-joy {
+  color: #3B82F6;
+  font-weight: 700;
+}
+
+/* Emotion Tags in Sidebar Header */
+.emotion-tags-header {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.emotion-tag-small {
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.emotion-tag-small:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+
+.emotion-tag-small.fulfillment {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.emotion-tag-small.bliss {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.emotion-tag-small.joy {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
 }
 
 .sidebar-nav {
@@ -77,6 +129,14 @@
 
 .nav-label {
   font-size: var(--text-base);
+}
+
+/* Sidebar Pomodoro Section */
+.sidebar-pomodoro {
+  padding: 12px;
+  border-top: 1px solid var(--border-light);
+  border-bottom: 1px solid var(--border-light);
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8eef5 100%);
 }
 
 .sidebar-footer {
