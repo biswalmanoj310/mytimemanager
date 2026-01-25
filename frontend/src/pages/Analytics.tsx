@@ -20,7 +20,8 @@ import {
   Radar,
   PieChart,
   Pie,
-  Cell
+  Cell,
+  LabelList
 } from 'recharts';
 import apiClient from '../services/api';
 import './Analytics.css';
@@ -235,12 +236,12 @@ export default function Analytics() {
   const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
-  const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(false); // Toggle for Task Utilization weekly
-  const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(false); // Toggle for Task Utilization monthly
-  const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(false); // Toggle for Category Utilization weekly
-  const [showUtilizationCategoryMonth, setShowUtilizationCategoryMonth] = useState(false); // Toggle for Category Utilization monthly
-  const [showUtilizationOneTimeWeek, setShowUtilizationOneTimeWeek] = useState(false); // Toggle for One-Time Task Utilization weekly
-  const [showUtilizationOneTimeMonth, setShowUtilizationOneTimeMonth] = useState(false); // Toggle for One-Time Task Utilization monthly
+  const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(() => localStorage.getItem('showUtilizationTaskWeek') === 'true');
+  const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(() => localStorage.getItem('showUtilizationTaskMonth') === 'true');
+  const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(() => localStorage.getItem('showUtilizationCategoryWeek') === 'true');
+  const [showUtilizationCategoryMonth, setShowUtilizationCategoryMonth] = useState(() => localStorage.getItem('showUtilizationCategoryMonth') === 'true');
+  const [showUtilizationOneTimeWeek, setShowUtilizationOneTimeWeek] = useState(() => localStorage.getItem('showUtilizationOneTimeWeek') === 'true');
+  const [showUtilizationOneTimeMonth, setShowUtilizationOneTimeMonth] = useState(() => localStorage.getItem('showUtilizationOneTimeMonth') === 'true');
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -252,6 +253,31 @@ export default function Analytics() {
   const [modalEndDate, setModalEndDate] = useState(formatDateForInput(new Date()));
   const [modalWeekDate, setModalWeekDate] = useState(formatDateForInput(new Date()));
   const [modalMonth, setModalMonth] = useState(formatDateForInput(new Date()).substring(0, 7)); // YYYY-MM format
+
+  // Persist toggle states to localStorage
+  useEffect(() => {
+    localStorage.setItem('showUtilizationTaskWeek', showUtilizationTaskWeek.toString());
+  }, [showUtilizationTaskWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showUtilizationTaskMonth', showUtilizationTaskMonth.toString());
+  }, [showUtilizationTaskMonth]);
+  
+  useEffect(() => {
+    localStorage.setItem('showUtilizationCategoryWeek', showUtilizationCategoryWeek.toString());
+  }, [showUtilizationCategoryWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showUtilizationCategoryMonth', showUtilizationCategoryMonth.toString());
+  }, [showUtilizationCategoryMonth]);
+  
+  useEffect(() => {
+    localStorage.setItem('showUtilizationOneTimeWeek', showUtilizationOneTimeWeek.toString());
+  }, [showUtilizationOneTimeWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showUtilizationOneTimeMonth', showUtilizationOneTimeMonth.toString());
+  }, [showUtilizationOneTimeMonth]);
 
   // Load dynamic configuration on mount
   useEffect(() => {
@@ -309,21 +335,21 @@ export default function Analytics() {
       
       // Load categories
       const categoriesResponse = await apiClient.get('/api/categories/');
-      const categories = categoriesResponse.data.map((c: any, index: number) => ({
+      const categories = categoriesResponse.data.map((c: any) => ({
         id: c.id,
         name: c.name,
         pillar_id: c.pillar_id,
-        order: index // Use array order from database
+        order: c.id // Use ID as order to match Daily tab
       }));
       setCategoriesConfig(categories);
       
       // Load all tasks for ordering
       const tasksResponse = await apiClient.get('/api/tasks?limit=1000');
-      const tasks = tasksResponse.data.map((t: any, index: number) => ({
+      const tasks = tasksResponse.data.map((t: any) => ({
         id: t.id,
         name: t.name,
         category_id: t.category_id,
-        order: index // Use array order from database
+        order: t.id // Use ID as order to match Daily tab
       }));
       setTasksConfig(tasks);
       
@@ -343,9 +369,33 @@ export default function Analytics() {
     return pillar ? pillar.order : 999;
   };
   
+  // Define hierarchy order (same as Daily tab in Tasks.tsx)
+  const hierarchyOrder: { [key: string]: number } = {
+    // Hard Work
+    'Hard Work|Office-Tasks': 1,
+    'Hard Work|Learning': 2,
+    'Hard Work|Confidence': 3,
+    // Calmness
+    'Calmness|Yoga': 4,
+    'Calmness|Sleep': 5,
+    // Family
+    'Family|My Tasks': 6,
+    'Family|Home Tasks': 7,
+    'Family|Time Waste': 8,
+  };
+  
   const getCategoryOrder = (categoryName: string): number => {
+    // Find category to get pillar info
     const category = categoriesConfig.find(c => c.name === categoryName);
-    return category ? category.order : 999;
+    if (!category) return 999;
+    
+    // Find pillar name
+    const pillar = pillarsConfig.find(p => p.id === category.pillar_id);
+    if (!pillar) return 999;
+    
+    // Use hierarchy order mapping
+    const hierarchyKey = `${pillar.name}|${categoryName}`;
+    return hierarchyOrder[hierarchyKey] || 999;
   };
   
   const getTaskOrder = (taskName: string): number => {
@@ -908,7 +958,7 @@ export default function Analytics() {
                     });
                   })()}
                   barSize={35}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                  margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
@@ -933,14 +983,14 @@ export default function Analytics() {
                     name="Ideal (Allocated)" 
                     fill="#cbd5e0" 
                     radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#666', fontSize: 11, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#666', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
                   <Bar 
                     dataKey="today" 
                     name="Today (Actual)" 
                     fill="#4299e1" 
                     radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                   />
                   {showPillarWeek && (
                     <Bar 
@@ -948,7 +998,7 @@ export default function Analytics() {
                       name="Weekly Avg (Actual)" 
                       fill="#48bb78" 
                       radius={[6, 6, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                   {showMonthColumn && (
@@ -957,7 +1007,7 @@ export default function Analytics() {
                       name="Monthly Avg (Actual)" 
                       fill="#ed8936" 
                       radius={[6, 6, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 11, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                 </BarChart>
@@ -1060,7 +1110,7 @@ export default function Analytics() {
                       .slice(0, 20); // Show top 20 tasks
                   })()}
                   barSize={15}
-                  margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                  margin={{ top: 80, right: 30, left: 20, bottom: 60 }}
                 >
                   <CartesianGrid strokeDasharray="0" stroke="#f0f0f0" vertical={false} />
                   <XAxis 
@@ -1072,42 +1122,55 @@ export default function Analytics() {
                   <YAxis 
                     label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
-                    domain={[0, 'auto']}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '10px' }}
                     iconType="rect"
                   />
                   {/* Reference line at 100% - Target utilization */}
-                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" label={{ value: '100%', position: 'right', fill: '#10b981', fontSize: 12, fontWeight: 600 }} />
+                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />
                   <Bar 
                     dataKey="today" 
                     name="Today %" 
                     stackId="today"
                     fill="#4299e1" 
                     radius={[0, 0, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                      if (!props || !props.payload) return '';
-                      const payload = props.payload;
-                      // Only show label if there's no overtime (red bar will handle it otherwise)
-                      if (payload.todayOvertime > 0) return '';
-                      const total = payload.today || 0;
-                      return total > 0 ? `${total.toFixed(0)}%` : '';
-                    }}}
-                  />
+                  >
+                    <LabelList 
+                      dataKey="today"
+                      position="top"
+                      content={(props: any) => {
+                        const { x, y, width, value } = props;
+                        if (!value || value === 0) return null;
+                        return (
+                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                            {`${value.toFixed(0)}%`}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
                   <Bar 
                     dataKey="todayOvertime" 
                     name="Overtime" 
                     stackId="today"
                     fill="#dc2626" 
                     radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                      if (!props || !props.payload) return '';
-                      const payload = props.payload;
-                      const total = (payload.today || 0) + (payload.todayOvertime || 0);
-                      return total > 0 ? `${total.toFixed(0)}%` : '';
-                    }}}
-                  />
+                  >
+                    <LabelList 
+                      dataKey="todayOvertime"
+                      position="top"
+                      content={(props: any) => {
+                        const { x, y, width, value } = props;
+                        if (!value || value === 0) return null;
+                        return (
+                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                            {`${value.toFixed(0)}%`}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
                   {showUtilizationTaskWeek && (
                     <>
                       <Bar 
@@ -1116,28 +1179,44 @@ export default function Analytics() {
                         stackId="weekly"
                         fill="#48bb78" 
                         radius={[0, 0, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          // Only show label if there's no overtime
-                          if (payload.weeklyOvertime > 0) return '';
-                          const total = payload.weekly || 0;
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="weekly"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                       <Bar 
                         dataKey="weeklyOvertime" 
                         name="Weekly Overtime" 
                         stackId="weekly"
                         fill="#dc2626" 
                         radius={[4, 4, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          const total = (payload.weekly || 0) + (payload.weeklyOvertime || 0);
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="weeklyOvertime"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            // Show overtime value directly
+                            
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                     </>
                   )}
                   {showUtilizationTaskMonth && (
@@ -1148,28 +1227,44 @@ export default function Analytics() {
                         stackId="monthly"
                         fill="#ed8936" 
                         radius={[0, 0, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          // Only show label if there's no overtime
-                          if (payload.monthlyOvertime > 0) return '';
-                          const total = payload.monthly || 0;
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="monthly"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                       <Bar 
                         dataKey="monthlyOvertime" 
                         name="Monthly Overtime" 
                         stackId="monthly"
                         fill="#dc2626" 
                         radius={[4, 4, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          const total = (payload.monthly || 0) + (payload.monthlyOvertime || 0);
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="monthlyOvertime"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            // Show overtime value directly
+                            
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                     </>
                   )}
                 </BarChart>
@@ -1306,34 +1401,49 @@ export default function Analytics() {
                     iconType="rect"
                   />
                   {/* Reference line at 100% - Target utilization */}
-                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" label={{ value: '100%', position: 'right', fill: '#10b981', fontSize: 12, fontWeight: 600 }} />
+                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />
                   <Bar 
                     dataKey="today" 
                     name="Today %" 
                     stackId="today"
                     fill="#4299e1" 
                     radius={[0, 0, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 10, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                      if (!props || !props.payload) return '';
-                      const payload = props.payload;
-                      if (payload.todayOvertime > 0) return ''; // Overtime bar will show label
-                      const total = payload.today || 0;
-                      return total > 0 ? `${total.toFixed(0)}%` : '';
-                    }}}
-                  />
+                  >
+                    <LabelList 
+                      dataKey="today"
+                      position="top"
+                      content={(props: any) => {
+                        const { x, y, width, value } = props;
+                        if (!value || value === 0) return null;
+                        return (
+                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                            {`${value.toFixed(0)}%`}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
                   <Bar 
                     dataKey="todayOvertime" 
                     name="Overtime" 
                     stackId="today"
                     fill="#dc2626" 
                     radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 10, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                      if (!props || !props.payload) return '';
-                      const payload = props.payload;
-                      const total = (payload.today || 0) + (payload.todayOvertime || 0);
-                      return total > 0 ? `${total.toFixed(0)}%` : '';
-                    }}}
-                  />
+                  >
+                    <LabelList 
+                      dataKey="todayOvertime"
+                      position="top"
+                      content={(props: any) => {
+                        const { x, y, width, value } = props;
+                        if (!value || value === 0) return null;
+                        return (
+                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                            {`${value.toFixed(0)}%`}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
                   {showUtilizationCategoryWeek && (
                     <>
                       <Bar 
@@ -1342,27 +1452,44 @@ export default function Analytics() {
                         stackId="weekly"
                         fill="#48bb78" 
                         radius={[0, 0, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontSize: 10, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          if (payload.weeklyOvertime > 0) return ''; // Overtime bar will show label
-                          const total = payload.weekly || 0;
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="weekly"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                       <Bar 
                         dataKey="weeklyOvertime" 
                         name="Weekly Overtime" 
                         stackId="weekly"
                         fill="#dc2626" 
                         radius={[4, 4, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          const total = (payload.weekly || 0) + (payload.weeklyOvertime || 0);
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="weeklyOvertime"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            // Show overtime value directly
+                            
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                     </>
                   )}
                   {showUtilizationCategoryMonth && (
@@ -1373,27 +1500,44 @@ export default function Analytics() {
                         stackId="monthly"
                         fill="#ed8936" 
                         radius={[0, 0, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontSize: 10, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          if (payload.monthlyOvertime > 0) return ''; // Overtime bar will show label
-                          const total = payload.monthly || 0;
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="monthly"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                       <Bar 
                         dataKey="monthlyOvertime" 
                         name="Monthly Overtime" 
                         stackId="monthly"
                         fill="#dc2626" 
                         radius={[4, 4, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          const total = (payload.monthly || 0) + (payload.monthlyOvertime || 0);
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="monthlyOvertime"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            // Show overtime value directly
+                            
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                     </>
                   )}
                 </BarChart>
@@ -1515,35 +1659,49 @@ export default function Analytics() {
                     iconType="rect"
                   />
                   {/* Reference line at 100% - Target utilization */}
-                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" label={{ value: '100%', position: 'right', fill: '#10b981', fontSize: 12, fontWeight: 600 }} />
+                  <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />
                   <Bar 
                     dataKey="today" 
                     name="Today %" 
                     stackId="today"
                     fill="#4299e1" 
                     radius={[0, 0, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                      if (!props || !props.payload) return '';
-                      const payload = props.payload;
-                      // Only show label if there's no overtime (red bar will handle it otherwise)
-                      if (payload.todayOvertime > 0) return '';
-                      const total = payload.today || 0;
-                      return total > 0 ? `${total.toFixed(0)}%` : '';
-                    }}}
-                  />
+                  >
+                    <LabelList 
+                      dataKey="today"
+                      position="top"
+                      content={(props: any) => {
+                        const { x, y, width, value } = props;
+                        if (!value || value === 0) return null;
+                        return (
+                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                            {`${value.toFixed(0)}%`}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
                   <Bar 
                     dataKey="todayOvertime" 
                     name="Overtime" 
                     stackId="today"
                     fill="#dc2626" 
                     radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                      if (!props || !props.payload) return '';
-                      const payload = props.payload;
-                      const total = (payload.today || 0) + (payload.todayOvertime || 0);
-                      return total > 0 ? `${total.toFixed(0)}%` : '';
-                    }}}
-                  />
+                  >
+                    <LabelList 
+                      dataKey="todayOvertime"
+                      position="top"
+                      content={(props: any) => {
+                        const { x, y, width, value } = props;
+                        if (!value || value === 0) return null;
+                        return (
+                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                            {`${value.toFixed(0)}%`}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
                   {showUtilizationOneTimeWeek && (
                     <>
                       <Bar 
@@ -1552,27 +1710,44 @@ export default function Analytics() {
                         stackId="weekly"
                         fill="#48bb78" 
                         radius={[0, 0, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          if (payload.weeklyOvertime > 0) return ''; // Overtime bar will show label
-                          const total = payload.weekly || 0;
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="weekly"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                       <Bar 
                         dataKey="weeklyOvertime" 
                         name="Weekly Overtime" 
                         stackId="weekly"
                         fill="#dc2626" 
                         radius={[4, 4, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          const total = (payload.weekly || 0) + (payload.weeklyOvertime || 0);
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="weeklyOvertime"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            // Show overtime value directly
+                            
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                     </>
                   )}
                   {showUtilizationOneTimeMonth && (
@@ -1583,27 +1758,44 @@ export default function Analytics() {
                         stackId="monthly"
                         fill="#ed8936" 
                         radius={[0, 0, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontSize: 9, fontWeight: 500, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          if (payload.monthlyOvertime > 0) return ''; // Overtime bar will show label
-                          const total = payload.monthly || 0;
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="monthly"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                       <Bar 
                         dataKey="monthlyOvertime" 
                         name="Monthly Overtime" 
                         stackId="monthly"
                         fill="#dc2626" 
                         radius={[4, 4, 0, 0]}
-                        label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number, name: any, props: any) => {
-                          if (!props || !props.payload) return '';
-                          const payload = props.payload;
-                          const total = (payload.monthly || 0) + (payload.monthlyOvertime || 0);
-                          return total > 0 ? `${total.toFixed(0)}%` : '';
-                        }}}
-                      />
+                      >
+                        <LabelList 
+                          dataKey="monthlyOvertime"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            // Show overtime value directly
+                            
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {`${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
                     </>
                   )}
                 </BarChart>
