@@ -12,7 +12,7 @@ docker exec mytimemanager-backend python -c "from app.database.config import Bas
 
 echo ""
 echo "[2/2] Verifying database..."
-docker exec mytimemanager-backend python -c "from app.database.config import SessionLocal; from app.models.models import Pillar; db = SessionLocal(); print(f'✓ Database initialized! Tables count: {len(db.execute(\"SELECT name FROM sqlite_master WHERE type=\\\"table\\\"\").fetchall())}'); db.close()"
+docker exec mytimemanager-backend python -c "from app.database.config import SessionLocal; from app.models.models import Pillar; db = SessionLocal(); count = len(db.execute('SELECT name FROM sqlite_master WHERE type=\"table\"').fetchall()); print(f'✓ Database initialized! Tables count: {count}'); db.close()"
 
 echo ""
 echo "========================================"
