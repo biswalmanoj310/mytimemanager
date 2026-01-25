@@ -1257,7 +1257,7 @@ const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selected
                       onClick={() => {
                         // Store wish context in session storage for back navigation
                         sessionStorage.setItem('fromWishId', selectedWish.id);
-                        sessionStorage.setItem('fromWishName', selectedWish.wish_name || selectedWish.name);
+                        sessionStorage.setItem('fromWishName', selectedWish.title);
                         // Navigate to Tasks page with project tab and project selected
                         navigate(`/tasks?tab=projects&project=${project.id}`);
                       }}

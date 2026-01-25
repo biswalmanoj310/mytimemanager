@@ -8453,6 +8453,39 @@ export default function Tasks() {
                     fontWeight: '700',
                     margin: 0
                   }}>{selectedProject.name}</h2>
+                  
+                  {/* Dream Link - if coming from wish */}
+                  {sessionStorage.getItem('fromWishId') && (
+                    <button
+                      onClick={() => {
+                        const wishId = sessionStorage.getItem('fromWishId');
+                        const wishName = sessionStorage.getItem('fromWishName');
+                        // Clear sessionStorage to avoid showing on other projects
+                        sessionStorage.removeItem('fromWishId');
+                        sessionStorage.removeItem('fromWishName');
+                        // Navigate to dream detail page (tab=wishes not tab=dreams)
+                        navigate(`/goals?tab=wishes&wishId=${wishId}`);
+                      }}
+                      style={{
+                        marginTop: '6px',
+                        padding: '6px 12px',
+                        fontSize: '13px',
+                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                        border: 'none',
+                        color: 'white',
+                        fontWeight: '600',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 6px rgba(245, 158, 11, 0.3)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      ✨ Dream: {sessionStorage.getItem('fromWishName') || 'Unknown'}
+                    </button>
+                  )}
+                  
                   {selectedProject.goal_id && (() => {
                     const linkedGoal = lifeGoals.find(g => g.id === selectedProject.goal_id);
                     return linkedGoal && (
