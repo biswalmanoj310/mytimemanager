@@ -9,6 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
   Line,
+  LineChart,
   ComposedChart,
   ReferenceLine,
   Bar,
@@ -200,6 +201,21 @@ export default function Analytics() {
   const [detailedPeriodType, setDetailedPeriodType] = useState<'day' | 'week' | 'month'>('week');
   const [detailedDate, setDetailedDate] = useState<string>(formatDateForInput(new Date()));
   
+  // Detailed view - Multi-select state (up to 3 items)
+  const [selectedTasks, setSelectedTasks] = useState<number[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
+  const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars'>('tasks');
+  
+  // Detailed view - Week/Month-over-Week/Month toggles
+  const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
+  const [showMonthOverMonth, setShowMonthOverMonth] = useState(false);
+  
+  // Detailed view - Historical trend data
+  const [taskTrendData, setTaskTrendData] = useState<any[]>([]);
+  const [categoryTrendData, setCategoryTrendData] = useState<any[]>([]);
+  const [pillarTrendData, setPillarTrendData] = useState<any[]>([]);
+  
   // Comparative pillar data for Today/Week/Month
   const [dailyPillarData, setDailyPillarData] = useState<PillarData[]>([]);
   const [weeklyPillarData, setWeeklyPillarData] = useState<PillarData[]>([]);
@@ -320,6 +336,13 @@ export default function Analytics() {
       setDateRange('custom');
     }
   }, [viewMode, detailedDate, detailedPeriodType]);
+
+  // Load detailed trend data when selections change
+  useEffect(() => {
+    if (viewMode === 'detailed') {
+      loadDetailedTrendData();
+    }
+  }, [viewMode, detailedViewType, selectedTasks, selectedCategories, selectedPillars]);
 
   // Load pillars, categories, and tasks configuration from API
   const loadConfiguration = async () => {
@@ -707,6 +730,100 @@ export default function Analytics() {
       console.error('Error loading analytics:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load detailed trend data for selected tasks/categories/pillars
+  const loadDetailedTrendData = async () => {
+    if (viewMode !== 'detailed') return;
+    
+    try {
+      const today = new Date();
+      
+      // Load task trends if tasks are selected
+      if (detailedViewType === 'tasks' && selectedTasks.length > 0) {
+        // Load last 56 days (8 weeks) of data
+        const dailyData: any[] = [];
+        for (let i = 55; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = formatDateForInput(date);
+          
+          const response = await apiClient.get(`/api/daily-time/entries/${dateStr}`);
+          const entries = response.data || [];
+          
+          // Aggregate by task
+          const dayData: any = { date: dateStr };
+          selectedTasks.forEach(taskId => {
+            // Check both regular tasks and one-time tasks
+            const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
+            if (task) {
+              const taskEntries = entries.filter((e: any) => e.task_id === taskId);
+              const totalMinutes = taskEntries.reduce((sum: number, e: any) => sum + (e.minutes || 0), 0);
+              const allocated = task.allocated_minutes;
+              const utilization = allocated > 0 ? (totalMinutes / allocated) * 100 : 0;
+              dayData[`task_${taskId}`] = utilization;
+              dayData[`task_${taskId}_name`] = task.task_name;
+            }
+          });
+          dailyData.push(dayData);
+        }
+        setTaskTrendData(dailyData);
+      }
+      
+      // Load category trends if categories are selected
+      if (detailedViewType === 'categories' && selectedCategories.length > 0) {
+        const dailyData: any[] = [];
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = formatDateForInput(date);
+          
+          const response = await apiClient.get(`/api/analytics/category-breakdown?start_date=${dateStr}&end_date=${dateStr}`);
+          const categories = response.data.categories || [];
+          
+          const dayData: any = { date: dateStr };
+          selectedCategories.forEach(categoryName => {
+            const category = categories.find((c: any) => c.category_name === categoryName);
+            if (category) {
+              const allocated = category.allocated_hours;
+              const spent = category.spent_hours;
+              const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
+              dayData[`category_${categoryName}`] = utilization;
+            }
+          });
+          dailyData.push(dayData);
+        }
+        setCategoryTrendData(dailyData);
+      }
+      
+      // Load pillar trends if pillars are selected
+      if (detailedViewType === 'pillars' && selectedPillars.length > 0) {
+        const dailyData: any[] = [];
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = formatDateForInput(date);
+          
+          const response = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${dateStr}&end_date=${dateStr}`);
+          const pillars = response.data.pillars || [];
+          
+          const dayData: any = { date: dateStr };
+          selectedPillars.forEach(pillarName => {
+            const pillar = pillars.find((p: any) => p.pillar_name === pillarName);
+            if (pillar) {
+              const allocated = pillar.allocated_hours;
+              const spent = pillar.spent_hours;
+              const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
+              dayData[`pillar_${pillarName}`] = utilization;
+            }
+          });
+          dailyData.push(dayData);
+        }
+        setPillarTrendData(dailyData);
+      }
+    } catch (error) {
+      console.error('Error loading detailed trend data:', error);
     }
   };
 
@@ -2757,43 +2874,551 @@ export default function Analytics() {
         </div>
       )}
 
-      {/* DETAILED VIEW: Custom Date Selection with Comparison Charts */}
+      {/* DETAILED VIEW: Task/Category/Pillar Trend Analysis */}
       {viewMode === 'detailed' && (
         <div className="detailed-view-section">
-          <h2>📅 Detailed Analytics - Custom Time Period</h2>
-          <p className="chart-description">Select a specific date, week, or month to view detailed comparisons</p>
+          <h2>📊 Detailed Trend Analysis</h2>
+          <p className="chart-description">Select tasks, categories, or pillars to view their utilization trends over time</p>
           
-          {/* Period Type and Date Selector */}
-          <div className="detailed-controls">
-            <div className="period-type-selector">
-              <label>View By:</label>
-              <select 
-                value={detailedPeriodType} 
-                onChange={(e) => setDetailedPeriodType(e.target.value as 'day' | 'week' | 'month')}
+          {/* View Type Selector */}
+          <div className="detailed-controls" style={{ marginBottom: '20px', display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button 
+                className={`tab-button ${detailedViewType === 'tasks' ? 'active' : ''}`}
+                onClick={() => {
+                  setDetailedViewType('tasks');
+                  setSelectedTasks([]);
+                  setSelectedCategories([]);
+                  setSelectedPillars([]);
+                }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
               >
-                <option value="day">Single Day</option>
-                <option value="week">Week (Monday-Sunday)</option>
-                <option value="month">Month</option>
-              </select>
+                ✓ Tasks
+              </button>
+              <button 
+                className={`tab-button ${detailedViewType === 'categories' ? 'active' : ''}`}
+                onClick={() => {
+                  setDetailedViewType('categories');
+                  setSelectedTasks([]);
+                  setSelectedCategories([]);
+                  setSelectedPillars([]);
+                }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+              >
+                📁 Categories
+              </button>
+              <button 
+                className={`tab-button ${detailedViewType === 'pillars' ? 'active' : ''}`}
+                onClick={() => {
+                  setDetailedViewType('pillars');
+                  setSelectedTasks([]);
+                  setSelectedCategories([]);
+                  setSelectedPillars([]);
+                }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+              >
+                🎯 Pillars
+              </button>
             </div>
-            
-            <div className="date-selector">
-              <label>Select Date:</label>
-              <input
-                type="date"
-                value={detailedDate}
-                onChange={(e) => setDetailedDate(e.target.value)}
-              />
-            </div>
-            
-            <button 
-              className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-              onClick={() => setShowMonthColumn(!showMonthColumn)}
-              style={{ marginLeft: 'auto' }}
-            >
-              {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-            </button>
           </div>
+
+          {/* Task Selection */}
+          {detailedViewType === 'tasks' && (
+            <div style={{ marginBottom: '20px', padding: '15px', background: '#f7fafc', borderRadius: '8px' }}>
+              <label style={{ fontWeight: 600, marginBottom: '10px', display: 'block' }}>
+                Select Tasks (up to 3) - Time-Based & One-Time Tasks:
+              </label>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {[...allTasksData, ...allOneTimeTasksData].slice(0, 30).map(task => (
+                  <label key={task.task_id} style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    padding: '8px 12px', 
+                    background: selectedTasks.includes(task.task_id) ? '#4299e1' : 'white',
+                    color: selectedTasks.includes(task.task_id) ? 'white' : '#2d3748',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    border: '1px solid #cbd5e0'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTasks.includes(task.task_id)}
+                      onChange={(e) => {
+                        if (e.target.checked && selectedTasks.length < 3) {
+                          setSelectedTasks([...selectedTasks, task.task_id]);
+                        } else if (!e.target.checked) {
+                          setSelectedTasks(selectedTasks.filter(id => id !== task.task_id));
+                        }
+                      }}
+                      disabled={!selectedTasks.includes(task.task_id) && selectedTasks.length >= 3}
+                      style={{ marginRight: '8px' }}
+                    />
+                    {task.task_name}
+                  </label>
+                ))}
+              </div>
+              {selectedTasks.length === 3 && (
+                <p style={{ marginTop: '10px', color: '#ed8936', fontSize: '14px' }}>
+                  Maximum of 3 tasks selected. Uncheck one to select another.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Category Selection */}
+          {detailedViewType === 'categories' && (
+            <div style={{ marginBottom: '20px', padding: '15px', background: '#f7fafc', borderRadius: '8px' }}>
+              <label style={{ fontWeight: 600, marginBottom: '10px', display: 'block' }}>
+                Select Categories (up to 3):
+              </label>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {allCategoriesData.map(category => (
+                  <label key={category.category_name} style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    padding: '8px 12px', 
+                    background: selectedCategories.includes(category.category_name) ? '#48bb78' : 'white',
+                    color: selectedCategories.includes(category.category_name) ? 'white' : '#2d3748',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    border: '1px solid #cbd5e0'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCategories.includes(category.category_name)}
+                      onChange={(e) => {
+                        if (e.target.checked && selectedCategories.length < 3) {
+                          setSelectedCategories([...selectedCategories, category.category_name]);
+                        } else if (!e.target.checked) {
+                          setSelectedCategories(selectedCategories.filter(name => name !== category.category_name));
+                        }
+                      }}
+                      disabled={!selectedCategories.includes(category.category_name) && selectedCategories.length >= 3}
+                      style={{ marginRight: '8px' }}
+                    />
+                    {category.category_name}
+                  </label>
+                ))}
+              </div>
+              {selectedCategories.length === 3 && (
+                <p style={{ marginTop: '10px', color: '#ed8936', fontSize: '14px' }}>
+                  Maximum of 3 categories selected. Uncheck one to select another.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Pillar Selection */}
+          {detailedViewType === 'pillars' && (
+            <div style={{ marginBottom: '20px', padding: '15px', background: '#f7fafc', borderRadius: '8px' }}>
+              <label style={{ fontWeight: 600, marginBottom: '10px', display: 'block' }}>
+                Select Pillars (up to 3):
+              </label>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {dailyPillarData.map(pillar => (
+                  <label key={pillar.pillar_name} style={{ 
+                    display: 'inline-flex', 
+                    alignItems: 'center', 
+                    padding: '8px 12px', 
+                    background: selectedPillars.includes(pillar.pillar_name) ? pillar.color_code : 'white',
+                    color: selectedPillars.includes(pillar.pillar_name) ? 'white' : '#2d3748',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    border: '1px solid #cbd5e0'
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedPillars.includes(pillar.pillar_name)}
+                      onChange={(e) => {
+                        if (e.target.checked && selectedPillars.length < 3) {
+                          setSelectedPillars([...selectedPillars, pillar.pillar_name]);
+                        } else if (!e.target.checked) {
+                          setSelectedPillars(selectedPillars.filter(name => name !== pillar.pillar_name));
+                        }
+                      }}
+                      disabled={!selectedPillars.includes(pillar.pillar_name) && selectedPillars.length >= 3}
+                      style={{ marginRight: '8px' }}
+                    />
+                    {pillar.pillar_name}
+                  </label>
+                ))}
+              </div>
+              {selectedPillars.length === 3 && (
+                <p style={{ marginTop: '10px', color: '#ed8936', fontSize: '14px' }}>
+                  Maximum of 3 pillars selected. Uncheck one to select another.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Show charts only if something is selected */}
+          {((detailedViewType === 'tasks' && selectedTasks.length > 0) ||
+            (detailedViewType === 'categories' && selectedCategories.length > 0) ||
+            (detailedViewType === 'pillars' && selectedPillars.length > 0)) && (
+            <div>
+              <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+                <button 
+                  className={`toggle-month-btn ${showWeekOverWeek ? 'active' : ''}`}
+                  onClick={() => setShowWeekOverWeek(!showWeekOverWeek)}
+                >
+                  {showWeekOverWeek ? '✓' : '✗'} Show Week-over-Week
+                </button>
+                <button 
+                  className={`toggle-month-btn ${showMonthOverMonth ? 'active' : ''}`}
+                  onClick={() => setShowMonthOverMonth(!showMonthOverMonth)}
+                >
+                  {showMonthOverMonth ? '✓' : '✗'} Show Month-over-Month
+                </button>
+              </div>
+
+              {/* Daily Utilization Chart */}
+              <div className="comparative-charts-section" style={{ marginTop: '20px' }}>
+                  <h3>📅 Daily Utilization (Last 56 Days / 8 Weeks)</h3>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <LineChart 
+                      data={detailedViewType === 'tasks' ? taskTrendData : 
+                            detailedViewType === 'categories' ? categoryTrendData : pillarTrendData}
+                      margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis 
+                        dataKey="date" 
+                        angle={-45}
+                        textAnchor="end"
+                        height={60}
+                        style={{ fontSize: '10px' }}
+                      />
+                      <YAxis label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                      <Legend />
+                      <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />
+                      
+                      {/* Render lines for selected items */}
+                      {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
+                        const task = allTasksData.find(t => t.task_id === taskId);
+                        const colors = ['#4299e1', '#48bb78', '#ed8936'];
+                        return (
+                          <Line 
+                            key={taskId}
+                            type="monotone" 
+                            dataKey={`task_${taskId}`}
+                            name={task?.task_name || `Task ${taskId}`}
+                            stroke={colors[index]}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          />
+                        );
+                      })}
+                      
+                      {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
+                        const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                        return (
+                          <Line 
+                            key={categoryName}
+                            type="monotone" 
+                            dataKey={`category_${categoryName}`}
+                            name={categoryName}
+                            stroke={colors[index]}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          />
+                        );
+                      })}
+                      
+                      {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
+                        const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
+                        return (
+                          <Line 
+                            key={pillarName}
+                            type="monotone" 
+                            dataKey={`pillar_${pillarName}`}
+                            name={pillarName}
+                            stroke={pillar?.color_code || '#4299e1'}
+                            strokeWidth={2}
+                            dot={{ r: 3 }}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+              {/* Weekly Utilization Chart */}
+              {showWeekOverWeek && (
+                <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
+                  <h3>📊 Weekly Average (Last 8 Weeks)</h3>
+                  <ResponsiveContainer width="100%" height={350}>
+                      <BarChart 
+                        data={(() => {
+                          const trendData = detailedViewType === 'tasks' ? taskTrendData : 
+                                          detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
+                          
+                          // Calculate weekly averages from daily data (last 8 weeks = 56 days)
+                          const weeklyData: any[] = [];
+                          for (let weekIdx = 0; weekIdx < 8; weekIdx++) {
+                            const weekStart = weekIdx * 7;
+                            const weekEnd = weekStart + 7;
+                            const weekData = trendData.slice(weekStart, weekEnd);
+                            
+                            if (weekData.length === 0) continue;
+                            
+                            const weekEntry: any = { week: `Week ${weekIdx + 1}` };
+                            
+                            // Calculate average for each selected item
+                            if (detailedViewType === 'tasks') {
+                              selectedTasks.forEach((taskId, index) => {
+                                const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
+                                const values = weekData.map(d => d[`task_${taskId}`] || 0).filter(v => v > 0);
+                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                weekEntry[`task_${taskId}`] = avg;
+                                weekEntry[`task_${taskId}_name`] = task?.task_name || `Task ${taskId}`;
+                              });
+                            } else if (detailedViewType === 'categories') {
+                              selectedCategories.forEach((categoryName) => {
+                                const values = weekData.map(d => d[`category_${categoryName}`] || 0).filter(v => v > 0);
+                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                weekEntry[`category_${categoryName}`] = avg;
+                              });
+                            } else if (detailedViewType === 'pillars') {
+                              selectedPillars.forEach((pillarName) => {
+                                const values = weekData.map(d => d[`pillar_${pillarName}`] || 0).filter(v => v > 0);
+                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                weekEntry[`pillar_${pillarName}`] = avg;
+                              });
+                            }
+                            
+                            weeklyData.push(weekEntry);
+                          }
+                          
+                          return weeklyData.reverse();
+                        })()}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="week" />
+                        <YAxis label={{ value: 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                        <Legend />
+                        <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />
+                        
+                        {/* Render bars for selected items */}
+                        {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
+                          const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
+                          const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                          return (
+                            <Bar 
+                              key={taskId}
+                              dataKey={`task_${taskId}`}
+                              name={task?.task_name || `Task ${taskId}`}
+                              fill={colors[index]}
+                              radius={[6, 6, 0, 0]}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                            />
+                          );
+                        })}
+                        
+                        {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
+                          const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                          return (
+                            <Bar 
+                              key={categoryName}
+                              dataKey={`category_${categoryName}`}
+                              name={categoryName}
+                              fill={colors[index]}
+                              radius={[6, 6, 0, 0]}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                            />
+                          );
+                        })}
+                        
+                        {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
+                          const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
+                          return (
+                            <Bar 
+                              key={pillarName}
+                              dataKey={`pillar_${pillarName}`}
+                              name={pillarName}
+                              fill={pillar?.color_code || '#48bb78'}
+                              radius={[6, 6, 0, 0]}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                            />
+                          );
+                        })}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+              )}
+
+              {/* Monthly Utilization Chart */}
+              {showMonthOverMonth && (
+                <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
+                  <h3>📈 Monthly Average (Last 3 Months)</h3>
+                  <ResponsiveContainer width="100%" height={350}>
+                      <BarChart 
+                        data={(() => {
+                          const trendData = detailedViewType === 'tasks' ? taskTrendData : 
+                                          detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
+                          
+                          // Calculate monthly averages from daily data (last 3 months ~ 90 days, but we have 56 days)
+                          // We'll use last 56 days and split into roughly 2 months
+                          const monthlyData: any[] = [];
+                          const daysPerMonth = Math.floor(trendData.length / 3); // Divide available data into 3 periods
+                          
+                          for (let monthIdx = 0; monthIdx < 3; monthIdx++) {
+                            const monthStart = monthIdx * daysPerMonth;
+                            const monthEnd = monthIdx === 2 ? trendData.length : (monthIdx + 1) * daysPerMonth;
+                            const monthData = trendData.slice(monthStart, monthEnd);
+                            
+                            if (monthData.length === 0) continue;
+                            
+                            const today = new Date();
+                            const monthDate = new Date(today);
+                            monthDate.setMonth(today.getMonth() - (2 - monthIdx));
+                            const monthName = monthDate.toLocaleDateString('en-US', { month: 'short' });
+                            
+                            const monthEntry: any = { month: monthName };
+                            
+                            // Calculate average for each selected item
+                            if (detailedViewType === 'tasks') {
+                              selectedTasks.forEach((taskId, index) => {
+                                const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
+                                const values = monthData.map(d => d[`task_${taskId}`] || 0).filter(v => v > 0);
+                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                monthEntry[`task_${taskId}`] = avg;
+                                monthEntry[`task_${taskId}_name`] = task?.task_name || `Task ${taskId}`;
+                              });
+                            } else if (detailedViewType === 'categories') {
+                              selectedCategories.forEach((categoryName) => {
+                                const values = monthData.map(d => d[`category_${categoryName}`] || 0).filter(v => v > 0);
+                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                monthEntry[`category_${categoryName}`] = avg;
+                              });
+                            } else if (detailedViewType === 'pillars') {
+                              selectedPillars.forEach((pillarName) => {
+                                const values = monthData.map(d => d[`pillar_${pillarName}`] || 0).filter(v => v > 0);
+                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                monthEntry[`pillar_${pillarName}`] = avg;
+                              });
+                            }
+                            
+                            monthlyData.push(monthEntry);
+                          }
+                          
+                          return monthlyData;
+                        })()}
+                        margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis label={{ value: 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                        <Legend />
+                        <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />
+                        
+                        {/* Render bars for selected items */}
+                        {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
+                          const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
+                          const colors = ['#ed8936', '#4299e1', '#9f7aea'];
+                          return (
+                            <Bar 
+                              key={taskId}
+                              dataKey={`task_${taskId}`}
+                              name={task?.task_name || `Task ${taskId}`}
+                              fill={colors[index]}
+                              radius={[6, 6, 0, 0]}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                            />
+                          );
+                        })}
+                        
+                        {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
+                          const colors = ['#ed8936', '#4299e1', '#9f7aea'];
+                          return (
+                            <Bar 
+                              key={categoryName}
+                              dataKey={`category_${categoryName}`}
+                              name={categoryName}
+                              fill={colors[index]}
+                              radius={[6, 6, 0, 0]}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                            />
+                          );
+                        })}
+                        
+                        {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
+                          const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
+                          return (
+                            <Bar 
+                              key={pillarName}
+                              dataKey={`pillar_${pillarName}`}
+                              name={pillarName}
+                              fill={pillar?.color_code || '#ed8936'}
+                              radius={[6, 6, 0, 0]}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                            />
+                          );
+                        })}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+              )}
+            </div>
+          )}
+
+          {/* Empty state */}
+          {((detailedViewType === 'tasks' && selectedTasks.length === 0) ||
+            (detailedViewType === 'categories' && selectedCategories.length === 0) ||
+            (detailedViewType === 'pillars' && selectedPillars.length === 0)) && (
+            <div style={{ 
+              padding: '60px 20px', 
+              textAlign: 'center', 
+              background: '#f7fafc', 
+              borderRadius: '8px',
+              marginTop: '20px'
+            }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+              <h3 style={{ marginBottom: '8px' }}>No {detailedViewType} selected</h3>
+              <p style={{ color: '#718096' }}>
+                Select up to 3 {detailedViewType} above to view their utilization trends
+              </p>
+            </div>
+          )}
+
+          {/* Old comparison charts - keep below as additional context */}
+          <div style={{ marginTop: '40px', paddingTop: '40px', borderTop: '2px solid #e2e8f0' }}>
+            <h3 style={{ marginBottom: '20px' }}>📌 Additional Context</h3>
+            
+            {/* Period Type and Date Selector */}
+            <div className="detailed-controls">
+              <div className="period-type-selector">
+                <label>View By:</label>
+                <select 
+                  value={detailedPeriodType} 
+                  onChange={(e) => setDetailedPeriodType(e.target.value as 'day' | 'week' | 'month')}
+                >
+                  <option value="day">Single Day</option>
+                  <option value="week">Week (Monday-Sunday)</option>
+                  <option value="month">Month</option>
+                </select>
+              </div>
+              
+              <div className="date-selector">
+                <label>Select Date:</label>
+                <input
+                  type="date"
+                  value={detailedDate}
+                  onChange={(e) => setDetailedDate(e.target.value)}
+                />
+              </div>
+              
+              <button 
+                className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
+                onClick={() => setShowMonthColumn(!showMonthColumn)}
+                style={{ marginLeft: 'auto' }}
+              >
+                {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
+              </button>
+            </div>
 
           <div className="detailed-info-banner">
             <span className="info-icon">ℹ️</span>
@@ -3055,6 +3680,7 @@ export default function Analytics() {
                   </div>
                 );
               })}
+          </div>
           </div>
         </div>
       )}
