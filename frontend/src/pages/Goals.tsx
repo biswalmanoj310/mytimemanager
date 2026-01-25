@@ -3598,13 +3598,8 @@ export default function Goals() {
                             <div style={{ 
                               background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)', 
                               padding: '16px', 
-                              textAlign: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onClick={() => showToast(`${stats.projects} projects linked to this dream`, 'info')}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)'}>
+                              textAlign: 'center'
+                            }}>
                               <div style={{ fontSize: '28px', fontWeight: '900', color: '#9333ea', marginBottom: '4px' }}>
                                 {stats.projects}
                               </div>
@@ -3615,13 +3610,8 @@ export default function Goals() {
                             <div style={{ 
                               background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', 
                               padding: '16px', 
-                              textAlign: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onClick={() => showToast(`${stats.tasks} tasks linked to this dream`, 'info')}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)'}>
+                              textAlign: 'center'
+                            }}>
                               <div style={{ fontSize: '28px', fontWeight: '900', color: '#f59e0b', marginBottom: '4px' }}>
                                 {stats.tasks}
                               </div>
@@ -3632,13 +3622,8 @@ export default function Goals() {
                             <div style={{ 
                               background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)', 
                               padding: '16px', 
-                              textAlign: 'center',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease'
-                            }}
-                            onClick={() => showToast(`${stats.goals} goals promoted from this dream`, 'info')}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)'}>
+                              textAlign: 'center'
+                            }}>
                               <div style={{ fontSize: '28px', fontWeight: '900', color: '#14b8a6', marginBottom: '4px' }}>
                                 {stats.goals}
                               </div>
@@ -3650,7 +3635,7 @@ export default function Goals() {
 
                           {/* Action Buttons */}
                           <div style={{ padding: '16px', background: '#f9fafb' }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                               <button
                                 className="btn btn-sm"
                                 style={{
@@ -3669,49 +3654,52 @@ export default function Goals() {
                                   setShowWishDetailsModal(true);
                                 }}
                               >
-                                👁️ View Details
+                                👁️ View
                               </button>
                               <button
                                 className="btn btn-sm"
                                 style={{
                                   padding: '10px',
                                   fontSize: '13px',
-                                  background: 'white',
-                                  color: '#374151',
-                                  border: '2px solid #d1d5db',
+                                  backgroundColor: '#fef3c7',
+                                  color: '#92400e',
+                                  border: '1px solid #fde68a',
                                   borderRadius: '10px',
                                   fontWeight: '700',
                                   cursor: 'pointer'
                                 }}
-                                onClick={() => {
-                                  setCurrentExplorationWish(wish);
-                                  setShowAddExplorationModal(true);
+                                onClick={async () => {
+                                  if (confirm('Move back to Active Dreams (Dreaming status)?')) {
+                                    await handleUpdateWishStatus(wish.id, 'dreaming');
+                                    showToast('↶ Moved back to active dreams', 'info');
+                                  }
                                 }}
                               >
-                                ➕ Add Activity
+                                ↶ Back
+                              </button>
+                              <button
+                                className="btn btn-sm"
+                                style={{
+                                  padding: '10px',
+                                  fontSize: '13px',
+                                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '10px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                                }}
+                                onClick={async () => {
+                                  if (confirm('Mark this dream as achieved? 🎉')) {
+                                    await handleUpdateWishStatus(wish.id, 'achieved');
+                                    showToast('✨ Dream achieved! Congratulations! 🎉', 'success');
+                                  }
+                                }}
+                              >
+                                ✨ Achieved
                               </button>
                             </div>
-                            <button
-                              className="btn btn-sm"
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                fontSize: '12px',
-                                backgroundColor: '#fef3c7',
-                                color: '#92400e',
-                                border: '1px solid #fde68a',
-                                borderRadius: '8px',
-                                fontWeight: '600'
-                              }}
-                              onClick={async () => {
-                                if (confirm('Move back to Active Dreams (Dreaming status)?')) {
-                                  await handleUpdateWishStatus(wish.id, 'dreaming');
-                                  showToast('↶ Moved back to active dreams', 'info');
-                                }
-                              }}
-                            >
-                              ↶ Back to Active Dreams
-                            </button>
                           </div>
                         </div>
                       );
@@ -4172,9 +4160,48 @@ return (
                             e.currentTarget.style.boxShadow = 'none';
                           }}
                         >
-                          � Start Exploring
+                          🔬 Start Exploring
                         </button>
                       )}
+                      
+                      {/* Mark as Achieved */}
+                      <button
+                        className="btn btn-sm"
+                        style={{
+                          width: '100%',
+                          padding: '10px',
+                          fontSize: '13px',
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '10px',
+                          fontWeight: '700',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                        }}
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (confirm('Mark this dream as achieved? 🎉')) {
+                            await handleUpdateWishStatus(wish.id, 'achieved');
+                            showToast('✨ Dream achieved! Congratulations! 🎉', 'success');
+                          }
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.4)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = '0 2px 8px rgba(16, 185, 129, 0.3)';
+                        }}
+                      >
+                        ✨ Mark as Achieved
+                      </button>
                     </div>
                   </div>
                 );
