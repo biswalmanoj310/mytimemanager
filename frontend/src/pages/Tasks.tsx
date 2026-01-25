@@ -18,6 +18,7 @@ import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import ImportantTasks from './ImportantTasks';
 import UpcomingTasks from './UpcomingTasks';
+import { useUserPreferencesContext } from '../contexts/UserPreferencesContext';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'upcoming' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -91,6 +92,9 @@ const formatTaskValue = (task: Task, value: number): string => {
 }
 
 export default function Tasks() {
+  // Get setSelectedDate from UserPreferencesContext to update nested components
+  const { setSelectedDate: setContextDate } = useUserPreferencesContext();
+  
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2617,6 +2621,7 @@ export default function Tasks() {
     const newDate = new Date(selectedWeekStart);
     newDate.setDate(newDate.getDate() + (weeks * 7));
     setSelectedWeekStart(newDate);
+    setContextDate(newDate); // Update context so WeeklyTasks component refreshes
     loadWeeklyEntries(newDate);
   };
 
@@ -2627,6 +2632,7 @@ export default function Tasks() {
     const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday (if Sunday, go back 6 days)
     const currentWeek = new Date(today.setDate(diff));
     setSelectedWeekStart(currentWeek);
+    setContextDate(currentWeek); // Update context so WeeklyTasks component refreshes
     loadWeeklyEntries(currentWeek);
   };
 
@@ -2905,6 +2911,7 @@ export default function Tasks() {
     const newDate = new Date(selectedMonthStart);
     newDate.setMonth(newDate.getMonth() + months);
     setSelectedMonthStart(newDate);
+    setContextDate(newDate); // Update context so MonthlyTasks component refreshes
     loadMonthlyEntries(newDate);
   };
 
@@ -2913,6 +2920,7 @@ export default function Tasks() {
     const today = new Date();
     const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
     setSelectedMonthStart(currentMonth);
+    setContextDate(currentMonth); // Update context so MonthlyTasks component refreshes
     loadMonthlyEntries(currentMonth);
   };
 
