@@ -611,6 +611,11 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
             "completed": sum(1 for m in goal_milestones if m.is_completed) + sum(1 for m in project_milestones if m.is_completed),
             "remaining": sum(1 for m in goal_milestones if not m.is_completed) + sum(1 for m in project_milestones if not m.is_completed)
         },
+        "goal_projects": {
+            "total": len(linked_projects),
+            "completed": sum(1 for p in linked_projects if p.is_completed),
+            "remaining": sum(1 for p in linked_projects if not p.is_completed)
+        },
         "goal_tasks": {
             "total": len(goal_tasks),
             "completed": sum(1 for t in goal_tasks if t.is_completed),
