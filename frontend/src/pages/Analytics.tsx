@@ -210,6 +210,7 @@ export default function Analytics() {
   // Detailed view - Week/Month-over-Week/Month toggles
   const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
   const [showMonthOverMonth, setShowMonthOverMonth] = useState(false);
+  const [showAsHours, setShowAsHours] = useState(false);
   
   // Detailed view - Historical trend data
   const [taskTrendData, setTaskTrendData] = useState<any[]>([]);
@@ -469,8 +470,14 @@ export default function Analytics() {
       
       // Load ALL categories with allocated hours (no date filter)
       const allCategoriesResponse = await apiClient.get('/api/analytics/category-breakdown');
-      setAllCategoriesData(allCategoriesResponse.data.categories || []);
-      console.log('All categories (base):', allCategoriesResponse.data.categories);
+      // Sort categories by Daily tab hierarchy order
+      const sortedCategories = (allCategoriesResponse.data.categories || []).sort((a: CategoryData, b: CategoryData) => {
+        const orderA = getCategoryOrder(a.category_name);
+        const orderB = getCategoryOrder(b.category_name);
+        return orderA - orderB;
+      });
+      setAllCategoriesData(sortedCategories);
+      console.log('All categories (base, sorted):', sortedCategories);
       
       // Load Today's category data
       console.log('Loading today category data for:', todayStr);
@@ -762,7 +769,9 @@ export default function Analytics() {
               const totalMinutes = taskEntries.reduce((sum: number, e: any) => sum + (e.minutes || 0), 0);
               const allocated = task.allocated_minutes;
               const utilization = allocated > 0 ? (totalMinutes / allocated) * 100 : 0;
+              const hours = totalMinutes / 60;
               dayData[`task_${taskId}`] = utilization;
+              dayData[`task_${taskId}_hours`] = hours;
               dayData[`task_${taskId}_name`] = task.task_name;
             }
           });
@@ -790,6 +799,7 @@ export default function Analytics() {
               const spent = category.spent_hours;
               const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
               dayData[`category_${categoryName}`] = utilization;
+              dayData[`category_${categoryName}_hours`] = spent;
             }
           });
           dailyData.push(dayData);
@@ -816,6 +826,7 @@ export default function Analytics() {
               const spent = pillar.spent_hours;
               const utilization = allocated > 0 ? (spent / allocated) * 100 : 0;
               dayData[`pillar_${pillarName}`] = utilization;
+              dayData[`pillar_${pillarName}_hours`] = spent;
             }
           });
           dailyData.push(dayData);
@@ -934,7 +945,12 @@ export default function Analytics() {
         <div className="view-mode-tabs">
           <button 
             className={`tab-button ${viewMode === 'overview' ? 'active' : ''}`}
-            onClick={() => setViewMode('overview')}
+            onClick={() => {
+              setViewMode('overview');
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', 'overview');
+              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }}
           >
             📊 Overview
           </button>
@@ -951,19 +967,34 @@ export default function Analytics() {
           </button>
           <button 
             className={`tab-button ${viewMode === 'detailed' ? 'active' : ''}`}
-            onClick={() => setViewMode('detailed')}
+            onClick={() => {
+              setViewMode('detailed');
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', 'detailed');
+              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }}
           >
             📅 Detailed View
           </button>
           <button 
             className={`tab-button ${viewMode === 'categories' ? 'active' : ''}`}
-            onClick={() => setViewMode('categories')}
+            onClick={() => {
+              setViewMode('categories');
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', 'categories');
+              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }}
           >
             📁 Categories
           </button>
           <button 
             className={`tab-button ${viewMode === 'tasks' ? 'active' : ''}`}
-            onClick={() => setViewMode('tasks')}
+            onClick={() => {
+              setViewMode('tasks');
+              const params = new URLSearchParams(window.location.search);
+              params.set('view', 'tasks');
+              window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            }}
           >
             ✓ Tasks
           </button>
@@ -2929,7 +2960,27 @@ export default function Analytics() {
                 Select Tasks (up to 3) - Time-Based & One-Time Tasks:
               </label>
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                {[...allTasksData, ...allOneTimeTasksData].slice(0, 30).map(task => (
+                {[...allTasksData, ...allOneTimeTasksData]
+                  .sort((a, b) => {
+                    // Sort by Daily tab order: category first (which groups by pillar), then task name
+                    const categoryOrderA = getCategoryOrder(a.category_name);
+                    const categoryOrderB = getCategoryOrder(b.category_name);
+                    
+                    if (categoryOrderA !== categoryOrderB) {
+                      return categoryOrderA - categoryOrderB;
+                    }
+                    
+                    // Within same category, sort by task name order
+                    const taskOrderA = getTaskOrder(a.task_name);
+                    const taskOrderB = getTaskOrder(b.task_name);
+                    
+                    if (taskOrderA !== taskOrderB) {
+                      return taskOrderA - taskOrderB;
+                    }
+                    
+                    return a.task_name.localeCompare(b.task_name);
+                  })
+                  .slice(0, 50).map(task => (
                   <label key={task.task_id} style={{ 
                     display: 'inline-flex', 
                     alignItems: 'center', 
@@ -3056,7 +3107,14 @@ export default function Analytics() {
             (detailedViewType === 'categories' && selectedCategories.length > 0) ||
             (detailedViewType === 'pillars' && selectedPillars.length > 0)) && (
             <div>
-              <div style={{ marginBottom: '20px', display: 'flex', gap: '10px' }}>
+              <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <button 
+                  className={`toggle-month-btn ${showAsHours ? 'active' : ''}`}
+                  onClick={() => setShowAsHours(!showAsHours)}
+                  style={{ background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', fontWeight: 600 }}
+                >
+                  {showAsHours ? '⏱️ Hours' : '📊 Percentage'}
+                </button>
                 <button 
                   className={`toggle-month-btn ${showWeekOverWeek ? 'active' : ''}`}
                   onClick={() => setShowWeekOverWeek(!showWeekOverWeek)}
@@ -3073,7 +3131,7 @@ export default function Analytics() {
 
               {/* Daily Utilization Chart */}
               <div className="comparative-charts-section" style={{ marginTop: '20px' }}>
-                  <h3>📅 Daily Utilization (Last 56 Days / 8 Weeks)</h3>
+                  <h3>📅 Daily {showAsHours ? 'Hours Spent' : 'Utilization'} (Last 56 Days / 8 Weeks)</h3>
                   <ResponsiveContainer width="100%" height={400}>
                     <LineChart 
                       data={detailedViewType === 'tasks' ? taskTrendData : 
@@ -3088,10 +3146,10 @@ export default function Analytics() {
                         height={60}
                         style={{ fontSize: '10px' }}
                       />
-                      <YAxis label={{ value: 'Utilization %', angle: -90, position: 'insideLeft' }} />
-                      <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                      <YAxis label={{ value: showAsHours ? 'Hours' : 'Utilization %', angle: -90, position: 'insideLeft' }} />
+                      <Tooltip formatter={(value: number) => showAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(1)}%`} />
                       <Legend />
-                      <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />
+                      {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                       
                       {/* Render lines for selected items */}
                       {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
@@ -3101,7 +3159,7 @@ export default function Analytics() {
                           <Line 
                             key={taskId}
                             type="monotone" 
-                            dataKey={`task_${taskId}`}
+                            dataKey={showAsHours ? `task_${taskId}_hours` : `task_${taskId}`}
                             name={task?.task_name || `Task ${taskId}`}
                             stroke={colors[index]}
                             strokeWidth={2}
@@ -3116,7 +3174,7 @@ export default function Analytics() {
                           <Line 
                             key={categoryName}
                             type="monotone" 
-                            dataKey={`category_${categoryName}`}
+                            dataKey={showAsHours ? `category_${categoryName}_hours` : `category_${categoryName}`}
                             name={categoryName}
                             stroke={colors[index]}
                             strokeWidth={2}
@@ -3131,7 +3189,7 @@ export default function Analytics() {
                           <Line 
                             key={pillarName}
                             type="monotone" 
-                            dataKey={`pillar_${pillarName}`}
+                            dataKey={showAsHours ? `pillar_${pillarName}_hours` : `pillar_${pillarName}`}
                             name={pillarName}
                             stroke={pillar?.color_code || '#4299e1'}
                             strokeWidth={2}
@@ -3146,7 +3204,7 @@ export default function Analytics() {
               {/* Weekly Utilization Chart */}
               {showWeekOverWeek && (
                 <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
-                  <h3>📊 Weekly Average (Last 8 Weeks)</h3>
+                  <h3>📊 Weekly Average (Last 8 Weeks) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>
                   <ResponsiveContainer width="100%" height={350}>
                       <BarChart 
                         data={(() => {
@@ -3168,20 +3226,23 @@ export default function Analytics() {
                             if (detailedViewType === 'tasks') {
                               selectedTasks.forEach((taskId, index) => {
                                 const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
-                                const values = weekData.map(d => d[`task_${taskId}`] || 0).filter(v => v > 0);
+                                const dataKey = showAsHours ? `task_${taskId}_hours` : `task_${taskId}`;
+                                const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
                                 const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
                                 weekEntry[`task_${taskId}`] = avg;
                                 weekEntry[`task_${taskId}_name`] = task?.task_name || `Task ${taskId}`;
                               });
                             } else if (detailedViewType === 'categories') {
                               selectedCategories.forEach((categoryName) => {
-                                const values = weekData.map(d => d[`category_${categoryName}`] || 0).filter(v => v > 0);
+                                const dataKey = showAsHours ? `category_${categoryName}_hours` : `category_${categoryName}`;
+                                const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
                                 const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
                                 weekEntry[`category_${categoryName}`] = avg;
                               });
                             } else if (detailedViewType === 'pillars') {
                               selectedPillars.forEach((pillarName) => {
-                                const values = weekData.map(d => d[`pillar_${pillarName}`] || 0).filter(v => v > 0);
+                                const dataKey = showAsHours ? `pillar_${pillarName}_hours` : `pillar_${pillarName}`;
+                                const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
                                 const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
                                 weekEntry[`pillar_${pillarName}`] = avg;
                               });
@@ -3196,10 +3257,10 @@ export default function Analytics() {
                       >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="week" />
-                        <YAxis label={{ value: 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                        <YAxis label={{ value: showAsHours ? 'Avg Hours' : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip formatter={(value: number) => showAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(1)}%`} />
                         <Legend />
-                        <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />
+                        {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                         
                         {/* Render bars for selected items */}
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
@@ -3212,7 +3273,7 @@ export default function Analytics() {
                               name={task?.task_name || `Task ${taskId}`}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
@@ -3226,7 +3287,7 @@ export default function Analytics() {
                               name={categoryName}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
@@ -3240,7 +3301,7 @@ export default function Analytics() {
                               name={pillarName}
                               fill={pillar?.color_code || '#48bb78'}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
@@ -3252,7 +3313,7 @@ export default function Analytics() {
               {/* Monthly Utilization Chart */}
               {showMonthOverMonth && (
                 <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
-                  <h3>📈 Monthly Average (Last 3 Months)</h3>
+                  <h3>📈 Monthly Average (Last 3 Months) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>
                   <ResponsiveContainer width="100%" height={350}>
                       <BarChart 
                         data={(() => {
@@ -3282,20 +3343,23 @@ export default function Analytics() {
                             if (detailedViewType === 'tasks') {
                               selectedTasks.forEach((taskId, index) => {
                                 const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
-                                const values = monthData.map(d => d[`task_${taskId}`] || 0).filter(v => v > 0);
+                                const dataKey = showAsHours ? `task_${taskId}_hours` : `task_${taskId}`;
+                                const values = monthData.map(d => d[dataKey] || 0).filter(v => v > 0);
                                 const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
                                 monthEntry[`task_${taskId}`] = avg;
                                 monthEntry[`task_${taskId}_name`] = task?.task_name || `Task ${taskId}`;
                               });
                             } else if (detailedViewType === 'categories') {
                               selectedCategories.forEach((categoryName) => {
-                                const values = monthData.map(d => d[`category_${categoryName}`] || 0).filter(v => v > 0);
+                                const dataKey = showAsHours ? `category_${categoryName}_hours` : `category_${categoryName}`;
+                                const values = monthData.map(d => d[dataKey] || 0).filter(v => v > 0);
                                 const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
                                 monthEntry[`category_${categoryName}`] = avg;
                               });
                             } else if (detailedViewType === 'pillars') {
                               selectedPillars.forEach((pillarName) => {
-                                const values = monthData.map(d => d[`pillar_${pillarName}`] || 0).filter(v => v > 0);
+                                const dataKey = showAsHours ? `pillar_${pillarName}_hours` : `pillar_${pillarName}`;
+                                const values = monthData.map(d => d[dataKey] || 0).filter(v => v > 0);
                                 const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
                                 monthEntry[`pillar_${pillarName}`] = avg;
                               });
@@ -3310,10 +3374,10 @@ export default function Analytics() {
                       >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="month" />
-                        <YAxis label={{ value: 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip formatter={(value: number) => `${value.toFixed(1)}%`} />
+                        <YAxis label={{ value: showAsHours ? 'Avg Hours' : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
+                        <Tooltip formatter={(value: number) => showAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(1)}%`} />
                         <Legend />
-                        <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />
+                        {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                         
                         {/* Render bars for selected items */}
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
@@ -3326,7 +3390,7 @@ export default function Analytics() {
                               name={task?.task_name || `Task ${taskId}`}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
@@ -3340,7 +3404,7 @@ export default function Analytics() {
                               name={categoryName}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
@@ -3354,7 +3418,7 @@ export default function Analytics() {
                               name={pillarName}
                               fill={pillar?.color_code || '#ed8936'}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}%` : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
