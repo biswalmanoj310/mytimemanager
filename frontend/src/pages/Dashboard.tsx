@@ -4,9 +4,11 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import TaskForm from '../components/TaskForm';
 import GoalForm from '../components/GoalForm';
+import { AddChallengeModal } from '../components/AddChallengeModal';
 import './Dashboard.css';
 
 interface GoalsSummary {
@@ -128,9 +130,12 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [isGoalFormOpen, setIsGoalFormOpen] = useState(false);
+  const [isChallengeFormOpen, setIsChallengeFormOpen] = useState(false);
   const [backgroundColor, setBackgroundColor] = useState(() => {
     return localStorage.getItem('dashboardBgColor') || '#ffffff';
   });
+  
+  const navigate = useNavigate();
   
   console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
 
@@ -493,9 +498,17 @@ export default function Dashboard() {
             <span>🎯</span>
             <span>Create Goal</span>
           </button>
-          <button className="action-btn" onClick={() => window.location.href = '/goals/projects'}>
+          <button className="action-btn" onClick={() => navigate('/tasks?tab=projects&action=add')}>
             <span>📁</span>
             <span>Add Project</span>
+          </button>
+          <button className="action-btn" onClick={() => navigate('/goals?tab=wishes&action=add')}>
+            <span>✨</span>
+            <span>Add Dream</span>
+          </button>
+          <button className="action-btn" onClick={() => setIsChallengeFormOpen(true)}>
+            <span>🏆</span>
+            <span>Add Challenge</span>
           </button>
           <button className="action-btn" onClick={() => window.location.href = '/my-day-design'}>
             <span>🎨</span>
@@ -554,6 +567,18 @@ export default function Dashboard() {
           setIsGoalFormOpen(false);
         }}
       />
+
+      {/* Challenge Form Modal */}
+      {isChallengeFormOpen && (
+        <AddChallengeModal
+          isOpen={isChallengeFormOpen}
+          onClose={() => setIsChallengeFormOpen(false)}
+          onSuccess={() => {
+            setIsChallengeFormOpen(false);
+          }}
+          challenge={null}
+        />
+      )}
     </div>
   );
 }

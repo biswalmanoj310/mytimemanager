@@ -2408,9 +2408,19 @@ export default function Goals() {
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
     const wishId = params.get('wishId');
+    const actionParam = params.get('action');
     
     if (tab === 'wishes') {
       setActiveTab('wishes');
+      
+      // Handle action parameter to open add wish modal
+      if (actionParam === 'add') {
+        setShowAddWishModal(true);
+        // Remove action param from URL after opening modal
+        params.delete('action');
+        navigate(`?${params.toString()}`, { replace: true });
+      }
+      
       loadWishes().then((loadedWishes) => {
         // Check if wishId parameter exists to reopen modal after refresh
         if (wishId && loadedWishes) {

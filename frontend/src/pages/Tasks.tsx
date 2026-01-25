@@ -1251,8 +1251,17 @@ export default function Tasks() {
     const tabParam = searchParams.get('tab');
     const projectParam = searchParams.get('project');
     const dateParam = searchParams.get('date');
+    const actionParam = searchParams.get('action');
     
-    console.log('🔍 URL params changed:', { tab: tabParam, project: projectParam, date: dateParam });
+    console.log('🔍 URL params changed:', { tab: tabParam, project: projectParam, date: dateParam, action: actionParam });
+
+    // Handle action parameter to open modals
+    if (actionParam === 'add' && tabParam === 'projects') {
+      setShowAddProjectModal(true);
+      // Remove action param from URL after opening modal
+      searchParams.delete('action');
+      navigate(`?${searchParams.toString()}`, { replace: true });
+    }
 
     // Set active tab if provided (when URL changes)
     if (tabParam) {
