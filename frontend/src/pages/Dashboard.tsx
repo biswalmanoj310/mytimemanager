@@ -199,12 +199,27 @@ export default function Dashboard() {
         // Must NOT be one-time daily task
         if (task.is_daily_one_time) return false;
         
+        // Must be active (not globally completed or inactive)
+        if (task.is_completed || task.is_active === false) return false;
+        
         // Exclude completed/NA tasks for today
         const status = statusMap.get(task.id);
         if (status && (status.is_completed || status.is_na)) return false;
         
         return true;
       });
+      
+      // Debug: Log all time-based daily tasks being counted
+      console.log('[Dashboard] Total time-based daily tasks:', timeBasedDailyTasks.length);
+      console.log('[Dashboard] Time-based daily tasks:', timeBasedDailyTasks.map(t => ({
+        id: t.id,
+        name: t.name,
+        pillar: pillars.find(p => p.id === t.pillar_id)?.name,
+        category: categories.find(c => c.id === t.category_id)?.name,
+        allocated_minutes: t.allocated_minutes,
+        task_type: t.task_type,
+        follow_up_frequency: t.follow_up_frequency
+      })));
       
       // Group categories by pillar with DAILY time allocation (from Time-Based Tasks table)
       const pillarCategoryMap: Record<string, Category[]> = {};
@@ -215,6 +230,19 @@ export default function Dashboard() {
         const dailyPillarTasks = timeBasedDailyTasks.filter(t => t.pillar_id === pillar.id);
         const dailyPillarAllocated = dailyPillarTasks.reduce((sum, t) => sum + (t.allocated_minutes || 0), 0) / 60;
         pillarDailyHours[pillar.name] = dailyPillarAllocated;
+        
+        // Debug: Log tasks contributing to this pillar's hours
+        if (dailyPillarTasks.length > 0) {
+          console.log(`[Dashboard] ${pillar.name} tasks:`, dailyPillarTasks.map(t => ({
+            name: t.name,
+            category: categories.find(c => c.id === t.category_id)?.name,
+            allocated_minutes: t.allocated_minutes,
+            follow_up_frequency: t.follow_up_frequency,
+            task_type: t.task_type,
+            is_daily_one_time: t.is_daily_one_time
+          })));
+          console.log(`[Dashboard] ${pillar.name} total: ${dailyPillarAllocated.toFixed(2)} hours (${dailyPillarAllocated * 60} minutes)`);
+        }
         
         const pillarCats = categories
           .filter(c => c.pillar_id === pillar.id)
