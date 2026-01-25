@@ -28,6 +28,7 @@ interface Task {
   allocated_minutes?: number;
   target_value?: number;
   unit?: string;
+  is_active?: boolean; // Filter out inactive tasks
 }
 
 type FrequencyFilter = 'all' | 'daily' | 'weekly' | 'monthly';
@@ -107,6 +108,9 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
     }
 
     let filtered = [...tasks];
+
+    // Filter out inactive tasks - only show active tasks in dropdown
+    filtered = filtered.filter(t => t.is_active !== false);
 
     // Filter by frequency
     if (frequencyFilter !== 'all') {
