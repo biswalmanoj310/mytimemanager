@@ -3284,17 +3284,19 @@ export default function Tasks() {
 
   async function loadProjectTasksDueToday() {
     try {
-      // Load both tasks due today AND overdue tasks
-      const [todayResponse, overdueResponse]: any[] = await Promise.all([
+      // Load tasks: overdue, due today, AND tasks without due dates (for planning)
+      const [todayResponse, overdueResponse, noDueDateResponse]: any[] = await Promise.all([
         api.get('/api/projects/tasks/due-today'),
-        api.get('/api/projects/tasks/overdue')
+        api.get('/api/projects/tasks/overdue'),
+        api.get('/api/projects/tasks/no-due-date')
       ]);
       
       const todayTasks = Array.isArray(todayResponse.data || todayResponse) ? (todayResponse.data || todayResponse) : [];
       const overdueTasks = Array.isArray(overdueResponse.data || overdueResponse) ? (overdueResponse.data || overdueResponse) : [];
+      const noDueDateTasks = Array.isArray(noDueDateResponse.data || noDueDateResponse) ? (noDueDateResponse.data || noDueDateResponse) : [];
       
-      // Combine and remove duplicates (in case a task is both due today and overdue)
-      const allTasks = [...overdueTasks, ...todayTasks];
+      // Combine and remove duplicates
+      const allTasks = [...overdueTasks, ...todayTasks, ...noDueDateTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
       );
@@ -3308,17 +3310,19 @@ export default function Tasks() {
 
   async function loadGoalTasksDueToday() {
     try {
-      // Load both goal tasks due today AND overdue goal tasks
-      const [todayResponse, overdueResponse]: any[] = await Promise.all([
+      // Load goal tasks: overdue, due today, AND tasks without due dates (for planning)
+      const [todayResponse, overdueResponse, noDueDateResponse]: any[] = await Promise.all([
         api.get('/api/life-goals/goal-tasks/due-today'),
-        api.get('/api/life-goals/goal-tasks/overdue')
+        api.get('/api/life-goals/goal-tasks/overdue'),
+        api.get('/api/life-goals/goal-tasks/no-due-date')
       ]);
       
       const todayTasks = Array.isArray(todayResponse.data || todayResponse) ? (todayResponse.data || todayResponse) : [];
       const overdueTasks = Array.isArray(overdueResponse.data || overdueResponse) ? (overdueResponse.data || overdueResponse) : [];
+      const noDueDateTasks = Array.isArray(noDueDateResponse.data || noDueDateResponse) ? (noDueDateResponse.data || noDueDateResponse) : [];
       
       // Combine and remove duplicates
-      const allTasks = [...overdueTasks, ...todayTasks];
+      const allTasks = [...overdueTasks, ...todayTasks, ...noDueDateTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
       ).map(task => ({
@@ -3522,11 +3526,21 @@ export default function Tasks() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      // Get all misc tasks that are due today or overdue
+      // Get misc tasks: overdue, due today, AND tasks without due dates (for planning)
       const dueTasks: Array<ProjectTaskData & { group_name?: string; daysOverdue?: number }> = [];
       
       for (const task of miscTasks) {
-        if (task.is_completed || !task.due_date) continue;
+        if (task.is_completed) continue;
+        
+        // Include tasks without due dates for planning
+        if (!task.due_date) {
+          dueTasks.push({
+            ...task,
+            group_name: 'Misc Task',
+            daysOverdue: 0
+          });
+          continue;
+        }
         
         // Extract date part if it's a datetime string
         const datePart = task.due_date.split('T')[0];
@@ -3544,7 +3558,7 @@ export default function Tasks() {
         }
       }
       
-      // Sort by most overdue first
+      // Sort by most overdue first (tasks with no due date will have daysOverdue=0)
       dueTasks.sort((a, b) => (b.daysOverdue || 0) - (a.daysOverdue || 0));
       setMiscTasksDueToday(dueTasks);
     } catch (err: any) {
@@ -3785,6 +3799,8 @@ export default function Tasks() {
   };
 
   const getDueDateColorClass = (dueDate: string | null): string => {
+    // IMPORTANT: If no due date, return empty string (white background)
+    // Red rows ONLY for overdue tasks (past due date), white for all others
     if (!dueDate) return '';
     
     const today = new Date();
@@ -3798,14 +3814,11 @@ export default function Tasks() {
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
+    // Red ONLY for overdue tasks (past today), white for all future dates
     if (diffDays < 0) {
-      return 'task-overdue'; // Red - overdue
-    } else if (diffDays <= 2) {
-      return 'task-urgent'; // Red - 0-2 days
-    } else if (diffDays <= 7) {
-      return 'task-soon'; // Yellow - 3-7 days
+      return 'task-overdue'; // Red - overdue (past due date)
     } else {
-      return 'task-ok'; // Green - >7 days
+      return ''; // White - all future dates or no due date
     }
   };
 
@@ -8608,7 +8621,7 @@ export default function Tasks() {
                 </button>
               </div>
 
-              {/* All Tasks Section */}
+              {/* Project Tasks Section (True project tasks only, created via "Add Project Task") */}
               <div className="project-all-tasks-section" style={{ marginBottom: '30px' }}>
                 <div style={{ 
                   display: 'flex', 
@@ -8631,11 +8644,15 @@ export default function Tasks() {
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text'
                     }}>
-                      {expandedSections.allTasks ? '▼' : '▶'} 📋 All Tasks
+                      {expandedSections.allTasks ? '▼' : '▶'} 📋 Project Tasks
                     </h3>
                     <span style={{ fontSize: '14px', color: '#666', fontWeight: '500' }}>
                       {(() => {
-                        const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                        // Only count true project tasks (not reference tasks from other tabs)
+                        const thisProjectTasks = projectTasks.filter(t => 
+                          t.project_id === selectedProject.id && 
+                          (!t.follow_up_frequency || t.follow_up_frequency === 'project_task')
+                        );
                         return `${thisProjectTasks.filter(t => t.is_completed).length} / ${thisProjectTasks.length} completed`;
                       })()}
                     </span>
@@ -8676,7 +8693,11 @@ export default function Tasks() {
                         return result;
                       }
                       
-                      const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                      // Only count true project tasks (not reference tasks from other tabs)
+                      const thisProjectTasks = projectTasks.filter(t => 
+                        t.project_id === selectedProject.id && 
+                        (!t.follow_up_frequency || t.follow_up_frequency === 'project_task')
+                      );
                       const allTasksRecursive = getAllTasksRecursive(thisProjectTasks);
                       const totalCount = allTasksRecursive.length;
                       const inProgressCount = allTasksRecursive.filter(t => !t.is_completed).length;
@@ -8728,7 +8749,12 @@ export default function Tasks() {
                     ) : (
                       <div className="task-list">
                         {(() => {
-                          const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                          // Filter to show ONLY true project tasks (follow_up_frequency = 'project_task' or null/undefined)
+                          // Exclude reference tasks from other tabs (daily, weekly, monthly, yearly, one_time)
+                          const thisProjectTasks = projectTasks.filter(t => 
+                            t.project_id === selectedProject.id && 
+                            (!t.follow_up_frequency || t.follow_up_frequency === 'project_task')
+                          );
                           
                           // Helper to check if all children are completed
                           const allChildrenCompleted = (taskId: number): boolean => {
@@ -8760,7 +8786,10 @@ export default function Tasks() {
                           
                           // Get root tasks for this project, excluding fully completed hierarchies
                           let rootTasks = getTasksByParentId(null)
-                            .filter(task => task.project_id === selectedProject.id)
+                            .filter(task => 
+                              task.project_id === selectedProject.id &&
+                              (!task.follow_up_frequency || task.follow_up_frequency === 'project_task')
+                            )
                             .filter(task => !shouldHideTask(task));
                           
                           // Apply filter - show root if it matches OR if any descendant matches
@@ -8834,7 +8863,7 @@ export default function Tasks() {
               </div>
               )}
 
-              {/* Tasks by Frequency Section - NEW */}
+              {/* Reference Tasks by Frequency Section - Daily/Weekly/Monthly/Quarterly/Yearly only */}
               {(() => {
                 const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
                 const activeTasks = thisProjectTasks.filter(t => {
@@ -8844,7 +8873,7 @@ export default function Tasks() {
                   return true;
                 });
                 const hasFrequencyTasks = activeTasks.some(t => 
-                  ['project_task', 'daily', 'weekly', 'monthly', 'yearly', 'one_time'].includes(t.follow_up_frequency || '')
+                  ['daily', 'weekly', 'monthly', 'quarterly', 'yearly'].includes(t.follow_up_frequency || '')
                 );
                 
                 if (!hasFrequencyTasks) return null;
@@ -8860,17 +8889,22 @@ export default function Tasks() {
                 }}
                   onClick={() => setExpandedSections(prev => ({ ...prev, frequencyTasks: !prev.frequencyTasks }))}
                 >
-                  <h3 style={{ 
-                    margin: 0, 
-                    fontSize: '22px', 
-                    fontWeight: '700',
-                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    backgroundClip: 'text'
-                  }}>
-                    {expandedSections.frequencyTasks ? '▼' : '▶'} 📅 Tasks by Frequency
-                  </h3>
+                  <div>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: '22px', 
+                      fontWeight: '700',
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text'
+                    }}>
+                      {expandedSections.frequencyTasks ? '▼' : '▶'} 📅 Reference Tasks (by Frequency)
+                    </h3>
+                    <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+                      Tasks from Daily/Weekly/Monthly/Quarterly/Yearly tabs linked to this project
+                    </div>
+                  </div>
                 </div>
                 
                 {expandedSections.frequencyTasks && (
@@ -8893,53 +8927,15 @@ export default function Tasks() {
                         return false;
                       });
                       
-                      // Filter active tasks by frequency
-                      const projectTasksFreq = activeTasks.filter(t => t.follow_up_frequency === 'project_task');
+                      // Filter active tasks by frequency (exclude project_task, one_time, misc - those go in separate sections)
                       const dailyTasks = activeTasks.filter(t => t.follow_up_frequency === 'daily');
                       const weeklyTasks = activeTasks.filter(t => t.follow_up_frequency === 'weekly');
                       const monthlyTasks = activeTasks.filter(t => t.follow_up_frequency === 'monthly');
+                      const quarterlyTasks = activeTasks.filter(t => t.follow_up_frequency === 'quarterly');
                       const yearlyTasks = activeTasks.filter(t => t.follow_up_frequency === 'yearly');
-                      const oneTimeTasks = activeTasks.filter(t => t.follow_up_frequency === 'one_time');
                       
                       return (
                         <>
-                          {/* Project Tasks */}
-                          {projectTasksFreq.length > 0 && (
-                            <div style={{ 
-                              padding: '15px', 
-                              background: '#f0f7ff', 
-                              borderRadius: '8px',
-                              border: '2px solid #4299e1' 
-                            }}>
-                              <h4 style={{ margin: '0 0 10px 0', color: '#2c5282' }}>
-                                📁 Project Tasks ({projectTasksFreq.length})
-                              </h4>
-                              <div style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
-                                Shows only in Projects tab
-                              </div>
-                              {projectTasksFreq.map(task => (
-                                <div key={task.id} style={{ 
-                                  padding: '8px', 
-                                  marginBottom: '6px', 
-                                  background: 'white', 
-                                  borderRadius: '4px',
-                                  borderLeft: task.is_completed ? '3px solid #48bb78' : '3px solid #4299e1'
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    {task.is_completed ? '✅' : '⏳'}
-                                    <span style={{ 
-                                      fontSize: '13px',
-                                      textDecoration: task.is_completed ? 'line-through' : 'none',
-                                      color: task.is_completed ? '#666' : '#333'
-                                    }}>
-                                      {task.name}
-                                    </span>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
                           {/* Daily Support Tasks */}
                           {dailyTasks.length > 0 && (
                             <div style={{ 
@@ -8949,7 +8945,7 @@ export default function Tasks() {
                               border: '2px solid #48bb78' 
                             }}>
                               <h4 style={{ margin: '0 0 10px 0', color: '#22543d' }}>
-                                📆 Daily Support ({dailyTasks.length})
+                                📆 Daily ({dailyTasks.length})
                               </h4>
                               <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Daily tasks supporting this project</span>
@@ -8974,16 +8970,13 @@ export default function Tasks() {
                                     }}>
                                       {task.name}
                                     </span>
+                                    <span style={{ fontSize: '10px', color: '#fff', background: '#38a169', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                      Daily
+                                    </span>
                                     {task.allocated_minutes > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#e6fffa', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: '#718096', marginTop: '4px' }}>
-                                    Created: {task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}
-                                    {task.is_completed && task.completed_at && (
-                                      <> • Completed: {new Date(task.completed_at).toLocaleDateString()}</>
                                     )}
                                   </div>
                                 </div>
@@ -9000,7 +8993,7 @@ export default function Tasks() {
                               border: '2px solid #ed8936' 
                             }}>
                               <h4 style={{ margin: '0 0 10px 0', color: '#7c2d12' }}>
-                                📅 Weekly Support ({weeklyTasks.length})
+                                📅 Weekly ({weeklyTasks.length})
                               </h4>
                               <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Weekly tasks supporting this project</span>
@@ -9025,16 +9018,13 @@ export default function Tasks() {
                                     }}>
                                       {task.name}
                                     </span>
+                                    <span style={{ fontSize: '10px', color: '#fff', background: '#ed8936', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                      Weekly
+                                    </span>
                                     {task.allocated_minutes > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#fffaf0', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: '#718096', marginTop: '4px' }}>
-                                    Created: {task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}
-                                    {task.is_completed && task.completed_at && (
-                                      <> • Completed: {new Date(task.completed_at).toLocaleDateString()}</>
                                     )}
                                   </div>
                                 </div>
@@ -9051,7 +9041,7 @@ export default function Tasks() {
                               border: '2px solid #9f7aea' 
                             }}>
                               <h4 style={{ margin: '0 0 10px 0', color: '#44337a' }}>
-                                📅 Monthly Support ({monthlyTasks.length})
+                                📅 Monthly ({monthlyTasks.length})
                               </h4>
                               <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Monthly tasks supporting this project</span>
@@ -9076,6 +9066,9 @@ export default function Tasks() {
                                     }}>
                                       {task.name}
                                     </span>
+                                    <span style={{ fontSize: '10px', color: '#fff', background: '#9f7aea', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                      Monthly
+                                    </span>
                                     {task.allocated_minutes > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#faf5ff', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
@@ -9093,6 +9086,54 @@ export default function Tasks() {
                             </div>
                           )}
 
+                          {/* Quarterly Support Tasks */}
+                          {quarterlyTasks.length > 0 && (
+                            <div style={{ 
+                              padding: '15px', 
+                              background: '#fffbea', 
+                              borderRadius: '8px',
+                              border: '2px solid #d69e2e' 
+                            }}>
+                              <h4 style={{ margin: '0 0 10px 0', color: '#975a16' }}>
+                                📅 Quarterly ({quarterlyTasks.length})
+                              </h4>
+                              <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                                <span>Quarterly tasks supporting this project</span>
+                                <span>{quarterlyTasks.filter(t => t.is_completed).length}/{quarterlyTasks.length} completed</span>
+                              </div>
+                              {quarterlyTasks.map(task => (
+                                <div key={task.id} style={{ 
+                                  padding: '8px', 
+                                  marginBottom: '6px', 
+                                  background: 'white', 
+                                  borderRadius: '4px',
+                                  borderLeft: task.is_completed ? '3px solid #ecc94b' : '3px solid #d69e2e'
+                                }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                    {task.is_completed ? '✅' : '🔄'}
+                                    <span style={{ 
+                                      fontSize: '13px',
+                                      fontWeight: '600',
+                                      textDecoration: task.is_completed ? 'line-through' : 'none',
+                                      color: task.is_completed ? '#666' : '#333',
+                                      flex: 1
+                                    }}>
+                                      {task.name}
+                                    </span>
+                                    <span style={{ fontSize: '10px', color: '#fff', background: '#d69e2e', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                      Quarterly
+                                    </span>
+                                    {task.allocated_minutes > 0 && (
+                                      <span style={{ fontSize: '11px', color: '#666', background: '#fffbea', padding: '2px 6px', borderRadius: '4px' }}>
+                                        {task.allocated_minutes}m
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Yearly Support Tasks */}
                           {yearlyTasks.length > 0 && (
                             <div style={{ 
@@ -9102,7 +9143,7 @@ export default function Tasks() {
                               border: '2px solid #fc8181' 
                             }}>
                               <h4 style={{ margin: '0 0 10px 0', color: '#742a2a' }}>
-                                📅 Yearly Support ({yearlyTasks.length})
+                                📅 Yearly ({yearlyTasks.length})
                               </h4>
                               <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
                                 <span>Yearly tasks supporting this project</span>
@@ -9127,67 +9168,13 @@ export default function Tasks() {
                                     }}>
                                       {task.name}
                                     </span>
+                                    <span style={{ fontSize: '10px', color: '#fff', background: '#fc8181', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                      Yearly
+                                    </span>
                                     {task.allocated_minutes > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#fff5f5', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: '#718096', marginTop: '4px' }}>
-                                    Created: {task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}
-                                    {task.is_completed && task.completed_at && (
-                                      <> • Completed: {new Date(task.completed_at).toLocaleDateString()}</>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* One-Time Tasks */}
-                          {oneTimeTasks.length > 0 && (
-                            <div style={{ 
-                              padding: '15px', 
-                              background: '#f7fafc', 
-                              borderRadius: '8px',
-                              border: '2px solid #718096' 
-                            }}>
-                              <h4 style={{ margin: '0 0 10px 0', color: '#2d3748' }}>
-                                ⭐ Important One-Time ({oneTimeTasks.length})
-                              </h4>
-                              <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                                <span>One-time important tasks</span>
-                                <span>{oneTimeTasks.filter(t => t.is_completed).length}/{oneTimeTasks.length} completed</span>
-                              </div>
-                              {oneTimeTasks.map(task => (
-                                <div key={task.id} style={{ 
-                                  padding: '8px', 
-                                  marginBottom: '6px', 
-                                  background: 'white', 
-                                  borderRadius: '4px',
-                                  borderLeft: task.is_completed ? '3px solid #a0aec0' : '3px solid #718096'
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                    {task.is_completed ? '✅' : '🔄'}
-                                    <span style={{ 
-                                      fontSize: '13px',
-                                      fontWeight: '600',
-                                      textDecoration: task.is_completed ? 'line-through' : 'none',
-                                      color: task.is_completed ? '#666' : '#333',
-                                      flex: 1
-                                    }}>
-                                      {task.name}
-                                    </span>
-                                    {task.allocated_minutes > 0 && (
-                                      <span style={{ fontSize: '11px', color: '#666', background: '#f7fafc', padding: '2px 6px', borderRadius: '4px' }}>
-                                        {task.allocated_minutes}m
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div style={{ fontSize: '10px', color: '#718096', marginTop: '4px' }}>
-                                    Created: {task.created_at ? new Date(task.created_at).toLocaleDateString() : 'N/A'}
-                                    {task.is_completed && task.completed_at && (
-                                      <> • Completed: {new Date(task.completed_at).toLocaleDateString()}</>
                                     )}
                                   </div>
                                 </div>
@@ -9197,6 +9184,152 @@ export default function Tasks() {
                         </>
                       );
                     })()}
+                  </div>
+                )}
+              </div>
+                );
+              })()}
+
+              {/* Reference Tasks - Important and Misc Section */}
+              {(() => {
+                const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
+                const activeTasks = thisProjectTasks.filter(t => {
+                  if (t.is_completed) return false;
+                  const dailyStatus = dailyStatuses.get(t.id);
+                  if (dailyStatus && dailyStatus.is_completed) return false;
+                  return true;
+                });
+                const oneTimeTasks = activeTasks.filter(t => t.follow_up_frequency === 'one_time');
+                const miscTasks = activeTasks.filter(t => t.follow_up_frequency === 'misc');
+                
+                if (oneTimeTasks.length === 0 && miscTasks.length === 0) return null;
+                
+                return (
+              <div className="project-important-misc-tasks-section" style={{ marginTop: '30px', marginBottom: '30px' }}>
+                <div style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  marginBottom: '15px',
+                  cursor: 'pointer' 
+                }}
+                  onClick={() => setExpandedSections(prev => ({ ...prev, importantMiscTasks: !prev.importantMiscTasks }))}
+                >
+                  <div>
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: '22px', 
+                      fontWeight: '700',
+                      background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text'
+                    }}>
+                      {expandedSections.importantMiscTasks ? '▼' : '▶'} ⭐ Reference Tasks (Important & Misc)
+                    </h3>
+                    <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
+                      Tasks from Important and Misc tabs linked to this project
+                    </div>
+                  </div>
+                </div>
+                
+                {expandedSections.importantMiscTasks && (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                    {/* Important Tasks */}
+                    {oneTimeTasks.length > 0 && (
+                      <div style={{ 
+                        padding: '15px', 
+                        background: '#f7fafc', 
+                        borderRadius: '8px',
+                        border: '2px solid #718096' 
+                      }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#2d3748' }}>
+                          ⭐ Important ({oneTimeTasks.length})
+                        </h4>
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>One-time important tasks</span>
+                          <span>{oneTimeTasks.filter(t => t.is_completed).length}/{oneTimeTasks.length} completed</span>
+                        </div>
+                        {oneTimeTasks.map(task => (
+                          <div key={task.id} style={{ 
+                            padding: '8px', 
+                            marginBottom: '6px', 
+                            background: 'white', 
+                            borderRadius: '4px',
+                            borderLeft: task.is_completed ? '3px solid #a0aec0' : '3px solid #718096'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              {task.is_completed ? '✅' : '🔄'}
+                              <span style={{ 
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                textDecoration: task.is_completed ? 'line-through' : 'none',
+                                color: task.is_completed ? '#666' : '#333',
+                                flex: 1
+                              }}>
+                                {task.name}
+                              </span>
+                              <span style={{ fontSize: '10px', color: '#fff', background: '#718096', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                Important
+                              </span>
+                              {task.allocated_minutes > 0 && (
+                                <span style={{ fontSize: '11px', color: '#666', background: '#f7fafc', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {task.allocated_minutes}m
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Misc Tasks */}
+                    {miscTasks.length > 0 && (
+                      <div style={{ 
+                        padding: '15px', 
+                        background: '#fef3c7', 
+                        borderRadius: '8px',
+                        border: '2px solid #f59e0b' 
+                      }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: '#92400e' }}>
+                          🎨 Misc ({miscTasks.length})
+                        </h4>
+                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Miscellaneous tasks</span>
+                          <span>{miscTasks.filter(t => t.is_completed).length}/{miscTasks.length} completed</span>
+                        </div>
+                        {miscTasks.map(task => (
+                          <div key={task.id} style={{ 
+                            padding: '8px', 
+                            marginBottom: '6px', 
+                            background: 'white', 
+                            borderRadius: '4px',
+                            borderLeft: task.is_completed ? '3px solid #fbbf24' : '3px solid #f59e0b'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                              {task.is_completed ? '✅' : '🔄'}
+                              <span style={{ 
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                textDecoration: task.is_completed ? 'line-through' : 'none',
+                                color: task.is_completed ? '#666' : '#333',
+                                flex: 1
+                              }}>
+                                {task.name}
+                              </span>
+                              <span style={{ fontSize: '10px', color: '#fff', background: '#f59e0b', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
+                                Misc
+                              </span>
+                              {task.allocated_minutes > 0 && (
+                                <span style={{ fontSize: '11px', color: '#666', background: '#fef3c7', padding: '2px 6px', borderRadius: '4px' }}>
+                                  {task.allocated_minutes}m
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -13599,9 +13732,9 @@ export default function Tasks() {
 
           {/* Task Breakdown Panel - Today Tab */}
           {activeTab === 'today' && (() => {
-            // Count tasks from different sections ON TODAY TAB
+            // Count ALL tasks from different sections ON TODAY TAB (all priorities)
             const projectCount = projectTasksDueToday.length;
-            const goalCount = goalTasksDueToday.length;
+            const goalCount = goalTasksDueToday.filter(t => !t.is_completed).length;
             const miscCount = miscTasksDueToday.length;
             const importantCount = importantTasksDueToday.length;
             
@@ -13622,18 +13755,18 @@ export default function Tasks() {
               return dueDate > today && dueDate <= monthEnd;
             }).length;
             
-            // Count Needs Attention tasks on Today tab
+            // Count ALL Needs Attention tasks on Today tab (all priorities)
             const weeklyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
-              item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'weekly'
             ).length;
             const monthlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
-              item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'monthly'
             ).length;
             const quarterlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
-              item.reason === 'quarterly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'quarterly'
             ).length;
             const yearlyNeedsAttentionCount = tasksNeedingAttention.filter(item => 
-              item.reason === 'yearly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'yearly'
             ).length;
             
             // Calculate total using the same filtered counts as displayed
@@ -15457,8 +15590,8 @@ export default function Tasks() {
           {/* Project Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Don't filter out completed tasks - backend returns them only if completed today (visible until midnight)
-            const filteredTasks = projectTasksDueToday.filter(t => (!t.priority || t.priority > 3) && filterByMonth(t));
+            // Show ALL tasks regardless of priority - backend returns completed tasks only if completed today
+            const filteredTasks = projectTasksDueToday.filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
             <div id="project-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -15477,7 +15610,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>📋</span>
-                  <span>Project Tasks Due Today & Overdue ({filteredTasks.length})</span>
+                  <span>Project Tasks: Overdue, Today & No Target Date ({filteredTasks.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.projectTasksDueToday ? '▼' : '▶'}
@@ -15599,8 +15732,8 @@ export default function Tasks() {
           {/* Goal Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Don't filter out completed tasks - backend returns them only if completed today (visible until midnight)
-            const filteredTasks = goalTasksDueToday.filter(t => (!t.priority || t.priority > 3) && filterByMonth(t));
+            // Show ALL tasks regardless of priority - backend returns completed tasks only if completed today
+            const filteredTasks = goalTasksDueToday.filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
             <div id="goal-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -15619,7 +15752,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>🎯</span>
-                  <span>Goal Tasks Due Today & Overdue ({goalTasksDueToday.filter(t => !t.is_completed && (!t.priority || t.priority > 3)).length})</span>
+                  <span>Goal Tasks: Overdue, Today & No Target Date ({filteredTasks.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.goalTasksDueToday ? '▼' : '▶'}
@@ -15648,7 +15781,8 @@ export default function Tasks() {
                     <tbody>
                       {filteredTasks.map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
-                        const isOverdue = dueDateClass.includes('overdue'); // Only 'overdue', not 'urgent'
+                        // IMPORTANT: Only mark as overdue if task HAS a due date AND it's past due
+                        const isOverdue = task.due_date && dueDateClass.includes('overdue');
                         const isCompleted = task.is_completed;
                         const rowBgColor = isCompleted ? 'repeating-linear-gradient(45deg, #d1fae5, #d1fae5 10px, #a7f3d0 10px, #a7f3d0 20px)' : (isOverdue ? '#fee2e2' : '#fff');
                         const rowHoverColor = isCompleted ? 'repeating-linear-gradient(45deg, #a7f3d0, #a7f3d0 10px, #6ee7b7 10px, #6ee7b7 20px)' : (isOverdue ? '#fecaca' : '#f1f5f9');
@@ -15767,7 +15901,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>📁</span>
-                  <span>Misc Tasks: Due Today & Overdue ({filteredTasks.length})</span>
+                  <span>Misc Tasks: Overdue, Today & No Target Date ({filteredTasks.length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.miscTasksDueToday ? '▼' : '▶'}
@@ -15806,7 +15940,9 @@ export default function Tasks() {
                     </thead>
                     <tbody>
                       {filteredTasks.map((task) => {
-                        const isOverdue = (task.daysOverdue || 0) > 0;
+                        // IMPORTANT: Only mark as overdue if task HAS a due date AND daysOverdue > 0
+                        // (tasks without due dates are already filtered out by loadMiscTasksDueToday)
+                        const isOverdue = task.due_date && (task.daysOverdue || 0) > 0;
                         
                         return (
                           <tr 
@@ -16134,18 +16270,18 @@ export default function Tasks() {
 
           {/* Needs Attention Section - Only show in Today tab */}
           {activeTab === 'today' && (() => {
-            // Filter out tasks that are in NOW (priority 1-3) - they should only show in NOW tab
+            // Show ALL tasks needing attention regardless of priority
             const weeklyTasks = tasksNeedingAttention.filter(item => 
-              item.reason === 'weekly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'weekly'
             );
             const monthlyTasks = tasksNeedingAttention.filter(item => 
-              item.reason === 'monthly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'monthly'
             );
             const quarterlyTasks = tasksNeedingAttention.filter(item => 
-              item.reason === 'quarterly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'quarterly'
             );
             const yearlyTasks = tasksNeedingAttention.filter(item => 
-              item.reason === 'yearly' && (!item.task.priority || item.task.priority > 3)
+              item.reason === 'yearly'
             );
             
             // Motivational quotes that rotate daily

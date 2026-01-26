@@ -729,6 +729,37 @@ def get_goal_tasks_overdue(db: Session = Depends(get_db)):
     
     return result
 
+@router.get("/goal-tasks/no-due-date")
+def get_goal_tasks_without_due_date(db: Session = Depends(get_db)):
+    """Get all incomplete goal tasks without a due date (for planning in Today tab)"""
+    from app.models.goal import LifeGoalTask, LifeGoal
+    
+    tasks = db.query(LifeGoalTask).join(
+        LifeGoal, LifeGoalTask.goal_id == LifeGoal.id
+    ).filter(
+        LifeGoalTask.due_date.is_(None),
+        LifeGoalTask.is_completed == False
+    ).all()
+    
+    result = []
+    for task in tasks:
+        task_dict = {
+            "id": task.id,
+            "goal_id": task.goal_id,
+            "goal_name": task.goal.name if task.goal else None,
+            "name": task.name,
+            "description": task.description,
+            "due_date": None,
+            "priority": task.priority,
+            "is_completed": task.is_completed,
+            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+        }
+        result.append(task_dict)
+    
+    return result
+
 @router.get("/{goal_id}/challenges")
 def get_goal_challenges(
     goal_id: int,

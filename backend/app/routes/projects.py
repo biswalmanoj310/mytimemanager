@@ -593,6 +593,39 @@ def get_overdue_tasks(
     ]
 
 
+@router.get("/tasks/no-due-date")
+def get_tasks_without_due_date(
+    db: Session = Depends(get_db)
+):
+    """Get all incomplete tasks without a due date (for planning in Today tab)"""
+    from app.models.models import ProjectTask
+    
+    tasks = db.query(ProjectTask).filter(
+        ProjectTask.due_date.is_(None),
+        ProjectTask.is_completed == False
+    ).all()
+    
+    return [
+        {
+            "id": task.id,
+            "project_id": task.project_id,
+            "project_name": task.project.name if task.project else None,
+            "parent_task_id": task.parent_task_id,
+            "name": task.name,
+            "description": task.description,
+            "due_date": None,
+            "priority": task.priority_new if task.priority_new is not None else (2 if task.priority == "high" else 5 if task.priority == "medium" else 8),
+            "allocated_minutes": task.allocated_minutes if task.allocated_minutes else 60,
+            "is_completed": task.is_completed,
+            "completed_at": task.completed_at,
+            "order": task.order,
+            "created_at": task.created_at,
+            "updated_at": task.updated_at
+        }
+        for task in tasks
+    ]
+
+
 @router.get("/tasks/upcoming")
 def get_upcoming_tasks(
     days: int = 7,
