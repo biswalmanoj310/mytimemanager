@@ -1817,6 +1817,13 @@ export default function Tasks() {
         }
         
         // Show all active tasks
+        if (activeTab === 'daily' && task.follow_up_frequency === 'daily') {
+          console.log(`🔍 [Daily Tab Final is_active Check] Task ${task.id} (${task.name}):`, {
+            is_active: task.is_active,
+            is_active_type: typeof task.is_active,
+            will_pass: !!task.is_active
+          });
+        }
         if (isDebugTask) console.log(`${task.is_active ? '✅' : '❌'} Final result: is_active = ${task.is_active}`);
         return task.is_active;
       }
