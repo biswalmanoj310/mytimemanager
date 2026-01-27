@@ -1730,6 +1730,9 @@ export default function Tasks() {
           const taskCreatedDate = new Date(task.created_at);
           taskCreatedDate.setHours(0, 0, 0, 0);
           if (viewingDate < taskCreatedDate) {
+            if (task.follow_up_frequency === 'daily') {
+              console.log(`❌ [Rule 1] Task ${task.id} filtered: Viewing date before task creation`);
+            }
             if (isDebugTask) console.log(`❌ Rule 1: Viewing date before task creation`);
             return false; // Task didn't exist on this date
           }
@@ -1765,6 +1768,9 @@ export default function Tasks() {
           
           // If task was completed BEFORE viewing date, hide it permanently
           if (completionDate < viewingDate) {
+            if (task.follow_up_frequency === 'daily') {
+              console.log(`❌ [Rule 3] Task ${task.id} filtered: Completed on previous day (${completionDateStr})`);
+            }
             if (isDebugTask) console.log(`❌ Rule 3: Completed on previous day (${completionDateStr})`);
             return false;
           }
