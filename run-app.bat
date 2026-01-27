@@ -77,6 +77,7 @@ echo.
 
 REM Step 3: Build Docker images
 echo [Step 3/5] Building application - first time may take 2-3 minutes...
+set BUILDX_BAKE_ENTITLEMENTS_FS=0
 docker-compose build --quiet
 if errorlevel 1 (
     echo.
