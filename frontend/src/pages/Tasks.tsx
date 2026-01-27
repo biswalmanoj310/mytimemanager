@@ -1753,7 +1753,12 @@ export default function Tasks() {
           taskCreatedDate.setHours(0, 0, 0, 0);
           if (viewingDate < taskCreatedDate) {
             if (task.follow_up_frequency === 'daily') {
-              console.log(`❌ [Rule 1] Task ${task.id} filtered: Viewing date before task creation`);
+              console.log(`❌ [Rule 1] Task ${task.id} (${task.name}) filtered:`, {
+                viewingDate: viewingDate.toISOString(),
+                taskCreatedDate: taskCreatedDate.toISOString(),
+                created_at_raw: task.created_at,
+                comparison: `${viewingDate.getTime()} < ${taskCreatedDate.getTime()}`
+              });
             }
             if (isDebugTask) console.log(`❌ Rule 1: Viewing date before task creation`);
             return false; // Task didn't exist on this date
