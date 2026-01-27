@@ -13,6 +13,7 @@ from app.models.models import Task, Pillar, Category, SubCategory
 from app.models.goal import LifeGoal
 from app.models.schemas import TaskCreate, TaskUpdate, TaskFilters
 from app.utils.datetime_utils import normalize_to_midnight
+from app.utils.timezone_utils import get_local_now
 
 
 class TaskService:
@@ -71,8 +72,7 @@ class TaskService:
         if task_data.additional_whys:
             additional_whys_json = json.dumps(task_data.additional_whys)
         
-        # Create task with explicit local created_at (not UTC)
-        # Use datetime.now() without timezone to get local time
+        # Creatimezone utility for consistent cross-platform behavior
         db_task = Task(
             name=task_data.name,
             description=task_data.description,
@@ -95,6 +95,7 @@ class TaskService:
             why_reason=task_data.why_reason,
             additional_whys=additional_whys_json,
             due_date=task_data.due_date,
+            created_at=get_local_now()  # Universal: works on Windows, Mac, Linux
             created_at=datetime.now()  # Use local time, not UTC
         )
         
