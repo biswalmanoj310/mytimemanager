@@ -1701,20 +1701,23 @@ export default function Tasks() {
       
       // For daily tab: Handle date-based visibility with completion history
       if (activeTab === 'daily') {
+        // Declare dates outside try-catch so they're accessible throughout this block
+        let viewingDate: Date;
+        let todayDate: Date;
+        
         // Log ALL daily tasks entering this section
         if (task.follow_up_frequency === 'daily') {
           console.log(`🔍 [Entering Daily Tab Filter] Task ${task.id} (${task.name})`);
-          console.log(`🔍 [Step 1] Task ${task.id}: About to parse dates`);
         }
         
         try {
-          const viewingDate = new Date(selectedDate);
+          viewingDate = new Date(selectedDate);
           viewingDate.setHours(0, 0, 0, 0);
-          const todayDate = new Date();
+          todayDate = new Date();
           todayDate.setHours(0, 0, 0, 0);
           
           if (task.follow_up_frequency === 'daily') {
-            console.log(`🔍 [Step 2: Date Parsing OK] Task ${task.id}:`, {
+            console.log(`🔍 [Date Parsing OK] Task ${task.id}:`, {
               selectedDate,
               viewingDate: viewingDate.toISOString(),
               todayDate: todayDate.toISOString()
@@ -1722,7 +1725,7 @@ export default function Tasks() {
           }
         } catch (err) {
           if (task.follow_up_frequency === 'daily') {
-            console.log(`❌ [Step 2: Date Parsing ERROR] Task ${task.id}:`, err, {
+            console.log(`❌ [Date Parsing ERROR] Task ${task.id}:`, err, {
               selectedDate,
               selectedDateType: typeof selectedDate
             });
