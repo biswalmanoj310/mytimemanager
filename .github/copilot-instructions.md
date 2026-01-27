@@ -18,14 +18,15 @@ MyTimeManager is a time and task management application built on the **CANI (Con
 backend/app/main.py              # Router registration - ALL routes must be added here (lines 70-108)
 backend/app/database/config.py   # DB session factory (get_db dependency injection)
 backend/app/services/            # Business logic layer (27 service files - stateless @staticmethod pattern)
-backend/app/routes/              # API endpoints (30 routers - import models for relationship resolution)
+backend/app/routes/              # API endpoints (30 routers including __init__.py - import models for relationship resolution)
 backend/app/models/models.py     # SQLAlchemy models (must import in main.py:22-23 before routes)
 backend/app/models/goal.py       # Goal-specific models (separate file)
 backend/app/models/schemas.py    # Pydantic schemas for request/response validation
 frontend/src/contexts/           # Global state (TaskContext, TimeEntriesContext, UserPreferencesProvider)
 frontend/src/App.tsx             # Context providers wrap all routes (order matters: Task → TimeEntries → UserPreferences)
 frontend/src/components/PillarCategorySelector.tsx  # Reusable org hierarchy selector
-backend/migrations/              # Database migrations (40+ files: NNN_*.py or NNN_*.sql)
+frontend/src/components/PomodoroTree.tsx  # Persistent pomodoro timer with tree growth animation
+backend/migrations/              # Database migrations (42 files: NNN_*.py or NNN_*.sql)
 backend/database/mytimemanager.db # SQLite database (backup at ~/mytimemanager_backups/)
 *.py (root dir)                  # 20+ utility scripts (backup, recalc, migrations, setup, etc.)
 *.sh (root dir)                  # Shell scripts for starting/stopping/backup
@@ -230,6 +231,15 @@ class HabitService:
         # ... implementation
 ```
 
+### 7. Pomodoro Timer Pattern
+The app includes a persistent pomodoro timer with tree growth visualization:
+- **Location**: `frontend/src/components/PomodoroTree.tsx` (575 lines)
+- **Integration**: Rendered in `Layout.tsx` - available on ALL pages
+- **Features**: 25/5-minute work/break cycles, tree growth animation, session persistence
+- **State**: Uses localStorage to persist timer state across page refreshes
+- **Styling**: `frontend/src/styles/PomodoroTree.css` - tree SVG animations
+- **Usage**: No props needed for basic integration - handles its own state
+
 ## Data Integrity Rules
 
 1. **Time Allocation**: Daily tasks should total 480 minutes (8 hours) per pillar (not enforced but expected)
@@ -261,17 +271,18 @@ class HabitService:
 - **Compact Card Layouts**: List views use compact cards (see `COMPACT_CARDS_IMPLEMENTATION.md`)
 - **Empty States**: Provide actionable empty states with "Add [Entity]" buttons
 - **Date Navigation**: All time tabs have Previous/Today/Next date selectors
+- **Pomodoro Timer**: Persistent timer in Layout with tree growth animation (`PomodoroTree.tsx`) - available globally across all pages
 
 ## Essential Documentation
 
 ### Core Architecture & Features
-- [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Complete feature catalog with implementation details (606 lines - comprehensive system overview)
-- [TASK_LIFECYCLE_DOCUMENTATION.md](TASK_LIFECYCLE_DOCUMENTATION.md) - Deep dive into task completion/NA/status logic (513 lines - READ THIS for task changes)
-- [REUSABLE_COMPONENTS_GUIDE.md](REUSABLE_COMPONENTS_GUIDE.md) - PillarCategorySelector, TaskSelector patterns with research-backed UX patterns
-- [DATABASE_INFO.md](DATABASE_INFO.md) - Backup locations (Docker: `backend/database/backups/`, Non-Docker: `~/mytimemanager_backups/`), restore procedures, schema reference
+- [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Complete feature catalog with implementation details (605 lines - comprehensive system overview)
+- [TASK_LIFECYCLE_DOCUMENTATION.md](TASK_LIFECYCLE_DOCUMENTATION.md) - Deep dive into task completion/NA/status logic (512 lines - READ THIS for task changes)
+- [REUSABLE_COMPONENTS_GUIDE.md](REUSABLE_COMPONENTS_GUIDE.md) - PillarCategorySelector, TaskSelector patterns with research-backed UX patterns (495 lines)
+- [DATABASE_INFO.md](DATABASE_INFO.md) - Backup locations (Docker: `backend/database/backups/`, Non-Docker: `~/mytimemanager_backups/`), restore procedures, schema reference (208 lines)
 - [QUICK_TEST_CHECKLIST.md](QUICK_TEST_CHECKLIST.md) - Regression tests for time entry system (critical for validating changes)
 - [COMPACT_CARDS_IMPLEMENTATION.md](COMPACT_CARDS_IMPLEMENTATION.md) - UI card layout patterns
-- [GOAL_PROJECT_STRATEGY_GUIDE.md](GOAL_PROJECT_STRATEGY_GUIDE.md) - Goals vs Projects architecture decisions
+- [GOAL_PROJECT_STRATEGY_GUIDE.md](GOAL_PROJECT_STRATEGY_GUIDE.md) - Goals vs Projects architecture decisions (596 lines)
 
 ### Deployment & Operations (Cloud-Ready)
 - [DOCKER_SETUP_GUIDE.md](DOCKER_SETUP_GUIDE.md) - Complete Docker deployment guide (prerequisites, troubleshooting, data management)
@@ -280,7 +291,7 @@ class HabitService:
 - [DAD_DEPLOYMENT_CHECKLIST.md](DAD_DEPLOYMENT_CHECKLIST.md) - Weekend deployment plan (547 lines - includes support strategy)
 - [EXACT_COMMANDS.md](EXACT_COMMANDS.md) - Windows copy-paste commands (403 lines)
 - [MAC_SETUP_COMMANDS.md](MAC_SETUP_COMMANDS.md) - Mac copy-paste commands (716 lines)
-- [AUTOMATIC_BACKUP_GUIDE.md](AUTOMATIC_BACKUP_GUIDE.md) - Automatic backup system details (Docker cron + 30-day retention)
+- [AUTOMATIC_BACKUP_GUIDE.md](AUTOMATIC_BACKUP_GUIDE.md) - Automatic backup system details (Docker cron + 30-day retention, 400 lines)
 - [TIME_BLOCKS_VISUAL_GUIDE.md](TIME_BLOCKS_VISUAL_GUIDE.md) - Time blocks feature explanation (313 lines - kid-friendly vs professional views)
 
 ## Docker Deployment (Cloud-Ready)

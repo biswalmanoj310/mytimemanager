@@ -2375,6 +2375,8 @@ input[type="number"].hour-input {
 }
 
 .task-node.level-1 .task-row {
+  font-weight: 400;
+}
 
 /* Button styles */
 .btn-sm {

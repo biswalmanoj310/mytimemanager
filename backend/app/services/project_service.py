@@ -189,10 +189,15 @@ def update_project_task(
     task_id: int,
     **kwargs
 ) -> Optional[ProjectTask]:
-    """Update a project task"""
+    """Update a project task - handles both ProjectTask and regular Task entries"""
+    # Try to find the task in ProjectTask table first
     task = get_task_by_id(db, task_id)
+    
+    # If not found, try the regular Task table (for tasks with project_id)
     if not task:
-        return None
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            return None
     
     for key, value in kwargs.items():
         if hasattr(task, key):
@@ -278,8 +283,14 @@ def _update_project_status(db: Session, project_id: int):
 
 
 def delete_project_task(db: Session, task_id: int) -> bool:
-    """Delete a project task and all its sub-tasks"""
+    """Delete a project task and all its sub-tasks - handles both ProjectTask and regular Task entries"""
+    # Try to find the task in ProjectTask table first
     task = get_task_by_id(db, task_id)
+    
+    # If not found, try the regular Task table (for tasks with project_id)
+    if not task:
+        task = db.query(Task).filter(Task.id == task_id).first()
+    
     if task:
         db.delete(task)
         db.commit()

@@ -1622,11 +1622,13 @@ export default function Tasks() {
         }
         
       } else {
-        // Debug ALL daily tasks to diagnose issue
-        if (activeTab === 'daily' && task.follow_up_frequency) {
+        // Debug ALL daily tasks to diagnose issue - including null/undefined frequencies
+        if (activeTab === 'daily') {
           console.log(`🔍 [Daily Tab Debug] Task ${task.id} (${task.name}):`, {
             follow_up_frequency: task.follow_up_frequency,
             frequency_type: typeof task.follow_up_frequency,
+            frequency_is_null: task.follow_up_frequency === null,
+            frequency_is_undefined: task.follow_up_frequency === undefined,
             activeTab,
             matches: task.follow_up_frequency === activeTab,
             comparison: `"${task.follow_up_frequency}" === "${activeTab}"`
