@@ -11767,7 +11767,7 @@ export default function Tasks() {
                 </thead>
                 <tbody>
                   {filteredTasks
-                    .filter(task => task.is_daily_one_time === true)
+                    .filter(task => task.is_daily_one_time === true && task.task_type === 'time')
                     .filter(task => {
                       // Exclude completed and NA tasks (they show in completed section)
                       const dailyStatus = dailyStatuses.get(task.id);
