@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 REM MyTimeManager - One-Click Startup for Windows
 REM This script automatically starts Docker Desktop and runs the app
 REM Perfect for non-technical users!
@@ -52,8 +53,8 @@ if errorlevel 1 (
     docker info >nul 2>&1
     if errorlevel 1 (
         set /a RETRY_COUNT+=1
-        if %RETRY_COUNT% LSS 24 (
-            echo    Still waiting... %RETRY_COUNT% of 24 attempts
+        if !RETRY_COUNT! LSS 24 (
+            echo    Still waiting... !RETRY_COUNT! of 24 attempts
             goto WAIT_DOCKER
         ) else (
             echo.
