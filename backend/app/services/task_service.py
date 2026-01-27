@@ -71,7 +71,8 @@ class TaskService:
         if task_data.additional_whys:
             additional_whys_json = json.dumps(task_data.additional_whys)
         
-        # Create task
+        # Create task with explicit local created_at (not UTC)
+        # Use datetime.now() without timezone to get local time
         db_task = Task(
             name=task_data.name,
             description=task_data.description,
@@ -93,7 +94,8 @@ class TaskService:
             priority=task_data.priority,
             why_reason=task_data.why_reason,
             additional_whys=additional_whys_json,
-            due_date=task_data.due_date
+            due_date=task_data.due_date,
+            created_at=datetime.now()  # Use local time, not UTC
         )
         
         db.add(db_task)
