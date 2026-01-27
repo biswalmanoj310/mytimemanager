@@ -1704,6 +1704,7 @@ export default function Tasks() {
         // Log ALL daily tasks entering this section
         if (task.follow_up_frequency === 'daily') {
           console.log(`🔍 [Entering Daily Tab Filter] Task ${task.id} (${task.name})`);
+          console.log(`🔍 [Step 1] Task ${task.id}: About to parse dates`);
         }
         
         try {
@@ -1713,7 +1714,7 @@ export default function Tasks() {
           todayDate.setHours(0, 0, 0, 0);
           
           if (task.follow_up_frequency === 'daily') {
-            console.log(`🔍 [Date Parsing OK] Task ${task.id}:`, {
+            console.log(`🔍 [Step 2: Date Parsing OK] Task ${task.id}:`, {
               selectedDate,
               viewingDate: viewingDate.toISOString(),
               todayDate: todayDate.toISOString()
@@ -1721,7 +1722,7 @@ export default function Tasks() {
           }
         } catch (err) {
           if (task.follow_up_frequency === 'daily') {
-            console.log(`❌ [Date Parsing ERROR] Task ${task.id}:`, err, {
+            console.log(`❌ [Step 2: Date Parsing ERROR] Task ${task.id}:`, err, {
               selectedDate,
               selectedDateType: typeof selectedDate
             });
