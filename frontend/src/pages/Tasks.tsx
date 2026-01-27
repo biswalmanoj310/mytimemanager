@@ -1721,7 +1721,10 @@ export default function Tasks() {
           }
         } catch (err) {
           if (task.follow_up_frequency === 'daily') {
-            console.error(`❌ [Date Parsing ERROR] Task ${task.id}:`, err);
+            console.log(`❌ [Date Parsing ERROR] Task ${task.id}:`, err, {
+              selectedDate,
+              selectedDateType: typeof selectedDate
+            });
           }
           return false;
         }
