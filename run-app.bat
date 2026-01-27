@@ -53,7 +53,7 @@ if errorlevel 1 (
     if errorlevel 1 (
         set /a RETRY_COUNT+=1
         if %RETRY_COUNT% LSS 24 (
-            echo    Still waiting... (%RETRY_COUNT%/24)
+            echo    Still waiting... %RETRY_COUNT% of 24 attempts
             goto WAIT_DOCKER
         ) else (
             echo.
