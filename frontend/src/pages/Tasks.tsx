@@ -1629,12 +1629,18 @@ export default function Tasks() {
             frequency_type: typeof task.follow_up_frequency,
             frequency_is_null: task.follow_up_frequency === null,
             frequency_is_undefined: task.follow_up_frequency === undefined,
+            is_active: task.is_active,
+            is_active_type: typeof task.is_active,
+            is_completed: task.is_completed,
             activeTab,
             matches: task.follow_up_frequency === activeTab,
             comparison: `"${task.follow_up_frequency}" === "${activeTab}"`
           });
         }
         if (task.follow_up_frequency !== activeTab) {
+          if (activeTab === 'daily') {
+            console.log(`❌ [Tab Filter] Task ${task.id} filtered: frequency mismatch`);
+          }
           return false;
         }
       }
