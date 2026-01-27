@@ -1622,19 +1622,17 @@ export default function Tasks() {
         }
         
       } else {
-        // Debug specific tasks
-        const debugTaskIds = [5, 6, 12, 20, 24];
-        if (debugTaskIds.includes(task.id)) {
-          console.log(`🔍 [Tab Filter] Task ${task.id} (${task.name}):`, {
-            activeTab,
+        // Debug ALL daily tasks to diagnose issue
+        if (activeTab === 'daily' && task.follow_up_frequency) {
+          console.log(`🔍 [Daily Tab Debug] Task ${task.id} (${task.name}):`, {
             follow_up_frequency: task.follow_up_frequency,
-            matches: task.follow_up_frequency === activeTab
+            frequency_type: typeof task.follow_up_frequency,
+            activeTab,
+            matches: task.follow_up_frequency === activeTab,
+            comparison: `"${task.follow_up_frequency}" === "${activeTab}"`
           });
         }
         if (task.follow_up_frequency !== activeTab) {
-          if (debugTaskIds.includes(task.id)) {
-            console.log(`❌ [Tab Filter] Task ${task.id} filtered: frequency mismatch`);
-          }
           return false;
         }
       }
