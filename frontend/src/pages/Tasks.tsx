@@ -1701,6 +1701,11 @@ export default function Tasks() {
       
       // For daily tab: Handle date-based visibility with completion history
       if (activeTab === 'daily') {
+        // Log ALL daily tasks entering this section
+        if (task.follow_up_frequency === 'daily') {
+          console.log(`🔍 [Entering Daily Tab Filter] Task ${task.id} (${task.name})`);
+        }
+        
         const viewingDate = new Date(selectedDate);
         viewingDate.setHours(0, 0, 0, 0);
         const todayDate = new Date();
