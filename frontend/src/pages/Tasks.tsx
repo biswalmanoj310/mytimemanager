@@ -1706,10 +1706,25 @@ export default function Tasks() {
           console.log(`🔍 [Entering Daily Tab Filter] Task ${task.id} (${task.name})`);
         }
         
-        const viewingDate = new Date(selectedDate);
-        viewingDate.setHours(0, 0, 0, 0);
-        const todayDate = new Date();
-        todayDate.setHours(0, 0, 0, 0);
+        try {
+          const viewingDate = new Date(selectedDate);
+          viewingDate.setHours(0, 0, 0, 0);
+          const todayDate = new Date();
+          todayDate.setHours(0, 0, 0, 0);
+          
+          if (task.follow_up_frequency === 'daily') {
+            console.log(`🔍 [Date Parsing OK] Task ${task.id}:`, {
+              selectedDate,
+              viewingDate: viewingDate.toISOString(),
+              todayDate: todayDate.toISOString()
+            });
+          }
+        } catch (err) {
+          if (task.follow_up_frequency === 'daily') {
+            console.error(`❌ [Date Parsing ERROR] Task ${task.id}:`, err);
+          }
+          return false;
+        }
         
         // Debug specific tasks
         const debugTaskIds = [5, 6, 12, 20, 24]; // Cloud, LLM GenAI, Sleep, Parent Talk, Daughter Sports
