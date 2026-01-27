@@ -72,7 +72,8 @@ class TaskService:
         if task_data.additional_whys:
             additional_whys_json = json.dumps(task_data.additional_whys)
         
-        # Creatimezone utility for consistent cross-platform behavior
+        # Create task with explicit local created_at (not UTC)
+        # Use timezone utility for consistent cross-platform behavior
         db_task = Task(
             name=task_data.name,
             description=task_data.description,
@@ -96,7 +97,6 @@ class TaskService:
             additional_whys=additional_whys_json,
             due_date=task_data.due_date,
             created_at=get_local_now()  # Universal: works on Windows, Mac, Linux
-            created_at=datetime.now()  # Use local time, not UTC
         )
         
         db.add(db_task)
