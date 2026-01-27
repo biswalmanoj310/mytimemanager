@@ -41,7 +41,7 @@ if errorlevel 1 (
     REM Try to start Docker Desktop
     start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
     
-    echo    Waiting for Docker Desktop to start (this may take 30-60 seconds)...
+    echo    Waiting for Docker Desktop to start - this may take 30-60 seconds...
     echo    Please be patient...
     echo.
     
@@ -75,7 +75,7 @@ if errorlevel 1 (
 echo.
 
 REM Step 3: Build Docker images
-echo [Step 3/5] Building application (first time may take 2-3 minutes)...
+echo [Step 3/5] Building application - first time may take 2-3 minutes...
 docker-compose build --quiet
 if errorlevel 1 (
     echo.
