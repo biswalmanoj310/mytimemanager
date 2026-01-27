@@ -1756,6 +1756,13 @@ export default function Tasks() {
         // If yes, hide it (user manually completed it, so it should disappear after midnight)
         const completionDateStr = dailyTaskCompletionDates.get(task.id);
         
+        if (task.follow_up_frequency === 'daily') {
+          console.log(`🔍 [Rule 3 Check] Task ${task.id}:`, {
+            completionDateStr,
+            hasCompletionDate: !!completionDateStr
+          });
+        }
+        
         if (isDebugTask) {
           console.log(`   Completion history:`, { completionDateStr });
         }
@@ -1766,12 +1773,20 @@ export default function Tasks() {
           const completionDate = new Date(year, month - 1, day);
           completionDate.setHours(0, 0, 0, 0);
           
+          if (task.follow_up_frequency === 'daily') {
+            console.log(`🔍 [Rule 3 Date Compare] Task ${task.id}:`, {
+              completionDate: completionDate.toISOString(),
+              viewingDate: viewingDate.toISOString(),
+              isPast: completionDate < viewingDate
+            });
+          }
+          
           // If task was completed BEFORE viewing date, hide it permanently
           if (completionDate < viewingDate) {
             if (task.follow_up_frequency === 'daily') {
               console.log(`❌ [Rule 3] Task ${task.id} filtered: Completed on previous day (${completionDateStr})`);
             }
-            if (isDebugTask) console.log(`❌ Rule 3: Completed on previous day (${completionDateStr})`);
+            if (isDebugTask) console.log(`❌ [Rule 3] Completed on previous day (${completionDateStr})`);
             return false;
           }
           // If completed ON viewing date, it's already handled by Rule 2 above
