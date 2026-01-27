@@ -144,7 +144,7 @@ class TaskService:
         query = query.filter(
             or_(
                 Task.follow_up_frequency != 'daily',  # Show all non-daily tasks
-                Task.is_completed == False,  # Show incomplete daily tasks
+                Task.is_completed.isnot(True),  # Show incomplete daily tasks (handles NULL correctly)
                 Task.completed_at >= today_midnight  # Show daily tasks completed today
             )
         )
