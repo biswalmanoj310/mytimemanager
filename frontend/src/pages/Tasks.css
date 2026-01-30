@@ -86,6 +86,8 @@
   margin: 0 auto;
   min-height: 100vh;
   background: var(--bg-tasks-page);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .tasks-header {
@@ -3856,42 +3858,51 @@ input[type="number"].hour-input {
    RESPONSIVE FIXES FOR WINDOWS CHROME
    ======================================== */
 
-/* Ensure tables don't overflow viewport on Windows */
-@media screen and (max-width: 1920px) {
+/* Base desktop styling - ensure full content visibility */
+.tasks-page {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Large desktop screens (no changes needed) */
+@media screen and (min-width: 1921px) {
+  .tasks-page {
+    max-width: 1600px;
+  }
+}
+
+/* Standard desktop/laptop (1366px-1920px) - Windows typical */
+@media screen and (max-width: 1920px) and (min-width: 1367px) {
   .tasks-page {
     max-width: 100%;
-    padding: 20px 16px;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .tasks-table-container {
-    /* Ensure container respects viewport width */
     box-sizing: border-box;
   }
   
   .daily-table .col-task {
-    min-width: 180px; /* Further reduce for medium screens */
+    min-width: 180px;
     max-width: 280px;
   }
 }
 
-/* Tablet and smaller laptop screens */
-@media screen and (max-width: 1440px) {
-  .tasks-page {
-    padding: 16px 12px;
-  }
-  
+/* Smaller laptops (1024px-1366px) */
+@media screen and (max-width: 1366px) and (min-width: 1025px) {
   .daily-table .col-task {
     min-width: 160px;
     max-width: 250px;
   }
   
   .tasks-table {
-    font-size: 13px; /* Slightly smaller font for better fit */
+    font-size: 13px;
   }
 }
 
-/* Small screens (tablets) */
-@media screen and (max-width: 1024px) {
+/* Tablets (768px-1024px) */
+@media screen and (max-width: 1024px) and (min-width: 769px) {
   .tasks-page {
     padding: 12px 8px;
   }
@@ -3934,17 +3945,16 @@ input[type="number"].hour-input {
   }
 }
 
-/* Windows Chrome specific fixes - force proper scrolling behavior */
+/* Windows Chrome specific fixes */
 @supports (-ms-ime-align: auto) {
-  /* Edge/IE specific */
   .tasks-table-container {
-    overflow-x: scroll !important;
+    overflow-x: auto !important;
   }
 }
 
-/* Chromium-based browsers on Windows - ensure proper scrollbar */
+/* Chromium-based browsers - ensure proper scrollbar */
 @media screen and (-webkit-min-device-pixel-ratio: 0) {
   .tasks-table-container {
-    scrollbar-gutter: stable; /* Reserve space for scrollbar to prevent layout shift */
+    scrollbar-gutter: stable;
   }
 }
