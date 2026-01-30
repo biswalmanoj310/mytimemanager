@@ -10,7 +10,7 @@
 
 /* Sidebar */
 .sidebar {
-  width: 260px;
+  width: 220px;
   background: var(--bg-primary);
   border-right: 1px solid var(--border-light);
   display: flex;
@@ -201,7 +201,7 @@
 /* Main Content */
 .main-content {
   flex: 1;
-  margin-left: 260px;
+  margin-left: 220px;
   min-height: 100vh;
 }
 

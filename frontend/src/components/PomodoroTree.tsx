@@ -11,6 +11,7 @@ const PomodoroTree: React.FC<PomodoroTreeProps> = ({ onComplete }) => {
   const [isRunning, setIsRunning] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
 
   const durationOptions = [5, 10, 15, 20, 25, 30, 45, 60, 90, 120];
 
@@ -80,17 +81,33 @@ const PomodoroTree: React.FC<PomodoroTreeProps> = ({ onComplete }) => {
   return (
     <>
     <div className="pomodoro-tree-container">
-      <div className="pomodoro-header">
-        <h3>🍅 Focus Timer</h3>
+      <div className="pomodoro-header" onClick={() => setIsCollapsed(!isCollapsed)} style={{ cursor: 'pointer', userSelect: 'none' }}>
+        <h3 style={{ fontSize: isCollapsed ? '15px' : '16px', margin: 0, whiteSpace: 'nowrap' }}>
+          🍅 {isCollapsed ? formatTime(timeLeft) : 'Focus Timer'} {isCollapsed && isRunning ? '▶️' : ''}
+        </h3>
         <button 
           className="expand-btn"
-          onClick={() => setIsExpanded(true)}
+          onClick={(e) => { e.stopPropagation(); setIsExpanded(true); }}
           title="Expand to full screen"
+          style={{ flexShrink: 0 }}
         >
           ⛶
         </button>
+        <button 
+          className="collapse-btn"
+          onClick={(e) => { e.stopPropagation(); setIsCollapsed(!isCollapsed); }}
+          title={isCollapsed ? "Expand" : "Collapse"}
+          style={{ flexShrink: 0 }}
+        >
+          {isCollapsed ? '▼' : '▲'}
+        </button>
+          title={isCollapsed ? "Expand" : "Collapse"}
+        >
+          {isCollapsed ? '▼' : '▲'}
+        </button>
       </div>
 
+      {!isCollapsed && (
       <div className="pomodoro-content">
         <div className="tree-display-wrapper">
           {/* Tree in center */}
@@ -385,6 +402,7 @@ const PomodoroTree: React.FC<PomodoroTreeProps> = ({ onComplete }) => {
           </div>
         </div>
       </div>
+      )}
     </div>
 
     {/* Expanded Modal View */}
