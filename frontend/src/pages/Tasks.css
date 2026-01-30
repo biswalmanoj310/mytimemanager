@@ -392,6 +392,8 @@ td.section-header-cell.boolean-based {
   overflow-x: auto;
   overflow-y: auto;
   max-height: calc(100vh - 250px); /* Allow vertical scrolling */
+  max-width: 100%; /* Prevent overflow beyond viewport - Windows fix */
+  width: 100%;
   position: relative;
   isolation: isolate;
 }
@@ -408,6 +410,8 @@ td.section-header-cell.boolean-based {
   border-spacing: 0;
   font-size: 14px;
   table-layout: auto; /* Allow columns to auto-size based on content */
+  min-width: 800px; /* Minimum width for readability, triggers horizontal scroll if needed */
+}
   position: relative;
   z-index: 1;
 }
@@ -1042,12 +1046,16 @@ td.section-header-cell.boolean-based {
 
 /* Daily Tab - Hourly Columns */
 .daily-table {
-  min-width: fit-content; /* Auto-adjust to content */
-  width: auto;
+  min-width: max-content; /* Auto-adjust to content but allow horizontal scroll */
+  width: max-content; /* Fit content width */
+  max-width: none; /* Allow scrolling if content is wider than container */
 }
 
 .daily-table .col-task {
-  min-width: 250px; /* Slightly wider for daily view */
+  min-width: 200px; /* Reduced from 250px for better fit on smaller screens */
+  max-width: 300px; /* Cap maximum width */
+  white-space: normal; /* Allow text wrapping */
+  word-wrap: break-word;
 }
 
 .daily-table .col-time {
@@ -3840,4 +3848,101 @@ input[type="number"].hour-input {
 .metric-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* ========================================
+   RESPONSIVE FIXES FOR WINDOWS CHROME
+   ======================================== */
+
+/* Ensure tables don't overflow viewport on Windows */
+@media screen and (max-width: 1920px) {
+  .tasks-page {
+    max-width: 100%;
+    padding: 20px 16px;
+  }
+  
+  .tasks-table-container {
+    /* Ensure container respects viewport width */
+    box-sizing: border-box;
+  }
+  
+  .daily-table .col-task {
+    min-width: 180px; /* Further reduce for medium screens */
+    max-width: 280px;
+  }
+}
+
+/* Tablet and smaller laptop screens */
+@media screen and (max-width: 1440px) {
+  .tasks-page {
+    padding: 16px 12px;
+  }
+  
+  .daily-table .col-task {
+    min-width: 160px;
+    max-width: 250px;
+  }
+  
+  .tasks-table {
+    font-size: 13px; /* Slightly smaller font for better fit */
+  }
+}
+
+/* Small screens (tablets) */
+@media screen and (max-width: 1024px) {
+  .tasks-page {
+    padding: 12px 8px;
+  }
+  
+  .daily-table .col-task {
+    min-width: 140px;
+    max-width: 220px;
+  }
+  
+  .col-hour {
+    width: 45px;
+    min-width: 45px;
+    max-width: 45px;
+  }
+  
+  .tasks-table {
+    font-size: 12px;
+  }
+}
+
+/* Mobile devices */
+@media screen and (max-width: 768px) {
+  .tasks-page {
+    padding: 8px;
+  }
+  
+  .tasks-table-container {
+    max-height: calc(100vh - 200px);
+  }
+  
+  .daily-table .col-task {
+    min-width: 120px;
+    max-width: 200px;
+  }
+  
+  .col-hour {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+  }
+}
+
+/* Windows Chrome specific fixes - force proper scrolling behavior */
+@supports (-ms-ime-align: auto) {
+  /* Edge/IE specific */
+  .tasks-table-container {
+    overflow-x: scroll !important;
+  }
+}
+
+/* Chromium-based browsers on Windows - ensure proper scrollbar */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  .tasks-table-container {
+    scrollbar-gutter: stable; /* Reserve space for scrollbar to prevent layout shift */
+  }
 }
