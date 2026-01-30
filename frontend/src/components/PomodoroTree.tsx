@@ -101,10 +101,6 @@ const PomodoroTree: React.FC<PomodoroTreeProps> = ({ onComplete }) => {
         >
           {isCollapsed ? '▼' : '▲'}
         </button>
-          title={isCollapsed ? "Expand" : "Collapse"}
-        >
-          {isCollapsed ? '▼' : '▲'}
-        </button>
       </div>
 
       {!isCollapsed && (
