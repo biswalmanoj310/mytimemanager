@@ -143,7 +143,7 @@ class TaskService:
         
         # Auto-hide daily tasks that were completed before today
         # Daily tasks completed today are still shown (visible until midnight)
-        today_midnight = normalize_to_midnight(datetime.now())
+        today_midnight = normalize_to_midnight(get_local_now())
         query = query.filter(
             or_(
                 Task.follow_up_frequency != 'daily',  # Show all non-daily tasks
@@ -241,12 +241,12 @@ class TaskService:
         # Handle completion
         if task_data.is_completed is not None and task_data.is_completed and not db_task.is_completed:
             # Store current date at midnight in local timezone
-            update_data['completed_at'] = normalize_to_midnight(datetime.now())
+            update_data['completed_at'] = normalize_to_midnight(get_local_now())
         
         # Handle NA marking - set timestamp when task is marked as inactive
         if task_data.is_active is not None and not task_data.is_active and db_task.is_active:
             # Store current date at midnight in local timezone
-            update_data['na_marked_at'] = normalize_to_midnight(datetime.now())
+            update_data['na_marked_at'] = normalize_to_midnight(get_local_now())
         
         # If task is reactivated, clear the NA timestamp
         if task_data.is_active is not None and task_data.is_active and not db_task.is_active:
@@ -364,7 +364,7 @@ class TaskService:
         
         db_task.is_completed = True
         # Store current date at midnight in local timezone
-        db_task.completed_at = normalize_to_midnight(datetime.now())
+        db_task.completed_at = normalize_to_midnight(get_local_now())
         
         db.commit()
         db.refresh(db_task)
