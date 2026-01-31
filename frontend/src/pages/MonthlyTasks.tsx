@@ -309,17 +309,25 @@ const MonthlyTasks: React.FC = () => {
     monthStart.setHours(0, 0, 0, 0);
     const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
     monthEnd.setHours(0, 0, 0, 0);
+    
+    // Use the later of month start or task creation date as the effective start
+    const taskCreatedAt = new Date(task.created_at);
+    taskCreatedAt.setHours(0, 0, 0, 0);
+    const effectiveStart = taskCreatedAt > monthStart ? taskCreatedAt : monthStart;
+    
     let daysElapsed = 1;
-    if (today >= monthStart) {
+    if (today >= effectiveStart) {
       if (today <= monthEnd) {
-        const diffTime = today.getTime() - monthStart.getTime();
+        const diffTime = today.getTime() - effectiveStart.getTime();
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       } else {
-        daysElapsed = daysInMonth;
+        // Past month - count from effective start to month end
+        const diffTime = monthEnd.getTime() - effectiveStart.getTime();
+        daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
     }
     let daysRemaining = 0;
-    if (today >= monthStart && today <= monthEnd) {
+    if (today >= effectiveStart && today <= monthEnd) {
       const diffTime = monthEnd.getTime() - today.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     }
@@ -405,17 +413,25 @@ const MonthlyTasks: React.FC = () => {
     monthStart.setHours(0, 0, 0, 0);
     const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
     monthEnd.setHours(0, 0, 0, 0);
+    
+    // Use the later of month start or task creation date as the effective start
+    const taskCreatedAt = new Date(task.created_at);
+    taskCreatedAt.setHours(0, 0, 0, 0);
+    const effectiveStart = taskCreatedAt > monthStart ? taskCreatedAt : monthStart;
+    
     let daysElapsed = 1;
-    if (today >= monthStart) {
+    if (today >= effectiveStart) {
       if (today <= monthEnd) {
-        const diffTime = today.getTime() - monthStart.getTime();
+        const diffTime = today.getTime() - effectiveStart.getTime();
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       } else {
-        daysElapsed = daysInMonth;
+        // Past month - count from effective start to month end
+        const diffTime = monthEnd.getTime() - effectiveStart.getTime();
+        daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
     }
     let daysRemaining = 0;
-    if (today >= monthStart && today <= monthEnd) {
+    if (today >= effectiveStart && today <= monthEnd) {
       const diffTime = monthEnd.getTime() - today.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
     }

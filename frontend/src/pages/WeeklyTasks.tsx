@@ -759,18 +759,25 @@ const WeeklyTasks: React.FC = () => {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
     
+    // Use the later of week start or task creation date as the effective start
+    const taskCreatedAt = new Date(task.created_at);
+    taskCreatedAt.setHours(0, 0, 0, 0);
+    const effectiveStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
+    
     let daysElapsed = 1; // At least 1 day
-    if (today >= weekStart) {
+    if (today >= effectiveStart) {
       if (today <= weekEnd) {
-        const diffTime = today.getTime() - weekStart.getTime();
+        const diffTime = today.getTime() - effectiveStart.getTime();
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       } else {
-        daysElapsed = 7; // Past week
+        // Past week - count from effective start to week end
+        const diffTime = weekEnd.getTime() - effectiveStart.getTime();
+        daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
     }
     
     let daysRemaining = 0;
-    if (today >= weekStart && today <= weekEnd) {
+    if (today >= effectiveStart && today <= weekEnd) {
       const diffTime = weekEnd.getTime() - today.getTime();
       daysRemaining = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Include today
     }

@@ -399,20 +399,20 @@ const YearlyTasks: React.FC = () => {
       }
     }
     
-    // Determine tracking start month from created_at
+    // Determine tracking start month from task created_at (not yearlyStatus created_at)
     const yearlyStatus = yearlyTaskStatuses[task.id];
     let trackingStartMonth: number | null = 1; // Default to January if no created_at
     
-    if (yearlyStatus?.created_at) {
-      const createdDate = new Date(yearlyStatus.created_at);
+    if (task.created_at) {
+      const createdDate = new Date(task.created_at);
       // Only apply tracking start if created in current year
       if (createdDate.getFullYear() === yearStartDate.getFullYear()) {
         trackingStartMonth = createdDate.getMonth() + 1; // 1-based month
       } else if (createdDate.getFullYear() < yearStartDate.getFullYear()) {
-        // Task added in previous year, track from January
+        // Task created in previous year, track from January
         trackingStartMonth = 1;
       } else {
-        // Task added in future year (shouldn't happen), track from January
+        // Task created in future year (shouldn't happen), track from January
         trackingStartMonth = 1;
       }
     }
