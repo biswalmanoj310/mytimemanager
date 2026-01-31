@@ -392,17 +392,21 @@ const WeeklyTasks: React.FC = () => {
    * @returns CSS class name
    */
   const getWeeklyRowColorClass = (task: Task, totalSpent: number): string => {
-    // Calculate days elapsed in week (including today)
+    // Calculate days elapsed from task creation or week start (whichever is later)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekStart = new Date(weekStartDate);
     weekStart.setHours(0, 0, 0, 0);
     
-    let daysElapsed = 7; // Default to full week for past weeks
-    if (today >= weekStart) {
-      const diffTime = today.getTime() - weekStart.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      daysElapsed = Math.min(diffDays + 1, 7); // +1 to include today, max 7
+    // Use the later of week start or task creation date
+    const taskCreatedAt = new Date(task.created_at);
+    taskCreatedAt.setHours(0, 0, 0, 0);
+    const effectiveStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
+    
+    let daysElapsed = 1; // At least 1 day
+    if (today >= effectiveStart) {
+      const diffTime = today.getTime() - effectiveStart.getTime();
+      daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
     }
     
     // Calculate expected target based on task type and frequency
