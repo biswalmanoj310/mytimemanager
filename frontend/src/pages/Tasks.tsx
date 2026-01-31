@@ -12560,9 +12560,8 @@ export default function Tasks() {
                   <tbody>
                     {timeBasedTasks.map((task) => {
                       const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
-                      const weeklyTarget = task.allocated_minutes * 7;
                       
-                      // Calculate days elapsed and actual average
+                      // Get monitoring start date from weekly task status
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       const weekStart = new Date(selectedWeekStart);
@@ -12570,17 +12569,34 @@ export default function Tasks() {
                       const weekEnd = new Date(weekStart);
                       weekEnd.setDate(weekEnd.getDate() + 6);
                       
+                      const taskStatus = weeklyTaskStatuses[task.id];
+                      let monitoringStart = weekStart;
+                      if (taskStatus?.created_at) {
+                        const createdAt = new Date(taskStatus.created_at);
+                        createdAt.setHours(0, 0, 0, 0);
+                        // Use the later of week start or monitoring start
+                        monitoringStart = createdAt > weekStart ? createdAt : weekStart;
+                      }
+                      
+                      // Calculate days elapsed from MONITORING START (not week start!)
                       let daysElapsed = 1; // Default to at least 1 day
-                      if (today >= weekStart) {
+                      if (today >= monitoringStart && monitoringStart <= weekEnd) {
                         if (today <= weekEnd) {
-                          // Current week: count days from week start to today (inclusive)
-                          const diffTime = today.getTime() - weekStart.getTime();
+                          // Current week: count days from monitoring start to today (inclusive)
+                          const diffTime = today.getTime() - monitoringStart.getTime();
                           daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         } else {
-                          // Past week: all 7 days
-                          daysElapsed = 7;
+                          // Past week: from monitoring start to week end
+                          const diffTime = weekEnd.getTime() - monitoringStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         }
+                      } else if (monitoringStart > weekEnd) {
+                        // Monitoring started after this week ended - no expectation
+                        daysElapsed = 0;
                       }
+                      
+                      // Calculate target based on DAYS ELAPSED (not full week!)
+                      const weeklyTarget = task.allocated_minutes * daysElapsed;
                       
                       const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
                       const remaining = weeklyTarget - totalSpent;
@@ -13103,9 +13119,7 @@ export default function Tasks() {
                         totalSpent += getMonthlyTime(task.id, day);
                       }
                       
-                      const monthlyTarget = task.allocated_minutes * daysInMonth;
-                      
-                      // Calculate days elapsed and actual average
+                      // Get monitoring start date from monthly task status
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       const monthStart = new Date(selectedMonthStart);
@@ -13113,17 +13127,34 @@ export default function Tasks() {
                       const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
                       monthEnd.setHours(0, 0, 0, 0);
                       
+                      const taskStatus = monthlyTaskStatuses[task.id];
+                      let monitoringStart = monthStart;
+                      if (taskStatus?.created_at) {
+                        const createdAt = new Date(taskStatus.created_at);
+                        createdAt.setHours(0, 0, 0, 0);
+                        // Use the later of month start or monitoring start
+                        monitoringStart = createdAt > monthStart ? createdAt : monthStart;
+                      }
+                      
+                      // Calculate days elapsed from MONITORING START (not month start!)
                       let daysElapsed = 1; // Default to at least 1 day
-                      if (today >= monthStart) {
+                      if (today >= monitoringStart && monitoringStart <= monthEnd) {
                         if (today <= monthEnd) {
-                          // Current month: count days from month start to today (inclusive)
-                          const diffTime = today.getTime() - monthStart.getTime();
+                          // Current month: count days from monitoring start to today (inclusive)
+                          const diffTime = today.getTime() - monitoringStart.getTime();
                           daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         } else {
-                          // Past month: all days in month
-                          daysElapsed = daysInMonth;
+                          // Past month: from monitoring start to month end
+                          const diffTime = monthEnd.getTime() - monitoringStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         }
+                      } else if (monitoringStart > monthEnd) {
+                        // Monitoring started after this month ended - no expectation
+                        daysElapsed = 0;
                       }
+                      
+                      // Calculate target based on DAYS ELAPSED (not full month!)
+                      const monthlyTarget = task.allocated_minutes * daysElapsed;
                       
                       const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
                       const remaining = monthlyTarget - totalSpent;
@@ -15117,38 +15148,74 @@ export default function Tasks() {
                             totalSpent += getYearlyTime(task.id, month);
                           }
                           
-                          // Calculate target and remaining based on task type and follow-up frequency
+                          // Get monitoring start date from yearly task status
+                          const today = new Date();
+                          const yearStart = new Date(selectedYearStart);
+                          yearStart.setHours(0, 0, 0, 0);
+                          
+                          const taskStatus = yearlyTaskStatuses[task.id];
+                          let monitoringStart = yearStart;
+                          if (taskStatus?.created_at) {
+                            const createdAt = new Date(taskStatus.created_at);
+                            createdAt.setHours(0, 0, 0, 0);
+                            monitoringStart = createdAt > yearStart ? createdAt : yearStart;
+                          }
+                          
+                          // Calculate days elapsed from MONITORING START (not year start!)
+                          today.setHours(0, 0, 0, 0);
+                          const yearEnd = new Date(yearStart.getFullYear(), 11, 31);
+                          yearEnd.setHours(0, 0, 0, 0);
+                          
+                          let daysElapsed = 1;
+                          if (today >= monitoringStart && monitoringStart <= yearEnd) {
+                            if (today <= yearEnd) {
+                              // Current year: from monitoring start to today
+                              const diffTime = today.getTime() - monitoringStart.getTime();
+                              daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                            } else {
+                              // Past year: from monitoring start to year end
+                              const diffTime = yearEnd.getTime() - monitoringStart.getTime();
+                              daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                            }
+                          } else if (monitoringStart > yearEnd) {
+                            // Monitoring started after this year ended - no expectation
+                            daysElapsed = 0;
+                          }
+                          
+                          // Calculate target based on DAYS ELAPSED (not full year!)
                           let yearlyTarget = 0;
                           if (task.task_type === TaskType.COUNT) {
                             if (task.follow_up_frequency === 'daily') {
-                              yearlyTarget = (task.target_value || 0) * 365;
+                              yearlyTarget = (task.target_value || 0) * daysElapsed;
                             } else if (task.follow_up_frequency === 'weekly') {
-                              yearlyTarget = Math.round((task.target_value || 0) * 52);
+                              yearlyTarget = Math.round((task.target_value || 0) * (daysElapsed / 7));
                             } else if (task.follow_up_frequency === 'monthly') {
-                              yearlyTarget = (task.target_value || 0) * 12;
+                              const monthsElapsed = Math.max(1, Math.floor(daysElapsed / 30.4));
+                              yearlyTarget = (task.target_value || 0) * monthsElapsed;
                             } else {
-                              yearlyTarget = task.target_value || 0;
+                              yearlyTarget = (task.target_value || 0) * (daysElapsed / 365);
                             }
                           } else if (task.task_type === TaskType.BOOLEAN) {
                             if (task.follow_up_frequency === 'daily') {
-                              yearlyTarget = 365;
+                              yearlyTarget = daysElapsed;
                             } else if (task.follow_up_frequency === 'weekly') {
-                              yearlyTarget = 52;
+                              yearlyTarget = Math.round(daysElapsed / 7);
                             } else if (task.follow_up_frequency === 'monthly') {
-                              yearlyTarget = 12;
+                              yearlyTarget = Math.max(1, Math.floor(daysElapsed / 30.4));
                             } else {
-                              yearlyTarget = 1;
+                              yearlyTarget = daysElapsed >= 365 ? 1 : 0;
                             }
                           } else {
                             // TIME tasks
                             if (task.follow_up_frequency === 'daily') {
-                              yearlyTarget = task.allocated_minutes * 365;
+                              yearlyTarget = task.allocated_minutes * daysElapsed;
                             } else if (task.follow_up_frequency === 'weekly') {
-                              yearlyTarget = task.allocated_minutes * 52;
+                              yearlyTarget = Math.round(task.allocated_minutes * (daysElapsed / 7));
                             } else if (task.follow_up_frequency === 'monthly') {
-                              yearlyTarget = task.allocated_minutes * 12;
+                              const monthsElapsed = Math.max(1, Math.floor(daysElapsed / 30.4));
+                              yearlyTarget = task.allocated_minutes * monthsElapsed;
                             } else {
-                              yearlyTarget = task.allocated_minutes;
+                              yearlyTarget = Math.round(task.allocated_minutes * (daysElapsed / 365));
                             }
                           }
                           
