@@ -6286,7 +6286,11 @@ export default function Tasks() {
           taskId={selectedTaskId || undefined}
           onClose={() => setIsTaskFormOpen(false)}
           onSuccess={async () => {
-            await loadTasks();
+            const freshTasks = await loadTasks();
+            // Reload today-specific data with fresh tasks
+            await loadTodaysOnlyTasks(freshTasks);
+            await loadProjectTasksDueToday();
+            await loadGoalTasksDueToday();
             setIsTaskFormOpen(false);
           }}
         />
@@ -6493,7 +6497,11 @@ export default function Tasks() {
           taskId={selectedTaskId || undefined}
           onClose={() => setIsTaskFormOpen(false)}
           onSuccess={async () => {
-            await loadTasks();
+            const freshTasks = await loadTasks();
+            // Reload today-specific data with fresh tasks
+            await loadTodaysOnlyTasks(freshTasks);
+            await loadProjectTasksDueToday();
+            await loadGoalTasksDueToday();
             setIsTaskFormOpen(false);
           }}
         />
@@ -6724,7 +6732,11 @@ export default function Tasks() {
           taskId={selectedTaskId || undefined}
           onClose={() => setIsTaskFormOpen(false)}
           onSuccess={async () => {
-            await loadTasks();
+            const freshTasks = await loadTasks();
+            // Reload today-specific data with fresh tasks
+            await loadTodaysOnlyTasks(freshTasks);
+            await loadProjectTasksDueToday();
+            await loadGoalTasksDueToday();
             setIsTaskFormOpen(false);
           }}
         />
