@@ -5759,7 +5759,7 @@ export default function Tasks() {
         if (shouldShowInAttention) {
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
             : `Need ${Math.ceil(deficit)} ${unit} today to hit target (month ended)`;
 
           // Check if already added from weekly - if so, also add as separate monthly entry
@@ -5771,7 +5771,7 @@ export default function Tasks() {
               percentBehind, 
               totalSpent, 
               expectedTarget,
-              dailyTarget: Math.round(dailyTarget),
+              dailyTarget: parseFloat(dailyTarget.toFixed(1)),
               currentAverage: Math.round(currentAverage),
               neededToday: Math.ceil(neededToday),
               deficit: Math.round(deficit)

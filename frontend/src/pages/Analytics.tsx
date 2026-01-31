@@ -240,15 +240,15 @@ export default function Analytics() {
   const [monthOneTimeTaskData, setMonthOneTimeTaskData] = useState<TaskData[]>([]);
   const [allOneTimeTasksData, setAllOneTimeTasksData] = useState<TaskData[]>([]); // Base one-time tasks
   
-  const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Pillars)
-  const [showWeekColumn, setShowWeekColumn] = useState(false); // Toggle for week average column (Pillars)
-  const [showCategoryMonth, setShowCategoryMonth] = useState(false); // Toggle for Categories
-  const [showCategoryWeek, setShowCategoryWeek] = useState(false); // Toggle for Categories weekly
-  const [showTaskMonth, setShowTaskMonth] = useState(false); // Toggle for Tasks
-  const [showTaskWeek, setShowTaskWeek] = useState(false); // Toggle for Tasks weekly
-  const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(false); // Toggle for One-Time Tasks
-  const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(false); // Toggle for One-Time Tasks weekly
-  const [showPillarWeek, setShowPillarWeek] = useState(false); // Toggle for Pillar weekly data
+  const [showMonthColumn, setShowMonthColumn] = useState(() => localStorage.getItem('showMonthColumn') === 'true'); // Toggle for month average column (Pillars)
+  const [showWeekColumn, setShowWeekColumn] = useState(() => localStorage.getItem('showWeekColumn') === 'true'); // Toggle for week average column (Pillars)
+  const [showCategoryMonth, setShowCategoryMonth] = useState(() => localStorage.getItem('showCategoryMonth') === 'true'); // Toggle for Categories
+  const [showCategoryWeek, setShowCategoryWeek] = useState(() => localStorage.getItem('showCategoryWeek') === 'true'); // Toggle for Categories weekly
+  const [showTaskMonth, setShowTaskMonth] = useState(() => localStorage.getItem('showTaskMonth') === 'true'); // Toggle for Tasks
+  const [showTaskWeek, setShowTaskWeek] = useState(() => localStorage.getItem('showTaskWeek') === 'true'); // Toggle for Tasks weekly
+  const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(() => localStorage.getItem('showOneTimeTaskMonth') === 'true'); // Toggle for One-Time Tasks
+  const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(() => localStorage.getItem('showOneTimeTaskWeek') === 'true'); // Toggle for One-Time Tasks weekly
+  const [showPillarWeek, setShowPillarWeek] = useState(() => localStorage.getItem('showPillarWeek') === 'true'); // Toggle for Pillar weekly data
   const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
@@ -295,6 +295,39 @@ export default function Analytics() {
   useEffect(() => {
     localStorage.setItem('showUtilizationOneTimeMonth', showUtilizationOneTimeMonth.toString());
   }, [showUtilizationOneTimeMonth]);
+  
+  // Persist Weekly/Monthly toggle states to localStorage
+  useEffect(() => {
+    localStorage.setItem('showPillarWeek', showPillarWeek.toString());
+  }, [showPillarWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showMonthColumn', showMonthColumn.toString());
+  }, [showMonthColumn]);
+  
+  useEffect(() => {
+    localStorage.setItem('showCategoryWeek', showCategoryWeek.toString());
+  }, [showCategoryWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showCategoryMonth', showCategoryMonth.toString());
+  }, [showCategoryMonth]);
+  
+  useEffect(() => {
+    localStorage.setItem('showTaskWeek', showTaskWeek.toString());
+  }, [showTaskWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showTaskMonth', showTaskMonth.toString());
+  }, [showTaskMonth]);
+  
+  useEffect(() => {
+    localStorage.setItem('showOneTimeTaskWeek', showOneTimeTaskWeek.toString());
+  }, [showOneTimeTaskWeek]);
+  
+  useEffect(() => {
+    localStorage.setItem('showOneTimeTaskMonth', showOneTimeTaskMonth.toString());
+  }, [showOneTimeTaskMonth]);
 
   // Load dynamic configuration on mount
   useEffect(() => {
