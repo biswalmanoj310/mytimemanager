@@ -967,19 +967,22 @@ export default function Tasks() {
         console.log('API response:', response);
       }
       
-      // Switch to NOW tab FIRST to prevent Today tab's useEffect from reloading with old data
+      // Switch to NOW tab FIRST before reloading data
       setActiveTab('now');
       const searchParams = new URLSearchParams(location.search);
       searchParams.set('tab', 'now');
       navigate(`?${searchParams.toString()}`, { replace: true });
       
-      // Now reload all data - useEffect will only reload NOW tab, not Today tab
-      console.log('Reloading all task data...');
-      await loadTasks();
-      await loadProjectTasksDueToday();
-      await loadGoalTasksDueToday();
-      await loadUpcomingTasks();
-      console.log('Task moved to NOW successfully, all data reloaded');
+      // Use setTimeout to ensure tab switch state update completes before reloading data
+      // This prevents the useEffect from firing while activeTab is still 'today'
+      setTimeout(async () => {
+        console.log('Reloading all task data after tab switch...');
+        await loadTasks();
+        await loadProjectTasksDueToday();
+        await loadGoalTasksDueToday();
+        await loadUpcomingTasks();
+        console.log('Task moved to NOW successfully, all data reloaded');
+      }, 100); // Delay to ensure state updates propagate
     } catch (err: any) {
       console.error('Failed to move to NOW - Full error:', err);
       console.error('Error response:', err.response);
@@ -1451,7 +1454,7 @@ export default function Tasks() {
       loadMonthlyTasksNeedingAttention();
       loadUpcomingTasks();
     }
-  }, [tasks, miscTasks, weeklyTaskStatuses, monthlyTaskStatuses, activeTab]);
+  }, [miscTasks, weeklyTaskStatuses, monthlyTaskStatuses, activeTab]); // REMOVED tasks dependency to prevent reload during tab switch
 
   // Define hierarchy order for sorting (matches actual database pillar-category combinations)
   const hierarchyOrder: { [key: string]: number } = {
@@ -3543,7 +3546,8 @@ export default function Tasks() {
   async function loadTodaysOnlyTasks(tasksToFilter?: Task[]) {
     try {
       // Load tasks created specifically for today (follow_up_frequency = 'today')
-      // Exclude NOW tasks (priority <= 3) to prevent duplicates
+      // Include ALL today tasks, including NOW tasks (priority <= 3)
+      // NOW tasks should appear in BOTH NOW tab and Today tab
       // Include completed tasks if completed today (they'll be styled differently)
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -3559,7 +3563,7 @@ export default function Tasks() {
         
         if (task.follow_up_frequency !== 'today') return false;
         if (!task.is_active) return false;
-        if (task.priority && task.priority <= 3) return false; // Exclude NOW tasks
+        if (task.priority && task.priority <= 3) return false; // Exclude NOW tasks (priority 1-3) from Today tab
         
         // Include incomplete tasks
         if (!task.is_completed) {
