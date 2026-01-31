@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 
 from app.database.config import get_db
 from app.models.models import Goal, Task, Pillar, Category, SubCategory, GoalTimePeriod, FollowUpFrequency
+from app.models.goal import LifeGoal, GoalProject
 from app.models.schemas import GoalResponse, TaskResponse
 
 router = APIRouter()
@@ -22,31 +23,43 @@ def get_goals_dashboard_overview(db: Session = Depends(get_db)):
     Get comprehensive goals dashboard overview
     
     Returns:
-    - Total goals count
+    - Total goals count (includes LifeGoals, GoalProjects, and legacy Goals)
     - Goals by status (active, completed, pending)
     - Goals by time period (week, month, quarter, year)
     - Overall progress statistics
     - Top performing goals
     - Goals needing attention
     """
-    # Get all goals
-    all_goals = db.query(Goal).all()
+    # Get all goal types
+    all_legacy_goals = db.query(Goal).all()
+    all_life_goals = db.query(LifeGoal).all()
+    all_goal_projects = db.query(GoalProject).all()
     
-    # Calculate overall statistics
-    total_goals = len(all_goals)
-    active_goals = sum(1 for g in all_goals if g.is_active)
-    completed_goals = sum(1 for g in all_goals if g.is_completed)
-    pending_goals = sum(1 for g in all_goals if not g.is_completed)
+    # Calculate overall statistics (counting all goal types)
+    total_goals = len(all_legacy_goals) + len(all_life_goals) + len(all_goal_projects)
     
-    # Calculate total hours
-    total_allocated_hours = sum(g.allocated_hours for g in all_goals)
-    total_spent_hours = sum(g.spent_hours for g in all_goals)
+    # For legacy goals statistics (these still use the old Goal model)
+    active_goals = sum(1 for g in all_legacy_goals if g.is_active)
+    completed_goals = sum(1 for g in all_legacy_goals if g.is_completed)
+    
+    # Add life goals to active/completed counts (LifeGoal uses is_achieved/is_archived, not status)
+    active_goals += sum(1 for g in all_life_goals if not g.status in ['completed', 'abandoned'])
+    completed_goals += sum(1 for g in all_life_goals if g.status == 'completed')
+    
+    # Goal projects are always active (they don't have a status/completion field)
+    active_goals += len(all_goal_projects)
+    
+    pending_goals = total_goals - completed_goals
+    
+    # Calculate total hours (only legacy goals have this data)
+    total_allocated_hours = sum(g.allocated_hours for g in all_legacy_goals)
+    total_spent_hours = sum(g.spent_hours for g in all_legacy_goals)
     overall_progress = (total_spent_hours / total_allocated_hours * 100) if total_allocated_hours > 0 else 0
     
-    # Group by time period
+    # Group by time period (only legacy goals have this)
     by_time_period = {}
     for period in GoalTimePeriod:
-        period_goals = [g for g in all_goals if g.goal_time_period == period]
+        period_goals = [g for g in all_legacy_goals if g.goal_time_period == period]
         if period_goals:
             by_time_period[period.value] = {
                 "count": len(period_goals),
@@ -57,11 +70,11 @@ def get_goals_dashboard_overview(db: Session = Depends(get_db)):
                 "progress": (sum(g.spent_hours for g in period_goals) / sum(g.allocated_hours for g in period_goals) * 100) if sum(g.allocated_hours for g in period_goals) > 0 else 0
             }
     
-    # Group by pillar
+    # Group by pillar (only legacy goals have pillar_id)
     by_pillar = {}
     pillars = db.query(Pillar).all()
     for pillar in pillars:
-        pillar_goals = [g for g in all_goals if g.pillar_id == pillar.id]
+        pillar_goals = [g for g in all_legacy_goals if g.pillar_id == pillar.id]
         if pillar_goals:
             by_pillar[pillar.name] = {
                 "pillar_id": pillar.id,
@@ -73,9 +86,9 @@ def get_goals_dashboard_overview(db: Session = Depends(get_db)):
                 "progress": (sum(g.spent_hours for g in pillar_goals) / sum(g.allocated_hours for g in pillar_goals) * 100) if sum(g.allocated_hours for g in pillar_goals) > 0 else 0
             }
     
-    # Top performing goals (highest progress percentage)
+    # Top performing goals (highest progress percentage) - only legacy goals tracked in dashboard
     goals_with_progress = []
-    for goal in all_goals:
+    for goal in all_legacy_goals:
         if goal.is_active and not goal.is_completed:
             progress = (goal.spent_hours / goal.allocated_hours * 100) if goal.allocated_hours > 0 else 0
             goals_with_progress.append({
@@ -92,9 +105,9 @@ def get_goals_dashboard_overview(db: Session = Depends(get_db)):
     # Goals needing attention (lowest progress, active but not started much)
     needs_attention = [g for g in goals_with_progress if g["progress"] < 25][:5]
     
-    # Recently completed goals
+    # Recently completed goals (only legacy goals tracked in dashboard)
     recently_completed = sorted(
-        [g for g in all_goals if g.is_completed and g.completed_at],
+        [g for g in all_legacy_goals if g.is_completed and g.completed_at],
         key=lambda x: x.completed_at,
         reverse=True
     )[:5]
