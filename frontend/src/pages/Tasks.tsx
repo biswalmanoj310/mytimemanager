@@ -5608,6 +5608,13 @@ export default function Tasks() {
         const today = new Date();
         today.setHours(0, 0, 0, 0); // Start of today
         
+        // Use the later of week start or task creation date as the effective start
+        const taskCreatedAt = new Date(task.created_at);
+        taskCreatedAt.setHours(0, 0, 0, 0);
+        const weekStart = new Date(selectedWeekStart);
+        weekStart.setHours(0, 0, 0, 0);
+        const effectiveStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
+        
         weekDays.forEach(day => {
           totalSpent += getWeeklyTime(task.id, day.index);
           
@@ -5615,12 +5622,13 @@ export default function Tasks() {
           dayDate.setDate(dayDate.getDate() + day.index);
           dayDate.setHours(0, 0, 0, 0);
 
-          if (dayDate <= today) {
+          // Only count days on or after the effective start date
+          if (dayDate >= effectiveStart && dayDate <= today) {
             totalDaysIncludingToday++;
           }
           
-          // Count only PAST days (before today) for deficit calculation
-          if (dayDate < today) {
+          // Count only PAST days (before today) that are on or after effective start
+          if (dayDate >= effectiveStart && dayDate < today) {
             pastDaysOnly++;
           }
         });
@@ -5711,20 +5719,27 @@ export default function Tasks() {
         const monthStart = new Date(selectedMonthStart);
         monthStart.setHours(0, 0, 0, 0);
         
+        // Use the later of month start or task creation date as the effective start
+        const taskCreatedAt = new Date(task.created_at);
+        taskCreatedAt.setHours(0, 0, 0, 0);
+        const effectiveStart = taskCreatedAt > monthStart ? taskCreatedAt : monthStart;
+        
         let daysIncludingToday = 1; // Days including today
         let pastDaysOnly = 0; // Past days only (for deficit calculation)
         
-        if (today >= monthStart) {
+        if (today >= effectiveStart) {
           const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
           monthEnd.setHours(0, 0, 0, 0);
           
           if (today <= monthEnd) {
-            const diffTime = today.getTime() - monthStart.getTime();
+            const diffTime = today.getTime() - effectiveStart.getTime();
             daysIncludingToday = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
             pastDaysOnly = Math.max(0, daysIncludingToday - 1); // Exclude today
           } else {
-            daysIncludingToday = daysInMonth;
-            pastDaysOnly = daysInMonth;
+            // Past month - count from effective start to month end
+            const diffTime = monthEnd.getTime() - effectiveStart.getTime();
+            daysIncludingToday = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            pastDaysOnly = daysIncludingToday;
           }
         }
 
