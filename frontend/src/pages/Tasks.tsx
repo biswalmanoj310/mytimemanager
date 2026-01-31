@@ -5815,8 +5815,16 @@ export default function Tasks() {
         startOfYear.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
         
-        const daysElapsedInYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        const daysLeftInYear = 365 - daysElapsedInYear + 1; // Including today
+        // Calculate effective start date (task.created_at or year start)
+        const taskCreated = task.created_at ? new Date(task.created_at) : startOfYear;
+        taskCreated.setHours(0, 0, 0, 0);
+        const effectiveStart = taskCreated > startOfYear ? taskCreated : startOfYear;
+        
+        // Calculate days elapsed from effective start (when task was actually being tracked)
+        const daysElapsedInYear = Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const yearEnd = new Date(currentYear, 11, 31);
+        yearEnd.setHours(0, 0, 0, 0);
+        const daysLeftInYear = Math.floor((yearEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         
         // Calculate total spent from yearlyMonthlyAggregates (all months year-to-date)
         let totalSpent = 0;
@@ -5897,11 +5905,21 @@ export default function Tasks() {
       if (yearlyStatus && !yearlyStatus.is_completed && !yearlyStatus.is_na) {
         const today = new Date();
         const currentYear = today.getFullYear();
+        const startOfYear = new Date(currentYear, 0, 1);
+        startOfYear.setHours(0, 0, 0, 0);
         today.setHours(0, 0, 0, 0);
         
         // Determine current quarter
         const currentMonth = today.getMonth() + 1; // 1-12
         const currentQuarter = Math.ceil(currentMonth / 3); // 1, 2, 3, or 4
+        
+        // Calculate effective start date (task.created_at or year start)
+        const taskCreated = task.created_at ? new Date(task.created_at) : startOfYear;
+        taskCreated.setHours(0, 0, 0, 0);
+        const effectiveStart = taskCreated > startOfYear ? taskCreated : startOfYear;
+        
+        // Calculate days elapsed in year from effective start
+        const daysElapsedInYear = Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         
         // Calculate total spent from yearlyMonthlyAggregates (all quarters year-to-date)
         let totalSpent = 0;
@@ -5910,11 +5928,6 @@ export default function Tasks() {
           const key = `${task.id}-${month}`;
           totalSpent += (yearlyMonthlyAggregates[key] || 0);
         }
-        
-        // Calculate days elapsed in year
-        const startOfYear = new Date(currentYear, 0, 1);
-        startOfYear.setHours(0, 0, 0, 0);
-        const daysElapsedInYear = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
         
         // Calculate daily target (ideal daily average)
         let dailyTarget = 0;
