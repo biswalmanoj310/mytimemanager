@@ -3367,11 +3367,9 @@ export default function Tasks() {
       const allTasks = [...overdueTasks, ...todayTasks, ...noDueDateTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
-      ).filter(task => {
-        // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
-        // Backend returns 'priority' field (maps priority_new to priority)
-        return !(task.priority && task.priority <= 3);
-      });
+      );
+      // NOTE: Removed priority filter here - let rendering logic in each tab decide what to show
+      // NOW tab will filter for priority 1-3, Today tab will filter OUT priority 1-3
       
       setProjectTasksDueToday(uniqueTasks);
     } catch (err: any) {
@@ -3397,19 +3395,15 @@ export default function Tasks() {
       const allTasks = [...overdueTasks, ...todayTasks, ...noDueDateTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
-      ).filter(task => {
-        // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
-        const taskPriority = typeof task.priority === 'string' 
-          ? (task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9)
-          : task.priority;
-        return !(taskPriority && taskPriority <= 3);
-      }).map(task => ({
+      ).map(task => ({
         ...task,
         // Convert string priority to integer for display: high=P1, medium=P5, low=P9
         priority: typeof task.priority === 'string' 
           ? (task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9)
           : task.priority
       }));
+      // NOTE: Removed priority filter here - let rendering logic in each tab decide what to show
+      // NOW tab will filter for priority 1-3, Today tab will filter OUT priority 1-3
       
       setGoalTasksDueToday(uniqueTasks);
     } catch (err: any) {
@@ -3653,13 +3647,11 @@ export default function Tasks() {
       const response: any = await api.get('/api/important-tasks/due-today');
       const dueTasks = Array.isArray(response.data || response) ? (response.data || response) : [];
       
-      // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
-      const filteredTasks = dueTasks.filter((task: any) => {
-        return !(task.priority && task.priority <= 3);
-      });
+      // NOTE: Removed priority filter here - let rendering logic in each tab decide what to show
+      // NOW tab will filter for priority 1-3, Today tab will filter OUT priority 1-3
       
-      console.log('✅ Important tasks loaded:', filteredTasks.length, filteredTasks);
-      setImportantTasksDueToday(filteredTasks);
+      console.log('✅ Important tasks loaded:', dueTasks.length, dueTasks);
+      setImportantTasksDueToday(dueTasks);
     } catch (err: any) {
       console.error('❌ Error loading important tasks due today:', err);
       setImportantTasksDueToday([]);
