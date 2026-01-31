@@ -5680,7 +5680,7 @@ export default function Tasks() {
           needsAttention.push({
             task,
             reason: 'weekly',
-            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysIncludingToday, neededToday: Math.ceil(neededToday), dailyTarget: Math.round(dailyTarget), deficit: Math.round(deficit) },
+            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysIncludingToday, daysLeft: daysLeft, neededToday: Math.ceil(neededToday), dailyTarget: Math.round(dailyTarget), deficit: Math.round(deficit) },
             recommendation
           });
         }
@@ -16495,7 +16495,7 @@ export default function Tasks() {
                               </span>
                               {item.weeklyIssue && (
                                 <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '600' }}>
-                                  Need <strong>{item.weeklyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.weeklyIssue.dailyTarget}, Lagged: {item.weeklyIssue.deficit || 0}, {item.weeklyIssue.totalDays - item.weeklyIssue.redDays} days left)
+                                  Need <strong>{item.weeklyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.weeklyIssue.dailyTarget}, Lagged: {item.weeklyIssue.deficit || 0}, {item.weeklyIssue.daysLeft} days left)
                                 </span>
                               )}
                               {item.monthlyIssue && !item.weeklyIssue && (
