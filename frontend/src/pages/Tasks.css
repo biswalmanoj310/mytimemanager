@@ -1435,6 +1435,8 @@ input[type="number"].hour-input {
   vertical-align: middle;
   white-space: pre-line; /* Allow line breaks */
   text-align: center;
+  color: #2563eb !important; /* Dark blue for visibility */
+  font-weight: 600;
 }
 
 /* Hour column - over 60 minutes warning */
