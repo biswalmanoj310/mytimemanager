@@ -414,7 +414,7 @@ const MonthlyTasks: React.FC = () => {
             </div>
           ) : isMonthlyCompleted || isMonthlyNA ? (
             <div className="action-buttons">
-              <button style={{ background: '#4299e1', color: 'white', padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }} onClick={() => handleRestoreMonthlyTask(task.id)} title="Restore this task to active state">
+              <button style={{ background: '#bfdbfe', color: 'white', padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }} onClick={() => handleRestoreMonthlyTask(task.id)} title="Restore this task to active state">
                 <i className="fas fa-undo"></i> RESTORE
               </button>
             </div>
@@ -516,7 +516,7 @@ const MonthlyTasks: React.FC = () => {
         })}
         <td className="col-status" style={bgColor ? { backgroundColor: bgColor } : undefined}>
           <div className="action-buttons">
-            <button style={{ background: '#4299e1', color: 'white', padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }} onClick={() => handleRestoreMonthlyTask(task.id)} title="Restore this task to active state">
+            <button style={{ background: '#bfdbfe', color: 'white', padding: '6px 12px', borderRadius: '4px', border: 'none', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }} onClick={() => handleRestoreMonthlyTask(task.id)} title="Restore this task to active state">
               <i className="fas fa-undo"></i> RESTORE
             </button>
           </div>
@@ -535,14 +535,14 @@ const MonthlyTasks: React.FC = () => {
         </h3>
         <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
           <table className="tasks-table daily-table">
-            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
+            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
               <tr>
                 <th className="col-task sticky-col sticky-col-1" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#fef3c7' }}>Task</th>
                 <th className="col-time sticky-col sticky-col-2" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Ideal<br/>Average/Day</th>
                 <th className="col-time sticky-col sticky-col-3" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Actual<br/>Average/Day</th>
                 <th className="col-time sticky-col sticky-col-4" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Needed<br/>Average/Day</th>
-                {monthDays.map(day => <th key={day.day} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.day}</th>)}
-                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                {monthDays.map(day => <th key={day.day} className="col-hour" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.day}</th>)}
+                <th className="col-status" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -565,14 +565,14 @@ const MonthlyTasks: React.FC = () => {
         </h3>
         <div className="tasks-table-container" style={{ borderRadius: '0 0 8px 8px' }}>
           <table className="tasks-table daily-table">
-            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
+            <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
               <tr>
                 <th className="col-task sticky-col sticky-col-1" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#fef3c7' }}>Task</th>
                 <th className="col-time sticky-col sticky-col-2" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Ideal<br/>Average/Day</th>
                 <th className="col-time sticky-col sticky-col-3" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Actual<br/>Average/Day</th>
                 <th className="col-time sticky-col sticky-col-4" style={{ color: '#1a202c', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#fef3c7' }}>Needed<br/>Average/Day</th>
-                {monthDays.map(day => <th key={day.day} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.day}</th>)}
-                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
+                {monthDays.map(day => <th key={day.day} className="col-hour" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{day.day}</th>)}
+                <th className="col-status" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
               </tr>
             </thead>
             <tbody>

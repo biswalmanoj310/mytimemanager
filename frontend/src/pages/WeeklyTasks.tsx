@@ -1043,7 +1043,7 @@ const WeeklyTasks: React.FC = () => {
             <thead style={{ 
               display: 'table-header-group', 
               visibility: 'visible',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)',
               position: 'sticky',
               top: 0,
               zIndex: 20,
@@ -1063,11 +1063,11 @@ const WeeklyTasks: React.FC = () => {
                   Needed<br/>Avg/Day
                 </th>
                 {weekDays.map(day => (
-                  <th key={day.index} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>
+                  <th key={day.index} className="col-hour" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>
                     {day.label}
                   </th>
                 ))}
-                <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>
+                <th className="col-status" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>
                   Actions
                 </th>
               </tr>
@@ -1104,7 +1104,7 @@ const WeeklyTasks: React.FC = () => {
       {nativeWeeklyTasks.length > 0 && (
         <div className="row mb-4">
           <div className="col">
-            <div className="alert" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
+            <div className="alert" style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
               <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                 <i className="fas fa-calendar-week me-2"></i>
                 📅 Weekly Tasks - Home Tab ({nativeWeeklyTasks.length} tasks) - Track progress day-by-day (Mon-Sun) or mark complete/NA for the entire week.
