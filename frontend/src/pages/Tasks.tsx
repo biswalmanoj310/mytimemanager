@@ -16066,19 +16066,19 @@ export default function Tasks() {
                   }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f7fafc', borderBottom: '2px solid #e2e8f0' }}>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0', width: '35%' }}>
                           Task Name
                         </th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0', width: '15%' }}>
                           Category
                         </th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0', width: '15%' }}>
                           Due Date
                         </th>
-                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0', width: '15%' }}>
                           Status
                         </th>
-                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontWeight: '600', color: '#2d3748', fontSize: '13px', border: '1px solid #e2e8f0', width: '20%' }}>
                           Actions
                         </th>
                       </tr>
@@ -16202,7 +16202,7 @@ export default function Tasks() {
                               )}
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', flexWrap: 'nowrap' }}>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
