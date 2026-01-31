@@ -15738,8 +15738,10 @@ export default function Tasks() {
           {/* Project Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Show ALL tasks regardless of priority - backend returns completed tasks only if completed today
-            const filteredTasks = projectTasksDueToday.filter(t => filterByMonth(t));
+            // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
+            const filteredTasks = projectTasksDueToday
+              .filter(t => !(t.priority_new && t.priority_new <= 3)) // Exclude NOW tasks
+              .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
             <div id="project-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -15880,8 +15882,10 @@ export default function Tasks() {
           {/* Goal Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Show ALL tasks regardless of priority - backend returns completed tasks only if completed today
-            const filteredTasks = goalTasksDueToday.filter(t => filterByMonth(t));
+            // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
+            const filteredTasks = goalTasksDueToday
+              .filter(t => !(t.priority && t.priority <= 3)) // Exclude NOW tasks
+              .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
             <div id="goal-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -16280,7 +16284,10 @@ export default function Tasks() {
           {/* Important Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            const filteredTasks = importantTasksDueToday.filter(t => filterByMonth(t));
+            // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
+            const filteredTasks = importantTasksDueToday
+              .filter(t => !(t.priority && t.priority <= 3)) // Exclude NOW tasks
+              .filter(t => filterByMonth(t));
             
             // Only show section if there are tasks
             if (filteredTasks.length === 0) return null;
