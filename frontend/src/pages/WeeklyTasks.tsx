@@ -772,7 +772,12 @@ const WeeklyTasks: React.FC = () => {
       }
     }
     
-    // Calculate target based on daysElapsed (not full 7 days)
+    // Daily ideal target (for display - NOT adjusted for daysElapsed)
+    const dailyIdeal = task.task_type === TaskType.COUNT 
+      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 7)
+      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7);
+    
+    // Expected target for daysElapsed (for calculations)
     const weeklyTarget = task.task_type === TaskType.COUNT 
       ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) * daysElapsed : (task.target_value || 0))
       : (task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysElapsed : task.allocated_minutes);
@@ -827,7 +832,7 @@ const WeeklyTasks: React.FC = () => {
         >
           {task.task_type === TaskType.BOOLEAN 
             ? '1/1 day' 
-            : formatValue(task, weeklyTarget / 7)
+            : formatValue(task, dailyIdeal)
           }
         </td>
         

@@ -326,6 +326,15 @@ const MonthlyTasks: React.FC = () => {
       }
     }
     
+    // Daily ideal target (for display - NOT adjusted for daysElapsed)
+    const dailyIdeal = task.task_type === TaskType.COUNT 
+      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : 
+         task.follow_up_frequency === 'weekly' ? (task.target_value || 0) / 7 :
+         (task.target_value || 0) / daysInMonth)
+      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : 
+         task.follow_up_frequency === 'weekly' ? task.allocated_minutes / 7 :
+         task.allocated_minutes / daysInMonth);
+    
     // Calculate target based on daysElapsed (not full month)
     const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysElapsed : task.allocated_minutes * daysElapsed;
     let daysRemaining = 0;
@@ -354,7 +363,7 @@ const MonthlyTasks: React.FC = () => {
           </div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes)}
+          {formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
           {formatValue(task, avgSpentPerDay)}
@@ -432,6 +441,15 @@ const MonthlyTasks: React.FC = () => {
       }
     }
     
+    // Daily ideal target (for display - NOT adjusted for daysElapsed)
+    const dailyIdeal = task.task_type === TaskType.COUNT 
+      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : 
+         task.follow_up_frequency === 'weekly' ? (task.target_value || 0) / 7 :
+         (task.target_value || 0) / daysInMonth)
+      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : 
+         task.follow_up_frequency === 'weekly' ? task.allocated_minutes / 7 :
+         task.allocated_minutes / daysInMonth);
+    
     // Calculate target based on daysElapsed (not full month)
     const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysElapsed : task.allocated_minutes * daysElapsed;
     let daysRemaining = 0;
@@ -460,7 +478,7 @@ const MonthlyTasks: React.FC = () => {
           </div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes)}
+          {formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
           {formatValue(task, avgSpentPerDay)}
