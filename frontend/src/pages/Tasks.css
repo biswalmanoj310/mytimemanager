@@ -3855,106 +3855,24 @@ input[type="number"].hour-input {
 }
 
 /* ========================================
-   RESPONSIVE FIXES FOR WINDOWS CHROME
+   DESKTOP OPTIMIZATIONS (Windows/Mac/Linux)
+   Mobile support will be added later
    ======================================== */
 
-/* Base desktop styling - ensure full content visibility */
-.tasks-page {
-  width: 100%;
+/* Ensure proper layout on all desktop screens */
+.tasks-table-container {
   box-sizing: border-box;
+  width: 100%;
 }
 
-/* Large desktop screens (no changes needed) */
-@media screen and (min-width: 1921px) {
-  .tasks-page {
-    max-width: 1600px;
-  }
-}
-
-/* Standard desktop/laptop (1366px-1920px) - Windows typical */
-@media screen and (max-width: 1920px) and (min-width: 1367px) {
-  .tasks-page {
-    max-width: 100%;
-    width: 100%;
-    box-sizing: border-box;
-  }
-  
-  .tasks-table-container {
-    box-sizing: border-box;
-  }
-  
-  .daily-table .col-task {
-    min-width: 180px;
-    max-width: 280px;
-  }
-}
-
-/* Smaller laptops (1024px-1366px) */
-@media screen and (max-width: 1366px) and (min-width: 1025px) {
-  .daily-table .col-task {
-    min-width: 160px;
-    max-width: 250px;
-  }
-  
-  .tasks-table {
-    font-size: 13px;
-  }
-}
-
-/* Tablets (768px-1024px) */
-@media screen and (max-width: 1024px) and (min-width: 769px) {
-  .tasks-page {
-    padding: 12px 8px;
-  }
-  
-  .daily-table .col-task {
-    min-width: 140px;
-    max-width: 220px;
-  }
-  
-  .col-hour {
-    width: 45px;
-    min-width: 45px;
-    max-width: 45px;
-  }
-  
-  .tasks-table {
-    font-size: 12px;
-  }
-}
-
-/* Mobile devices */
-@media screen and (max-width: 768px) {
-  .tasks-page {
-    padding: 8px;
-  }
-  
-  .tasks-table-container {
-    max-height: calc(100vh - 200px);
-  }
-  
-  .daily-table .col-task {
-    min-width: 120px;
-    max-width: 200px;
-  }
-  
-  .col-hour {
-    width: 40px;
-    min-width: 40px;
-    max-width: 40px;
-  }
-}
-
-/* Windows Chrome specific fixes */
+/* Windows Chrome - ensure proper scrollbar behavior */
 @supports (-ms-ime-align: auto) {
   .tasks-table-container {
     overflow-x: auto !important;
   }
 }
 
-/* Chromium-based browsers - ensure proper scrollbar */
-@media screen and (-webkit-min-device-pixel-ratio: 0) {
-  .tasks-table-container {
-    scrollbar-gutter: stable;
-  }
+/* Chromium browsers - stable scrollbar space */
+.tasks-table-container {
+  scrollbar-gutter: stable;
 }

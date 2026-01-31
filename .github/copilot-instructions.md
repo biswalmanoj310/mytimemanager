@@ -4,6 +4,20 @@
 
 MyTimeManager is a time and task management application built on the **CANI (Constant And Never-ending Improvement)** philosophy. The app balances life across three 8-hour pillars: **Hard Work** (💼), **Calmness** (🧘), and **Family** (👨‍👩‍👦). It supports multi-profile usage (family members) with kid-friendly and professional time block views.
 
+### Multi-Platform Development Context (CRITICAL)
+**Development Environment**:
+- **Single codebase** - NO OS-specific branches
+- **Development machine**: Mac (this machine - runs AI/Copilot, direct run for dev, ALSO production for dad's daily tasks)
+- **Family production**: Windows (daughter - Docker), Mac (wife - Docker)
+- **Bug reports mentioning "Windows"**: Come from daughter's machine - test with `./start-docker.sh` on Mac, NOT `./start_app.sh`
+
+**Cross-Platform Requirements**:
+- ALWAYS use `timezone_utils.py` for datetime (Windows stores UTC, Mac/Linux store local - see Pattern #8)
+- ALWAYS use `os.path.join()` or `Path` for file paths (NOT hardcoded `/` or `\`)
+- ALWAYS provide `.sh` (Mac/Linux) AND `.bat` (Windows) scripts
+- ALWAYS test with Docker (`./start-docker.sh`) before pushing to family machines
+- See README "Multi-Platform Development Workflow" section for complete workflow
+
 ## Architecture
 
 ### Tech Stack
@@ -240,6 +254,22 @@ The app includes a persistent pomodoro timer with tree growth visualization:
 - **Styling**: `frontend/src/styles/PomodoroTree.css` - tree SVG animations
 - **Usage**: No props needed for basic integration - handles its own state
 
+### 8. Timezone/Datetime Pattern (CRITICAL for Cross-Platform)
+**ALWAYS use `timezone_utils.py` for datetime operations** (fixes Windows/Mac/Linux inconsistencies):
+```python
+from app.utils.timezone_utils import get_local_now, to_local_date_start, parse_date_string
+
+# CORRECT: Use timezone utilities
+task.created_at = get_local_now()                      # Instead of datetime.now() or func.now()
+task_date = to_local_date_start(task.created_at)      # Normalize to midnight
+selected_date = parse_date_string(params.get('date')) # Parse frontend date strings
+
+# WRONG: Direct datetime usage causes timezone bugs
+task.created_at = datetime.utcnow()  # ❌ UTC causes display issues
+task.created_at = func.now()         # ❌ Database-level now() inconsistent across platforms
+```
+**Why**: System stores naive datetimes (no timezone) to avoid conversion errors between Windows (UTC default) and Unix (local default)
+
 ## Data Integrity Rules
 
 1. **Time Allocation**: Daily tasks should total 480 minutes (8 hours) per pillar (not enforced but expected)
@@ -263,6 +293,9 @@ The app includes a persistent pomodoro timer with tree growth visualization:
 11. **Docker vs Direct Run**: Docker backups go to `backend/database/backups/`, manual script backups go to `~/mytimemanager_backups/` - different locations!
 12. **Time Blocks Misconception**: Time blocks change DISPLAY only (not storage) - entries always stored by absolute hour (0-23)
 13. **Cron in Docker**: Automatic backups only work in Docker deployment (requires cron service in container)
+14. **Timezone Utilities Bypass**: Never use `datetime.now()`, `datetime.utcnow()`, or `func.now()` directly - ALWAYS import and use `get_local_now()` from `app.utils.timezone_utils` to ensure cross-platform consistency (Windows stores UTC, Unix stores local time - timezone_utils normalizes this)
+15. **Testing Wrong Environment**: When daughter (Windows) reports bugs, test with `./start-docker.sh` NOT `./start_app.sh` - Docker environment differs from direct run (see README "Multi-Platform Development Workflow")
+16. **Windows Path Issues**: Never hardcode paths with `/` or `\` - use `Path` from pathlib or `os.path.join()` for cross-platform compatibility
 
 ## UI/UX Standards
 

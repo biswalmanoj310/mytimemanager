@@ -63,7 +63,126 @@ A comprehensive time and task management application based on the CANI (Constant
 
 ---
 
-## 💻 Development Setup
+## � Multi-Platform Development Workflow
+
+### Overview
+This app is developed and deployed across **three machines with different operating systems**:
+
+| Machine | OS | Usage | Deployment Mode |
+|---------|----|----|-----------------|
+| **Dad's MacBook** (Dev) | macOS | Development + Production | Direct Run (start_app.sh) |
+| **Daughter's Laptop** | Windows | Production Only | Docker (start-docker.bat) |
+| **Wife's MacBook** | macOS | Production Only | Docker (start-docker.sh) |
+
+### Important Development Principles
+
+#### 1. Single Codebase, No OS Branching
+- **All development happens on Dad's MacBook** (this machine)
+- **No separate branches for Windows vs Mac** - one codebase for all platforms
+- AI tools (GitHub Copilot) run on the Mac development machine
+
+#### 2. Cross-Platform Testing Strategy
+When developing features or fixing bugs:
+
+**For Windows-Specific Issues** (reported by daughter):
+```bash
+# On Mac (Dev Machine):
+1. Daughter reports issue: "Task completion not working on Windows"
+2. Check if issue is OS-specific (timezone, path, datetime handling)
+3. Review backend/app/utils/timezone_utils.py usage
+4. Test fix using Docker on Mac: ./start-docker.sh
+5. Verify in Swagger UI: http://localhost:8000/docs
+6. Push changes to daughter's machine
+```
+
+**For Mac Issues** (reported by wife):
+```bash
+# Same process - fix on dev machine, test with Docker
+./start-docker.sh  # Simulates production Docker environment
+```
+
+#### 3. Critical Cross-Platform Patterns
+
+**✅ ALWAYS Use These Patterns:**
+- **Datetime handling**: Use `timezone_utils.py` functions (NOT `datetime.now()` or `func.now()`)
+  ```python
+  from app.utils.timezone_utils import get_local_now
+  task.created_at = get_local_now()  # ✅ Cross-platform safe
+  ```
+- **File paths**: Use `os.path.join()` and `Path` (NOT hardcoded slashes)
+  ```python
+  from pathlib import Path
+  db_path = Path("backend") / "database" / "mytimemanager.db"  # ✅ Works on Windows & Mac
+  ```
+- **Scripts**: Provide both `.sh` (Mac/Linux) and `.bat` (Windows) versions
+
+**❌ NEVER Do These:**
+- ❌ `datetime.utcnow()` - breaks on Windows (UTC vs local time)
+- ❌ Hardcoded paths like `/Users/...` or `C:\Users\...`
+- ❌ OS-specific code without cross-platform fallbacks
+
+#### 4. Testing Before Deployment
+
+**Before pushing to family machines:**
+```bash
+# On Mac Dev Machine:
+# Test 1: Direct run (development mode)
+./start_app.sh
+# Verify: http://localhost:3000
+
+# Test 2: Docker mode (production simulation)
+./stop_app.sh  # Stop direct run first
+./start-docker.sh
+# Verify: http://localhost:3000
+# Check browser DevTools console for errors
+
+# Test 3: Run backend tests
+cd backend
+pytest
+```
+
+#### 5. Bug Report Workflow
+
+When family members report issues:
+
+```
+Daughter (Windows): "Tasks not showing in Daily tab"
+  ↓
+1. Ask: "What OS?" → Windows
+2. Check: Is this timezone-related? Path-related? Docker-specific?
+3. Look for: Windows-specific datetime bugs, file path issues
+4. Fix on Mac: Update backend/app/utils/timezone_utils.py usage
+5. Test on Mac: ./start-docker.sh (simulates Windows Docker environment)
+6. Verify: cd backend && pytest
+7. Deploy: Push code, daughter runs: docker-compose pull && docker-compose up -d
+```
+
+#### 6. Development Machine as Production
+
+⚠️ **Special Note**: The Mac dev machine is ALSO used for production (daily task tracking).
+
+**Best Practices:**
+- **Always backup before testing**: `./backup_database.sh`
+- **Use separate database profiles**: "Production" vs "Testing"
+- **Test on Docker first** before direct run to avoid corrupting production data
+- **Never run migrations** without backup: `./backup_database.sh && python migrations/XXX.py`
+
+#### 7. Docker vs Direct Run Differences
+
+| Aspect | Direct Run (Mac Dev) | Docker (All Machines) |
+|--------|----------------------|-----------------------|
+| Database | `backend/database/mytimemanager.db` | Same (volume mounted) |
+| Backups | `~/mytimemanager_backups/` | `backend/database/backups/` |
+| Automatic Backups | ❌ Manual only | ✅ Daily at 2 AM (cron) |
+| Python/Node Install | ✅ Required | ❌ Not needed |
+| Hot Reload | ✅ Code changes reflect instantly | ❌ Need rebuild |
+| Use Case | Development + Testing | Family Production Use |
+
+**Key Insight**: When daughter/wife report Docker issues, reproduce on Mac using `./start-docker.sh`, NOT `./start_app.sh`.
+
+---
+
+## �💻 Development Setup
 
 ### Prerequisites
 - Python 3.9+
