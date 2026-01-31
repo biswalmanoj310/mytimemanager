@@ -5674,13 +5674,13 @@ export default function Tasks() {
           
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           const recommendation = daysLeft > 0 
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
+            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
             : `Need ${Math.ceil(remaining)} ${unit} today to hit target`;
 
           needsAttention.push({
             task,
             reason: 'weekly',
-            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysIncludingToday, daysLeft: daysLeft, neededToday: Math.ceil(neededToday), dailyTarget: Math.round(dailyTarget), deficit: Math.round(deficit) },
+            weeklyIssue: { redDays: redDaysCount, totalDays: totalDaysIncludingToday, daysLeft: daysLeft, neededToday: Math.ceil(neededToday), dailyTarget: parseFloat(dailyTarget.toFixed(1)), deficit: Math.round(deficit) },
             recommendation
           });
         }
