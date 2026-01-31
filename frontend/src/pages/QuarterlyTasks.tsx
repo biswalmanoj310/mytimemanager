@@ -415,53 +415,63 @@ const QuarterlyTasks: React.FC = () => {
     
     const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
     
-    // Calculate quarters elapsed from tracking start
-    let quartersElapsed = 1;
-    if (today.getFullYear() === yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, currentQuarter - trackingStartQuarter + 1);
-    } else if (today.getFullYear() > yearStartDate.getFullYear()) {
-      quartersElapsed = Math.max(1, 4 - trackingStartQuarter + 1);
-    }
-
-    const avgSpentPerQuarter = Math.round(totalSpent / quartersElapsed);
+    // Calculate effective start date (task creation or year start)
+    const effectiveStart = yearlyStatus?.created_at 
+      ? new Date(Math.max(new Date(yearlyStatus.created_at).getTime(), yearStartDate.getTime()))
+      : yearStartDate;
     
-    // Calculate yearly target
-    let yearlyTarget = 0;
+    // Calculate days elapsed from effective start
+    const yearEnd = new Date(yearStartDate.getFullYear(), 11, 31); // Dec 31
+    const endOfPeriod = today < yearEnd ? today : yearEnd;
+    const daysElapsed = Math.max(1, Math.ceil((endOfPeriod.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    
+    // Calculate days in tracking period (effective start to year end)
+    const daysInTrackingPeriod = Math.ceil((yearEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Calculate DAILY ideal (for display - NOT adjusted for daysElapsed)
+    let dailyIdeal = 0;
     if (task.task_type === TaskType.COUNT) {
       if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = (task.target_value || 0) * 365;
+        dailyIdeal = task.target_value || 0;
       } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = Math.round((task.target_value || 0) * 52);
+        dailyIdeal = Math.round(((task.target_value || 0) * 52) / 365);
       } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = (task.target_value || 0) * 12;
+        dailyIdeal = Math.round(((task.target_value || 0) * 12) / 365);
       } else {
-        yearlyTarget = task.target_value || 0;
+        dailyIdeal = Math.round((task.target_value || 0) / 365);
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
       if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = 365;
+        dailyIdeal = 1;
       } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = 52;
+        dailyIdeal = Math.round(52 / 365);
       } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = 12;
+        dailyIdeal = Math.round(12 / 365);
       } else {
-        yearlyTarget = 1;
+        dailyIdeal = Math.round(1 / 365);
       }
     } else {
       if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = task.allocated_minutes * 365;
+        dailyIdeal = task.allocated_minutes;
       } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = task.allocated_minutes * 52;
+        dailyIdeal = Math.round((task.allocated_minutes * 52) / 365);
       } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = task.allocated_minutes * 12;
+        dailyIdeal = Math.round((task.allocated_minutes * 12) / 365);
       } else {
-        yearlyTarget = task.allocated_minutes;
+        dailyIdeal = Math.round(task.allocated_minutes / 365);
       }
     }
-
-    const idealAvgPerQuarter = Math.round(yearlyTarget / 4);
-    const quartersRemaining = 4 - currentQuarter;
-    const neededPerQuarter = quartersRemaining > 0 ? Math.max(0, Math.round((yearlyTarget - totalSpent) / quartersRemaining)) : 0;
+    
+    // Calculate yearly target using daysInTrackingPeriod
+    const yearlyTarget = dailyIdeal * daysInTrackingPeriod;
+    
+    // Avg spent per day
+    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+    
+    // Needed avg per day (remaining target / remaining days)
+    const daysRemaining = Math.max(0, daysInTrackingPeriod - daysElapsed);
+    const remainingTarget = Math.max(0, yearlyTarget - totalSpent);
+    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remainingTarget / daysRemaining) : 0;
 
     const rowColorClass = getQuarterlyRowColorClass(task, totalSpent, trackingStartQuarter);
 
@@ -481,13 +491,13 @@ const QuarterlyTasks: React.FC = () => {
           <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>{task.pillar_name} → {task.category_name}</div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
-          {formatValue(task, idealAvgPerQuarter)}
+          {formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
-          {formatValue(task, avgSpentPerQuarter)}
+          {formatValue(task, avgSpentPerDay)}
         </td>
         <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
-          {formatValue(task, neededPerQuarter)}
+          {formatValue(task, avgRemainingPerDay)}
         </td>
         {quarters.map(q => {
           const quarterValue = getQuarterlyTime(task.id, q.quarter);
@@ -496,7 +506,7 @@ const QuarterlyTasks: React.FC = () => {
           const shouldShowColor = trackingStartQuarter !== null && q.quarter >= trackingStartQuarter;
           const bgColor = shouldShowColor && quarterValue > 0 && !cellColorClass ? '#e6ffed' : undefined;
           return (
-            <td key={q.quarter} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: bgColor, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
+            <td key={q.quarter} className={`col-hour ${cellColorClass} ${rowColorClass}`} style={{ backgroundColor: bgColor, textAlign: 'center', fontSize: '12px', minWidth: '80px' }}>
               {quarterValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(quarterValue)) : '-'}
             </td>
           );
@@ -600,9 +610,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -625,9 +635,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -652,9 +662,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -677,9 +687,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -704,9 +714,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -729,9 +739,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -756,9 +766,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -781,9 +791,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>
@@ -834,9 +844,9 @@ const QuarterlyTasks: React.FC = () => {
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #718096 0%, #4a5568 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#718096', minWidth: '250px' }}>Task</th>
-                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Ideal<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Ideal<br/>Avg/Day</th>
                           <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Actual Avg<br/>(Since Start)</th>
-                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Needed<br/>Average/Quarter</th>
+                          <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#718096', minWidth: '100px' }}>Needed<br/>Avg/Day</th>
                           {quarters.map(q => <th key={q.quarter} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '80px' }}>{q.name}</th>)}
                           <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', minWidth: '200px' }}>Actions</th>
                         </tr>

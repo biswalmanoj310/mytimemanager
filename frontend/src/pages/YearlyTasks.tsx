@@ -366,40 +366,7 @@ const YearlyTasks: React.FC = () => {
   const renderTaskRow = (task: Task) => {
     const totalSpent = months.reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
     
-    let yearlyTarget = 0;
-    if (task.task_type === TaskType.COUNT) {
-      if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = (task.target_value || 0) * 365;
-      } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = Math.round((task.target_value || 0) * 52);
-      } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = (task.target_value || 0) * 12;
-      } else {
-        yearlyTarget = task.target_value || 0;
-      }
-    } else if (task.task_type === TaskType.BOOLEAN) {
-      if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = 365;
-      } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = 52;
-      } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = 12;
-      } else {
-        yearlyTarget = 1;
-      }
-    } else {
-      if (task.follow_up_frequency === 'daily') {
-        yearlyTarget = task.allocated_minutes * 365;
-      } else if (task.follow_up_frequency === 'weekly') {
-        yearlyTarget = task.allocated_minutes * 52;
-      } else if (task.follow_up_frequency === 'monthly') {
-        yearlyTarget = task.allocated_minutes * 12;
-      } else {
-        yearlyTarget = task.allocated_minutes;
-      }
-    }
-    
-    // Determine tracking start month from task created_at (not yearlyStatus created_at)
+    // Determine tracking start month from task created_at
     const yearlyStatus = yearlyTaskStatuses[task.id];
     let trackingStartMonth: number | null = 1; // Default to January if no created_at
     
@@ -420,22 +387,63 @@ const YearlyTasks: React.FC = () => {
     const today = new Date();
     const yearStart = new Date(yearStartDate);
     
-    // Calculate months elapsed from tracking start (not from January)
-    let monthsElapsed = 1;
-    if (today.getFullYear() === yearStart.getFullYear()) {
-      // Current year: from tracking start month to current month
-      const currentMonth = today.getMonth() + 1;
-      monthsElapsed = Math.max(1, currentMonth - trackingStartMonth + 1);
-    } else if (today.getFullYear() > yearStart.getFullYear()) {
-      // Past year: from tracking start month to December
-      monthsElapsed = Math.max(1, 12 - trackingStartMonth + 1);
+    // Calculate effective start date (task creation or year start)
+    const effectiveStart = task.created_at
+      ? new Date(Math.max(new Date(task.created_at).getTime(), yearStartDate.getTime()))
+      : yearStartDate;
+    
+    // Calculate days elapsed from effective start
+    const yearEnd = new Date(yearStartDate.getFullYear(), 11, 31); // Dec 31
+    const endOfPeriod = today < yearEnd ? today : yearEnd;
+    const daysElapsed = Math.max(1, Math.ceil((endOfPeriod.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+    
+    // Calculate days in tracking period (effective start to year end)
+    const daysInTrackingPeriod = Math.ceil((yearEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    
+    // Calculate DAILY ideal (for display - NOT adjusted for daysElapsed)
+    let dailyIdeal = 0;
+    if (task.task_type === TaskType.COUNT) {
+      if (task.follow_up_frequency === 'daily') {
+        dailyIdeal = task.target_value || 0;
+      } else if (task.follow_up_frequency === 'weekly') {
+        dailyIdeal = Math.round(((task.target_value || 0) * 52) / 365);
+      } else if (task.follow_up_frequency === 'monthly') {
+        dailyIdeal = Math.round(((task.target_value || 0) * 12) / 365);
+      } else {
+        dailyIdeal = Math.round((task.target_value || 0) / 365);
+      }
+    } else if (task.task_type === TaskType.BOOLEAN) {
+      if (task.follow_up_frequency === 'daily') {
+        dailyIdeal = 1;
+      } else if (task.follow_up_frequency === 'weekly') {
+        dailyIdeal = Math.round(52 / 365);
+      } else if (task.follow_up_frequency === 'monthly') {
+        dailyIdeal = Math.round(12 / 365);
+      } else {
+        dailyIdeal = Math.round(1 / 365);
+      }
+    } else {
+      if (task.follow_up_frequency === 'daily') {
+        dailyIdeal = task.allocated_minutes;
+      } else if (task.follow_up_frequency === 'weekly') {
+        dailyIdeal = Math.round((task.allocated_minutes * 52) / 365);
+      } else if (task.follow_up_frequency === 'monthly') {
+        dailyIdeal = Math.round((task.allocated_minutes * 12) / 365);
+      } else {
+        dailyIdeal = Math.round(task.allocated_minutes / 365);
+      }
     }
     
-    const monthsRemaining = 12 - (today.getMonth() + 1); // Remaining in the year
+    // Calculate yearly target using daysInTrackingPeriod
+    const yearlyTarget = dailyIdeal * daysInTrackingPeriod;
     
-    const avgSpentPerMonth = Math.round(totalSpent / monthsElapsed);
-    const remaining = yearlyTarget - totalSpent;
-    const avgRemainingPerMonth = monthsRemaining > 0 ? Math.round(remaining / monthsRemaining) : 0;
+    // Avg spent per day
+    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
+    
+    // Needed avg per day (remaining target / remaining days)
+    const daysRemaining = Math.max(0, daysInTrackingPeriod - daysElapsed);
+    const remainingTarget = Math.max(0, yearlyTarget - totalSpent);
+    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remainingTarget / daysRemaining) : 0;
     
     const rowColorClass = getYearlyRowColorClass(task, totalSpent, trackingStartMonth);
     // yearlyStatus already declared above when determining trackingStartMonth
@@ -457,13 +465,13 @@ const YearlyTasks: React.FC = () => {
           </div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, task.task_type === TaskType.COUNT ? (task.target_value || 0) : task.allocated_minutes)}
+          {formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, avgSpentPerMonth)}
+          {formatValue(task, avgSpentPerDay)}
         </td>
         <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, avgRemainingPerMonth)}
+          {formatValue(task, avgRemainingPerDay)}
         </td>
         {months.map(m => {
           const monthValue = getYearlyTime(task.id, m.month);
@@ -472,7 +480,7 @@ const YearlyTasks: React.FC = () => {
           const shouldShowColor = trackingStartMonth !== null && m.month >= trackingStartMonth;
           const cellBgColor = bgColor || (shouldShowColor && monthValue > 0 && !cellColorClass ? '#e6ffed' : undefined);
           return (
-            <td key={m.month} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: cellBgColor, textAlign: 'center', fontSize: '12px' }}>
+            <td key={m.month} className={`col-hour ${cellColorClass} ${rowColorClass}`} style={{ backgroundColor: cellBgColor, textAlign: 'center', fontSize: '12px' }}>
               {monthValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : Math.round(monthValue)) : '-'}
             </td>
           );
@@ -519,9 +527,9 @@ const YearlyTasks: React.FC = () => {
             <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
               <tr>
                 <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Month</th>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Avg/Day</th>
                 <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }} title="Calculated from first month with data">Actual Avg<br/>(Since Start)</th>
-                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Month</th>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Avg/Day</th>
                 {months.map(m => <th key={m.month} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{m.name}</th>)}
                 <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
               </tr>
@@ -670,9 +678,9 @@ const YearlyTasks: React.FC = () => {
             <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', position: 'sticky', top: 0, zIndex: 20, borderBottom: '2px solid #5a67d8' }}>
               <tr>
                 <th className="col-task sticky-col sticky-col-1" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#667eea' }}>Task</th>
-                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Average/Month</th>
+                <th className="col-time sticky-col sticky-col-2" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#4299e1' }}>Ideal<br/>Avg/Day</th>
                 <th className="col-time sticky-col sticky-col-3" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#48bb78' }}>Actual Avg<br/>(Since Start)</th>
-                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Average/Month</th>
+                <th className="col-time sticky-col sticky-col-4" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center', background: '#ed8936' }}>Needed<br/>Avg/Day</th>
                 {months.map(m => <th key={m.month} className="col-hour" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>{m.name}</th>)}
                 <th className="col-status" style={{ color: '#ffffff', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'center' }}>Actions</th>
               </tr>
