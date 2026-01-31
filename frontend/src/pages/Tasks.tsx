@@ -969,10 +969,10 @@ export default function Tasks() {
       
       // Wait for all data to reload before navigating
       console.log('Reloading all task data...');
-      const freshTasks = await loadTasks(); // Must complete before navigating to NOW tab
+      await loadTasks(); // Must complete before navigating to NOW tab
       await loadProjectTasksDueToday();
       await loadGoalTasksDueToday();
-      await loadTodaysOnlyTasks(freshTasks);
+      // Note: loadTodaysOnlyTasks() will be called automatically by useEffect when tasks state updates
       await loadUpcomingTasks();
       console.log('Task moved to NOW successfully, all data reloaded');
       
@@ -1043,8 +1043,8 @@ export default function Tasks() {
     try {
       console.log('handleMoveToToday called:', taskId, taskType);
       await handlePriorityChange(taskId, 4, taskType);
-      // Force refresh all data to update NOW tab
-      await loadTasks();
+      // Force refresh all data to update NOW tab and Today tab
+      await loadTasks(); // This will trigger useEffect to reload Today tasks automatically
       await loadProjectTasksDueToday();
       await loadGoalTasksDueToday();
       console.log('Task moved to Today successfully');
