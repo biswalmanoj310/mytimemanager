@@ -15222,8 +15222,6 @@ export default function Tasks() {
                           const remaining = yearlyTarget - totalSpent;
                           
                           // Calculate how many months are left in the year
-                          const today = new Date();
-                          const yearStart = new Date(selectedYearStart);
                           let monthsElapsed = 1;
                           if (today.getFullYear() === yearStart.getFullYear()) {
                             monthsElapsed = today.getMonth() + 1;
