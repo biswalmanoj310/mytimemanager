@@ -3367,7 +3367,10 @@ export default function Tasks() {
       const allTasks = [...overdueTasks, ...todayTasks, ...noDueDateTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
-      );
+      ).filter(task => {
+        // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
+        return !(task.priority_new && task.priority_new <= 3);
+      });
       
       setProjectTasksDueToday(uniqueTasks);
     } catch (err: any) {
@@ -3393,7 +3396,13 @@ export default function Tasks() {
       const allTasks = [...overdueTasks, ...todayTasks, ...noDueDateTasks];
       const uniqueTasks = allTasks.filter((task, index, self) => 
         index === self.findIndex(t => t.id === task.id)
-      ).map(task => ({
+      ).filter(task => {
+        // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
+        const taskPriority = typeof task.priority === 'string' 
+          ? (task.priority === 'high' ? 1 : task.priority === 'medium' ? 5 : 9)
+          : task.priority;
+        return !(taskPriority && taskPriority <= 3);
+      }).map(task => ({
         ...task,
         // Convert string priority to integer for display: high=P1, medium=P5, low=P9
         priority: typeof task.priority === 'string' 
@@ -3643,8 +3652,13 @@ export default function Tasks() {
       const response: any = await api.get('/api/important-tasks/due-today');
       const dueTasks = Array.isArray(response.data || response) ? (response.data || response) : [];
       
-      console.log('✅ Important tasks loaded:', dueTasks.length, dueTasks);
-      setImportantTasksDueToday(dueTasks);
+      // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
+      const filteredTasks = dueTasks.filter((task: any) => {
+        return !(task.priority && task.priority <= 3);
+      });
+      
+      console.log('✅ Important tasks loaded:', filteredTasks.length, filteredTasks);
+      setImportantTasksDueToday(filteredTasks);
     } catch (err: any) {
       console.error('❌ Error loading important tasks due today:', err);
       setImportantTasksDueToday([]);
