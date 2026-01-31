@@ -747,10 +747,6 @@ const WeeklyTasks: React.FC = () => {
     }
     
     // Calculate target and averages
-    const weeklyTarget = task.task_type === TaskType.COUNT 
-      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) * 7 : (task.target_value || 0))
-      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes * 7 : task.allocated_minutes);
-    
     // Calculate days elapsed and remaining
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -775,6 +771,11 @@ const WeeklyTasks: React.FC = () => {
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
     }
+    
+    // Calculate target based on daysElapsed (not full 7 days)
+    const weeklyTarget = task.task_type === TaskType.COUNT 
+      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) * daysElapsed : (task.target_value || 0))
+      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysElapsed : task.allocated_minutes);
     
     let daysRemaining = 0;
     if (today >= effectiveStart && today <= weekEnd) {

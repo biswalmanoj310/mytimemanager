@@ -302,7 +302,6 @@ const MonthlyTasks: React.FC = () => {
 
   const renderTaskRow = (task: Task) => {
     const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
-    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysInMonth : task.allocated_minutes * daysInMonth;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const monthStart = new Date(monthStartDate);
@@ -326,6 +325,9 @@ const MonthlyTasks: React.FC = () => {
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
     }
+    
+    // Calculate target based on daysElapsed (not full month)
+    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysElapsed : task.allocated_minutes * daysElapsed;
     let daysRemaining = 0;
     if (today >= effectiveStart && today <= monthEnd) {
       const diffTime = monthEnd.getTime() - today.getTime();
@@ -406,7 +408,6 @@ const MonthlyTasks: React.FC = () => {
   // Render function for completed tasks
   const renderCompletedTaskRow = (task: Task) => {
     const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
-    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysInMonth : task.allocated_minutes * daysInMonth;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const monthStart = new Date(monthStartDate);
@@ -430,6 +431,9 @@ const MonthlyTasks: React.FC = () => {
         daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
       }
     }
+    
+    // Calculate target based on daysElapsed (not full month)
+    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysElapsed : task.allocated_minutes * daysElapsed;
     let daysRemaining = 0;
     if (today >= effectiveStart && today <= monthEnd) {
       const diffTime = monthEnd.getTime() - today.getTime();
