@@ -967,20 +967,19 @@ export default function Tasks() {
         console.log('API response:', response);
       }
       
-      // Wait for all data to reload before navigating
-      console.log('Reloading all task data...');
-      await loadTasks(); // Must complete before navigating to NOW tab
-      await loadProjectTasksDueToday();
-      await loadGoalTasksDueToday();
-      // Note: loadTodaysOnlyTasks() will be called automatically by useEffect when tasks state updates
-      await loadUpcomingTasks();
-      console.log('Task moved to NOW successfully, all data reloaded');
-      
-      // Auto-navigate to NOW tab so user can see the task immediately
+      // Switch to NOW tab FIRST to prevent Today tab's useEffect from reloading with old data
       setActiveTab('now');
       const searchParams = new URLSearchParams(location.search);
       searchParams.set('tab', 'now');
       navigate(`?${searchParams.toString()}`, { replace: true });
+      
+      // Now reload all data - useEffect will only reload NOW tab, not Today tab
+      console.log('Reloading all task data...');
+      await loadTasks();
+      await loadProjectTasksDueToday();
+      await loadGoalTasksDueToday();
+      await loadUpcomingTasks();
+      console.log('Task moved to NOW successfully, all data reloaded');
     } catch (err: any) {
       console.error('Failed to move to NOW - Full error:', err);
       console.error('Error response:', err.response);
