@@ -175,20 +175,36 @@ const QuarterlyTasks: React.FC = () => {
   };
 
   const getQuarterlyRowColorClass = (task: Task, totalSpent: number, trackingStartQuarter: number | null): string => {
-    // Row color based on YEAR-TO-DATE progress (days elapsed from Jan 1)
+    // Row color based on YEAR-TO-DATE progress (days elapsed from task creation or Jan 1)
     const currentYear = today.getFullYear();
     const selectedYear = yearStartDate.getFullYear();
     
     // Don't color future years
     if (selectedYear > currentYear) return '';
     
-    // Calculate days elapsed in the year so far
+    // Calculate days elapsed from task creation date or year start (whichever is later)
     let daysElapsed = 0;
     if (selectedYear === currentYear) {
       const startOfYear = new Date(currentYear, 0, 1);
-      daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      startOfYear.setHours(0, 0, 0, 0);
+      
+      // Use task creation date as effective start
+      const taskCreatedAt = task.created_at ? new Date(task.created_at) : startOfYear;
+      taskCreatedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = taskCreatedAt > startOfYear ? taskCreatedAt : startOfYear;
+      
+      daysElapsed = Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     } else {
-      daysElapsed = 365;
+      // Past year: calculate from task creation or Jan 1 to Dec 31
+      const startOfYear = new Date(selectedYear, 0, 1);
+      startOfYear.setHours(0, 0, 0, 0);
+      const taskCreatedAt = task.created_at ? new Date(task.created_at) : startOfYear;
+      taskCreatedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = taskCreatedAt > startOfYear ? taskCreatedAt : startOfYear;
+      
+      const endOfYear = new Date(selectedYear, 11, 31);
+      endOfYear.setHours(23, 59, 59, 999);
+      daysElapsed = Math.floor((endOfYear.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     }
     
     // Calculate expected based on days elapsed
@@ -241,16 +257,40 @@ const QuarterlyTasks: React.FC = () => {
     if (selectedYear > currentYear) return '';
     if (selectedYear === currentYear && quarter > currentQuarter) return '';
     
-    // Calculate days elapsed in this specific quarter
+    // Calculate days elapsed in this specific quarter from task creation or quarter start
     let daysElapsed = 0;
     if (selectedYear === currentYear && quarter === currentQuarter) {
-      // Current quarter: calculate days from quarter start to today
+      // Current quarter: calculate days from quarter start OR task creation to today
       const quarterStartMonth = (quarter - 1) * 3;
       const quarterStart = new Date(currentYear, quarterStartMonth, 1);
-      daysElapsed = Math.floor((today.getTime() - quarterStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      quarterStart.setHours(0, 0, 0, 0);
+      
+      // Use task creation date as effective start if created mid-quarter
+      const taskCreatedAt = task.created_at ? new Date(task.created_at) : quarterStart;
+      taskCreatedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = taskCreatedAt > quarterStart ? taskCreatedAt : quarterStart;
+      
+      daysElapsed = Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     } else {
-      // Past quarter: ~91 days (365 / 4)
-      daysElapsed = Math.round(365 / 4);
+      // Past quarter: calculate from task creation or quarter start to quarter end
+      const quarterStartMonth = (quarter - 1) * 3;
+      const quarterStart = new Date(selectedYear, quarterStartMonth, 1);
+      quarterStart.setHours(0, 0, 0, 0);
+      
+      const quarterEndMonth = quarterStartMonth + 2;
+      const quarterEnd = new Date(selectedYear, quarterEndMonth + 1, 0); // Last day of quarter
+      quarterEnd.setHours(23, 59, 59, 999);
+      
+      const taskCreatedAt = task.created_at ? new Date(task.created_at) : quarterStart;
+      taskCreatedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = taskCreatedAt > quarterStart ? taskCreatedAt : quarterStart;
+      
+      // If task created after quarter ended, no expectation
+      if (effectiveStart > quarterEnd) {
+        daysElapsed = 0;
+      } else {
+        daysElapsed = Math.floor((quarterEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      }
     }
     
     // Calculate expected value based on days elapsed in THIS quarter

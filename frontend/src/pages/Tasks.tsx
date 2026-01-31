@@ -12598,7 +12598,7 @@ export default function Tasks() {
                     {timeBasedTasks.map((task) => {
                       const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
                       
-                      // Get monitoring start date from weekly task status
+                      // Use task creation date as effective start
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       const weekStart = new Date(selectedWeekStart);
@@ -12606,14 +12606,10 @@ export default function Tasks() {
                       const weekEnd = new Date(weekStart);
                       weekEnd.setDate(weekEnd.getDate() + 6);
                       
-                      const taskStatus = weeklyTaskStatuses[task.id];
-                      let monitoringStart = weekStart;
-                      if (taskStatus?.created_at) {
-                        const createdAt = new Date(taskStatus.created_at);
-                        createdAt.setHours(0, 0, 0, 0);
-                        // Use the later of week start or monitoring start
-                        monitoringStart = createdAt > weekStart ? createdAt : weekStart;
-                      }
+                      // Use the later of week start or task creation date
+                      const taskCreatedAt = new Date(task.created_at);
+                      taskCreatedAt.setHours(0, 0, 0, 0);
+                      const monitoringStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
                       
                       // Calculate days elapsed from MONITORING START (not week start!)
                       let daysElapsed = 1; // Default to at least 1 day
@@ -12791,7 +12787,7 @@ export default function Tasks() {
                       }, 0);
                       const weeklyTarget = (task.target_value || 0) * 7;
                       
-                      // Calculate days elapsed and actual average
+                      // Calculate days elapsed from task creation date
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       const weekStart = new Date(selectedWeekStart);
@@ -12799,16 +12795,24 @@ export default function Tasks() {
                       const weekEnd = new Date(weekStart);
                       weekEnd.setDate(weekEnd.getDate() + 6);
                       
+                      // Use the later of week start or task creation date
+                      const taskCreatedAt = new Date(task.created_at);
+                      taskCreatedAt.setHours(0, 0, 0, 0);
+                      const effectiveStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
+                      
                       let daysElapsed = 1; // Default to at least 1 day
-                      if (today >= weekStart) {
+                      if (today >= effectiveStart && effectiveStart <= weekEnd) {
                         if (today <= weekEnd) {
-                          // Current week: count days from week start to today (inclusive)
-                          const diffTime = today.getTime() - weekStart.getTime();
+                          // Current week: count days from effective start to today (inclusive)
+                          const diffTime = today.getTime() - effectiveStart.getTime();
                           daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         } else {
-                          // Past week: all 7 days
-                          daysElapsed = 7;
+                          // Past week: from effective start to week end
+                          const diffTime = weekEnd.getTime() - effectiveStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         }
+                      } else if (effectiveStart > weekEnd) {
+                        daysElapsed = 0;
                       }
                       
                       const avgCountPerDay = Math.round((totalCount / daysElapsed) * 10) / 10; // Round to 1 decimal
@@ -13156,7 +13160,7 @@ export default function Tasks() {
                         totalSpent += getMonthlyTime(task.id, day);
                       }
                       
-                      // Get monitoring start date from monthly task status
+                      // Use task creation date as effective start
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       const monthStart = new Date(selectedMonthStart);
@@ -13164,14 +13168,10 @@ export default function Tasks() {
                       const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
                       monthEnd.setHours(0, 0, 0, 0);
                       
-                      const taskStatus = monthlyTaskStatuses[task.id];
-                      let monitoringStart = monthStart;
-                      if (taskStatus?.created_at) {
-                        const createdAt = new Date(taskStatus.created_at);
-                        createdAt.setHours(0, 0, 0, 0);
-                        // Use the later of month start or monitoring start
-                        monitoringStart = createdAt > monthStart ? createdAt : monthStart;
-                      }
+                      // Use the later of month start or task creation date
+                      const taskCreatedAt = new Date(task.created_at);
+                      taskCreatedAt.setHours(0, 0, 0, 0);
+                      const monitoringStart = taskCreatedAt > monthStart ? taskCreatedAt : monthStart;
                       
                       // Calculate days elapsed from MONITORING START (not month start!)
                       let daysElapsed = 1; // Default to at least 1 day
@@ -13374,7 +13374,7 @@ export default function Tasks() {
                         }
                       }
                       
-                      // Calculate days elapsed and actual average
+                      // Calculate days elapsed from task creation date
                       const today = new Date();
                       today.setHours(0, 0, 0, 0);
                       const monthStart = new Date(selectedMonthStart);
@@ -13382,14 +13382,22 @@ export default function Tasks() {
                       const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
                       monthEnd.setHours(0, 0, 0, 0);
                       
+                      // Use the later of month start or task creation date
+                      const taskCreatedAt = new Date(task.created_at);
+                      taskCreatedAt.setHours(0, 0, 0, 0);
+                      const effectiveStart = taskCreatedAt > monthStart ? taskCreatedAt : monthStart;
+                      
                       let daysElapsed = 1;
-                      if (today >= monthStart) {
+                      if (today >= effectiveStart && effectiveStart <= monthEnd) {
                         if (today <= monthEnd) {
-                          const diffTime = today.getTime() - monthStart.getTime();
+                          const diffTime = today.getTime() - effectiveStart.getTime();
                           daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         } else {
-                          daysElapsed = daysInMonth;
+                          const diffTime = monthEnd.getTime() - effectiveStart.getTime();
+                          daysElapsed = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
                         }
+                      } else if (effectiveStart > monthEnd) {
+                        daysElapsed = 0;
                       }
                       
                       const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
