@@ -335,8 +335,26 @@ const MonthlyTasks: React.FC = () => {
          task.follow_up_frequency === 'weekly' ? task.allocated_minutes / 7 :
          task.allocated_minutes / daysInMonth);
     
-    // Calculate target based on daysElapsed (not full month)
-    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysElapsed : task.allocated_minutes * daysElapsed;
+    // Calculate days in tracking period (from effectiveStart to monthEnd)
+    let daysInTrackingPeriod = daysInMonth;
+    if (effectiveStart > monthStart) {
+      // Task created mid-month - count from creation to month end
+      const diffTime = monthEnd.getTime() - effectiveStart.getTime();
+      daysInTrackingPeriod = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+    
+    // Calculate target based on FULL tracking period (not just elapsed days)
+    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysInTrackingPeriod : task.allocated_minutes * daysInTrackingPeriod;
+    // Calculate days in tracking period (from effectiveStart to monthEnd)
+    let daysInTrackingPeriod = daysInMonth;
+    if (effectiveStart > monthStart) {
+      // Task created mid-month - count from creation to month end
+      const diffTime = monthEnd.getTime() - effectiveStart.getTime();
+      daysInTrackingPeriod = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+    
+    // Calculate target based on FULL tracking period (not just elapsed days)
+    const monthlyTarget = task.task_type === TaskType.COUNT ? (task.target_value || 0) * daysInTrackingPeriod : task.allocated_minutes * daysInTrackingPeriod;
     let daysRemaining = 0;
     if (today >= effectiveStart && today <= monthEnd) {
       const diffTime = monthEnd.getTime() - today.getTime();

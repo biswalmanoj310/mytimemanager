@@ -777,10 +777,18 @@ const WeeklyTasks: React.FC = () => {
       ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 7)
       : (task.follow_up_frequency === 'daily' ? task.allocated_minutes : task.allocated_minutes / 7);
     
-    // Expected target for daysElapsed (for calculations)
+    // Calculate days in tracking period (from effectiveStart to weekEnd)
+    let daysInTrackingPeriod = 7;
+    if (effectiveStart > weekStart) {
+      // Task created mid-week - count from creation to week end
+      const diffTime = weekEnd.getTime() - effectiveStart.getTime();
+      daysInTrackingPeriod = Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    }
+    
+    // Expected target for the FULL tracking period (not just elapsed days)
     const weeklyTarget = task.task_type === TaskType.COUNT 
-      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) * daysElapsed : (task.target_value || 0))
-      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysElapsed : task.allocated_minutes);
+      ? (task.follow_up_frequency === 'daily' ? (task.target_value || 0) * daysInTrackingPeriod : (task.target_value || 0))
+      : (task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysInTrackingPeriod : task.allocated_minutes);
     
     let daysRemaining = 0;
     if (today >= effectiveStart && today <= weekEnd) {
