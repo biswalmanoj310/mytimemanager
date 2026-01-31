@@ -206,7 +206,6 @@
   width: calc(100vw - 220px);
   max-width: calc(100vw - 220px);
   box-sizing: border-box;
-  overflow-x: hidden;
 }
 
 .content-wrapper {
