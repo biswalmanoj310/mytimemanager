@@ -3188,12 +3188,14 @@ export default function Analytics() {
                       {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                         const task = allTasksData.find(t => t.task_id === taskId);
                         const colors = ['#4299e1', '#48bb78', '#ed8936'];
+                        const idealHours = task?.allocated_minutes ? (task.allocated_minutes / 60).toFixed(1) : '0.0';
+                        const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealHours}h/day)`;
                         return (
                           <Line 
                             key={taskId}
                             type="monotone" 
                             dataKey={showAsHours ? `task_${taskId}_hours` : `task_${taskId}`}
-                            name={task?.task_name || `Task ${taskId}`}
+                            name={taskLabel}
                             stroke={colors[index]}
                             strokeWidth={2}
                             dot={{ r: 3 }}
@@ -3253,7 +3255,15 @@ export default function Analytics() {
                             
                             if (weekData.length === 0) continue;
                             
-                            const weekEntry: any = { week: `Week ${weekIdx + 1}` };
+                            // Calculate actual date range for this week
+                            const today = new Date();
+                            const weekStartDate = new Date(today);
+                            weekStartDate.setDate(today.getDate() - (55 - weekStart)); // 55 days ago to today
+                            const weekEndDate = new Date(weekStartDate);
+                            weekEndDate.setDate(weekStartDate.getDate() + 6);
+                            const weekLabel = `${weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}-${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                            
+                            const weekEntry: any = { week: weekLabel };
                             
                             // Calculate average for each selected item
                             if (detailedViewType === 'tasks') {
@@ -3299,11 +3309,13 @@ export default function Analytics() {
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                           const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                          const idealHours = task?.allocated_minutes ? (task.allocated_minutes / 60).toFixed(1) : '0.0';
+                          const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealHours}h/day)`;
                           return (
                             <Bar 
                               key={taskId}
                               dataKey={`task_${taskId}`}
-                              name={task?.task_name || `Task ${taskId}`}
+                              name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
@@ -3368,7 +3380,7 @@ export default function Analytics() {
                             const today = new Date();
                             const monthDate = new Date(today);
                             monthDate.setMonth(today.getMonth() - (2 - monthIdx));
-                            const monthName = monthDate.toLocaleDateString('en-US', { month: 'short' });
+                            const monthName = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                             
                             const monthEntry: any = { month: monthName };
                             
@@ -3416,11 +3428,13 @@ export default function Analytics() {
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                           const colors = ['#ed8936', '#4299e1', '#9f7aea'];
+                          const idealHours = task?.allocated_minutes ? (task.allocated_minutes / 60).toFixed(1) : '0.0';
+                          const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealHours}h/day)`;
                           return (
                             <Bar 
                               key={taskId}
                               dataKey={`task_${taskId}`}
-                              name={task?.task_name || `Task ${taskId}`}
+                              name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
