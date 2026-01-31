@@ -3369,7 +3369,8 @@ export default function Tasks() {
         index === self.findIndex(t => t.id === task.id)
       ).filter(task => {
         // Exclude NOW tasks (priority 1-3) - they should only appear in NOW tab
-        return !(task.priority_new && task.priority_new <= 3);
+        // Backend returns 'priority' field (maps priority_new to priority)
+        return !(task.priority && task.priority <= 3);
       });
       
       setProjectTasksDueToday(uniqueTasks);
@@ -15740,7 +15741,7 @@ export default function Tasks() {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
             const filteredTasks = projectTasksDueToday
-              .filter(t => !(t.priority_new && t.priority_new <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && t.priority <= 3)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
