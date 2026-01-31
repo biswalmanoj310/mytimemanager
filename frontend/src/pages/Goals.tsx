@@ -33,6 +33,9 @@ interface LifeGoalData {
   time_allocated_hours: number;
   time_spent_hours: number;
   days_remaining: number | null;
+  pillar_id?: number | null;
+  category_id?: number | null;
+  sub_category_id?: number | null;
   stats?: {
     milestones?: {
       total: number;
@@ -313,6 +316,8 @@ interface WishData {
   achieved_at?: string;
   achievement_notes?: string;
   released_at?: string;
+  pillar_id?: number | null;
+  category_id?: number | null;
   release_reason?: string;
   stats?: {
     days_dreaming: number;
@@ -6099,7 +6104,11 @@ return (
                   is_active: true
                 };
                 
-                // Add pillar/category if selected
+                // Inherit pillar/category from parent goal if available
+                if (selectedGoal.pillar_id) projectData.pillar_id = selectedGoal.pillar_id;
+                if (selectedGoal.category_id) projectData.category_id = selectedGoal.category_id;
+                
+                // Override with manually selected pillar/category if provided
                 if (goalProjectPillarId) projectData.pillar_id = goalProjectPillarId;
                 if (goalProjectCategoryId) projectData.category_id = goalProjectCategoryId;
                 
@@ -9101,14 +9110,20 @@ return (
                 
                 try {
                   const goalId = formData.get('goal_id');
-                  await api.post('/api/projects/', {
+                  const projectData: any = {
                     name: formData.get('name'),
                     description: formData.get('description') || null,
                     goal_id: goalId && goalId !== '' ? parseInt(goalId as string) : null,
                     related_wish_id: currentExplorationWish.id,
                     start_date: formData.get('start_date') || null,
                     target_completion_date: formData.get('target_completion_date') || null
-                  });
+                  };
+                  
+                  // Inherit pillar/category from parent wish if available
+                  if (currentExplorationWish.pillar_id) projectData.pillar_id = currentExplorationWish.pillar_id;
+                  if (currentExplorationWish.category_id) projectData.category_id = currentExplorationWish.category_id;
+                  
+                  await api.post('/api/projects/', projectData);
                   
                   showToast('✅ Project created and linked to dream!', 'success');
                   setShowInlineProjectModal(false);
