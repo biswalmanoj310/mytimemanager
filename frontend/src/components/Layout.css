@@ -203,6 +203,10 @@
   flex: 1;
   margin-left: 220px;
   min-height: 100vh;
+  width: calc(100vw - 220px);
+  max-width: calc(100vw - 220px);
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .content-wrapper {
