@@ -394,7 +394,7 @@ const MonthlyTasks: React.FC = () => {
           const dayValue = getMonthlyTime(task.id, day.day);
           const cellColorClass = getMonthlyCellColorClass(task, dayValue, day.date);
           return (
-            <td key={day.day} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: bgColor || (dayValue > 0 && !cellColorClass ? '#e6ffed' : undefined), textAlign: 'center', fontSize: '12px' }}>
+            <td key={day.day} className={`col-hour ${cellColorClass} ${rowColorClass}`} style={{ backgroundColor: bgColor || (dayValue > 0 && !cellColorClass ? '#e6ffed' : undefined), textAlign: 'center', fontSize: '12px' }}>
               {dayValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : dayValue) : '-'}
             </td>
           );
@@ -509,7 +509,7 @@ const MonthlyTasks: React.FC = () => {
           const dayValue = getMonthlyTime(task.id, day.day);
           const cellColorClass = getMonthlyCellColorClass(task, dayValue, day.date);
           return (
-            <td key={day.day} className={`col-hour ${cellColorClass}`} style={{ backgroundColor: bgColor || (dayValue > 0 && !cellColorClass ? '#e6ffed' : undefined), textAlign: 'center', fontSize: '12px' }}>
+            <td key={day.day} className={`col-hour ${cellColorClass} ${rowColorClass}`} style={{ backgroundColor: bgColor || (dayValue > 0 && !cellColorClass ? '#e6ffed' : undefined), textAlign: 'center', fontSize: '12px' }}>
               {dayValue > 0 ? (task.task_type === TaskType.BOOLEAN ? '✓' : dayValue) : '-'}
             </td>
           );

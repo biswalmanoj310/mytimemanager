@@ -897,7 +897,7 @@ const WeeklyTasks: React.FC = () => {
           return (
             <td 
               key={day.index} 
-              className={`col-hour ${cellColorClass}`}
+              className={`col-hour ${cellColorClass} ${rowColorClass}`}
               style={{ 
                 backgroundColor: bgColor || (cellValue > 0 && !cellColorClass ? '#e6ffed' : undefined),
                 textAlign: 'center',
