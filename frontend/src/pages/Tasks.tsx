@@ -5829,11 +5829,35 @@ export default function Tasks() {
         // Calculate daily target (ideal daily average)
         let dailyTarget = 0;
         if (task.task_type === TaskType.COUNT) {
-          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 365;
+          if (task.follow_up_frequency === 'daily') {
+            dailyTarget = task.target_value || 0;
+          } else if (task.follow_up_frequency === 'weekly') {
+            dailyTarget = Math.round(((task.target_value || 0) * 52) / 365);
+          } else if (task.follow_up_frequency === 'monthly') {
+            dailyTarget = Math.round(((task.target_value || 0) * 12) / 365);
+          } else {
+            dailyTarget = Math.round((task.target_value || 0) / 365);
+          }
         } else if (task.task_type === TaskType.BOOLEAN) {
-          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/365;
+          if (task.follow_up_frequency === 'daily') {
+            dailyTarget = 1;
+          } else if (task.follow_up_frequency === 'weekly') {
+            dailyTarget = Math.round(52 / 365);
+          } else if (task.follow_up_frequency === 'monthly') {
+            dailyTarget = Math.round(12 / 365);
+          } else {
+            dailyTarget = Math.round(1 / 365);
+          }
         } else {
-          dailyTarget = task.allocated_minutes;
+          if (task.follow_up_frequency === 'daily') {
+            dailyTarget = task.allocated_minutes;
+          } else if (task.follow_up_frequency === 'weekly') {
+            dailyTarget = Math.round((task.allocated_minutes * 52) / 365);
+          } else if (task.follow_up_frequency === 'monthly') {
+            dailyTarget = Math.round((task.allocated_minutes * 12) / 365);
+          } else {
+            dailyTarget = Math.round(task.allocated_minutes / 365);
+          }
         }
         
         // Calculate actual average per day (since start of year)
@@ -5895,11 +5919,35 @@ export default function Tasks() {
         // Calculate daily target (ideal daily average)
         let dailyTarget = 0;
         if (task.task_type === TaskType.COUNT) {
-          dailyTarget = task.follow_up_frequency === 'daily' ? (task.target_value || 0) : (task.target_value || 0) / 365;
+          if (task.follow_up_frequency === 'daily') {
+            dailyTarget = task.target_value || 0;
+          } else if (task.follow_up_frequency === 'weekly') {
+            dailyTarget = Math.round(((task.target_value || 0) * 52) / 365);
+          } else if (task.follow_up_frequency === 'monthly') {
+            dailyTarget = Math.round(((task.target_value || 0) * 12) / 365);
+          } else {
+            dailyTarget = Math.round((task.target_value || 0) / 365);
+          }
         } else if (task.task_type === TaskType.BOOLEAN) {
-          dailyTarget = task.follow_up_frequency === 'daily' ? 1 : 1/365;
+          if (task.follow_up_frequency === 'daily') {
+            dailyTarget = 1;
+          } else if (task.follow_up_frequency === 'weekly') {
+            dailyTarget = Math.round(52 / 365);
+          } else if (task.follow_up_frequency === 'monthly') {
+            dailyTarget = Math.round(12 / 365);
+          } else {
+            dailyTarget = Math.round(1 / 365);
+          }
         } else {
-          dailyTarget = task.allocated_minutes;
+          if (task.follow_up_frequency === 'daily') {
+            dailyTarget = task.allocated_minutes;
+          } else if (task.follow_up_frequency === 'weekly') {
+            dailyTarget = Math.round((task.allocated_minutes * 52) / 365);
+          } else if (task.follow_up_frequency === 'monthly') {
+            dailyTarget = Math.round((task.allocated_minutes * 12) / 365);
+          } else {
+            dailyTarget = Math.round(task.allocated_minutes / 365);
+          }
         }
         
         // Calculate actual average per day (since start of year)
