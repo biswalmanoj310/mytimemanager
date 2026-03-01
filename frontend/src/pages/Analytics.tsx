@@ -3294,7 +3294,7 @@ export default function Analytics() {
                             weeklyData.push(weekEntry);
                           }
                           
-                          return weeklyData.reverse();
+                          return weeklyData;
                         })()}
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                       >
