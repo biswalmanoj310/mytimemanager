@@ -12649,8 +12649,11 @@ export default function Tasks() {
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekEnd.getDate() + 6);
 
-            // Only show for current week (not past/future)
-            if (today < weekStart || today > weekEnd) return null;
+            // Don't show banner for future weeks (no data yet)
+            if (today < weekStart) return null;
+
+            // Reference date: use today for current week, weekEnd for past weeks
+            const refDate = today <= weekEnd ? today : weekEnd;
 
             const behindTasks: { name: string; deficit: string }[] = [];
 
@@ -12658,16 +12661,13 @@ export default function Tasks() {
               const taskCreatedAt = new Date(task.created_at);
               taskCreatedAt.setHours(0, 0, 0, 0);
               const effectiveStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
-              if (effectiveStart > weekEnd) return 0;
-              const diffTime = today.getTime() - effectiveStart.getTime();
+              if (effectiveStart > refDate) return 0;
+              const diffTime = refDate.getTime() - effectiveStart.getTime();
               return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
             };
 
             // Time-based tasks
             timeBasedTasks.forEach((task) => {
-              const status = weeklyTaskStatuses[task.id];
-              if (status?.is_completed || status?.is_na) return;
-              if (task.is_completed || !task.is_active) return;
               const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
               const daysElapsed = getDaysElapsed(task);
               if (daysElapsed === 0) return;
@@ -12680,9 +12680,6 @@ export default function Tasks() {
 
             // Count-based tasks
             countBasedTasks.forEach((task) => {
-              const status = weeklyTaskStatuses[task.id];
-              if (status?.is_completed || status?.is_na) return;
-              if (task.is_completed || !task.is_active) return;
               const totalCount = weekDays.reduce((sum, day) => sum + (getWeeklyTime(task.id, day.index) || 0), 0);
               const daysElapsed = getDaysElapsed(task);
               if (daysElapsed === 0) return;
@@ -12695,9 +12692,6 @@ export default function Tasks() {
 
             // Boolean tasks
             booleanTasks.forEach((task) => {
-              const status = weeklyTaskStatuses[task.id];
-              if (status?.is_completed || status?.is_na) return;
-              if (task.is_completed || !task.is_active) return;
               const daysCompleted = weekDays.filter(day => getWeeklyTime(task.id, day.index) > 0).length;
               const daysElapsed = getDaysElapsed(task);
               if (daysElapsed === 0) return;
@@ -12759,7 +12753,7 @@ export default function Tasks() {
                     }}>
                       <span style={{ color: '#f97316' }}>●</span>
                       {t.name}
-                      <span style={{ color: '#9a3412', fontWeight: 400 }}>({t.deficit})</span>
+                      <span style={{ background: '#fed7aa', color: '#9a3412', fontWeight: 700, padding: '1px 6px', borderRadius: '8px', fontSize: '11px' }}>{t.deficit}</span>
                     </span>
                   ))}
                 </div>
