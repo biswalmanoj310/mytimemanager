@@ -211,6 +211,7 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
         additional_whys: data.additional_whys || [],
         due_date: data.due_date || '',
         priority: data.priority || 5,
+        parent_task_id: data.parent_task_id || null,
       });
       
       setLoading(false);
@@ -388,7 +389,8 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
       why_reason: '',
       additional_whys: [],
       due_date: '',
-      priority: 5
+      priority: 5,
+      parent_task_id: null,
     });
     setError(null);
   };

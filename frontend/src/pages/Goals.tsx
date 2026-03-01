@@ -46,8 +46,10 @@ interface LifeGoalData {
     goal_tasks?: { total: number; completed: number };
     project_tasks?: { total: number; completed: number };
     all_tasks?: { total: number; completed: number };
-    linked_tasks?: { total: number };
+    linked_tasks?: { total: number; completed?: number };
+    goal_projects?: { total: number; completed: number };
   };
+  timeframe?: string;
   created_at: string;
   updated_at: string | null;
 }
@@ -74,6 +76,9 @@ interface GoalTaskLinkData {
   notes: string | null;
   created_at: string;
   task?: Task; // Populated task data
+  completion_percentage?: number;
+  completion_count?: number;
+  expected_count?: number;
 }
 
 interface GoalTaskData {
@@ -319,6 +324,7 @@ interface WishData {
   pillar_id?: number | null;
   category_id?: number | null;
   release_reason?: string;
+  created_at?: string;
   stats?: {
     days_dreaming: number;
     reflections_count: number;
@@ -1261,7 +1267,7 @@ const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selected
                     <button 
                       onClick={() => {
                         // Store wish context in session storage for back navigation
-                        sessionStorage.setItem('fromWishId', selectedWish.id);
+                        sessionStorage.setItem('fromWishId', selectedWish.id.toString());
                         sessionStorage.setItem('fromWishName', selectedWish.title);
                         // Navigate to Tasks page with project tab and project selected
                         navigate(`/tasks?tab=projects&project=${project.id}`);
@@ -5071,7 +5077,7 @@ return (
                       value={selectedGoal.start_date || ''}
                       onChange={(e) => {
                         e.stopPropagation();
-                        handleUpdateGoal(selectedGoal.id, { start_date: e.target.value });
+                        handleUpdateLifeGoal(selectedGoal.id, { start_date: e.target.value });
                       }}
                       onClick={(e) => e.stopPropagation()}
                       style={{
@@ -5092,7 +5098,7 @@ return (
                       value={selectedGoal.target_date || ''}
                       onChange={(e) => {
                         e.stopPropagation();
-                        handleUpdateGoal(selectedGoal.id, { target_date: e.target.value });
+                        handleUpdateLifeGoal(selectedGoal.id, { target_date: e.target.value });
                       }}
                       onClick={(e) => e.stopPropagation()}
                       style={{
@@ -8257,7 +8263,7 @@ return (
                       
                       // If creating a subtask, expand the parent automatically
                       if (taskData.parent_task_id) {
-                        setExpandedDreamTasks(prev => new Set(prev).add(taskData.parent_task_id));
+                        setExpandedDreamTasks(prev => new Set(prev).add(taskData.parent_task_id!));
                       }
                     }
                     
@@ -8480,8 +8486,7 @@ return (
                   onClick={() => {
                     setShowAddExplorationModal(false);
                     setCurrentExplorationWish(null);
-                    setNewProject({ ...newProject, related_wish_id: currentExplorationWish.id });
-                    setShowAddProjectModal(true);
+                    navigate('/tasks?tab=projects');
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
                   onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}

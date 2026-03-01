@@ -599,12 +599,11 @@ export default function Dashboard() {
       {/* Challenge Form Modal */}
       {isChallengeFormOpen && (
         <AddChallengeModal
-          isOpen={isChallengeFormOpen}
+          show={true}
           onClose={() => setIsChallengeFormOpen(false)}
           onSuccess={() => {
             setIsChallengeFormOpen(false);
           }}
-          challenge={null}
         />
       )}
     </div>

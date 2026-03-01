@@ -61,7 +61,7 @@ const CustomMultilineLabel = ({ x, y, payload, index }: any) => {
     const words = text.split(' ');
     let currentLine = '';
     
-    words.forEach((word) => {
+    words.forEach((word: string) => {
       if ((currentLine + ' ' + word).trim().length <= maxCharsPerLine) {
         currentLine = (currentLine + ' ' + word).trim();
       } else {
@@ -211,7 +211,9 @@ export default function Analytics() {
   const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
   const [showMonthOverMonth, setShowMonthOverMonth] = useState(false);
   const [showAsHours, setShowAsHours] = useState(false);
-  const [showOverviewAsHours, setShowOverviewAsHours] = useState(false);
+  const [showTodayAsHours, setShowTodayAsHours] = useState(false);
+  const [showWeeklyAsHours, setShowWeeklyAsHours] = useState(false);
+  const [showMonthlyAsHours, setShowMonthlyAsHours] = useState(false);
   
   // Detailed view - Historical trend data
   const [taskTrendData, setTaskTrendData] = useState<any[]>([]);
@@ -251,8 +253,10 @@ export default function Analytics() {
   const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(() => localStorage.getItem('showOneTimeTaskWeek') === 'true'); // Toggle for One-Time Tasks weekly
   const [showPillarWeek, setShowPillarWeek] = useState(() => localStorage.getItem('showPillarWeek') === 'true'); // Toggle for Pillar weekly data
   const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  const [showCategoryBreakdownWeekAll, setShowCategoryBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  const [showTaskBreakdownWeekAll, setShowTaskBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(() => localStorage.getItem('showUtilizationTaskWeek') === 'true');
   const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(() => localStorage.getItem('showUtilizationTaskMonth') === 'true');
@@ -1201,29 +1205,41 @@ export default function Analytics() {
           <div className="comparative-charts-section">
             <div className="section-header-with-toggle">
               <div>
-                <h2>📊 {showOverviewAsHours ? 'Hours Spent' : 'Time Utilization %'}: Daily Tasks</h2>
-                <p className="chart-description">{showOverviewAsHours ? 'Actual hours spent / weekly avg (h/day) / monthly avg (h/day)' : 'Percentage of allocated time actually used (100% = perfect match, >100% = overtime)'}</p>
+                <h2>📊 Time Utilization: Daily Tasks</h2>
+                <p className="chart-description">Today / weekly avg / monthly avg — toggle each period between % and hours</p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => setShowOverviewAsHours(!showOverviewAsHours)}
-                  style={{ fontSize: '11px', padding: '6px 12px', background: showOverviewAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => setShowTodayAsHours(!showTodayAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showTodayAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                 >
-                  {showOverviewAsHours ? '⏱️ Hours' : '📊 %'}
+                  Today: {showTodayAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationTaskWeek ? 'active' : ''}`}
                   onClick={() => setShowUtilizationTaskWeek(!showUtilizationTaskWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                  style={{ fontSize: '11px', padding: '6px 10px' }}
                 >
-                  {showUtilizationTaskWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                  {showUtilizationTaskWeek ? 'Hide Weekly' : 'Show Weekly'}
+                </button>
+                <button
+                  onClick={() => setShowWeeklyAsHours(!showWeeklyAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showWeeklyAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Weekly: {showWeeklyAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationTaskMonth ? 'active' : ''}`}
                   onClick={() => setShowUtilizationTaskMonth(!showUtilizationTaskMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                  style={{ fontSize: '11px', padding: '6px 10px' }}
                 >
-                  {showUtilizationTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                  {showUtilizationTaskMonth ? 'Hide Monthly' : 'Show Monthly'}
+                </button>
+                <button
+                  onClick={() => setShowMonthlyAsHours(!showMonthlyAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showMonthlyAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Monthly: {showMonthlyAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   onClick={() => {
@@ -1258,12 +1274,12 @@ export default function Analytics() {
                         const weeklyAvg = (weekTask?.spent_minutes || 0) / 60 / daysInWeek;
                         const monthlyAvg = (monthTask?.spent_minutes || 0) / 60 / daysInMonth;
                         
-                        const todayVal = showOverviewAsHours ? todaySpent : (allocated > 0 ? Math.min((todaySpent / allocated) * 100, 100) : 0);
-                        const todayOT = showOverviewAsHours ? 0 : (allocated > 0 ? Math.max((todaySpent / allocated) * 100 - 100, 0) : 0);
-                        const weeklyVal = showOverviewAsHours ? weeklyAvg : (allocated > 0 ? Math.min((weeklyAvg / allocated) * 100, 100) : 0);
-                        const weeklyOT = showOverviewAsHours ? 0 : (allocated > 0 ? Math.max((weeklyAvg / allocated) * 100 - 100, 0) : 0);
-                        const monthlyVal = showOverviewAsHours ? monthlyAvg : (allocated > 0 ? Math.min((monthlyAvg / allocated) * 100, 100) : 0);
-                        const monthlyOT = showOverviewAsHours ? 0 : (allocated > 0 ? Math.max((monthlyAvg / allocated) * 100 - 100, 0) : 0);
+                        const todayVal = showTodayAsHours ? todaySpent : (allocated > 0 ? Math.min((todaySpent / allocated) * 100, 100) : 0);
+                        const todayOT = showTodayAsHours ? 0 : (allocated > 0 ? Math.max((todaySpent / allocated) * 100 - 100, 0) : 0);
+                        const weeklyVal = showWeeklyAsHours ? weeklyAvg : (allocated > 0 ? Math.min((weeklyAvg / allocated) * 100, 100) : 0);
+                        const weeklyOT = showWeeklyAsHours ? 0 : (allocated > 0 ? Math.max((weeklyAvg / allocated) * 100 - 100, 0) : 0);
+                        const monthlyVal = showMonthlyAsHours ? monthlyAvg : (allocated > 0 ? Math.min((monthlyAvg / allocated) * 100, 100) : 0);
+                        const monthlyOT = showMonthlyAsHours ? 0 : (allocated > 0 ? Math.max((monthlyAvg / allocated) * 100 - 100, 0) : 0);
                         
                         return {
                           name: task.task_name,
@@ -1310,17 +1326,17 @@ export default function Analytics() {
                     tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
-                    label={{ value: showOverviewAsHours ? 'Hours (Avg/Day)' : 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: '', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '10px' }}
                     iconType="rect"
                   />
-                  {!showOverviewAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
+                  {!showTodayAsHours && !showWeeklyAsHours && !showMonthlyAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
                   <Bar 
                     dataKey="today" 
-                    name={showOverviewAsHours ? 'Today h' : 'Today %'} 
+                    name={showTodayAsHours ? 'Today h' : 'Today %'} 
                     stackId="today"
                     fill="#4299e1" 
                     radius={[0, 0, 0, 0]}
@@ -1333,16 +1349,16 @@ export default function Analytics() {
                         if (!value || value === 0) return null;
                         return (
                           <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                            {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                            {showTodayAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                           </text>
                         );
                       }}
                     />
                   </Bar>
-                  {!showOverviewAsHours && (
+                  {!showTodayAsHours && (
                     <Bar 
                       dataKey="todayOvertime" 
-                      name="Overtime" 
+                      name="Today OT" 
                       stackId="today"
                       fill="#dc2626" 
                       radius={[4, 4, 0, 0]}
@@ -1366,7 +1382,7 @@ export default function Analytics() {
                     <>
                       <Bar 
                         dataKey="weekly" 
-                        name={showOverviewAsHours ? 'Weekly Avg h' : 'Weekly Avg %'} 
+                        name={showWeeklyAsHours ? 'Weekly Avg h' : 'Weekly Avg %'} 
                         stackId="weekly"
                         fill="#48bb78" 
                         radius={[0, 0, 0, 0]}
@@ -1379,16 +1395,16 @@ export default function Analytics() {
                             if (!value || value === 0) return null;
                             return (
                               <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                                {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                                {showWeeklyAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                               </text>
                             );
                           }}
                         />
                       </Bar>
-                      {!showOverviewAsHours && (
+                      {!showWeeklyAsHours && (
                         <Bar 
                           dataKey="weeklyOvertime" 
-                          name="Weekly Overtime" 
+                          name="Weekly OT" 
                           stackId="weekly"
                           fill="#dc2626" 
                           radius={[4, 4, 0, 0]}
@@ -1414,7 +1430,7 @@ export default function Analytics() {
                     <>
                       <Bar 
                         dataKey="monthly" 
-                        name={showOverviewAsHours ? 'Monthly Avg h' : 'Monthly Avg %'} 
+                        name={showMonthlyAsHours ? 'Monthly Avg h' : 'Monthly Avg %'} 
                         stackId="monthly"
                         fill="#ed8936" 
                         radius={[0, 0, 0, 0]}
@@ -1427,16 +1443,16 @@ export default function Analytics() {
                             if (!value || value === 0) return null;
                             return (
                               <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                                {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                                {showMonthlyAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                               </text>
                             );
                           }}
                         />
                       </Bar>
-                      {!showOverviewAsHours && (
+                      {!showMonthlyAsHours && (
                         <Bar 
                           dataKey="monthlyOvertime" 
-                          name="Monthly Overtime" 
+                          name="Monthly OT" 
                           stackId="monthly"
                           fill="#dc2626" 
                           radius={[4, 4, 0, 0]}
@@ -1467,29 +1483,41 @@ export default function Analytics() {
           <div className="comparative-charts-section">
             <div className="section-header-with-toggle">
               <div>
-                <h2>📊 {showOverviewAsHours ? 'Hours Spent' : 'Time Utilization %'}: Daily Categories</h2>
-                <p className="chart-description">{showOverviewAsHours ? 'Actual hours spent / weekly avg (h/day) / monthly avg (h/day) by category' : 'Percentage of allocated time actually used by category (100% = perfect match, >100% = overtime)'}</p>
+                <h2>📊 Time Utilization: Daily Categories</h2>
+                <p className="chart-description">Today / weekly avg / monthly avg — toggle each period between % and hours</p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => setShowOverviewAsHours(!showOverviewAsHours)}
-                  style={{ fontSize: '11px', padding: '6px 12px', background: showOverviewAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => setShowTodayAsHours(!showTodayAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showTodayAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                 >
-                  {showOverviewAsHours ? '⏱️ Hours' : '📊 %'}
+                  Today: {showTodayAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationCategoryWeek ? 'active' : ''}`}
                   onClick={() => setShowUtilizationCategoryWeek(!showUtilizationCategoryWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                  style={{ fontSize: '11px', padding: '6px 10px' }}
                 >
-                  {showUtilizationCategoryWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                  {showUtilizationCategoryWeek ? 'Hide Weekly' : 'Show Weekly'}
+                </button>
+                <button
+                  onClick={() => setShowWeeklyAsHours(!showWeeklyAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showWeeklyAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Weekly: {showWeeklyAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationCategoryMonth ? 'active' : ''}`}
                   onClick={() => setShowUtilizationCategoryMonth(!showUtilizationCategoryMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                  style={{ fontSize: '11px', padding: '6px 10px' }}
                 >
-                  {showUtilizationCategoryMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                  {showUtilizationCategoryMonth ? 'Hide Monthly' : 'Show Monthly'}
+                </button>
+                <button
+                  onClick={() => setShowMonthlyAsHours(!showMonthlyAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showMonthlyAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Monthly: {showMonthlyAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   onClick={() => {
@@ -1554,12 +1582,12 @@ export default function Analytics() {
                         const weeklyAvg = cat.weekSpent / daysInWeek;
                         const monthlyAvg = cat.monthSpent / daysInMonth;
                         
-                        const todayVal = showOverviewAsHours ? cat.todaySpent : (cat.allocated > 0 ? Math.min((cat.todaySpent / cat.allocated) * 100, 100) : 0);
-                        const todayOT = showOverviewAsHours ? 0 : (cat.allocated > 0 ? Math.max((cat.todaySpent / cat.allocated) * 100 - 100, 0) : 0);
-                        const weeklyVal = showOverviewAsHours ? weeklyAvg : (cat.allocated > 0 ? Math.min((weeklyAvg / cat.allocated) * 100, 100) : 0);
-                        const weeklyOT = showOverviewAsHours ? 0 : (cat.allocated > 0 ? Math.max((weeklyAvg / cat.allocated) * 100 - 100, 0) : 0);
-                        const monthlyVal = showOverviewAsHours ? monthlyAvg : (cat.allocated > 0 ? Math.min((monthlyAvg / cat.allocated) * 100, 100) : 0);
-                        const monthlyOT = showOverviewAsHours ? 0 : (cat.allocated > 0 ? Math.max((monthlyAvg / cat.allocated) * 100 - 100, 0) : 0);
+                        const todayVal = showTodayAsHours ? cat.todaySpent : (cat.allocated > 0 ? Math.min((cat.todaySpent / cat.allocated) * 100, 100) : 0);
+                        const todayOT = showTodayAsHours ? 0 : (cat.allocated > 0 ? Math.max((cat.todaySpent / cat.allocated) * 100 - 100, 0) : 0);
+                        const weeklyVal = showWeeklyAsHours ? weeklyAvg : (cat.allocated > 0 ? Math.min((weeklyAvg / cat.allocated) * 100, 100) : 0);
+                        const weeklyOT = showWeeklyAsHours ? 0 : (cat.allocated > 0 ? Math.max((weeklyAvg / cat.allocated) * 100 - 100, 0) : 0);
+                        const monthlyVal = showMonthlyAsHours ? monthlyAvg : (cat.allocated > 0 ? Math.min((monthlyAvg / cat.allocated) * 100, 100) : 0);
+                        const monthlyOT = showMonthlyAsHours ? 0 : (cat.allocated > 0 ? Math.max((monthlyAvg / cat.allocated) * 100 - 100, 0) : 0);
                         
                         return {
                           name: cat.category_name,
@@ -1591,7 +1619,7 @@ export default function Analytics() {
                     tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
-                    label={{ value: showOverviewAsHours ? 'Hours (Avg/Day)' : 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: '', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
                   />
@@ -1599,10 +1627,10 @@ export default function Analytics() {
                     wrapperStyle={{ paddingTop: '10px' }}
                     iconType="rect"
                   />
-                  {!showOverviewAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
+                  {!showTodayAsHours && !showWeeklyAsHours && !showMonthlyAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
                   <Bar 
                     dataKey="today" 
-                    name={showOverviewAsHours ? 'Today h' : 'Today %'} 
+                    name={showTodayAsHours ? 'Today h' : 'Today %'} 
                     stackId="today"
                     fill="#4299e1" 
                     radius={[0, 0, 0, 0]}
@@ -1615,16 +1643,16 @@ export default function Analytics() {
                         if (!value || value === 0) return null;
                         return (
                           <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                            {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                            {showTodayAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                           </text>
                         );
                       }}
                     />
                   </Bar>
-                  {!showOverviewAsHours && (
+                  {!showTodayAsHours && (
                     <Bar 
                       dataKey="todayOvertime" 
-                      name="Overtime" 
+                      name="Today OT" 
                       stackId="today"
                       fill="#dc2626" 
                       radius={[4, 4, 0, 0]}
@@ -1648,7 +1676,7 @@ export default function Analytics() {
                     <>
                       <Bar 
                         dataKey="weekly" 
-                        name={showOverviewAsHours ? 'Weekly Avg h' : 'Weekly Avg %'} 
+                        name={showWeeklyAsHours ? 'Weekly Avg h' : 'Weekly Avg %'} 
                         stackId="weekly"
                         fill="#48bb78" 
                         radius={[0, 0, 0, 0]}
@@ -1661,16 +1689,16 @@ export default function Analytics() {
                             if (!value || value === 0) return null;
                             return (
                               <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                                {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                                {showWeeklyAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                               </text>
                             );
                           }}
                         />
                       </Bar>
-                      {!showOverviewAsHours && (
+                      {!showWeeklyAsHours && (
                         <Bar 
                           dataKey="weeklyOvertime" 
-                          name="Weekly Overtime" 
+                          name="Weekly OT" 
                           stackId="weekly"
                           fill="#dc2626" 
                           radius={[4, 4, 0, 0]}
@@ -1696,7 +1724,7 @@ export default function Analytics() {
                     <>
                       <Bar 
                         dataKey="monthly" 
-                        name={showOverviewAsHours ? 'Monthly Avg h' : 'Monthly Avg %'} 
+                        name={showMonthlyAsHours ? 'Monthly Avg h' : 'Monthly Avg %'} 
                         stackId="monthly"
                         fill="#ed8936" 
                         radius={[0, 0, 0, 0]}
@@ -1709,16 +1737,16 @@ export default function Analytics() {
                             if (!value || value === 0) return null;
                             return (
                               <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                                {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                                {showMonthlyAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                               </text>
                             );
                           }}
                         />
                       </Bar>
-                      {!showOverviewAsHours && (
+                      {!showMonthlyAsHours && (
                         <Bar 
                           dataKey="monthlyOvertime" 
-                          name="Monthly Overtime" 
+                          name="Monthly OT" 
                           stackId="monthly"
                           fill="#dc2626" 
                           radius={[4, 4, 0, 0]}
@@ -1749,29 +1777,41 @@ export default function Analytics() {
           <div className="comparative-charts-section">
             <div className="section-header-with-toggle">
               <div>
-                <h2>📊 {showOverviewAsHours ? 'Hours Spent' : 'Time Utilization %'}: Daily: One-Time Tasks</h2>
-                <p className="chart-description">{showOverviewAsHours ? 'Actual hours spent / weekly avg (h/day) / monthly avg (h/day) for one-time tasks' : 'Percentage of allocated time actually used for one-time tasks (100% = perfect match, >100% = overtime)'}</p>
+                <h2>📊 Time Utilization: Daily: One-Time Tasks</h2>
+                <p className="chart-description">Today / weekly avg / monthly avg — toggle each period between % and hours</p>
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button
-                  onClick={() => setShowOverviewAsHours(!showOverviewAsHours)}
-                  style={{ fontSize: '11px', padding: '6px 12px', background: showOverviewAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                  onClick={() => setShowTodayAsHours(!showTodayAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showTodayAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                 >
-                  {showOverviewAsHours ? '⏱️ Hours' : '📊 %'}
+                  Today: {showTodayAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationOneTimeWeek ? 'active' : ''}`}
                   onClick={() => setShowUtilizationOneTimeWeek(!showUtilizationOneTimeWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                  style={{ fontSize: '11px', padding: '6px 10px' }}
                 >
-                  {showUtilizationOneTimeWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                  {showUtilizationOneTimeWeek ? 'Hide Weekly' : 'Show Weekly'}
+                </button>
+                <button
+                  onClick={() => setShowWeeklyAsHours(!showWeeklyAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showWeeklyAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Weekly: {showWeeklyAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationOneTimeMonth ? 'active' : ''}`}
                   onClick={() => setShowUtilizationOneTimeMonth(!showUtilizationOneTimeMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
+                  style={{ fontSize: '11px', padding: '6px 10px' }}
                 >
-                  {showUtilizationOneTimeMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
+                  {showUtilizationOneTimeMonth ? 'Hide Monthly' : 'Show Monthly'}
+                </button>
+                <button
+                  onClick={() => setShowMonthlyAsHours(!showMonthlyAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: showMonthlyAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  Monthly: {showMonthlyAsHours ? '⏱️ h' : '📊 %'}
                 </button>
                 <button 
                   onClick={() => {
@@ -1806,12 +1846,12 @@ export default function Analytics() {
                         const weeklyAvg = (weekTask?.spent_minutes || 0) / 60 / daysInWeek;
                         const monthlyAvg = (monthTask?.spent_minutes || 0) / 60 / daysInMonth;
                         
-                        const todayVal = showOverviewAsHours ? todaySpent : (allocated > 0 ? Math.min((todaySpent / allocated) * 100, 100) : 0);
-                        const todayOT = showOverviewAsHours ? 0 : (allocated > 0 ? Math.max((todaySpent / allocated) * 100 - 100, 0) : 0);
-                        const weeklyVal = showOverviewAsHours ? weeklyAvg : (allocated > 0 ? Math.min((weeklyAvg / allocated) * 100, 100) : 0);
-                        const weeklyOT = showOverviewAsHours ? 0 : (allocated > 0 ? Math.max((weeklyAvg / allocated) * 100 - 100, 0) : 0);
-                        const monthlyVal = showOverviewAsHours ? monthlyAvg : (allocated > 0 ? Math.min((monthlyAvg / allocated) * 100, 100) : 0);
-                        const monthlyOT = showOverviewAsHours ? 0 : (allocated > 0 ? Math.max((monthlyAvg / allocated) * 100 - 100, 0) : 0);
+                        const todayVal = showTodayAsHours ? todaySpent : (allocated > 0 ? Math.min((todaySpent / allocated) * 100, 100) : 0);
+                        const todayOT = showTodayAsHours ? 0 : (allocated > 0 ? Math.max((todaySpent / allocated) * 100 - 100, 0) : 0);
+                        const weeklyVal = showWeeklyAsHours ? weeklyAvg : (allocated > 0 ? Math.min((weeklyAvg / allocated) * 100, 100) : 0);
+                        const weeklyOT = showWeeklyAsHours ? 0 : (allocated > 0 ? Math.max((weeklyAvg / allocated) * 100 - 100, 0) : 0);
+                        const monthlyVal = showMonthlyAsHours ? monthlyAvg : (allocated > 0 ? Math.min((monthlyAvg / allocated) * 100, 100) : 0);
+                        const monthlyOT = showMonthlyAsHours ? 0 : (allocated > 0 ? Math.max((monthlyAvg / allocated) * 100 - 100, 0) : 0);
                         
                         return {
                           name: task.task_name,
@@ -1858,7 +1898,7 @@ export default function Analytics() {
                     tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
-                    label={{ value: showOverviewAsHours ? 'Hours (Avg/Day)' : 'Utilization %', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: '', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
                   />
@@ -1866,10 +1906,10 @@ export default function Analytics() {
                     wrapperStyle={{ paddingTop: '10px' }}
                     iconType="rect"
                   />
-                  {!showOverviewAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
+                  {!showTodayAsHours && !showWeeklyAsHours && !showMonthlyAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
                   <Bar 
                     dataKey="today" 
-                    name={showOverviewAsHours ? 'Today h' : 'Today %'} 
+                    name={showTodayAsHours ? 'Today h' : 'Today %'} 
                     stackId="today"
                     fill="#4299e1" 
                     radius={[0, 0, 0, 0]}
@@ -1882,16 +1922,16 @@ export default function Analytics() {
                         if (!value || value === 0) return null;
                         return (
                           <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                            {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                            {showTodayAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                           </text>
                         );
                       }}
                     />
                   </Bar>
-                  {!showOverviewAsHours && (
+                  {!showTodayAsHours && (
                     <Bar 
                       dataKey="todayOvertime" 
-                      name="Overtime" 
+                      name="Today OT" 
                       stackId="today"
                       fill="#dc2626" 
                       radius={[4, 4, 0, 0]}
@@ -1915,7 +1955,7 @@ export default function Analytics() {
                     <>
                       <Bar 
                         dataKey="weekly" 
-                        name={showOverviewAsHours ? 'Weekly Avg h' : 'Weekly Avg %'} 
+                        name={showWeeklyAsHours ? 'Weekly Avg h' : 'Weekly Avg %'} 
                         stackId="weekly"
                         fill="#48bb78" 
                         radius={[0, 0, 0, 0]}
@@ -1928,16 +1968,16 @@ export default function Analytics() {
                             if (!value || value === 0) return null;
                             return (
                               <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                                {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                                {showWeeklyAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                               </text>
                             );
                           }}
                         />
                       </Bar>
-                      {!showOverviewAsHours && (
+                      {!showWeeklyAsHours && (
                         <Bar 
                           dataKey="weeklyOvertime" 
-                          name="Weekly Overtime" 
+                          name="Weekly OT" 
                           stackId="weekly"
                           fill="#dc2626" 
                           radius={[4, 4, 0, 0]}
@@ -1963,7 +2003,7 @@ export default function Analytics() {
                     <>
                       <Bar 
                         dataKey="monthly" 
-                        name={showOverviewAsHours ? 'Monthly Avg h' : 'Monthly Avg %'} 
+                        name={showMonthlyAsHours ? 'Monthly Avg h' : 'Monthly Avg %'} 
                         stackId="monthly"
                         fill="#ed8936" 
                         radius={[0, 0, 0, 0]}
@@ -1976,16 +2016,16 @@ export default function Analytics() {
                             if (!value || value === 0) return null;
                             return (
                               <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                                {showOverviewAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                                {showMonthlyAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
                               </text>
                             );
                           }}
                         />
                       </Bar>
-                      {!showOverviewAsHours && (
+                      {!showMonthlyAsHours && (
                         <Bar 
                           dataKey="monthlyOvertime" 
-                          name="Monthly Overtime" 
+                          name="Monthly OT" 
                           stackId="monthly"
                           fill="#dc2626" 
                           radius={[4, 4, 0, 0]}
@@ -2446,11 +2486,11 @@ export default function Analytics() {
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
-                  className={`toggle-month-btn ${showCategoryBreakdownWeek ? 'active' : ''}`}
-                  onClick={() => setShowCategoryBreakdownWeek(!showCategoryBreakdownWeek)}
+                  className={`toggle-month-btn ${showCategoryBreakdownWeekAll ? 'active' : ''}`}
+                  onClick={() => setShowCategoryBreakdownWeekAll(!showCategoryBreakdownWeekAll)}
                   style={{ fontSize: '11px', padding: '6px 12px' }}
                 >
-                  {showCategoryBreakdownWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                  {showCategoryBreakdownWeekAll ? '📊 Hide Weekly' : '📊 Show Weekly'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
@@ -2610,11 +2650,11 @@ export default function Analytics() {
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button 
-                  className={`toggle-month-btn ${showTaskBreakdownWeek ? 'active' : ''}`}
-                  onClick={() => setShowTaskBreakdownWeek(!showTaskBreakdownWeek)}
+                  className={`toggle-month-btn ${showTaskBreakdownWeekAll ? 'active' : ''}`}
+                  onClick={() => setShowTaskBreakdownWeekAll(!showTaskBreakdownWeekAll)}
                   style={{ fontSize: '11px', padding: '6px 12px' }}
                 >
-                  {showTaskBreakdownWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
+                  {showTaskBreakdownWeekAll ? '📊 Hide Weekly' : '📊 Show Weekly'}
                 </button>
                 <button 
                   className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
@@ -3178,13 +3218,6 @@ export default function Analytics() {
             <div>
               <div style={{ marginBottom: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                 <button 
-                  className={`toggle-month-btn ${showAsHours ? 'active' : ''}`}
-                  onClick={() => setShowAsHours(!showAsHours)}
-                  style={{ background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', fontWeight: 600 }}
-                >
-                  {showAsHours ? '⏱️ Hours' : '📊 Percentage'}
-                </button>
-                <button 
                   className={`toggle-month-btn ${showWeekOverWeek ? 'active' : ''}`}
                   onClick={() => setShowWeekOverWeek(!showWeekOverWeek)}
                 >
@@ -3200,7 +3233,15 @@ export default function Analytics() {
 
               {/* Daily Utilization Chart */}
               <div className="comparative-charts-section" style={{ marginTop: '20px' }}>
-                  <h3>📅 Daily {showAsHours ? 'Hours Spent' : 'Utilization'} (Last 56 Days / 8 Weeks)</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    <h3 style={{ margin: 0 }}>📅 Daily {showAsHours ? 'Hours Spent' : 'Utilization'} (Last 56 Days / 8 Weeks)</h3>
+                    <button
+                      onClick={() => setShowAsHours(!showAsHours)}
+                      style={{ fontSize: '11px', padding: '4px 10px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      {showAsHours ? '⏱️ h' : '📊 %'}
+                    </button>
+                  </div>
                   <ResponsiveContainer width="100%" height={400}>
                     <LineChart 
                       data={detailedViewType === 'tasks' ? taskTrendData : 
@@ -3275,7 +3316,15 @@ export default function Analytics() {
               {/* Weekly Utilization Chart */}
               {showWeekOverWeek && (
                 <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
-                  <h3>📊 Weekly Average (Last 8 Weeks) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    <h3 style={{ margin: 0 }}>📊 Weekly Average (Last 8 Weeks) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>
+                    <button
+                      onClick={() => setShowAsHours(!showAsHours)}
+                      style={{ fontSize: '11px', padding: '4px 10px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      {showAsHours ? '⏱️ h' : '📊 %'}
+                    </button>
+                  </div>
                   <ResponsiveContainer width="100%" height={350}>
                       <BarChart 
                         data={(() => {

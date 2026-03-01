@@ -227,6 +227,7 @@ export default function Tasks() {
     is_tracked: boolean;
     created_at: string;
     updated_at: string;
+    completed_at?: string | null;
   };
   const [dailyStatuses, setDailyStatuses] = useState<Map<number, DailyTaskStatus>>(new Map());
   
@@ -295,6 +296,11 @@ export default function Tasks() {
     updated_at: string;
     pillar_name?: string;
     category_name?: string;
+    follow_up_frequency?: string;
+    allocated_minutes?: number;
+    pillar_id?: number | null;
+    category_id?: number | null;
+    daysOverdue?: number;
   };
 
   // Life Goals state
@@ -316,6 +322,11 @@ export default function Tasks() {
     days_remaining: number | null;
     created_at: string;
     updated_at: string | null;
+    pillar_id?: number | null;
+    category_id?: number | null;
+    time_period?: string;
+    target_value?: number | null;
+    unit?: string | null;
   };
 
   interface MilestoneData {
@@ -403,7 +414,7 @@ export default function Tasks() {
     const saved = localStorage.getItem('expandedHabitCategories');
     return saved ? new Set(JSON.parse(saved)) : new Set();
   });
-  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean; frequencyTasks: boolean; completedTasks: boolean; linkedTasks: boolean }>(() => {
+  const [expandedSections, setExpandedSections] = useState<{ milestones: boolean; allTasks: boolean; frequencyTasks: boolean; completedTasks: boolean; linkedTasks: boolean; importantMiscTasks: boolean }>(() => {
     const saved = localStorage.getItem('projectDetailSectionsExpanded');
     if (saved) {
       try {
@@ -412,7 +423,7 @@ export default function Tasks() {
         console.error('Failed to parse projectDetailSectionsExpanded:', e);
       }
     }
-    return { milestones: true, allTasks: false, frequencyTasks: true, completedTasks: false, linkedTasks: true };
+    return { milestones: true, allTasks: false, frequencyTasks: true, completedTasks: false, linkedTasks: true, importantMiscTasks: false };
   });
   
   useEffect(() => {
@@ -443,7 +454,7 @@ export default function Tasks() {
   });
 
   // Today Tab state - expandable sections
-  const [todayTabSections, setTodayTabSections] = useState(() => {
+  const [todayTabSections, setTodayTabSections] = useState<{[key: string]: boolean}>(() => {
     // Try to load saved state from localStorage
     const saved = localStorage.getItem('todayTabSections');
     if (saved) {
@@ -647,6 +658,7 @@ export default function Tasks() {
       current_streak?: number;
       longest_streak?: number;
     };
+    start_date?: string | null;
   }
 
   interface TodaysChallenge {
@@ -868,13 +880,13 @@ export default function Tasks() {
     );
     
     const nowProjectTasks = projectTasksDueToday.filter(task => 
-      task.priority && task.priority >= 1 && task.priority <= 3 && 
+      task.priority && Number(task.priority) >= 1 && Number(task.priority) <= 3 && 
       !task.is_completed &&
       task.due_date && parseDateString(task.due_date) <= today
     );
     
     const nowGoalTasks = goalTasksDueToday.filter(task => 
-      task.priority && task.priority >= 1 && task.priority <= 3 && 
+      task.priority && Number(task.priority) >= 1 && Number(task.priority) <= 3 && 
       !task.is_completed &&
       task.due_date && parseDateString(task.due_date) <= today
     );
@@ -1101,7 +1113,7 @@ export default function Tasks() {
       setCompletedHabits(completedList);
       
       // Reset selected month to current month when loading habits
-      setHabitSelectedMonth(new Date());
+      setHabitSelectedMonth({});
       
       // Load month days for each active habit
       habitsList.forEach((habit: any) => {
@@ -1824,7 +1836,7 @@ export default function Tasks() {
       }
       
       // For today tab: Filter completed/NA tasks and priority 1-3 tasks (they show in NOW tab)
-      if (activeTab === 'today') {
+      if ((activeTab as string) === 'today') {
         const status = dailyStatuses.get(task.id);
         if (status && (status.is_completed || status.is_na)) {
           return false;
@@ -1837,7 +1849,7 @@ export default function Tasks() {
       
       // For daily tab: Allow completed tasks (they'll show in completed section)
       // For other tabs: Filter out completed tasks
-      if (activeTab === 'daily') {
+      if ((activeTab as string) === 'daily') {
         // For daily tab, show tasks that are active OR completed today
         // Check if task is completed via daily status OR global completion
         const status = dailyStatuses.get(task.id);
@@ -1869,7 +1881,7 @@ export default function Tasks() {
         }
         
         // Show all active tasks
-        if (activeTab === 'daily' && task.follow_up_frequency === 'daily') {
+        if ((activeTab as string) === 'daily' && task.follow_up_frequency === 'daily') {
           console.log(`🔍 [Daily Tab Final is_active Check] Task ${task.id} (${task.name}):`, {
             is_active: task.is_active,
             is_active_type: typeof task.is_active,
@@ -2749,7 +2761,7 @@ export default function Tasks() {
       const statusResponse: any = await api.get(`/api/monthly-time/status/${dateStr}`);
       
       const statusData = Array.isArray(statusResponse) ? statusResponse : (statusResponse.data || []);
-      const statusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {}
+      const statusMap: Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}> = {}
       
       if (Array.isArray(statusData)) {
         statusData.forEach((status: any) => {
@@ -3037,7 +3049,7 @@ export default function Tasks() {
       console.log('📡 Yearly status response:', statusResponse);
       
       const statusData = Array.isArray(statusResponse) ? statusResponse : (statusResponse.data || []);
-      const statusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {}
+      const statusMap: Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}> = {}
       
       if (Array.isArray(statusData)) {
         statusData.forEach((status: any) => {
@@ -3809,6 +3821,16 @@ export default function Tasks() {
     }
   };
 
+  const handleToggleProjectTask = async (taskId: number, isCompleted: boolean) => {
+    if (!selectedProject) return;
+    try {
+      await api.put(`/api/projects/tasks/${taskId}`, { is_completed: isCompleted });
+      await loadProjectTasks(selectedProject.id);
+    } catch (error) {
+      console.error('Error updating project task:', error);
+    }
+  };
+
   const handleToggleProjectMilestone = async (milestoneId: number, isCompleted: boolean) => {
     if (!selectedProject) return;
     try {
@@ -3896,7 +3918,7 @@ export default function Tasks() {
   };
 
   // Get color class for tasks based on due_date OR created_at (for 'today' frequency tasks)
-  const getTaskColorClass = (task: TaskData): string => {
+  const getTaskColorClass = (task: Task): string => {
     // If task has explicit due_date, use that
     if (task.due_date) {
       return getDueDateColorClass(task.due_date);
@@ -4080,7 +4102,7 @@ export default function Tasks() {
         allocated_minutes: editingRegularTask.allocated_minutes,
         pillar: editingRegularTask.pillar,
         category: editingRegularTask.category,
-        subcategory: editingRegularTask.subcategory,
+        subcategory: editingRegularTask.sub_category,
         follow_up_frequency: editingRegularTask.follow_up_frequency
       });
       
@@ -5552,7 +5574,7 @@ export default function Tasks() {
     const needsAttention: Array<{
       task: Task;
       reason: string;
-      weeklyIssue?: { redDays: number; totalDays: number; neededToday?: number; dailyTarget?: number; deficit?: number; currentAverage?: number }
+      weeklyIssue?: { redDays: number; totalDays: number; daysLeft?: number; neededToday?: number; dailyTarget?: number; deficit?: number; currentAverage?: number }
       monthlyIssue?: { 
         percentBehind: number; 
         totalSpent: number; 
@@ -6045,7 +6067,7 @@ export default function Tasks() {
     onUpdateDueDate: (taskId: number, newDueDate: string) => void;
     getDueDateColorClass: (dueDate: string | null) => string;
     getTasksByParentId: (parentId: number | null) => ProjectTaskData[];
-    projectTaskFilter?: 'all' | 'in-progress' | 'completed' | 'no-milestone';
+    projectTaskFilter?: 'all' | 'in-progress' | 'completed' | 'no-milestone' | 'overdue';
     onAddSubtask?: (parentTask: ProjectTaskData) => void;
   }) => {
     const subTasks = getTasksByParentId(task.id);
@@ -6169,7 +6191,7 @@ export default function Tasks() {
                   const newDate = e.target.value;
                   if (newDate) {
                     // Preserve the existing time or use midnight if none exists
-                    const existingTime = task.due_date.includes('T') ? task.due_date.split('T')[1] : '00:00:00';
+                const existingTime = (task.due_date?.includes('T')) ? task.due_date!.split('T')[1] : '00:00:00';
                     onUpdateDueDate(task.id, newDate + 'T' + existingTime);
                   }
                 }}
@@ -7117,7 +7139,7 @@ export default function Tasks() {
         {showAddYearlyTaskModal && (
           <div className="modal-overlay" onClick={() => setShowAddYearlyTaskModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              {console.log('📋 Add Yearly Task SELECTION MODAL is rendering (OLD section)')}
+              {/* {console.log('\uD83D\uDCCB Add Yearly Task SELECTION MODAL is rendering (OLD section)')} */}
               <div className="modal-header">
                 <h2>Add Yearly Task</h2>
                 <button className="btn-close" onClick={() => setShowAddYearlyTaskModal(false)}>×</button>
@@ -7273,7 +7295,7 @@ export default function Tasks() {
   };
 
   // Upcoming tab - Shows future tasks grouped by pillar
-  if (activeTab === 'upcoming') {
+  if ((activeTab as string) === 'upcoming') {
     return <UpcomingTasks />;
   }
 
@@ -7341,7 +7363,7 @@ export default function Tasks() {
             }
             
             const nowProjectTasks = projectTasksDueToday.filter(task => 
-              task.priority && task.priority >= 1 && task.priority <= 3 && 
+              task.priority && Number(task.priority) >= 1 && Number(task.priority) <= 3 && 
               !task.is_completed &&
               task.due_date && parseDateString(task.due_date.split('T')[0]) <= today
             );
@@ -7444,7 +7466,7 @@ export default function Tasks() {
                                     await loadGoalTasksDueToday();
                                   } else {
                                     if (e.target.checked) {
-                                      await handleComplete(task.id);
+                                      await handleTaskComplete(task.id);
                                     } else {
                                       await api.put(`/api/tasks/${task.id}`, { is_completed: false });
                                       await loadTasks();
@@ -7480,7 +7502,7 @@ export default function Tasks() {
                               {task.pillar && (
                                 <span>
                                   {task.pillar === 'hard_work' ? '💼' : task.pillar === 'calmness' ? '🧘' : '👨‍👩‍👦'}{' '}
-                                  {task.pillar.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                  {task.pillar.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                                 </span>
                               )}
                               {task.category && <span> › {task.category}</span>}
@@ -7627,7 +7649,7 @@ export default function Tasks() {
                                 } else if (taskType === 'goal') {
                                   handleToggleGoalTaskCompletion(task.id, false);
                                 } else {
-                                  handleComplete(task.id);
+                                  handleTaskComplete(task.id);
                                 }
                               }}
                               style={{
@@ -7866,7 +7888,7 @@ export default function Tasks() {
       )}
 
       {/* Week Navigator for Weekly Tab */}
-      {activeTab === 'weekly' && (
+      {(activeTab as string) === 'weekly' && (
         <div className="date-navigator">
           <button className="btn-nav" onClick={() => changeWeek(-1)}>
             ← Previous Week
@@ -7903,7 +7925,7 @@ export default function Tasks() {
       )}
 
       {/* Month Navigator for Monthly Tab */}
-      {activeTab === 'monthly' && (
+      {(activeTab as string) === 'monthly' && (
         <div className="date-navigator">
           <button className="btn-nav" onClick={() => changeMonth(-1)}>
             ← Previous Month
@@ -7930,7 +7952,7 @@ export default function Tasks() {
         </div>
       )}
 
-      {activeTab === 'yearly' && (
+      {(activeTab as string) === 'yearly' && (
         <div className="date-navigator">
           <button className="btn-nav" onClick={() => changeYear(-1)}>
             ← Previous Year
@@ -9134,7 +9156,7 @@ export default function Tasks() {
                                     <span style={{ fontSize: '10px', color: '#fff', background: '#38a169', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                       Daily
                                     </span>
-                                    {task.allocated_minutes > 0 && (
+                                    {(task.allocated_minutes ?? 0) > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#e6fffa', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
@@ -9182,7 +9204,7 @@ export default function Tasks() {
                                     <span style={{ fontSize: '10px', color: '#fff', background: '#ed8936', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                       Weekly
                                     </span>
-                                    {task.allocated_minutes > 0 && (
+                                    {(task.allocated_minutes ?? 0) > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#fffaf0', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
@@ -9230,7 +9252,7 @@ export default function Tasks() {
                                     <span style={{ fontSize: '10px', color: '#fff', background: '#9f7aea', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                       Monthly
                                     </span>
-                                    {task.allocated_minutes > 0 && (
+                                    {(task.allocated_minutes ?? 0) > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#faf5ff', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
@@ -9284,7 +9306,7 @@ export default function Tasks() {
                                     <span style={{ fontSize: '10px', color: '#fff', background: '#d69e2e', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                       Quarterly
                                     </span>
-                                    {task.allocated_minutes > 0 && (
+                                    {(task.allocated_minutes ?? 0) > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#fffbea', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
@@ -9332,7 +9354,7 @@ export default function Tasks() {
                                     <span style={{ fontSize: '10px', color: '#fff', background: '#fc8181', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                       Yearly
                                     </span>
-                                    {task.allocated_minutes > 0 && (
+                                    {(task.allocated_minutes ?? 0) > 0 && (
                                       <span style={{ fontSize: '11px', color: '#666', background: '#fff5f5', padding: '2px 6px', borderRadius: '4px' }}>
                                         {task.allocated_minutes}m
                                       </span>
@@ -9433,7 +9455,7 @@ export default function Tasks() {
                               <span style={{ fontSize: '10px', color: '#fff', background: '#718096', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                 Important
                               </span>
-                              {task.allocated_minutes > 0 && (
+                              {(task.allocated_minutes ?? 0) > 0 && (
                                 <span style={{ fontSize: '11px', color: '#666', background: '#f7fafc', padding: '2px 6px', borderRadius: '4px' }}>
                                   {task.allocated_minutes}m
                                 </span>
@@ -9481,7 +9503,7 @@ export default function Tasks() {
                               <span style={{ fontSize: '10px', color: '#fff', background: '#f59e0b', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
                                 Misc
                               </span>
-                              {task.allocated_minutes > 0 && (
+                              {(task.allocated_minutes ?? 0) > 0 && (
                                 <span style={{ fontSize: '11px', color: '#666', background: '#fef3c7', padding: '2px 6px', borderRadius: '4px' }}>
                                   {task.allocated_minutes}m
                                 </span>
@@ -9721,16 +9743,16 @@ export default function Tasks() {
                           onClick={async (e) => {
                             e.stopPropagation();
                             try {
-                              await axios.put(`http://localhost:8000/api/tasks/${task.id}`, {
+                              await api.put(`/api/tasks/${task.id}`, {
                                 ...task,
                                 is_completed: false,
                                 completed_at: null
                               });
-                              showAlert(`Task "${task.name}" restored successfully!`, 'success');
-                              refreshTasks();
+                              alert(`Task "${task.name}" restored successfully!`);
+                              loadTasks();
                             } catch (error) {
                               console.error('Error restoring task:', error);
-                              showAlert('Failed to restore task', 'error');
+                              alert('Failed to restore task');
                             }
                           }}
                           style={{
@@ -12558,7 +12580,7 @@ export default function Tasks() {
                             </div>
                             <div style={{ fontSize: '12px', color: '#059669' }}>
                               {task.pillar_name} - {task.category_name}
-                              {task.allocated_minutes > 0 && (
+                              {(task.allocated_minutes ?? 0) > 0 && (
                                 <span style={{ marginLeft: '12px' }}>
                                   ⏱️ {task.allocated_minutes} minutes
                                 </span>
@@ -12615,7 +12637,7 @@ export default function Tasks() {
             );
           })()}
         </>
-      ) : activeTab === 'weekly' ? (
+      ) : (activeTab as string) === 'weekly' ? (
         /* WEEKLY TAB: Three separate tables with aggregated data from daily */
         <>
           {/* TIME-BASED TASKS TABLE */}
@@ -13168,7 +13190,7 @@ export default function Tasks() {
             </div>
           )}
         </>
-      ) : activeTab === 'monthly' ? (
+      ) : (activeTab as string) === 'monthly' ? (
         /* MONTHLY TAB: Three separate tables with aggregated data from daily */
         <>
           {/* TIME-BASED TASKS TABLE */}
@@ -13711,7 +13733,7 @@ export default function Tasks() {
         /* OTHER TABS: Keep existing single table */
         <>
           {/* Habits & Challenges Section moved to bottom of Today tab - see after Needs Attention section */}
-          {activeTab === 'never-show-here' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
+          {(false) && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
             <div style={{ marginBottom: '30px' }}>
               {/* Active Habits Section */}
               {todaysHabits.length > 0 && (
@@ -14590,7 +14612,7 @@ export default function Tasks() {
                         onChange={(e) => {
                           // Handle checkbox change - you can add completion logic here
                           if (e.target.checked) {
-                            handleComplete(task.id);
+                            handleTaskComplete(task.id);
                           }
                         }}
                       />
@@ -15822,7 +15844,7 @@ export default function Tasks() {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
             const filteredTasks = projectTasksDueToday
-              .filter(t => !(t.priority && t.priority <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && Number(t.priority) <= 3)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
@@ -15966,7 +15988,7 @@ export default function Tasks() {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
             const filteredTasks = goalTasksDueToday
-              .filter(t => !(t.priority && t.priority <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && Number(t.priority) <= 3)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
@@ -16368,7 +16390,7 @@ export default function Tasks() {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
             const filteredTasks = importantTasksDueToday
-              .filter(t => !(t.priority && t.priority <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && Number(t.priority) <= 3)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             // Only show section if there are tasks
@@ -19992,7 +20014,7 @@ export default function Tasks() {
       {showAddYearlyTaskModal && (
         <div className="modal-overlay" onClick={() => setShowAddYearlyTaskModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            {console.log('📋 Add Yearly Task SELECTION MODAL is rendering')}
+            {/* {console.log('\uD83D\uDCCB Add Yearly Task SELECTION MODAL is rendering')} */}
             <div className="modal-header">
               <h2>Add Yearly Task</h2>
               <button className="btn-close" onClick={() => setShowAddYearlyTaskModal(false)}>×</button>

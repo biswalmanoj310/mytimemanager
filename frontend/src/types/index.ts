@@ -99,6 +99,7 @@ export interface Task {
   completed_at?: string;
   na_marked_at?: string;
   priority: number;  // Priority 1-10 (1=highest, 10=lowest), default 10
+  parent_task_id?: number | null;
   created_at: string;
   updated_at?: string;
   due_date?: string;

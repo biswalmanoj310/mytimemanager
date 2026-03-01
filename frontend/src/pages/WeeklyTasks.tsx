@@ -73,7 +73,7 @@ const WeeklyTasks: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, any>>({});
-  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const saveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [weeklyDailyEntries, setWeeklyDailyEntries] = useState<DailyEntry[]>([]);
   
   // Edit task state - use TaskForm component (like Daily tab)
