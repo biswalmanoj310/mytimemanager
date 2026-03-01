@@ -12640,6 +12640,133 @@ export default function Tasks() {
       ) : (activeTab as string) === 'weekly' ? (
         /* WEEKLY TAB: Three separate tables with aggregated data from daily */
         <>
+          {/* BEHIND SCHEDULE BANNER */}
+          {(() => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const weekStart = new Date(selectedWeekStart);
+            weekStart.setHours(0, 0, 0, 0);
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 6);
+
+            // Only show for current week (not past/future)
+            if (today < weekStart || today > weekEnd) return null;
+
+            const behindTasks: { name: string; deficit: string }[] = [];
+
+            const getDaysElapsed = (task: any) => {
+              const taskCreatedAt = new Date(task.created_at);
+              taskCreatedAt.setHours(0, 0, 0, 0);
+              const effectiveStart = taskCreatedAt > weekStart ? taskCreatedAt : weekStart;
+              if (effectiveStart > weekEnd) return 0;
+              const diffTime = today.getTime() - effectiveStart.getTime();
+              return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
+            };
+
+            // Time-based tasks
+            timeBasedTasks.forEach((task) => {
+              const status = weeklyTaskStatuses[task.id];
+              if (status?.is_completed || status?.is_na) return;
+              if (task.is_completed || !task.is_active) return;
+              const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
+              const daysElapsed = getDaysElapsed(task);
+              if (daysElapsed === 0) return;
+              const expectedSoFar = task.allocated_minutes * daysElapsed;
+              if (totalSpent < expectedSoFar) {
+                const deficitMins = expectedSoFar - totalSpent;
+                behindTasks.push({ name: task.name, deficit: `${deficitMins} min behind` });
+              }
+            });
+
+            // Count-based tasks
+            countBasedTasks.forEach((task) => {
+              const status = weeklyTaskStatuses[task.id];
+              if (status?.is_completed || status?.is_na) return;
+              if (task.is_completed || !task.is_active) return;
+              const totalCount = weekDays.reduce((sum, day) => sum + (getWeeklyTime(task.id, day.index) || 0), 0);
+              const daysElapsed = getDaysElapsed(task);
+              if (daysElapsed === 0) return;
+              const expectedSoFar = (task.target_value || 0) * daysElapsed;
+              if (totalCount < expectedSoFar) {
+                const deficit = Math.round((expectedSoFar - totalCount) * 10) / 10;
+                behindTasks.push({ name: task.name, deficit: `${deficit} ${task.unit || ''} behind`.trim() });
+              }
+            });
+
+            // Boolean tasks
+            booleanTasks.forEach((task) => {
+              const status = weeklyTaskStatuses[task.id];
+              if (status?.is_completed || status?.is_na) return;
+              if (task.is_completed || !task.is_active) return;
+              const daysCompleted = weekDays.filter(day => getWeeklyTime(task.id, day.index) > 0).length;
+              const daysElapsed = getDaysElapsed(task);
+              if (daysElapsed === 0) return;
+              if (daysCompleted < daysElapsed) {
+                const missedDays = daysElapsed - daysCompleted;
+                behindTasks.push({ name: task.name, deficit: `${missedDays} day${missedDays > 1 ? 's' : ''} missed` });
+              }
+            });
+
+            if (behindTasks.length === 0) {
+              return (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '12px 18px',
+                  marginBottom: '20px',
+                  background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+                  border: '1px solid #6ee7b7',
+                  borderRadius: '10px',
+                  boxShadow: '0 2px 8px rgba(16,185,129,0.12)',
+                }}>
+                  <span style={{ fontSize: '22px' }}>🎉</span>
+                  <span style={{ fontWeight: 700, fontSize: '15px', color: '#065f46' }}>
+                    All tasks on track this week!
+                  </span>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{
+                padding: '14px 18px',
+                marginBottom: '20px',
+                background: 'linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%)',
+                border: '1.5px solid #f97316',
+                borderRadius: '10px',
+                boxShadow: '0 2px 10px rgba(249,115,22,0.15)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: behindTasks.length > 0 ? '10px' : '0' }}>
+                  <span style={{ fontSize: '22px' }}>⚠️</span>
+                  <span style={{ fontWeight: 700, fontSize: '16px', color: '#9a3412' }}>
+                    {behindTasks.length} task{behindTasks.length > 1 ? 's' : ''} behind schedule
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {behindTasks.map((t, i) => (
+                    <span key={i} style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '4px 10px',
+                      background: 'white',
+                      border: '1px solid #fdba74',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#7c2d12',
+                    }}>
+                      <span style={{ color: '#f97316' }}>●</span>
+                      {t.name}
+                      <span style={{ color: '#9a3412', fontWeight: 400 }}>({t.deficit})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* TIME-BASED TASKS TABLE */}
           {timeBasedTasks.length > 0 && (
             <div style={{ marginBottom: '32px' }}>
