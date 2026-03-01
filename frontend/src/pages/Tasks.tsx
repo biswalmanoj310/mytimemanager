@@ -967,22 +967,12 @@ export default function Tasks() {
         console.log('API response:', response);
       }
       
-      // Switch to NOW tab FIRST before reloading data
-      setActiveTab('now');
-      const searchParams = new URLSearchParams(location.search);
-      searchParams.set('tab', 'now');
-      navigate(`?${searchParams.toString()}`, { replace: true });
-      
-      // Use setTimeout to ensure tab switch state update completes before reloading data
-      // This prevents the useEffect from firing while activeTab is still 'today'
-      setTimeout(async () => {
-        console.log('Reloading all task data after tab switch...');
-        await loadTasks();
-        await loadProjectTasksDueToday();
-        await loadGoalTasksDueToday();
-        await loadUpcomingTasks();
-        console.log('Task moved to NOW successfully, all data reloaded');
-      }, 100); // Delay to ensure state updates propagate
+      // Stay on current tab - just reload data so the task disappears from Today and updates counts
+      await loadTasks();
+      await loadProjectTasksDueToday();
+      await loadGoalTasksDueToday();
+      await loadUpcomingTasks();
+      console.log('Task moved to NOW successfully, data reloaded');
     } catch (err: any) {
       console.error('Failed to move to NOW - Full error:', err);
       console.error('Error response:', err.response);
