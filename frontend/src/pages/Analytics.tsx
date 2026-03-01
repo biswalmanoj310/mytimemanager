@@ -1471,6 +1471,12 @@ export default function Analytics() {
                 <p className="chart-description">{showOverviewAsHours ? 'Actual hours spent / weekly avg (h/day) / monthly avg (h/day) by category' : 'Percentage of allocated time actually used by category (100% = perfect match, >100% = overtime)'}</p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setShowOverviewAsHours(!showOverviewAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 12px', background: showOverviewAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {showOverviewAsHours ? '⏱️ Hours' : '📊 %'}
+                </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationCategoryWeek ? 'active' : ''}`}
                   onClick={() => setShowUtilizationCategoryWeek(!showUtilizationCategoryWeek)}
@@ -1747,6 +1753,12 @@ export default function Analytics() {
                 <p className="chart-description">{showOverviewAsHours ? 'Actual hours spent / weekly avg (h/day) / monthly avg (h/day) for one-time tasks' : 'Percentage of allocated time actually used for one-time tasks (100% = perfect match, >100% = overtime)'}</p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setShowOverviewAsHours(!showOverviewAsHours)}
+                  style={{ fontSize: '11px', padding: '6px 12px', background: showOverviewAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                  {showOverviewAsHours ? '⏱️ Hours' : '📊 %'}
+                </button>
                 <button 
                   className={`toggle-month-btn ${showUtilizationOneTimeWeek ? 'active' : ''}`}
                   onClick={() => setShowUtilizationOneTimeWeek(!showUtilizationOneTimeWeek)}
@@ -2957,7 +2969,15 @@ export default function Analytics() {
       {/* DETAILED VIEW: Task/Category/Pillar Trend Analysis */}
       {viewMode === 'detailed' && (
         <div className="detailed-view-section">
-          <h2>📊 Detailed Trend Analysis</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginBottom: '4px' }}>
+            <h2 style={{ margin: 0 }}>📊 Detailed Trend Analysis</h2>
+            <button
+              onClick={() => setShowAsHours(!showAsHours)}
+              style={{ fontSize: '11px', padding: '6px 12px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {showAsHours ? '⏱️ Hours' : '📊 %'}
+            </button>
+          </div>
           <p className="chart-description">Select tasks, categories, or pillars to view their utilization trends over time</p>
           
           {/* View Type Selector */}
