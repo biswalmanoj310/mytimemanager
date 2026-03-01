@@ -967,8 +967,14 @@ export default function Tasks() {
         console.log('API response:', response);
       }
       
-      // Stay on current tab - just reload data so the task disappears from Today and updates counts
-      await loadTasks();
+      // Stay on current tab - update local state without triggering the loading spinner
+      // For regular tasks: optimistic update so priority filter immediately hides it from Today
+      if (taskType === 'task') {
+        setTasks((prev: Task[]) => prev.map((t: Task) =>
+          t.id === taskId ? { ...t, priority: 1, due_date: todayISO } : t
+        ));
+      }
+      // For project/goal tasks: refresh those targeted lists (they don't trigger setLoading)
       await loadProjectTasksDueToday();
       await loadGoalTasksDueToday();
       await loadUpcomingTasks();
