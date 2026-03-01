@@ -131,13 +131,13 @@ def get_project_tasks(db: Session, project_id: int, include_completed: bool = Tr
     query = db.query(ProjectTask).filter(ProjectTask.project_id == project_id)
     if not include_completed:
         query = query.filter(ProjectTask.is_completed == False)
-    project_tasks = query.order_by(ProjectTask.order, ProjectTask.created_at).all()
+    project_tasks = query.order_by(ProjectTask.order, ProjectTask.created_at.desc()).all()
     
     # Get regular Task entries linked to this project (new system with frequency)
     task_query = db.query(Task).filter(Task.project_id == project_id)
     if not include_completed:
         task_query = task_query.filter(Task.is_completed == False)
-    regular_tasks = task_query.order_by(Task.created_at).all()
+    regular_tasks = task_query.order_by(Task.created_at.desc()).all()
     
     # Combine both lists
     return list(project_tasks) + list(regular_tasks)
