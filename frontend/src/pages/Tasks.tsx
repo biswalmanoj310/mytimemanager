@@ -1263,6 +1263,7 @@ export default function Tasks() {
 
     // Handle action parameter to open modals
     if (actionParam === 'add' && tabParam === 'projects') {
+      setEditingProject(null);
       setShowAddProjectModal(true);
       // Remove action param from URL after opening modal
       searchParams.delete('action');
@@ -8062,7 +8063,7 @@ export default function Tasks() {
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <button 
                     className="btn btn-primary" 
-                    onClick={() => setShowAddProjectModal(true)}
+                    onClick={() => { setEditingProject(null); setProjectFormGoalId(null); setProjectFormPillarId(null); setProjectFormCategoryId(null); setProjectFormSubCategoryId(null); setShowAddProjectModal(true); }}
                     style={{ 
                       background: 'rgba(255,255,255,0.2)', 
                       border: '1px solid rgba(255,255,255,0.3)',
@@ -8431,7 +8432,7 @@ export default function Tasks() {
                               </button>
                               <button 
                                 className="btn btn-secondary"
-                                onClick={(e) => { e.stopPropagation(); setEditingProject(project); setShowAddProjectModal(true); }}
+                                onClick={(e) => { e.stopPropagation(); setEditingProject(project); setProjectFormGoalId(project.goal_id); setProjectFormPillarId(project.pillar_id); setProjectFormCategoryId(project.category_id); setShowAddProjectModal(true); }}
                                 title="Edit Project"
                                 style={{ padding: '8px 14px', fontSize: '13px', minWidth: '100px' }}
                               >
@@ -10185,8 +10186,6 @@ export default function Tasks() {
                         await api.put(`/api/tasks/${taskId}`, {
                           is_completed: !currentStatus
                         });
-                        // Force a complete refresh by clearing and reloading
-                        setMiscTasks([]);
                         await loadMiscTaskGroups();
                       } catch (err: any) {
                         console.error('Error toggling task:', err);
@@ -10327,8 +10326,6 @@ export default function Tasks() {
                         await api.put(`/api/tasks/${taskId}`, {
                           is_completed: !currentStatus
                         });
-                        // Force a complete refresh by clearing and reloading
-                        setMiscTasks([]);
                         await loadMiscTaskGroups();
                       } catch (err: any) {
                         console.error('Error toggling task:', err);
@@ -18838,7 +18835,7 @@ export default function Tasks() {
 
       {/* Add Project Modal */}
       {showAddProjectModal && (
-        <div className="modal-overlay" onClick={() => setShowAddProjectModal(false)} style={{
+        <div className="modal-overlay" onClick={() => { setShowAddProjectModal(false); setEditingProject(null); setProjectFormGoalId(null); setProjectFormPillarId(null); setProjectFormCategoryId(null); setProjectFormSubCategoryId(null); }} style={{
           position: 'fixed',
           top: 0,
           left: 0,
@@ -18867,9 +18864,9 @@ export default function Tasks() {
               marginBottom: '24px',
               boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
             }}>
-              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>🚀 Add New Project</h2>
+              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>{editingProject ? '✏️ Edit Project' : '🚀 Add New Project'}</h2>
             </div>
-            <form onSubmit={async (e) => {
+            <form key={editingProject?.id || 'new'} onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
               try {
@@ -18889,9 +18886,14 @@ export default function Tasks() {
                 
                 const targetDate = formData.get('target_completion_date');
                 if (targetDate) projectData.target_completion_date = targetDate;
-                
-                await api.post('/api/projects/', projectData);
+
+                if (editingProject) {
+                  await api.put(`/api/projects/${editingProject.id}`, projectData);
+                } else {
+                  await api.post('/api/projects/', projectData);
+                }
                 setShowAddProjectModal(false);
+                setEditingProject(null);
                 // Reset form state
                 setProjectFormGoalId(null);
                 setProjectFormPillarId(null);
@@ -18899,8 +18901,8 @@ export default function Tasks() {
                 setProjectFormSubCategoryId(null);
                 await loadProjects();
               } catch (err: any) {
-                console.error('Error creating project:', err);
-                alert('Failed to create project: ' + (err.response?.data?.detail || err.message));
+                console.error('Error saving project:', err);
+                alert('Failed to save project: ' + (err.response?.data?.detail || err.message));
               }
             }}>
               <div style={{
@@ -18921,6 +18923,7 @@ export default function Tasks() {
                   type="text"
                   name="name"
                   required
+                  defaultValue={editingProject?.name || ''}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -18938,6 +18941,7 @@ export default function Tasks() {
                 <textarea
                   name="description"
                   rows={3}
+                  defaultValue={editingProject?.description || ''}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -19006,7 +19010,7 @@ export default function Tasks() {
                   <input
                     type="date"
                     name="start_date"
-                    defaultValue={new Date().toISOString().split('T')[0]}
+                    defaultValue={editingProject?.start_date ? editingProject.start_date.split('T')[0] : new Date().toISOString().split('T')[0]}
                     style={{
                       width: '100%',
                       padding: '8px',
@@ -19023,6 +19027,7 @@ export default function Tasks() {
                   <input
                     type="date"
                     name="target_completion_date"
+                    defaultValue={editingProject?.target_completion_date ? editingProject.target_completion_date.split('T')[0] : ''}
                     style={{
                       width: '100%',
                       padding: '8px',
@@ -19051,7 +19056,7 @@ export default function Tasks() {
                 </label>
                 <select
                   name="status"
-                  defaultValue="active"
+                  defaultValue={editingProject?.status || 'active'}
                   style={{
                     width: '100%',
                     padding: '8px',
@@ -19069,7 +19074,7 @@ export default function Tasks() {
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
                 <button
                   type="button"
-                  onClick={() => setShowAddProjectModal(false)}
+                  onClick={() => { setShowAddProjectModal(false); setEditingProject(null); setProjectFormGoalId(null); setProjectFormPillarId(null); setProjectFormCategoryId(null); setProjectFormSubCategoryId(null); }}
                   style={{
                     padding: '10px 20px',
                     fontSize: '14px',
@@ -19096,7 +19101,7 @@ export default function Tasks() {
                     fontWeight: '500'
                   }}
                 >
-                  Create Project
+                  {editingProject ? 'Update Project' : 'Create Project'}
                 </button>
               </div>
             </form>

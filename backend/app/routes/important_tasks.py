@@ -254,8 +254,9 @@ def get_important_tasks_due_today(
     for task in tasks:
         status_info = calculate_status(task)
         
-        # Include red (overdue) and gray (due soon) tasks
-        if status_info["status"] in ["red", "gray"]:
+        # Include only red (overdue) and tasks due exactly today (diff == 0)
+        # Exclude "due soon" tasks (gray with diff 1-5 days) - those should not appear in Today tab
+        if status_info["status"] == "red" or (status_info["status"] == "gray" and status_info["diff"] <= 0):
             result.append({
                 "id": task.id,
                 "name": task.name,
