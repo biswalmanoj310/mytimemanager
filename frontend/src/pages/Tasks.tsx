@@ -10730,17 +10730,12 @@ export default function Tasks() {
                         }}
                       >
                         <span>
-                          {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryHabits.length})
-                          {categorySuccessfulCount > 0 && (
-                            <span style={{ 
-                              marginLeft: '8px',
-                              color: '#16a34a',
-                              fontSize: '16px',
-                              fontWeight: '700'
-                            }}>
-                              ✅ {categorySuccessfulCount} success
-                            </span>
-                          )}
+                          {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName}
+                          <span style={{ marginLeft: '8px', fontSize: '14px', fontWeight: '500', color: '#4b5563' }}>
+                            (Total Habit: {categoryHabits.length}
+                            <span style={{ marginLeft: '6px', color: '#16a34a' }}>| Success: {categorySuccessfulCount}</span>
+                            <span style={{ marginLeft: '6px', color: categoryHabits.length - categorySuccessfulCount > 0 ? '#dc2626' : '#16a34a' }}>| Need Focus: {categoryHabits.length - categorySuccessfulCount}</span>)
+                          </span>
                         </span>
                         <span style={{ fontSize: '14px', color: '#666', fontWeight: 'normal' }}>
                           {pillarName}
@@ -12640,7 +12635,7 @@ export default function Tasks() {
       ) : (activeTab as string) === 'weekly' ? (
         /* WEEKLY TAB: Three separate tables with aggregated data from daily */
         <>
-          {/* BEHIND SCHEDULE BANNER */}
+          {/* WEEKLY SUMMARY BANNER */}
           {(() => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -12648,14 +12643,8 @@ export default function Tasks() {
             weekStart.setHours(0, 0, 0, 0);
             const weekEnd = new Date(weekStart);
             weekEnd.setDate(weekEnd.getDate() + 6);
-
-            // Don't show banner for future weeks (no data yet)
             if (today < weekStart) return null;
-
-            // Reference date: use today for current week, weekEnd for past weeks
             const refDate = today <= weekEnd ? today : weekEnd;
-
-            const behindTasks: { name: string; deficit: string }[] = [];
 
             const getDaysElapsed = (task: any) => {
               const taskCreatedAt = new Date(task.created_at);
@@ -12666,97 +12655,43 @@ export default function Tasks() {
               return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)) + 1);
             };
 
-            // Time-based tasks
+            let behindCount = 0;
             timeBasedTasks.forEach((task) => {
               const totalSpent = weekDays.reduce((sum, day) => sum + getWeeklyTime(task.id, day.index), 0);
               const daysElapsed = getDaysElapsed(task);
-              if (daysElapsed === 0) return;
-              const expectedSoFar = task.allocated_minutes * daysElapsed;
-              if (totalSpent < expectedSoFar) {
-                const deficitMins = expectedSoFar - totalSpent;
-                behindTasks.push({ name: task.name, deficit: `${deficitMins} min behind` });
-              }
+              if (daysElapsed > 0 && totalSpent < task.allocated_minutes * daysElapsed) behindCount++;
             });
-
-            // Count-based tasks
             countBasedTasks.forEach((task) => {
               const totalCount = weekDays.reduce((sum, day) => sum + (getWeeklyTime(task.id, day.index) || 0), 0);
               const daysElapsed = getDaysElapsed(task);
-              if (daysElapsed === 0) return;
-              const expectedSoFar = (task.target_value || 0) * daysElapsed;
-              if (totalCount < expectedSoFar) {
-                const deficit = Math.round((expectedSoFar - totalCount) * 10) / 10;
-                behindTasks.push({ name: task.name, deficit: `${deficit} ${task.unit || ''} behind`.trim() });
-              }
+              if (daysElapsed > 0 && totalCount < (task.target_value || 0) * daysElapsed) behindCount++;
             });
-
-            // Boolean tasks
             booleanTasks.forEach((task) => {
               const daysCompleted = weekDays.filter(day => getWeeklyTime(task.id, day.index) > 0).length;
               const daysElapsed = getDaysElapsed(task);
-              if (daysElapsed === 0) return;
-              if (daysCompleted < daysElapsed) {
-                const missedDays = daysElapsed - daysCompleted;
-                behindTasks.push({ name: task.name, deficit: `${missedDays} day${missedDays > 1 ? 's' : ''} missed` });
-              }
+              if (daysElapsed > 0 && daysCompleted < daysElapsed) behindCount++;
             });
 
-            if (behindTasks.length === 0) {
-              return (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px',
-                  padding: '12px 18px',
-                  marginBottom: '20px',
-                  background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                  border: '1px solid #6ee7b7',
-                  borderRadius: '10px',
-                  boxShadow: '0 2px 8px rgba(16,185,129,0.12)',
-                }}>
-                  <span style={{ fontSize: '22px' }}>🎉</span>
-                  <span style={{ fontWeight: 700, fontSize: '15px', color: '#065f46' }}>
-                    All tasks on track this week!
-                  </span>
-                </div>
-              );
-            }
-
+            const totalTasks = timeBasedTasks.length + countBasedTasks.length + booleanTasks.length;
             return (
               <div style={{
-                padding: '14px 18px',
-                marginBottom: '20px',
-                background: 'linear-gradient(135deg, #fff7ed 0%, #fed7aa 100%)',
-                border: '1.5px solid #f97316',
-                borderRadius: '10px',
-                boxShadow: '0 2px 10px rgba(249,115,22,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 16px',
+                marginBottom: '16px',
+                background: behindCount > 0 ? '#fff5f5' : '#f0fdf4',
+                border: `1.5px solid ${behindCount > 0 ? '#fca5a5' : '#86efac'}`,
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: 500,
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: behindTasks.length > 0 ? '10px' : '0' }}>
-                  <span style={{ fontSize: '22px' }}>⚠️</span>
-                  <span style={{ fontWeight: 700, fontSize: '16px', color: '#9a3412' }}>
-                    {behindTasks.length} task{behindTasks.length > 1 ? 's' : ''} behind schedule
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {behindTasks.map((t, i) => (
-                    <span key={i} style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '5px',
-                      padding: '4px 10px',
-                      background: 'white',
-                      border: '1px solid #fdba74',
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      color: '#7c2d12',
-                    }}>
-                      <span style={{ color: '#f97316' }}>●</span>
-                      {t.name}
-                      <span style={{ background: '#fed7aa', color: '#9a3412', fontWeight: 700, padding: '1px 6px', borderRadius: '8px', fontSize: '11px' }}>{t.deficit}</span>
-                    </span>
-                  ))}
-                </div>
+                <span>{behindCount > 0 ? '⚠️' : '✅'}</span>
+                <span style={{ color: '#374151' }}>Total Weekly Tasks: <strong>{totalTasks}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: behindCount > 0 ? '#dc2626' : '#16a34a' }}>
+                  Not reached Target: <strong>{behindCount}</strong>
+                </span>
               </div>
             );
           })()}
@@ -12840,12 +12775,14 @@ export default function Tasks() {
                       
                       const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remaining / daysRemaining) : 0;
                       const isComplete = totalSpent >= weeklyTarget;
-                      const colorClass = getWeeklyRowColorClass(task);
+                      const isBehind = !isComplete && totalSpent < weeklyTarget;
+                      const colorClass = isComplete ? '' : getWeeklyRowColorClass(task, totalSpent, new Date(selectedWeekStart));
                       const rowClassName = isComplete ? 'completed-row' : '';
+                      const rowStyle = isBehind ? { backgroundColor: '#fff5f5', borderLeft: '3px solid #ef4444' } : undefined;
                       
                       return (
-                        <tr key={task.id} className={rowClassName}>
-                          <td className={`col-task sticky-col sticky-col-1 ${colorClass}`}>
+                        <tr key={task.id} className={rowClassName} style={rowStyle}>
+                          <td className={`col-task sticky-col sticky-col-1 ${colorClass}`} style={isBehind ? { backgroundColor: '#fff5f5' } : undefined}>
                             <div className="task-name">
                               {task.name}
                               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
@@ -13030,10 +12967,11 @@ export default function Tasks() {
                       const isWeeklyNA = weeklyStatus?.is_na;
                       
                       const isComplete = totalCount >= weeklyTarget;
-                      const colorClass = getWeeklyRowColorClass(task);
+                      const isBehind = !isWeeklyCompleted && !isWeeklyNA && !isComplete;
+                      const colorClass = isComplete ? '' : getWeeklyRowColorClass(task, totalCount, new Date(selectedWeekStart));
                       const rowClassName = isWeeklyCompleted ? 'completed-row' : isWeeklyNA ? 'na-row' : (isComplete ? 'completed-row' : '');
                       
-                      const bgColor = isWeeklyCompleted ? '#c6f6d5' : isWeeklyNA ? '#e2e8f0' : undefined;
+                      const bgColor = isWeeklyCompleted ? '#c6f6d5' : isWeeklyNA ? '#e2e8f0' : isBehind ? '#fff5f5' : undefined;
                       
                       return (
                         <tr 
@@ -13196,27 +13134,38 @@ export default function Tasks() {
                         }
                       }
                       
+                      // Calculate days elapsed for behind check
+                      const todayB = new Date(); todayB.setHours(0,0,0,0);
+                      const wkStart = new Date(selectedWeekStart); wkStart.setHours(0,0,0,0);
+                      const wkEnd = new Date(wkStart); wkEnd.setDate(wkEnd.getDate() + 6);
+                      const refDateB = todayB <= wkEnd ? todayB : wkEnd;
+                      const createdB = new Date(task.created_at); createdB.setHours(0,0,0,0);
+                      const effStartB = createdB > wkStart ? createdB : wkStart;
+                      const daysElapsedB = effStartB > refDateB ? 0 : Math.max(1, Math.floor((refDateB.getTime() - effStartB.getTime()) / 86400000) + 1);
                       const isComplete = daysCompleted === 7;
+                      const isBoolBehind = !isComplete && daysElapsedB > 0 && daysCompleted < daysElapsedB;
                       const rowClassName = isComplete ? 'completed-row' : '';
+                      const boolRowStyle = isBoolBehind ? { backgroundColor: '#fff5f5', borderLeft: '3px solid #ef4444' } : undefined;
                       
+                      const boolStickyStyle = isBoolBehind ? { backgroundColor: '#fff5f5' } : undefined;
                       return (
-                        <tr key={task.id} className={rowClassName}>
-                          <td className="col-task sticky-col sticky-col-1">
+                        <tr key={task.id} className={rowClassName} style={boolRowStyle}>
+                          <td className="col-task sticky-col sticky-col-1" style={boolStickyStyle}>
                             <div className="task-name">
                               {task.name}
                               <span style={{ marginLeft: '8px', fontSize: '11px', color: '#999' }}>(Daily)</span>
                             </div>
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-2">
+                          <td className="col-time sticky-col sticky-col-2" style={boolStickyStyle}>
                             {daysCompleted}/7 days
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-3">
+                          <td className="col-time sticky-col sticky-col-3" style={boolStickyStyle}>
                             {completionRate}%
                           </td>
                           
-                          <td className="col-time sticky-col sticky-col-4">
+                          <td className="col-time sticky-col sticky-col-4" style={boolStickyStyle}>
                             {currentStreak > 0 ? `${currentStreak} days 🔥` : '-'}
                           </td>
                           
