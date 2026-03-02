@@ -10782,7 +10782,7 @@ export default function Tasks() {
                 >
                   {/* Habit Name with Pillar-Category */}
                   <div style={{ marginBottom: '12px' }}>
-                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>
+                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', color: isHabitSuccessful(habit) ? '#16a34a' : '#dc2626' }}>
                       {habit.name}
                       {habit.pillar_name && (
                         <span style={{
