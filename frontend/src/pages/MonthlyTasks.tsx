@@ -554,6 +554,31 @@ const MonthlyTasks: React.FC = () => {
     );
   };
 
+  // Summary banner data
+  const monthlySummaryData = useMemo(() => {
+    const nativeTasks = [...tasksByType.timeMonthly, ...tasksByType.countMonthly, ...tasksByType.booleanMonthly];
+    const monitoringTasks = [
+      ...tasksByType.timeDaily, ...tasksByType.countDaily, ...tasksByType.booleanDaily,
+      ...tasksByType.timeWeekly, ...tasksByType.countWeekly, ...tasksByType.booleanWeekly,
+    ];
+    let nativeAchieved = 0, nativeBehind = 0;
+    nativeTasks.forEach(task => {
+      const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
+      const cls = getMonthlyRowColorClass(task, totalSpent);
+      if (cls === 'weekly-on-track') nativeAchieved++; else nativeBehind++;
+    });
+    let monAchieved = 0, monBehind = 0;
+    monitoringTasks.forEach(task => {
+      const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
+      const cls = getMonthlyRowColorClass(task, totalSpent);
+      if (cls === 'weekly-on-track') monAchieved++; else monBehind++;
+    });
+    return {
+      nativeTotal: nativeTasks.length, nativeAchieved, nativeBehind,
+      monTotal: monitoringTasks.length, monAchieved, monBehind,
+    };
+  }, [tasksByType, monthDays]);
+
   const renderTaskSection = (sectionTitle: string, emoji: string, sectionClass: string, tasks: Task[], subtitle?: string) => {
     if (tasks.length === 0) return null;
     return (
@@ -599,6 +624,35 @@ const MonthlyTasks: React.FC = () => {
     <>
       <div className="row mb-3">
         <div className="col">
+          {/* Monthly Summary Banner */}
+          {(monthlySummaryData.nativeTotal > 0 || monthlySummaryData.monTotal > 0) && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+              marginBottom: '12px', flexWrap: 'wrap',
+              background: monthlySummaryData.nativeBehind > 0 || monthlySummaryData.monBehind > 0 ? '#fff5f5' : '#f0fdf4',
+              border: `1.5px solid ${monthlySummaryData.nativeBehind > 0 || monthlySummaryData.monBehind > 0 ? '#fca5a5' : '#86efac'}`,
+              borderRadius: '8px', fontSize: '14px', fontWeight: 500
+            }}>
+              <span>{monthlySummaryData.nativeBehind > 0 || monthlySummaryData.monBehind > 0 ? '⚠️' : '✅'}</span>
+              {monthlySummaryData.nativeTotal > 0 && (<>
+                <span style={{ color: '#374151' }}>Total Monthly Tasks: <strong>{monthlySummaryData.nativeTotal}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: '#16a34a' }}>Achieved: <strong>{monthlySummaryData.nativeAchieved}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: monthlySummaryData.nativeBehind > 0 ? '#dc2626' : '#16a34a' }}>Not reached Target: <strong>{monthlySummaryData.nativeBehind}</strong></span>
+              </>)}
+              {monthlySummaryData.nativeTotal > 0 && monthlySummaryData.monTotal > 0 && (
+                <span style={{ color: '#d1d5db', margin: '0 4px' }}>｜</span>
+              )}
+              {monthlySummaryData.monTotal > 0 && (<>
+                <span style={{ color: '#374151' }}>Total Daily Tasks (on Monthly): <strong>{monthlySummaryData.monTotal}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: '#16a34a' }}>Achieved: <strong>{monthlySummaryData.monAchieved}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: monthlySummaryData.monBehind > 0 ? '#dc2626' : '#16a34a' }}>Not Achieved: <strong>{monthlySummaryData.monBehind}</strong></span>
+              </>)}
+            </div>
+          )}
           <div className="alert alert-info">
             <i className="fas fa-info-circle me-2"></i>
             <strong>{filteredTasks.length}</strong> tasks tracked this month

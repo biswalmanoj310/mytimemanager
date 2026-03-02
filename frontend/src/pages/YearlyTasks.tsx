@@ -694,6 +694,38 @@ const YearlyTasks: React.FC = () => {
     );
   };
 
+  // Summary banner data
+  const yearlySummaryData = useMemo(() => {
+    const getTrackingStartMonth = (task: Task): number => {
+      if (!task.created_at) return 1;
+      const createdDate = new Date(task.created_at);
+      return createdDate.getFullYear() === yearStartDate.getFullYear() ? createdDate.getMonth() + 1 : 1;
+    };
+    const nativeTasks = [...tasksByType.timeYearly, ...tasksByType.countYearly, ...tasksByType.booleanYearly];
+    const monitoringTasks = [
+      ...tasksByType.timeDaily, ...tasksByType.countDaily, ...tasksByType.booleanDaily,
+      ...tasksByType.timeWeekly, ...tasksByType.countWeekly, ...tasksByType.booleanWeekly,
+      ...tasksByType.timeMonthly, ...tasksByType.countMonthly, ...tasksByType.booleanMonthly,
+      ...tasksByType.timeQuarterly, ...tasksByType.countQuarterly, ...tasksByType.booleanQuarterly,
+    ];
+    let nativeAchieved = 0, nativeBehind = 0;
+    nativeTasks.forEach(task => {
+      const totalSpent = months.reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
+      const cls = getYearlyRowColorClass(task, totalSpent, getTrackingStartMonth(task));
+      if (cls === 'weekly-on-track') nativeAchieved++; else nativeBehind++;
+    });
+    let monAchieved = 0, monBehind = 0;
+    monitoringTasks.forEach(task => {
+      const totalSpent = months.reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
+      const cls = getYearlyRowColorClass(task, totalSpent, getTrackingStartMonth(task));
+      if (cls === 'weekly-on-track') monAchieved++; else monBehind++;
+    });
+    return {
+      nativeTotal: nativeTasks.length, nativeAchieved, nativeBehind,
+      monTotal: monitoringTasks.length, monAchieved, monBehind,
+    };
+  }, [tasksByType, months, yearStartDate]);
+
   if (loading && tasks.length === 0) {
     return (
       <div className="container-fluid mt-4">
@@ -709,6 +741,35 @@ const YearlyTasks: React.FC = () => {
     <>
       <div className="row mb-3">
         <div className="col">
+          {/* Yearly Summary Banner */}
+          {(yearlySummaryData.nativeTotal > 0 || yearlySummaryData.monTotal > 0) && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+              marginBottom: '12px', flexWrap: 'wrap',
+              background: yearlySummaryData.nativeBehind > 0 || yearlySummaryData.monBehind > 0 ? '#fff5f5' : '#f0fdf4',
+              border: `1.5px solid ${yearlySummaryData.nativeBehind > 0 || yearlySummaryData.monBehind > 0 ? '#fca5a5' : '#86efac'}`,
+              borderRadius: '8px', fontSize: '14px', fontWeight: 500
+            }}>
+              <span>{yearlySummaryData.nativeBehind > 0 || yearlySummaryData.monBehind > 0 ? '⚠️' : '✅'}</span>
+              {yearlySummaryData.nativeTotal > 0 && (<>
+                <span style={{ color: '#374151' }}>Total Yearly Tasks: <strong>{yearlySummaryData.nativeTotal}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: '#16a34a' }}>Achieved: <strong>{yearlySummaryData.nativeAchieved}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: yearlySummaryData.nativeBehind > 0 ? '#dc2626' : '#16a34a' }}>Not reached Target: <strong>{yearlySummaryData.nativeBehind}</strong></span>
+              </>)}
+              {yearlySummaryData.nativeTotal > 0 && yearlySummaryData.monTotal > 0 && (
+                <span style={{ color: '#d1d5db', margin: '0 4px' }}>｜</span>
+              )}
+              {yearlySummaryData.monTotal > 0 && (<>
+                <span style={{ color: '#374151' }}>Total Daily Tasks (on Yearly): <strong>{yearlySummaryData.monTotal}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: '#16a34a' }}>Achieved: <strong>{yearlySummaryData.monAchieved}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: yearlySummaryData.monBehind > 0 ? '#dc2626' : '#16a34a' }}>Not Achieved: <strong>{yearlySummaryData.monBehind}</strong></span>
+              </>)}
+            </div>
+          )}
           <div className="alert alert-info">
             <i className="fas fa-info-circle me-2"></i>
             <strong>{filteredTasks.length}</strong> tasks tracked this year
