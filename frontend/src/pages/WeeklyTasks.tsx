@@ -717,6 +717,7 @@ const WeeklyTasks: React.FC = () => {
 
   // Compute summary data for weekly home tab banner
   const weeklySummaryData = useMemo(() => {
+    // --- Home weekly tasks ---
     const allHomeTasks = [...tasksByType.time, ...tasksByType.count, ...tasksByType.boolean];
     const totalTasks = allHomeTasks.length;
     let behindCount = 0;
@@ -738,9 +739,22 @@ const WeeklyTasks: React.FC = () => {
         behindCount++;
       }
     });
-    return { totalTasks, behindCount };
+
+    // --- Monitoring (daily) tasks tracked on weekly tab ---
+    const allMonitoringTasks = [...monitoringTasksByType.time, ...monitoringTasksByType.count, ...monitoringTasksByType.boolean];
+    const totalMonitoring = allMonitoringTasks.length;
+    let achievedMonitoring = 0;
+    let notAchievedMonitoring = 0;
+    allMonitoringTasks.forEach(task => {
+      const totalSpent = weekDays.reduce((sum: number, day: { index: number }) => sum + getWeeklyTime(task.id, day.index), 0);
+      const colorClass = getWeeklyRowColorClass(task, totalSpent);
+      if (colorClass === 'weekly-on-track') achievedMonitoring++;
+      else notAchievedMonitoring++;
+    });
+
+    return { totalTasks, behindCount, totalMonitoring, achievedMonitoring, notAchievedMonitoring };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksByType, weekDays, pendingChanges, weeklyDailyEntries, weekStartDate]);
+  }, [tasksByType, monitoringTasksByType, weekDays, pendingChanges, weeklyDailyEntries, weekStartDate]);
 
   // ============================================================================
   // RENDERING HELPERS
@@ -1132,20 +1146,34 @@ const WeeklyTasks: React.FC = () => {
         <div className="row mb-4">
           <div className="col">
             {/* Weekly Summary Banner */}
-            {weeklySummaryData.totalTasks > 0 && (
+            {(weeklySummaryData.totalTasks > 0 || weeklySummaryData.totalMonitoring > 0) && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
-                marginBottom: '16px',
-                background: weeklySummaryData.behindCount > 0 ? '#fff5f5' : '#f0fdf4',
-                border: `1.5px solid ${weeklySummaryData.behindCount > 0 ? '#fca5a5' : '#86efac'}`,
+                marginBottom: '16px', flexWrap: 'wrap',
+                background: weeklySummaryData.behindCount > 0 || weeklySummaryData.notAchievedMonitoring > 0 ? '#fff5f5' : '#f0fdf4',
+                border: `1.5px solid ${weeklySummaryData.behindCount > 0 || weeklySummaryData.notAchievedMonitoring > 0 ? '#fca5a5' : '#86efac'}`,
                 borderRadius: '8px', fontSize: '14px', fontWeight: 500
               }}>
-                <span>{weeklySummaryData.behindCount > 0 ? '⚠️' : '✅'}</span>
-                <span style={{ color: '#374151' }}>Total Weekly Tasks: <strong>{weeklySummaryData.totalTasks}</strong></span>
-                <span style={{ color: '#9ca3af' }}>|</span>
-                <span style={{ color: weeklySummaryData.behindCount > 0 ? '#dc2626' : '#16a34a' }}>
-                  Not reached Target: <strong>{weeklySummaryData.behindCount}</strong>
-                </span>
+                <span>{weeklySummaryData.behindCount > 0 || weeklySummaryData.notAchievedMonitoring > 0 ? '⚠️' : '✅'}</span>
+                {weeklySummaryData.totalTasks > 0 && (<>
+                  <span style={{ color: '#374151' }}>Total Weekly Tasks: <strong>{weeklySummaryData.totalTasks}</strong></span>
+                  <span style={{ color: '#9ca3af' }}>|</span>
+                  <span style={{ color: weeklySummaryData.behindCount > 0 ? '#dc2626' : '#16a34a' }}>
+                    Not reached Target: <strong>{weeklySummaryData.behindCount}</strong>
+                  </span>
+                </>)}
+                {weeklySummaryData.totalTasks > 0 && weeklySummaryData.totalMonitoring > 0 && (
+                  <span style={{ color: '#d1d5db', margin: '0 4px' }}>｜</span>
+                )}
+                {weeklySummaryData.totalMonitoring > 0 && (<>
+                  <span style={{ color: '#374151' }}>Total Daily Tasks (on Weekly): <strong>{weeklySummaryData.totalMonitoring}</strong></span>
+                  <span style={{ color: '#9ca3af' }}>|</span>
+                  <span style={{ color: '#16a34a' }}>Achieved: <strong>{weeklySummaryData.achievedMonitoring}</strong></span>
+                  <span style={{ color: '#9ca3af' }}>|</span>
+                  <span style={{ color: weeklySummaryData.notAchievedMonitoring > 0 ? '#dc2626' : '#16a34a' }}>
+                    Not Achieved: <strong>{weeklySummaryData.notAchievedMonitoring}</strong>
+                  </span>
+                </>)}
               </div>
             )}
             <div className="alert" style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
