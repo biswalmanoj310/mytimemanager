@@ -43,7 +43,7 @@ const WeeklyTasks: React.FC = () => {
   // CONTEXT HOOKS
   // ============================================================================
   
-  const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
+  const { tasks, loadTasks, loadPillars, loadCategories, completeTask, markTaskNA, reactivateTask } = useTaskContext();
   const { 
     weeklyTaskStatuses,
     loadWeeklyTaskStatuses,
@@ -205,9 +205,9 @@ const WeeklyTasks: React.FC = () => {
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
 
-      // Apply status filters
+      // Apply status filters — also respect global task.is_completed so tasks stay done across weeks
       const weeklyStatus = weeklyTaskStatuses[task.id];
-      const isCompleted = weeklyStatus?.is_completed || false;
+      const isCompleted = weeklyStatus?.is_completed || task.is_completed || false;
       const isNA = weeklyStatus?.is_na || false;
       
       if (!showCompleted && isCompleted) return false;
@@ -229,7 +229,8 @@ const WeeklyTasks: React.FC = () => {
   const nativeWeeklyTasks = useMemo(() => {
     return filteredTasks.filter(task => {
       const weeklyStatus = weeklyTaskStatuses[task.id];
-      const isCompleted = weeklyStatus?.is_completed || false;
+      // Also check global task.is_completed so tasks don't reappear after week rollover
+      const isCompleted = weeklyStatus?.is_completed || task.is_completed || false;
       const isNA = weeklyStatus?.is_na || false;
       return task.follow_up_frequency === 'weekly' && !isCompleted && !isNA;
     });
@@ -494,8 +495,9 @@ const WeeklyTasks: React.FC = () => {
   // ============================================================================
   
   /**
-   * Mark task as completed for this week only
-   * Does NOT affect global task status
+   * Mark task as completed.
+   * For native weekly tasks: also sets global task.is_completed so the task
+   * does NOT reappear after the week rolls over.
    */
   const handleWeeklyTaskComplete = async (taskId: number) => {
     try {
@@ -503,7 +505,11 @@ const WeeklyTasks: React.FC = () => {
         is_completed: true,
         is_na: false,
       });
-      // Reload to reflect changes
+      // Persist globally for native weekly tasks so they don't come back next week
+      const task = tasks.find(t => t.id === taskId);
+      if (task?.follow_up_frequency === 'weekly') {
+        await completeTask(taskId);
+      }
       await loadWeeklyTaskStatuses(weekStartString);
     } catch (err: any) {
       console.error('Error marking task complete:', err);
@@ -511,8 +517,9 @@ const WeeklyTasks: React.FC = () => {
   };
 
   /**
-   * Mark task as NA for this week only
-   * Does NOT affect global task status
+   * Mark task as NA.
+   * For native weekly tasks: also sets global task.is_active = false so the task
+   * does NOT reappear after the week rolls over.
    */
   const handleWeeklyTaskNA = async (taskId: number) => {
     try {
@@ -520,7 +527,11 @@ const WeeklyTasks: React.FC = () => {
         is_completed: false,
         is_na: true,
       });
-      // Reload to reflect changes
+      // Persist globally for native weekly tasks so they don't come back next week
+      const task = tasks.find(t => t.id === taskId);
+      if (task?.follow_up_frequency === 'weekly') {
+        await markTaskNA(taskId);
+      }
       await loadWeeklyTaskStatuses(weekStartString);
     } catch (err: any) {
       console.error('Error marking task NA:', err);
@@ -528,7 +539,8 @@ const WeeklyTasks: React.FC = () => {
   };
 
   /**
-   * Restore a completed/NA task back to active status
+   * Restore a completed/NA task back to active status.
+   * For native weekly tasks: also reactivates globally so the task reappears.
    */
   const handleRestoreWeeklyTask = async (taskId: number) => {
     try {
@@ -536,7 +548,11 @@ const WeeklyTasks: React.FC = () => {
         is_completed: false,
         is_na: false,
       });
-      // Reload to reflect changes
+      // Reactivate globally for native weekly tasks
+      const task = tasks.find(t => t.id === taskId);
+      if (task?.follow_up_frequency === 'weekly') {
+        await reactivateTask(taskId);
+      }
       await loadWeeklyTaskStatuses(weekStartString);
     } catch (err: any) {
       console.error('Error restoring task:', err);
