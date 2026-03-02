@@ -715,6 +715,33 @@ const WeeklyTasks: React.FC = () => {
     return `${percentage}%`;
   };
 
+  // Compute summary data for weekly home tab banner
+  const weeklySummaryData = useMemo(() => {
+    const allHomeTasks = [...tasksByType.time, ...tasksByType.count, ...tasksByType.boolean];
+    const totalTasks = allHomeTasks.length;
+    let behindCount = 0;
+    allHomeTasks.forEach(task => {
+      let totalSpent = 0;
+      weekDays.forEach((day: { dateString: string; index: number }) => {
+        const pendingKey = `${task.id}-${day.dateString}-0`;
+        if (pendingChanges[pendingKey] !== undefined) {
+          totalSpent += pendingChanges[pendingKey].value;
+        } else {
+          const dayEntries = weeklyDailyEntries.filter(
+            (e: { task_id: number; entry_date: string; minutes?: number }) =>
+              e.task_id === task.id && e.entry_date.split('T')[0] === day.dateString
+          );
+          totalSpent += dayEntries.reduce((sum: number, e: { minutes?: number }) => sum + (e.minutes || 0), 0);
+        }
+      });
+      if (getWeeklyRowColorClass(task, totalSpent) === 'weekly-below-target') {
+        behindCount++;
+      }
+    });
+    return { totalTasks, behindCount };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasksByType, weekDays, pendingChanges, weeklyDailyEntries, weekStartDate]);
+
   // ============================================================================
   // RENDERING HELPERS
   // ============================================================================
@@ -1104,6 +1131,23 @@ const WeeklyTasks: React.FC = () => {
       {nativeWeeklyTasks.length > 0 && (
         <div className="row mb-4">
           <div className="col">
+            {/* Weekly Summary Banner */}
+            {weeklySummaryData.totalTasks > 0 && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+                marginBottom: '16px',
+                background: weeklySummaryData.behindCount > 0 ? '#fff5f5' : '#f0fdf4',
+                border: `1.5px solid ${weeklySummaryData.behindCount > 0 ? '#fca5a5' : '#86efac'}`,
+                borderRadius: '8px', fontSize: '14px', fontWeight: 500
+              }}>
+                <span>{weeklySummaryData.behindCount > 0 ? '⚠️' : '✅'}</span>
+                <span style={{ color: '#374151' }}>Total Weekly Tasks: <strong>{weeklySummaryData.totalTasks}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: weeklySummaryData.behindCount > 0 ? '#dc2626' : '#16a34a' }}>
+                  Not reached Target: <strong>{weeklySummaryData.behindCount}</strong>
+                </span>
+              </div>
+            )}
             <div className="alert" style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
               <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                 <i className="fas fa-calendar-week me-2"></i>
