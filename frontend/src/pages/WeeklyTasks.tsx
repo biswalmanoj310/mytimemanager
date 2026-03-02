@@ -721,6 +721,7 @@ const WeeklyTasks: React.FC = () => {
     const allHomeTasks = [...tasksByType.time, ...tasksByType.count, ...tasksByType.boolean];
     const totalTasks = allHomeTasks.length;
     let behindCount = 0;
+    let achievedCount = 0;
     allHomeTasks.forEach(task => {
       let totalSpent = 0;
       weekDays.forEach((day: { dateString: string; index: number }) => {
@@ -737,6 +738,8 @@ const WeeklyTasks: React.FC = () => {
       });
       if (getWeeklyRowColorClass(task, totalSpent) === 'weekly-below-target') {
         behindCount++;
+      } else if (getWeeklyRowColorClass(task, totalSpent) === 'weekly-on-track') {
+        achievedCount++;
       }
     });
 
@@ -752,7 +755,7 @@ const WeeklyTasks: React.FC = () => {
       else notAchievedMonitoring++;
     });
 
-    return { totalTasks, behindCount, totalMonitoring, achievedMonitoring, notAchievedMonitoring };
+    return { totalTasks, achievedCount, behindCount, totalMonitoring, achievedMonitoring, notAchievedMonitoring };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tasksByType, monitoringTasksByType, weekDays, pendingChanges, weeklyDailyEntries, weekStartDate]);
 
@@ -1157,6 +1160,8 @@ const WeeklyTasks: React.FC = () => {
                 <span>{weeklySummaryData.behindCount > 0 || weeklySummaryData.notAchievedMonitoring > 0 ? '⚠️' : '✅'}</span>
                 {weeklySummaryData.totalTasks > 0 && (<>
                   <span style={{ color: '#374151' }}>Total Weekly Tasks: <strong>{weeklySummaryData.totalTasks}</strong></span>
+                  <span style={{ color: '#9ca3af' }}>|</span>
+                  <span style={{ color: '#16a34a' }}>Achieved: <strong>{weeklySummaryData.achievedCount}</strong></span>
                   <span style={{ color: '#9ca3af' }}>|</span>
                   <span style={{ color: weeklySummaryData.behindCount > 0 ? '#dc2626' : '#16a34a' }}>
                     Not reached Target: <strong>{weeklySummaryData.behindCount}</strong>
