@@ -6077,9 +6077,24 @@ export default function Tasks() {
     const dueDateOnly = task.due_date ? task.due_date.split('T')[0] : null;
     const dueDateClass = getDueDateColorClass(dueDateOnly);
 
+    // Check if any descendant subtask is overdue (and not completed)
+    const hasOverdueDescendant = (taskId: number): boolean => {
+      const children = allTasks.filter(t => t.parent_task_id === taskId);
+      for (const child of children) {
+        if (!child.is_completed && child.due_date) {
+          if (getDueDateColorClass(child.due_date.split('T')[0]) === 'task-overdue') return true;
+        }
+        if (hasOverdueDescendant(child.id)) return true;
+      }
+      return false;
+    };
+
+    // Use overdue class if the task itself is overdue, OR if any subtask is overdue
+    const effectiveDueDateClass = dueDateClass || (!task.is_completed && hasOverdueDescendant(task.id) ? 'task-overdue' : '');
+
     return (
       <div className={`task-node level-${level}`} style={{ marginLeft: `${level * 20}px` }} data-task-id={task.id}>
-        <div className={`task-row ${dueDateClass} ${task.is_completed ? 'completed' : ''}`}>
+        <div className={`task-row ${effectiveDueDateClass} ${task.is_completed ? 'completed' : ''}`}>
           <div className="task-checkbox">
             <input
               type="checkbox"
