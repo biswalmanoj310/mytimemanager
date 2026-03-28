@@ -91,6 +91,9 @@ const formatTaskValue = (task: Task, value: number): string => {
   };
 }
 
+// Maximum number of tasks visible in the NOW tab
+const NOW_LIMIT = 10;
+
 export default function Tasks() {
   // Get setSelectedDate from UserPreferencesContext to update nested components
   const { setSelectedDate: setContextDate } = useUserPreferencesContext();
@@ -945,8 +948,8 @@ export default function Tasks() {
     try {
       console.log('handleMoveToNow called:', taskId, taskType);
       const currentNowCount = getNowTaskCount();
-      if (currentNowCount >= 3) {
-        alert('NOW tab is full (max 3 tasks). Please complete or move existing NOW tasks first.');
+      if (currentNowCount >= NOW_LIMIT) {
+        alert(`NOW tab is full (max ${NOW_LIMIT} tasks). Please complete or move existing NOW tasks first.`);
         return;
       }
       
@@ -985,6 +988,10 @@ export default function Tasks() {
         setTasks((prev: Task[]) => prev.map((t: Task) =>
           t.id === taskId ? { ...t, priority: 1, due_date: todayISO } : t
         ));
+        // Also remove immediately from independent Today-tab state arrays that don't
+        // react to setTasks (their useEffect deps exclude tasks to avoid reload loops)
+        setTodaysOnlyTasks((prev: Task[]) => prev.filter((t: Task) => t.id !== taskId));
+        setImportantTasksDueToday((prev: any[]) => prev.filter((t: any) => t.id !== taskId));
       }
       // For project/goal tasks: refresh those targeted lists (they don't trigger setLoading)
       await loadProjectTasksDueToday();
@@ -1841,8 +1848,8 @@ export default function Tasks() {
         if (status && (status.is_completed || status.is_na)) {
           return false;
         }
-        // Exclude priority 1-3 tasks from Today tab (they appear in NOW tab)
-        if (task.priority && task.priority <= 3) {
+        // Exclude priority 1-3 tasks with today's (or past) due_date from Today tab (they appear in NOW tab)
+        if (task.priority && task.priority <= 3 && task.due_date && parseDateString(task.due_date.split('T')[0]) <= today) {
           return false;
         }
       }
@@ -3576,7 +3583,7 @@ export default function Tasks() {
         
         if (task.follow_up_frequency !== 'today') return false;
         if (!task.is_active) return false;
-        if (task.priority && task.priority <= 3) return false; // Exclude NOW tasks (priority 1-3) from Today tab
+        if (task.priority && task.priority <= 3 && task.due_date && parseDateString(task.due_date.split('T')[0]) <= today) return false; // Exclude NOW tasks (priority 1-3 with today/past due_date) from Today tab
         
         // Include incomplete tasks
         if (!task.is_completed) {
@@ -7401,7 +7408,7 @@ export default function Tasks() {
                 const bDatePart = b.due_date.split('T')[0];
                 return parseDateString(aDatePart).getTime() - parseDateString(bDatePart).getTime();
               })
-              .slice(0, 3); // Show top 3 only
+              .slice(0, NOW_LIMIT); // Show top NOW_LIMIT only
             
             // Check if there are NOW habits to display
             const hasNowHabits = nowHabits.size > 0 && todaysHabits.filter(h => nowHabits.has(h.id)).length > 0;
@@ -7418,18 +7425,18 @@ export default function Tasks() {
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
                   <h3 style={{ color: '#15803d', margin: '0 0 8px 0' }}>No Urgent Tasks Right Now!</h3>
                   <p style={{ color: '#166534', margin: 0 }}>
-                    Set task priorities to 1-3 with due dates today or earlier to see them here. Max 3 tasks allowed.
+                    Set task priorities to 1-3 with due dates today or earlier to see them here. Max {NOW_LIMIT} tasks allowed.
                   </p>
                 </div>
               );
             }
             
-            // Warning if more than 3 tasks qualify
+            // Warning if more than NOW_LIMIT tasks qualify
             const qualifyingCount = [...nowTasks, ...nowProjectTasks, ...nowGoalTasks].length;
 
             return (
               <div className="tasks-table-container" style={{ marginTop: '20px' }}>
-                {qualifyingCount > 3 && (
+                {qualifyingCount > NOW_LIMIT && (
                   <div style={{
                     padding: '12px 16px',
                     backgroundColor: '#fef3c7',
@@ -7439,7 +7446,7 @@ export default function Tasks() {
                     fontSize: '14px',
                     color: '#92400e'
                   }}>
-                    ⚠️ <strong>{qualifyingCount} tasks</strong> qualify for NOW tab. Showing top 3 by priority and due date.
+                    ⚠️ <strong>{qualifyingCount} tasks</strong> qualify for NOW tab. Showing top {NOW_LIMIT} by priority and due date.
                   </div>
                 )}
                 <table className="tasks-table">
@@ -15927,9 +15934,10 @@ export default function Tasks() {
           {/* Project Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            // Filter out NOW tasks (priority 1-3 with today/past due_date) - they should only appear in NOW tab
             const filteredTasks = projectTasksDueToday
-              .filter(t => !(t.priority && Number(t.priority) <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && Number(t.priority) <= 3 && t.due_date && parseDateString(t.due_date.split('T')[0]) <= today)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
@@ -16071,9 +16079,10 @@ export default function Tasks() {
           {/* Goal Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            // Filter out NOW tasks (priority 1-3 with today/past due_date) - they should only appear in NOW tab
             const filteredTasks = goalTasksDueToday
-              .filter(t => !(t.priority && Number(t.priority) <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && Number(t.priority) <= 3 && t.due_date && parseDateString(t.due_date.split('T')[0]) <= today)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             return filteredTasks.length > 0 && (
@@ -16473,9 +16482,10 @@ export default function Tasks() {
           {/* Important Tasks Due Today & Overdue Section */}
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
-            // Filter out NOW tasks (priority 1-3) - they should only appear in NOW tab
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            // Filter out NOW tasks (priority 1-3 with today/past due_date) - they should only appear in NOW tab
             const filteredTasks = importantTasksDueToday
-              .filter(t => !(t.priority && Number(t.priority) <= 3)) // Exclude NOW tasks
+              .filter(t => !(t.priority && Number(t.priority) <= 3 && t.due_date && parseDateString(t.due_date.split('T')[0]) <= today)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
             // Only show section if there are tasks
