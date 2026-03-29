@@ -7,44 +7,90 @@ interface CompletedTask {
   name: string;
   description?: string;
   completed_at: string;
-  task_type: 'daily' | 'project' | 'goal';
+  task_type: string;
+  source_table: 'task' | 'project_task';
   category_name?: string;
   project_name?: string;
-  goal_name?: string;
   pillar_name?: string;
-  priority?: string;
+  priority?: string | number;
   due_date?: string;
 }
 
-interface GroupedTasks {
-  [key: string]: CompletedTask[];
+interface Stats {
+  today: number;
+  week: number;
+  month: number;
+  year: number;
+  last_7_days: number;
+  last_30_days: number;
+  all: number;
+}
+
+type Period = 'today' | 'week' | 'month' | 'year' | 'last_7_days' | 'last_30_days' | 'all' | 'custom';
+
+const PILLAR_COLORS: Record<string, string> = {
+  'Hard Work': '#2563eb',
+  'Calmness': '#16a34a',
+  'Family': '#9333ea',
+};
+const PILLAR_ICONS: Record<string, string> = {
+  'Hard Work': '💼',
+  'Calmness': '🧘',
+  'Family': '👨‍👩‍👦',
+};
+
+function getPillarColor(name?: string) {
+  return PILLAR_COLORS[name || ''] || '#718096';
+}
+function getPillarIcon(name?: string) {
+  return PILLAR_ICONS[name || ''] || '📋';
+}
+
+function formatTaskType(type: string, projectName?: string) {
+  if (type === 'project') return `📋 ${projectName || 'Project Task'}`;
+  if (type === 'daily') return '📝 Daily';
+  if (type === 'weekly') return '📅 Weekly';
+  if (type === 'monthly') return '🗓 Monthly';
+  if (type === 'yearly') return '📆 Yearly';
+  if (type === 'one_time') return '⭐ Important';
+  if (type === 'misc') return '🎨 Misc';
+  return `📌 ${type}`;
 }
 
 function Completed() {
   const [completedTasks, setCompletedTasks] = useState<CompletedTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filterPeriod, setFilterPeriod] = useState<'today' | 'week' | 'month' | 'year' | 'all' | 'custom'>('today');
+  const [filterPeriod, setFilterPeriod] = useState<Period>('today');
   const [searchQuery, setSearchQuery] = useState('');
-  const [stats, setStats] = useState({ today: 0, week: 0, month: 0, year: 0, all: 0 });
+  const [stats, setStats] = useState<Stats>({ today: 0, week: 0, month: 0, year: 0, last_7_days: 0, last_30_days: 0, all: 0 });
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('');
 
+  // Pillar / category filters
+  const [availablePillars, setAvailablePillars] = useState<string[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [selectedPillar, setSelectedPillar] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+
+  // Collapsed state for date groups
+  const [collapsedDates, setCollapsedDates] = useState<Record<string, boolean>>({});
+  // Collapsed state: map of "dateGroup|pillarName" → boolean
+  const [collapsedPillars, setCollapsedPillars] = useState<Record<string, boolean>>({});
+
   useEffect(() => {
     loadCompletedTasks();
-  }, [filterPeriod, startDate, endDate, selectedMonth]);
+  }, [filterPeriod, startDate, endDate, selectedMonth, selectedPillar, selectedCategory]);
 
   const loadCompletedTasks = async () => {
     setLoading(true);
     try {
       let url = `/api/completed-tasks?period=${filterPeriod}`;
-      
-      // Add date range for custom period
+
       if (filterPeriod === 'custom' && startDate && endDate) {
         url += `&start_date_str=${startDate}&end_date_str=${endDate}`;
       }
-      
-      // Handle month selection (convert to custom date range)
+
       if (selectedMonth && filterPeriod === 'custom') {
         const [year, month] = selectedMonth.split('-');
         const monthStart = `${year}-${month}-01`;
@@ -52,10 +98,15 @@ function Completed() {
         const monthEnd = `${year}-${month}-${lastDay.toString().padStart(2, '0')}`;
         url = `/api/completed-tasks?period=custom&start_date_str=${monthStart}&end_date_str=${monthEnd}`;
       }
-      
+
+      if (selectedPillar) url += `&pillar_name=${encodeURIComponent(selectedPillar)}`;
+      if (selectedCategory) url += `&category_name=${encodeURIComponent(selectedCategory)}`;
+
       const response = await apiClient.get(url);
       setCompletedTasks(response.data.tasks || []);
-      setStats(response.data.stats || { today: 0, week: 0, month: 0, year: 0, all: 0 });
+      setStats(response.data.stats || { today: 0, week: 0, month: 0, year: 0, last_7_days: 0, last_30_days: 0, all: 0 });
+      setAvailablePillars(response.data.pillars || []);
+      setAvailableCategories(response.data.categories || []);
     } catch (error) {
       console.error('Error loading completed tasks:', error);
       setCompletedTasks([]);
@@ -64,57 +115,69 @@ function Completed() {
     }
   };
 
-  const groupTasksByDate = (tasks: CompletedTask[]): GroupedTasks => {
-    const filtered = tasks.filter(task => 
-      task.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const grouped: GroupedTasks = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    filtered.forEach(task => {
-      const completedDate = new Date(task.completed_at);
-      completedDate.setHours(0, 0, 0, 0);
-
-      let groupKey: string;
-      const diffDays = Math.floor((today.getTime() - completedDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (diffDays === 0) {
-        groupKey = '📅 Today';
-      } else if (diffDays === 1) {
-        groupKey = '📅 Yesterday';
-      } else if (diffDays <= 7) {
-        groupKey = `📅 ${completedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`;
-      } else {
-        groupKey = `📅 ${completedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
-      }
-
-      if (!grouped[groupKey]) {
-        grouped[groupKey] = [];
-      }
-      grouped[groupKey].push(task);
-    });
-
-    return grouped;
-  };
-
-  const getTaskIcon = (type: string) => {
-    switch (type) {
-      case 'daily': return '📝';
-      case 'project': return '📋';
-      case 'goal': return '🎯';
-      default: return '✓';
+  const handleRestore = async (task: CompletedTask) => {
+    if (!confirm(`Restore "${task.name}" back to active?`)) return;
+    try {
+      await apiClient.post(
+        `/api/completed-tasks/${task.id}/restore?source_table=${task.source_table}`
+      );
+      await loadCompletedTasks();
+    } catch (err) {
+      console.error('Failed to restore task:', err);
+      alert('Failed to restore task. Please try again.');
     }
   };
 
-  const getPriorityClass = (priority?: string) => {
-    if (!priority) return '';
-    return `priority-${priority.toLowerCase()}`;
+  // ── Group & filter ──
+  const filteredTasks = completedTasks.filter(t =>
+    t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    t.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Group by date label
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const getDateLabel = (completedAt: string): string => {
+    const d = new Date(completedAt);
+    d.setHours(0, 0, 0, 0);
+    const diff = Math.floor((today.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+    if (diff === 0) return '📅 Today';
+    if (diff === 1) return '📅 Yesterday';
+    if (diff <= 6) return `📅 ${d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`;
+    return `📅 ${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
   };
 
-  const groupedTasks = groupTasksByDate(completedTasks);
+  // Build a structure: dateLabel → pillarName → tasks[]
+  type PillarGroup = Record<string, CompletedTask[]>;
+  type DateGroup = Record<string, PillarGroup>;
+
+  const grouped: DateGroup = {};
+  filteredTasks.forEach(task => {
+    const dateLabel = getDateLabel(task.completed_at);
+    const pillar = task.pillar_name || 'Other';
+    if (!grouped[dateLabel]) grouped[dateLabel] = {};
+    if (!grouped[dateLabel][pillar]) grouped[dateLabel][pillar] = [];
+    grouped[dateLabel][pillar].push(task);
+  });
+
+  const togglePillar = (key: string) => {
+    setCollapsedPillars(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const toggleDate = (key: string) => {
+    setCollapsedDates(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const PERIOD_BUTTONS: { key: Period; label: string; statKey: keyof Stats }[] = [
+    { key: 'today', label: 'Today', statKey: 'today' },
+    { key: 'week', label: 'This Week', statKey: 'week' },
+    { key: 'month', label: 'This Month', statKey: 'month' },
+    { key: 'year', label: 'This Year', statKey: 'year' },
+    { key: 'last_7_days', label: 'Last 7 Days', statKey: 'last_7_days' },
+    { key: 'last_30_days', label: 'Last 30 Days', statKey: 'last_30_days' },
+    { key: 'all', label: 'All Time', statKey: 'all' },
+  ];
 
   return (
     <div className="completed-container">
@@ -125,55 +188,51 @@ function Completed() {
         </div>
       </div>
 
-      {/* Filters and Search */}
+      {/* ── Period buttons ── */}
       <div className="completed-controls">
         <div className="filter-buttons">
-          <button 
-            className={`filter-btn ${filterPeriod === 'today' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterPeriod('today');
-              setSelectedMonth('');
-            }}
-          >
-            Today ({stats.today})
-          </button>
-          <button 
-            className={`filter-btn ${filterPeriod === 'week' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterPeriod('week');
-              setSelectedMonth('');
-            }}
-          >
-            This Week ({stats.week})
-          </button>
-          <button 
-            className={`filter-btn ${filterPeriod === 'month' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterPeriod('month');
-              setSelectedMonth('');
-            }}
-          >
-            This Month ({stats.month})
-          </button>
-          <button 
-            className={`filter-btn ${filterPeriod === 'year' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterPeriod('year');
-              setSelectedMonth('');
-            }}
-          >
-            This Year ({stats.year})
-          </button>
-          <button 
-            className={`filter-btn ${filterPeriod === 'all' ? 'active' : ''}`}
-            onClick={() => {
-              setFilterPeriod('all');
-              setSelectedMonth('');
-            }}
-          >
-            All Time ({stats.all})
-          </button>
+          {PERIOD_BUTTONS.map(btn => (
+            <button
+              key={btn.key}
+              className={`filter-btn ${filterPeriod === btn.key ? 'active' : ''}`}
+              onClick={() => { setFilterPeriod(btn.key); setSelectedMonth(''); setStartDate(''); setEndDate(''); }}
+            >
+              {btn.label} ({stats[btn.statKey]})
+            </button>
+          ))}
         </div>
+
+        {/* ── Pillar / Category filter chips ── */}
+        {(availablePillars.length > 0 || availableCategories.length > 0) && (
+          <div className="pillar-filter-bar">
+            <span className="filter-label">Filter:</span>
+            <button
+              className={`chip ${!selectedPillar && !selectedCategory ? 'chip-active' : ''}`}
+              onClick={() => { setSelectedPillar(''); setSelectedCategory(''); }}
+            >
+              All
+            </button>
+            {availablePillars.map(p => (
+              <button
+                key={p}
+                className={`chip ${selectedPillar === p ? 'chip-active' : ''}`}
+                style={{ borderColor: getPillarColor(p), color: selectedPillar === p ? '#fff' : getPillarColor(p), background: selectedPillar === p ? getPillarColor(p) : 'white' }}
+                onClick={() => { setSelectedPillar(prev => prev === p ? '' : p); setSelectedCategory(''); }}
+              >
+                {getPillarIcon(p)} {p}
+              </button>
+            ))}
+            {availableCategories.map(c => (
+              <button
+                key={c}
+                className={`chip ${selectedCategory === c ? 'chip-active' : ''}`}
+                onClick={() => { setSelectedCategory(prev => prev === c ? '' : c); setSelectedPillar(''); }}
+              >
+                📂 {c}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="custom-filters">
           {/* Month Selector */}
@@ -188,85 +247,29 @@ function Completed() {
                 setStartDate('');
                 setEndDate('');
               }}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                cursor: 'pointer'
-              }}
+              style={{ padding: '8px 12px', fontSize: '14px', border: '1px solid #d1d5db', borderRadius: '6px', cursor: 'pointer' }}
             />
-            {selectedMonth && (
-              <span style={{ 
-                marginLeft: '8px', 
-                fontSize: '14px', 
-                fontWeight: '600',
-                color: '#4a5568',
-                backgroundColor: '#e2e8f0',
-                padding: '4px 12px',
-                borderRadius: '6px'
-              }}>
-                {completedTasks.length} tasks
-              </span>
-            )}
           </div>
 
-          {/* Date Range Selector */}
+          {/* Date Range */}
           <div className="date-range-selector">
             <label>📆 Date Range:</label>
             <input
               type="date"
               value={startDate}
-              onChange={(e) => {
-                setStartDate(e.target.value);
-                if (e.target.value && endDate) {
-                  setFilterPeriod('custom');
-                  setSelectedMonth('');
-                }
-              }}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                marginRight: '8px'
-              }}
+              onChange={(e) => { setStartDate(e.target.value); if (e.target.value && endDate) { setFilterPeriod('custom'); setSelectedMonth(''); } }}
+              style={{ padding: '8px 12px', fontSize: '14px', border: '1px solid #d1d5db', borderRadius: '6px' }}
             />
             <span style={{ margin: '0 4px' }}>to</span>
             <input
               type="date"
               value={endDate}
-              onChange={(e) => {
-                setEndDate(e.target.value);
-                if (startDate && e.target.value) {
-                  setFilterPeriod('custom');
-                  setSelectedMonth('');
-                }
-              }}
-              style={{
-                padding: '8px 12px',
-                fontSize: '14px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                marginLeft: '8px'
-              }}
+              onChange={(e) => { setEndDate(e.target.value); if (startDate && e.target.value) { setFilterPeriod('custom'); setSelectedMonth(''); } }}
+              style={{ padding: '8px 12px', fontSize: '14px', border: '1px solid #d1d5db', borderRadius: '6px' }}
             />
-            {startDate && endDate && (
-              <span style={{ 
-                marginLeft: '12px', 
-                fontSize: '14px', 
-                fontWeight: '600',
-                color: '#4a5568',
-                backgroundColor: '#e2e8f0',
-                padding: '4px 12px',
-                borderRadius: '6px'
-              }}>
-                {completedTasks.length} tasks
-              </span>
-            )}
           </div>
 
-          {/* Search Box */}
+          {/* Search */}
           <div className="search-box">
             <input
               type="text"
@@ -278,95 +281,121 @@ function Completed() {
         </div>
       </div>
 
-      {/* Completed Tasks List */}
+      {/* ── Task list ── */}
       <div className="completed-content">
         {loading ? (
           <div className="loading-state">Loading completed tasks...</div>
-        ) : Object.keys(groupedTasks).length === 0 ? (
+        ) : Object.keys(grouped).length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📭</div>
             <h3>No completed tasks found</h3>
             <p>Complete some tasks and they'll appear here!</p>
           </div>
         ) : (
-          Object.entries(groupedTasks).map(([dateGroup, tasks]) => (
-            <div key={dateGroup} className="task-group">
-              <div className="group-header">
-                <h3>{dateGroup}</h3>
-                <span className="task-count">{tasks.length} tasks</span>
-              </div>
+          Object.entries(grouped).map(([dateLabel, pillarGroups]) => {
+            const totalForDate = Object.values(pillarGroups).reduce((s, arr) => s + arr.length, 0);
+            const isDateCollapsed = !!collapsedDates[dateLabel];
+            return (
+              <div key={dateLabel} className="task-group">
+                {/* Date header — collapsible */}
+                <div className="group-header" onClick={() => toggleDate(dateLabel)} style={{ cursor: 'pointer' }}>
+                  <h3>
+                    {isDateCollapsed ? '▶' : '▼'} {dateLabel}
+                    <span className="inline-count">({totalForDate})</span>
+                  </h3>
+                </div>
 
-              <div className="tasks-list">
-                {tasks.map((task) => (
-                  <div key={`${task.task_type}-${task.id}`} className="completed-task-card">
-                    <div className="task-icon">
-                      {getTaskIcon(task.task_type)}
-                    </div>
-                    
-                    <div className="task-details">
-                      <div className="task-name">
-                        <span className="strikethrough">{task.name}</span>
-                        {task.priority && (
-                          <span className={`task-priority ${getPriorityClass(task.priority)}`}>
-                            {task.priority}
-                          </span>
-                        )}
-                      </div>
-                      
-                      {task.description && (
-                        <div className="task-description">{task.description}</div>
-                      )}
-                      
-                      <div className="task-meta">
-                        <span className="task-type-badge">
-                          {task.task_type === 'daily' && '📝 Daily Task'}
-                          {task.task_type === 'project' && `📋 ${task.project_name || 'Project'}`}
-                          {task.task_type === 'goal' && `🎯 ${task.goal_name || 'Goal'}`}
+                {/* Pillar sub-sections */}
+                {!isDateCollapsed && Object.entries(pillarGroups).map(([pillarName, tasks]) => {
+                  const collapseKey = `${dateLabel}|${pillarName}`;
+                  const isCollapsed = !!collapsedPillars[collapseKey];
+                  const color = getPillarColor(pillarName);
+
+                  return (
+                    <div key={pillarName} className="pillar-section" style={{ borderLeft: `4px solid ${color}` }}>
+                      {/* Pillar toggle header */}
+                      <div
+                        className="pillar-section-header"
+                        style={{ color }}
+                        onClick={() => togglePillar(collapseKey)}
+                      >
+                        <span>
+                          {isCollapsed ? '▶' : '▼'} {getPillarIcon(pillarName)} {pillarName}
+                          <span className="inline-count" style={{ color: '#718096' }}>({tasks.length})</span>
                         </span>
-                        
-                        {task.category_name && (
-                          <span className="task-category">
-                            📂 {task.category_name}
-                          </span>
-                        )}
-                        
-                        {task.pillar_name && (
-                          <span className="task-pillar">
-                            🏛️ {task.pillar_name}
-                          </span>
-                        )}
                       </div>
-                    </div>
 
-                    <div className="task-completion-info">
-                      <div className="completion-time">
-                        ✓ {new Date(task.completed_at).toLocaleTimeString('en-US', { 
-                          hour: 'numeric', 
-                          minute: '2-digit',
-                          hour12: true 
-                        })}
-                      </div>
-                      {task.due_date && (
-                        <div className="due-date-info">
-                          Due: {new Date(task.due_date).toLocaleDateString()}
-                        </div>
+                      {/* Tasks table */}
+                      {!isCollapsed && (
+                        <table className="completed-table">
+                          <thead>
+                            <tr>
+                              <th>Task Name</th>
+                              <th>Type / Project</th>
+                              <th>Category</th>
+                              <th>Completed At</th>
+                              <th>Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tasks.map(task => (
+                              <tr key={`${task.source_table}-${task.id}`} className="completed-task-row">
+                                <td>
+                                  <span className="task-name-text">{task.name}</span>
+                                  {task.description && (
+                                    <div className="task-desc">{task.description}</div>
+                                  )}
+                                </td>
+                                <td>
+                                  <span className="type-badge">
+                                    {formatTaskType(task.task_type, task.project_name)}
+                                  </span>
+                                </td>
+                                <td>
+                                  {task.category_name && (
+                                    <span className="category-badge">📂 {task.category_name}</span>
+                                  )}
+                                </td>
+                                <td className="completed-at-cell">
+                                  <div className="completed-date">
+                                    {new Date(task.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                  </div>
+                                  <div className="completed-time">
+                                    {new Date(task.completed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                  </div>
+                                </td>
+                                <td>
+                                  <button
+                                    className="restore-btn"
+                                    onClick={() => handleRestore(task)}
+                                    title="Restore this task to active"
+                                  >
+                                    ↩ Restore
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
       {/* Motivational Footer */}
-      {!loading && completedTasks.length > 0 && (
+      {!loading && filteredTasks.length > 0 && (
         <div className="motivation-footer">
           <div className="motivation-message">
-            {stats.today > 0 && `🎉 Great job! You completed ${stats.today} task${stats.today > 1 ? 's' : ''} today!`}
-            {stats.today === 0 && stats.week > 0 && `💪 You've completed ${stats.week} tasks this week. Keep it up!`}
-            {stats.today === 0 && stats.week === 0 && `🚀 Ready to complete some tasks today?`}
+            {stats.today > 0
+              ? `🎉 Great job! You completed ${stats.today} task${stats.today !== 1 ? 's' : ''} today!`
+              : stats.week > 0
+              ? `💪 You've completed ${stats.week} tasks this week. Keep it up!`
+              : `🚀 Ready to complete some tasks today?`}
           </div>
         </div>
       )}
