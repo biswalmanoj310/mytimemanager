@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 import json
 
-from app.models.models import Task, Pillar, Category, SubCategory
+from app.models.models import Task, Pillar, Category, SubCategory, Habit, WeeklyTaskStatus, MonthlyTaskStatus, YearlyTaskStatus, DailyTaskStatus
 from app.models.goal import LifeGoal
 from app.models.schemas import TaskCreate, TaskUpdate, TaskFilters
 from app.utils.datetime_utils import normalize_to_midnight
@@ -346,26 +346,87 @@ class TaskService:
     @staticmethod
     def mark_task_completed(db: Session, task_id: int) -> Task:
         """
-        Mark a task as completed
-        
-        Args:
-            db: Database session
-            task_id: ID of task to mark as completed
-            
-        Returns:
-            Updated Task object
-            
-        Raises:
-            ValueError: If task not found
+        Mark a task as completed.
+        Also:
+        - Marks any linked habits as completed
+        - Updates current-period status rows (weekly/monthly/yearly/daily)
         """
         db_task = db.query(Task).filter(Task.id == task_id).first()
         if not db_task:
             raise ValueError(f"Task with id {task_id} not found")
         
+        now = get_local_now()
+        completed_at = normalize_to_midnight(now)
+
         db_task.is_completed = True
-        # Store current date at midnight in local timezone
-        db_task.completed_at = normalize_to_midnight(get_local_now())
-        
+        db_task.completed_at = completed_at
+
+        # --- Sync linked habits ---
+        linked_habits = db.query(Habit).filter(
+            Habit.linked_task_id == task_id,
+            Habit.is_active == True,
+            Habit.is_completed == False
+        ).all()
+        for habit in linked_habits:
+            habit.is_completed = True
+            habit.is_active = False
+            habit.completed_at = now
+            habit.updated_at = now
+
+        # --- Sync current-period status rows so tabs stay consistent ---
+        from datetime import date, timedelta
+        today = now.date()
+        # Daily
+        daily_status = db.query(DailyTaskStatus).filter(
+            DailyTaskStatus.task_id == task_id,
+            DailyTaskStatus.date == today
+        ).first()
+        if daily_status:
+            daily_status.is_completed = True
+        else:
+            db.add(DailyTaskStatus(task_id=task_id, date=today, is_completed=True))
+
+        # Weekly (current week starting Monday)
+        week_start = today - timedelta(days=today.weekday())
+        from sqlalchemy import func as sqlfunc
+        from app.utils.timezone_utils import to_local_date_start
+        week_start_dt = to_local_date_start(datetime.combine(week_start, datetime.min.time()))
+        weekly_status = db.query(WeeklyTaskStatus).filter(
+            WeeklyTaskStatus.task_id == task_id,
+            sqlfunc.date(WeeklyTaskStatus.week_start_date) == week_start
+        ).first()
+        if weekly_status:
+            weekly_status.is_completed = True
+            weekly_status.completed_at = now
+        else:
+            db.add(WeeklyTaskStatus(task_id=task_id, week_start_date=week_start_dt, is_completed=True, completed_at=now))
+
+        # Monthly (first day of current month)
+        month_start = today.replace(day=1)
+        month_start_dt = to_local_date_start(datetime.combine(month_start, datetime.min.time()))
+        monthly_status = db.query(MonthlyTaskStatus).filter(
+            MonthlyTaskStatus.task_id == task_id,
+            sqlfunc.date(MonthlyTaskStatus.month_start_date) == month_start
+        ).first()
+        if monthly_status:
+            monthly_status.is_completed = True
+            monthly_status.completed_at = now
+        else:
+            db.add(MonthlyTaskStatus(task_id=task_id, month_start_date=month_start_dt, is_completed=True, completed_at=now))
+
+        # Yearly (first day of current year)
+        year_start = today.replace(month=1, day=1)
+        year_start_dt = to_local_date_start(datetime.combine(year_start, datetime.min.time()))
+        yearly_status = db.query(YearlyTaskStatus).filter(
+            YearlyTaskStatus.task_id == task_id,
+            sqlfunc.date(YearlyTaskStatus.year_start_date) == year_start
+        ).first()
+        if yearly_status:
+            yearly_status.is_completed = True
+            yearly_status.completed_at = now
+        else:
+            db.add(YearlyTaskStatus(task_id=task_id, year_start_date=year_start_dt, is_completed=True, completed_at=now))
+
         db.commit()
         db.refresh(db_task)
         

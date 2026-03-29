@@ -1119,7 +1119,7 @@ export default function Tasks() {
       const completedResponse: any = await api.get('/api/habits/?active_only=false');
       const completedData = completedResponse.data || completedResponse;
       console.log('✅ All habits API response:', completedData);
-      const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => !h.is_active) : [];
+      const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => !h.is_active || h.is_completed) : [];
       console.log('✅ Setting completed habits count:', completedList.length, completedList.map((h: any) => ({ id: h.id, name: h.name, is_active: h.is_active })));
       setCompletedHabits(completedList);
       
@@ -2021,13 +2021,23 @@ export default function Tasks() {
   const handleDailyTaskComplete = async (taskId: number) => {
     try {
       const dateStr = formatDateForInput(selectedDate);
+      // Mark daily-specific status first
       await api.post(`/api/daily-task-status/${taskId}/complete`, null, {
         params: { status_date: dateStr }
       });
+      // Also call global completion so weekly, monthly, yearly, and habit tabs sync
+      await api.post(`/api/tasks/${taskId}/complete`, {});
       // Reload daily statuses, entries, and completion dates
       await loadDailyStatuses(selectedDate);
       await loadDailyEntries(selectedDate);
       await loadDailyTaskCompletionDates();
+      // Reload tasks (updates task.is_completed for cross-tab filtering)
+      await loadTasks();
+      // Reload weekly and monthly statuses so in-page tabs also reflect completion
+      await loadWeeklyEntries(selectedWeekStart);
+      await loadMonthlyEntries(selectedMonthStart);
+      // Reload habits so any linked habit moves to completed section
+      await loadHabits();
     } catch (err: any) {
       console.error('Error marking daily task complete:', err);
       alert('Failed to mark task as completed: ' + (err.response?.data?.detail || err.message));
@@ -11480,169 +11490,200 @@ export default function Tasks() {
                     {showCompletedHabits ? '▼ Hide' : '▶ Show'} ({completedHabits.length})
                   </button>
                 </div>
-                {showCompletedHabits && (
-                  <div style={{ 
-                    display: 'flex',
-                    flexDirection: 'column',
-                  gap: '20px',
-                  width: '100%'
-                }}>
-                  {completedHabits.map((habit: any) => {
-                      const pillarColor = 
-                        habit.pillar_name === 'Hard Work' ? '#4299e1' :
-                        habit.pillar_name === 'Calmness' ? '#48bb78' :
-                        habit.pillar_name === 'Family' ? '#9f7aea' : '#718096';
+                {showCompletedHabits && (() => {
+                  // Group completed habits by pillar → category (same hierarchy as active section)
+                  const hierarchyOrder: { [key: string]: number } = {
+                    'Hard Work|Office-Tasks': 1,
+                    'Hard Work|Learning': 2,
+                    'Hard Work|Confidence': 3,
+                    'Calmness|Yoga': 4,
+                    'Calmness|Sleep': 5,
+                    'Family|My Tasks': 6,
+                    'Family|Home Tasks': 7,
+                    'Family|Time Waste': 8,
+                  };
 
-                      return (
-                        <div
-                          key={habit.id}
-                          style={{
-                            padding: '20px',
-                            borderRadius: '8px',
-                            border: '2px solid #e2e8f0',
-                            backgroundColor: '#f7fafc',
-                            cursor: 'default',
-                            opacity: 0.8
-                          }}
-                        >
-                          {/* Habit Name and Pillar Badge */}
-                          <div style={{ marginBottom: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600', flex: 1 }}>
-                                {habit.name}
-                              </h3>
-                              {habit.pillar_name && (
-                                <span style={{
-                                  padding: '4px 10px',
-                                  backgroundColor: pillarColor,
-                                  color: 'white',
-                                  borderRadius: '12px',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  flexShrink: 0
-                                }}>
-                                  {habit.pillar_name}
-                                  {habit.category_name && `: ${habit.category_name}`}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                  const completedByCategory = completedHabits.reduce((acc: Record<string, any[]>, habit: any) => {
+                    const key = habit.category_name || 'Uncategorized';
+                    if (!acc[key]) acc[key] = [];
+                    acc[key].push(habit);
+                    return acc;
+                  }, {});
 
-                          {/* Completion Info */}
-                          <div style={{ 
-                            display: 'flex', 
-                            gap: '8px',
-                            alignItems: 'center',
-                            marginBottom: '12px',
-                            flexWrap: 'nowrap'
-                          }}>
-                            {/* Completion date */}
-                            <div style={{ 
-                              padding: '6px 10px',
-                              backgroundColor: '#e6fffa',
-                              border: '1px solid #81e6d9',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              color: '#234e52',
-                              whiteSpace: 'nowrap',
-                              fontWeight: '600'
+                  const sortedCompletedCategories = Object.keys(completedByCategory).sort((a, b) => {
+                    const aPillar = completedByCategory[a][0]?.pillar_name || '';
+                    const bPillar = completedByCategory[b][0]?.pillar_name || '';
+                    const orderA = hierarchyOrder[`${aPillar}|${a}`] || 999;
+                    const orderB = hierarchyOrder[`${bPillar}|${b}`] || 999;
+                    return orderA - orderB;
+                  });
+
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                      {sortedCompletedCategories.map(categoryName => {
+                        const categoryHabits = completedByCategory[categoryName];
+                        const pillarName = categoryHabits[0]?.pillar_name || '';
+                        const pillarColor =
+                          pillarName === 'Hard Work' ? '#4299e1' :
+                          pillarName === 'Calmness' ? '#48bb78' :
+                          pillarName === 'Family' ? '#9f7aea' : '#718096';
+                        const pillarIcon =
+                          pillarName === 'Hard Work' ? '💼' :
+                          pillarName === 'Calmness' ? '🧘' :
+                          pillarName === 'Family' ? '👨‍👩‍👦' : '📋';
+
+                        return (
+                          <div key={categoryName}>
+                            {/* Category header */}
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              marginBottom: '12px',
+                              paddingBottom: '8px',
+                              borderBottom: `2px solid ${pillarColor}30`
                             }}>
-                              ✅ Completed: {parseDateString(habit.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
-
-                            {/* Final stats */}
-                            <div style={{ 
-                              padding: '6px 10px',
-                              backgroundColor: '#fef5e7',
-                              border: '1px solid #f9e79f',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              color: '#7d6608',
-                              whiteSpace: 'nowrap',
-                              fontWeight: '600'
-                            }}>
-                              🔥 {habit.stats?.current_streak || 0} | 🏆 {habit.stats?.longest_streak || 0} | ✅ {habit.stats?.success_rate || 0}%
-                            </div>
-
-                            {/* Duration */}
-                            <div style={{ 
-                              padding: '6px 10px',
-                              backgroundColor: '#f0f4ff',
-                              border: '1px solid #c3dafe',
-                              borderRadius: '4px',
-                              fontSize: '10px',
-                              color: '#2c5282',
-                              whiteSpace: 'nowrap',
-                              fontWeight: '600'
-                            }}>
-                              📊 {Math.floor((parseDateString(habit.end_date).getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))} days total
-                            </div>
-
-                            {/* Reactivate button */}
-                            <button
-                              className="btn btn-sm"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (confirm(`Reactivate habit "${habit.name}"? This will make it active again.`)) {
-                                  try {
-                                    console.log('Reactivating habit:', habit.id, habit.name);
-                                    
-                                    // Create update payload
-                                    const updatePayload = {
-                                      name: habit.name,
-                                      description: habit.description,
-                                      pillar_id: habit.pillar_id,
-                                      category_id: habit.category_id,
-                                      subcategory_id: habit.subcategory_id,
-                                      start_date: habit.start_date,
-                                      end_date: null,  // Remove end date
-                                      is_active: true,  // Set to active
-                                      tracking_mode: habit.tracking_mode,
-                                      period_type: habit.period_type,
-                                      target_count: habit.target_count,
-                                      target_comparison: habit.target_comparison,
-                                      linked_task_id: habit.linked_task_id,
-                                      session_target_value: habit.session_target_value,
-                                      session_target_unit: habit.session_target_unit
-                                    };
-                                    
-                                    console.log('Update payload:', updatePayload);
-                                    const response = await api.put(`/api/habits/${habit.id}`, updatePayload);
-                                    console.log('Reactivate response:', response);
-                                    
-                                    // Reload all habits
-                                    await loadHabits();
-                                    
-                                    alert(`✅ Success! "${habit.name}" has been reactivated!`);
-                                  } catch (err: any) {
-                                    console.error('Error reactivating habit:', err);
-                                    console.error('Error details:', err.response?.data);
-                                    const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
-                                    alert('Failed to reactivate habit: ' + errorMsg);
-                                  }
-                                }
-                              }}
-                              style={{ 
-                                padding: '5px 10px', 
-                                fontSize: '11px',
-                                backgroundColor: '#4299e1',
+                              <span style={{
+                                padding: '3px 10px',
+                                backgroundColor: pillarColor,
                                 color: 'white',
-                                border: 'none',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                fontWeight: '600',
-                                marginLeft: 'auto'
-                              }}
-                              title="Reactivate habit"
-                            >
-                              ♻️ Reactivate
-                            </button>
+                                borderRadius: '10px',
+                                fontSize: '11px',
+                                fontWeight: '700'
+                              }}>
+                                {pillarIcon} {pillarName}
+                              </span>
+                              <span style={{ fontSize: '14px', fontWeight: '600', color: '#4a5568' }}>
+                                {categoryName}
+                              </span>
+                              <span style={{ fontSize: '12px', color: '#a0aec0' }}>
+                                ({categoryHabits.length})
+                              </span>
+                            </div>
+
+                            {/* Habits in this category */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                              {categoryHabits.map((habit: any) => (
+                                <div
+                                  key={habit.id}
+                                  style={{
+                                    padding: '16px 20px',
+                                    borderRadius: '8px',
+                                    border: '2px solid #e2e8f0',
+                                    backgroundColor: '#f7fafc',
+                                    opacity: 0.85
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                    <span style={{ fontWeight: '600', fontSize: '15px', flex: 1, minWidth: '120px' }}>
+                                      {habit.name}
+                                    </span>
+
+                                    {/* Completion date */}
+                                    {habit.end_date && (
+                                      <div style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: '#e6fffa',
+                                        border: '1px solid #81e6d9',
+                                        borderRadius: '4px',
+                                        fontSize: '10px',
+                                        color: '#234e52',
+                                        whiteSpace: 'nowrap',
+                                        fontWeight: '600'
+                                      }}>
+                                        ✅ {parseDateString(habit.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                      </div>
+                                    )}
+
+                                    {/* Stats */}
+                                    <div style={{
+                                      padding: '4px 8px',
+                                      backgroundColor: '#fef5e7',
+                                      border: '1px solid #f9e79f',
+                                      borderRadius: '4px',
+                                      fontSize: '10px',
+                                      color: '#7d6608',
+                                      whiteSpace: 'nowrap',
+                                      fontWeight: '600'
+                                    }}>
+                                      🔥 {habit.stats?.current_streak || 0} | 🏆 {habit.stats?.longest_streak || 0} | ✅ {habit.stats?.success_rate || 0}%
+                                    </div>
+
+                                    {/* Duration */}
+                                    {habit.start_date && habit.end_date && (
+                                      <div style={{
+                                        padding: '4px 8px',
+                                        backgroundColor: '#f0f4ff',
+                                        border: '1px solid #c3dafe',
+                                        borderRadius: '4px',
+                                        fontSize: '10px',
+                                        color: '#2c5282',
+                                        whiteSpace: 'nowrap',
+                                        fontWeight: '600'
+                                      }}>
+                                        📊 {Math.floor((parseDateString(habit.end_date).getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24))} days
+                                      </div>
+                                    )}
+
+                                    {/* Reactivate button */}
+                                    <button
+                                      className="btn btn-sm"
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        if (confirm(`Reactivate habit "${habit.name}"? This will make it active again.`)) {
+                                          try {
+                                            const updatePayload = {
+                                              name: habit.name,
+                                              description: habit.description,
+                                              pillar_id: habit.pillar_id,
+                                              category_id: habit.category_id,
+                                              subcategory_id: habit.subcategory_id,
+                                              start_date: habit.start_date,
+                                              end_date: null,
+                                              is_active: true,
+                                              is_completed: false,
+                                              tracking_mode: habit.tracking_mode,
+                                              period_type: habit.period_type,
+                                              target_count: habit.target_count,
+                                              target_comparison: habit.target_comparison,
+                                              linked_task_id: habit.linked_task_id,
+                                              session_target_value: habit.session_target_value,
+                                              session_target_unit: habit.session_target_unit
+                                            };
+                                            await api.put(`/api/habits/${habit.id}`, updatePayload);
+                                            await loadHabits();
+                                            alert(`✅ "${habit.name}" has been reactivated!`);
+                                          } catch (err: any) {
+                                            const errorMsg = err.response?.data?.detail || err.message || 'Unknown error';
+                                            alert('Failed to reactivate habit: ' + errorMsg);
+                                          }
+                                        }
+                                      }}
+                                      style={{
+                                        padding: '4px 10px',
+                                        fontSize: '11px',
+                                        backgroundColor: '#4299e1',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600',
+                                        marginLeft: 'auto',
+                                        flexShrink: 0
+                                      }}
+                                    >
+                                      ♻️ Reactivate
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
             )}
             </>

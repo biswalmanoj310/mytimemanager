@@ -48,7 +48,7 @@ class HabitService:
         # Now return habits based on active_only filter
         query = db.query(Habit)
         if active_only:
-            query = query.filter(Habit.is_active == True)
+            query = query.filter(Habit.is_active == True, Habit.is_completed == False)
         return query.order_by(Habit.created_at.desc()).all()
     
     @staticmethod
