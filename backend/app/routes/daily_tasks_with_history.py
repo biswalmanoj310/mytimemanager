@@ -81,12 +81,9 @@ def get_completion_dates_for_daily_tasks(
     Get first completion date for each daily task
     Returns a map of task_id -> first_completion_date (ISO format)
     """
-    # Get all daily tasks
+    # Get all daily tasks (regardless of is_active, so NA-marked tasks are also tracked)
     daily_tasks = db.query(Task.id).filter(
-        and_(
-            Task.follow_up_frequency == 'daily',
-            Task.is_active == True
-        )
+        Task.follow_up_frequency == 'daily'
     ).all()
     
     task_ids = [t[0] for t in daily_tasks]

@@ -151,15 +151,23 @@ export default function Dashboard() {
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
       
-      const [dashboardData, tasks, projects, habits, pillars, categories, dailyStatuses] = await Promise.all([
+      const [dashboardData, tasks, projects, habits, pillars, categories, dailyStatuses, completionDatesResp] = await Promise.all([
         api.get<DashboardData>('/api/dashboard/goals/overview'),
         api.get<any[]>('/api/tasks'),
         api.get<any[]>('/api/projects'),
         api.get<any[]>('/api/habits'),
         api.get<any[]>('/api/pillars'),
         api.get<any[]>('/api/categories'),
-        api.get<any[]>(`/api/daily-task-status/date/${todayStr}`)
+        api.get<any[]>(`/api/daily-task-status/date/${todayStr}`),
+        api.get<any>('/api/daily-tasks-history/completion-dates').catch(() => ({}))
       ]);
+
+      // Build map of task_id -> completion date string (from daily_task_status history)
+      // api.get already unwraps .data, so completionDatesResp is the plain object directly
+      const completionDatesData: Record<string, string> = completionDatesResp || {};
+      const dailyTaskCompletionDates = new Map<number, string>(
+        Object.entries(completionDatesData).map(([id, date]) => [parseInt(id), date as string])
+      );
       
       console.log('[Dashboard] Data received:', dashboardData);
       
@@ -193,18 +201,31 @@ export default function Dashboard() {
         // Must be daily frequency
         if (task.follow_up_frequency !== 'daily') return false;
         
-        // Must be TIME type (not COUNT)
-        if (task.task_type !== 'time') return false;
+        // Must be TIME type (not COUNT) - case-insensitive check
+        if (task.task_type?.toLowerCase() !== 'time') return false;
         
         // Must NOT be one-time daily task
         if (task.is_daily_one_time) return false;
         
         // Must be active (not globally completed or inactive)
-        if (task.is_completed || task.is_active === false) return false;
+        // Use !== true to catch null/0/false/undefined from SQLite
+        if (task.is_completed || task.is_active !== true) return false;
         
         // Exclude completed/NA tasks for today
         const status = statusMap.get(task.id);
         if (status && (status.is_completed || status.is_na)) return false;
+
+        // Exclude tasks completed on a PREVIOUS day via daily_task_status
+        // (same logic as Analytics — prevents stale completed tasks from inflating pillar hours)
+        const completionDateStr = dailyTaskCompletionDates.get(task.id);
+        if (completionDateStr) {
+          const [year, month, day] = completionDateStr.split('-').map(Number);
+          const completionDate = new Date(year, month - 1, day);
+          completionDate.setHours(0, 0, 0, 0);
+          const todayMidnight = new Date();
+          todayMidnight.setHours(0, 0, 0, 0);
+          if (completionDate < todayMidnight) return false;
+        }
         
         return true;
       });
