@@ -9456,100 +9456,224 @@ export default function Tasks() {
                 </div>
                 
                 {expandedSections.importantMiscTasks && (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
-                    {/* Important Tasks */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+                    {/* ── Important / One-Time Tasks ── */}
                     {oneTimeTasks.length > 0 && (
-                      <div style={{ 
-                        padding: '15px', 
-                        background: '#f7fafc', 
+                      <div style={{
+                        padding: '15px',
+                        background: '#f7fafc',
                         borderRadius: '8px',
-                        border: '2px solid #718096' 
+                        border: '2px solid #718096'
                       }}>
-                        <h4 style={{ margin: '0 0 10px 0', color: '#2d3748' }}>
-                          ⭐ Important ({oneTimeTasks.length})
-                        </h4>
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>One-time important tasks</span>
-                          <span>{oneTimeTasks.filter(t => t.is_completed).length}/{oneTimeTasks.length} completed</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <h4 style={{ margin: 0, color: '#2d3748', fontSize: '16px', fontWeight: '700' }}>
+                            ⭐ Important Tasks ({oneTimeTasks.length})
+                          </h4>
+                          <span style={{ fontSize: '12px', color: '#718096' }}>
+                            {oneTimeTasks.filter(t => t.is_completed).length}/{oneTimeTasks.length} completed
+                          </span>
                         </div>
                         {oneTimeTasks.map(task => (
-                          <div key={task.id} style={{ 
-                            padding: '8px', 
-                            marginBottom: '6px', 
-                            background: 'white', 
-                            borderRadius: '4px',
-                            borderLeft: task.is_completed ? '3px solid #a0aec0' : '3px solid #718096'
+                          <div key={task.id} style={{
+                            padding: '10px 12px',
+                            marginBottom: '8px',
+                            background: 'white',
+                            borderRadius: '6px',
+                            borderLeft: task.is_completed ? '3px solid #a0aec0' : '3px solid #718096',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                              {task.is_completed ? '✅' : '🔄'}
-                              <span style={{ 
-                                fontSize: '13px',
+                            <input
+                              type="checkbox"
+                              checked={task.is_completed}
+                              onChange={async () => {
+                                try {
+                                  await api.put(`/api/tasks/${task.id}`, { is_completed: !task.is_completed });
+                                  await loadProjectTasks(selectedProject.id);
+                                } catch (err) {
+                                  console.error('Error toggling important task:', err);
+                                }
+                              }}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0 }}
+                            />
+                            <span style={{
+                              fontSize: '14px',
+                              fontWeight: '600',
+                              textDecoration: task.is_completed ? 'line-through' : 'none',
+                              color: task.is_completed ? '#a0aec0' : '#2d3748',
+                              flex: 1
+                            }}>
+                              {task.name}
+                            </span>
+                            {task.description && (
+                              <span style={{ fontSize: '12px', color: '#718096', fontStyle: 'italic', flex: 1 }}>
+                                {task.description}
+                              </span>
+                            )}
+                            {(task.allocated_minutes ?? 0) > 0 && (
+                              <span style={{ fontSize: '11px', color: '#718096', background: '#edf2f7', padding: '2px 6px', borderRadius: '4px', flexShrink: 0 }}>
+                                {task.allocated_minutes}m
+                              </span>
+                            )}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await api.put(`/api/tasks/${task.id}`, { is_completed: !task.is_completed });
+                                  await loadProjectTasks(selectedProject.id);
+                                } catch (err) {
+                                  console.error('Error toggling important task:', err);
+                                }
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                background: task.is_completed ? '#e2e8f0' : '#48bb78',
+                                color: task.is_completed ? '#718096' : 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
                                 fontWeight: '600',
-                                textDecoration: task.is_completed ? 'line-through' : 'none',
-                                color: task.is_completed ? '#666' : '#333',
-                                flex: 1
-                              }}>
-                                {task.name}
-                              </span>
-                              <span style={{ fontSize: '10px', color: '#fff', background: '#718096', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
-                                Important
-                              </span>
-                              {(task.allocated_minutes ?? 0) > 0 && (
-                                <span style={{ fontSize: '11px', color: '#666', background: '#f7fafc', padding: '2px 6px', borderRadius: '4px' }}>
-                                  {task.allocated_minutes}m
-                                </span>
-                              )}
-                            </div>
+                                flexShrink: 0
+                              }}
+                            >
+                              {task.is_completed ? 'Undo' : 'Done'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedTaskId(task.id);
+                                setIsTaskFormOpen(true);
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                background: '#4299e1',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                flexShrink: 0
+                              }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (confirm('Delete this task?')) {
+                                  try {
+                                    await api.delete(`/api/tasks/${task.id}`);
+                                    await loadProjectTasks(selectedProject.id);
+                                  } catch (err: any) {
+                                    alert('Failed to delete: ' + (err.response?.data?.detail || err.message));
+                                  }
+                                }
+                              }}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '12px',
+                                background: '#fc8181',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600',
+                                flexShrink: 0
+                              }}
+                            >
+                              Delete
+                            </button>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Misc Tasks */}
+                    {/* ── Misc Tasks (full tree view) ── */}
                     {miscTasks.length > 0 && (
-                      <div style={{ 
-                        padding: '15px', 
-                        background: '#fef3c7', 
+                      <div style={{
+                        padding: '15px',
+                        background: '#fffbeb',
                         borderRadius: '8px',
-                        border: '2px solid #f59e0b' 
+                        border: '2px solid #f59e0b'
                       }}>
-                        <h4 style={{ margin: '0 0 10px 0', color: '#92400e' }}>
-                          🎨 Misc ({miscTasks.length})
-                        </h4>
-                        <div style={{ fontSize: '11px', color: '#666', marginBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Miscellaneous tasks</span>
-                          <span>{miscTasks.filter(t => t.is_completed).length}/{miscTasks.length} completed</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <h4 style={{ margin: 0, color: '#92400e', fontSize: '16px', fontWeight: '700' }}>
+                            🎨 Misc Tasks ({miscTasks.length})
+                          </h4>
+                          <span style={{ fontSize: '12px', color: '#b45309' }}>
+                            {miscTasks.filter(t => t.is_completed).length}/{miscTasks.length} completed
+                          </span>
                         </div>
-                        {miscTasks.map(task => (
-                          <div key={task.id} style={{ 
-                            padding: '8px', 
-                            marginBottom: '6px', 
-                            background: 'white', 
-                            borderRadius: '4px',
-                            borderLeft: task.is_completed ? '3px solid #fbbf24' : '3px solid #f59e0b'
-                          }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                              {task.is_completed ? '✅' : '🔄'}
-                              <span style={{ 
-                                fontSize: '13px',
-                                fontWeight: '600',
-                                textDecoration: task.is_completed ? 'line-through' : 'none',
-                                color: task.is_completed ? '#666' : '#333',
-                                flex: 1
-                              }}>
-                                {task.name}
-                              </span>
-                              <span style={{ fontSize: '10px', color: '#fff', background: '#f59e0b', padding: '2px 8px', borderRadius: '10px', fontWeight: '600' }}>
-                                Misc
-                              </span>
-                              {(task.allocated_minutes ?? 0) > 0 && (
-                                <span style={{ fontSize: '11px', color: '#666', background: '#fef3c7', padding: '2px 6px', borderRadius: '4px' }}>
-                                  {task.allocated_minutes}m
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                        <div className="task-list">
+                          {miscTasks.filter(t => !t.parent_task_id).map(task => (
+                            <TaskNode
+                              key={`ref-misc-${task.id}-${task.is_completed}`}
+                              task={task}
+                              level={0}
+                              allTasks={miscTasks}
+                              expandedTasks={expandedMiscTasks}
+                              onToggleExpand={(taskId: number) => {
+                                const newExpanded = new Set(expandedMiscTasks);
+                                if (newExpanded.has(taskId)) {
+                                  newExpanded.delete(taskId);
+                                } else {
+                                  newExpanded.add(taskId);
+                                }
+                                setExpandedMiscTasks(newExpanded);
+                                localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
+                              }}
+                              onToggleComplete={async (taskId: number, currentStatus: boolean) => {
+                                if (!currentStatus) {
+                                  const hasIncomplete = miscTasks.some(t => t.parent_task_id === taskId && !t.is_completed);
+                                  if (hasIncomplete) {
+                                    alert('Cannot mark as done: complete all subtasks first.');
+                                    return;
+                                  }
+                                }
+                                try {
+                                  await api.put(`/api/tasks/${taskId}`, { is_completed: !currentStatus });
+                                  await loadProjectTasks(selectedProject.id);
+                                } catch (err) {
+                                  console.error('Error toggling misc task:', err);
+                                }
+                              }}
+                              onEdit={(t: ProjectTaskData) => {
+                                setSelectedTaskId(t.id);
+                                setIsTaskFormOpen(true);
+                              }}
+                              onDelete={async (taskId: number) => {
+                                const hasIncomplete = miscTasks.some(t => t.parent_task_id === taskId && !t.is_completed);
+                                if (hasIncomplete) {
+                                  alert('Cannot delete: complete or delete all subtasks first.');
+                                  return;
+                                }
+                                if (confirm('Delete this task and all its subtasks?')) {
+                                  try {
+                                    await api.delete(`/api/tasks/${taskId}`);
+                                    await loadProjectTasks(selectedProject.id);
+                                  } catch (err: any) {
+                                    alert('Failed to delete: ' + (err.response?.data?.detail || err.message));
+                                  }
+                                }
+                              }}
+                              onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                                try {
+                                  await api.put(`/api/tasks/${taskId}`, { due_date: newDueDate });
+                                  await loadProjectTasks(selectedProject.id);
+                                } catch (err) {
+                                  console.error('Error updating due date:', err);
+                                }
+                              }}
+                              getDueDateColorClass={getDueDateColorClass}
+                              getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
+                              onAddSubtask={(parentTask: ProjectTaskData) => {
+                                setEditingMiscTask(parentTask);
+                                setShowAddMiscTaskModal(true);
+                              }}
+                            />
+                          ))}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -14167,7 +14291,12 @@ export default function Tasks() {
           {/* Task Breakdown Panel - Today Tab */}
           {activeTab === 'today' && (() => {
             // Count ALL tasks from different sections ON TODAY TAB (all priorities)
-            const projectCount = projectTasksDueToday.length;
+            const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+            // Summary count = actionable (non-completed) tasks only, excluding NOW tasks
+            const projectCount = projectTasksDueToday
+              .filter(t => !t.is_completed)
+              .filter(t => !(t.priority && Number(t.priority) <= 3 && t.due_date && parseDateString(t.due_date.split('T')[0]) <= today0))
+              .length;
             const goalCount = goalTasksDueToday.filter(t => !t.is_completed).length;
             const miscCount = miscTasksDueToday.length;
             const importantCount = importantTasksDueToday.length;
@@ -16059,8 +16188,18 @@ export default function Tasks() {
           {(() => {
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const today = new Date(); today.setHours(0, 0, 0, 0);
+            const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
             // Filter out NOW tasks (priority 1-3 with today/past due_date) - they should only appear in NOW tab
             const filteredTasks = projectTasksDueToday
+              .filter(t => {
+                if (!t.is_completed) return true; // Always show active tasks
+                // Show completed tasks with strikethrough ONLY if completed today (until midnight)
+                if (t.completed_at) {
+                  const completedDate = new Date(t.completed_at);
+                  return completedDate >= today && completedDate <= todayEnd;
+                }
+                return false;
+              })
               .filter(t => !(t.priority && Number(t.priority) <= 3 && t.due_date && parseDateString(t.due_date.split('T')[0]) <= today)) // Exclude NOW tasks
               .filter(t => filterByMonth(t));
             
@@ -16081,7 +16220,7 @@ export default function Tasks() {
               >
                 <h3 style={{ margin: 0, color: '#ffffff', fontSize: '18px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span>📋</span>
-                  <span>Project Tasks: Overdue, Today & No Target Date ({filteredTasks.length})</span>
+                  <span>Project Tasks: Overdue, Today & No Target Date ({filteredTasks.filter(t => !t.is_completed).length})</span>
                 </h3>
                 <span style={{ fontSize: '20px', color: '#ffffff' }}>
                   {todayTabSections.projectTasksDueToday ? '▼' : '▶'}
@@ -16143,6 +16282,24 @@ export default function Tasks() {
                             </td>
                             <td style={{ padding: '8px', textAlign: 'center', background: 'inherit' }}>
                               <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                                {isCompleted ? (
+                                  <button
+                                    onClick={() => handleToggleTaskCompletion(task.id, task.is_completed, 'project')}
+                                    style={{
+                                      padding: '4px 10px',
+                                      fontSize: '11px',
+                                      backgroundColor: '#f59e0b',
+                                      color: 'white',
+                                      border: 'none',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      fontWeight: '600'
+                                    }}
+                                  >
+                                    Undo
+                                  </button>
+                                ) : (
+                                  <>
                                 <button
                                   onClick={() => handleMoveToNow(task.id, 'project')}
                                   style={{
@@ -16187,6 +16344,8 @@ export default function Tasks() {
                                 >
                                   Done
                                 </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
