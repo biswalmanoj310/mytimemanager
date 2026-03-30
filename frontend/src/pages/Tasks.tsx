@@ -438,6 +438,8 @@ export default function Tasks() {
   }, [expandedSections]);
   
   const [projectTaskFilter, setProjectTaskFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone'>('all');
+  const [projectListFilter, setProjectListFilter] = useState<'all' | 'in_progress' | 'not_started' | 'completed' | 'overdue'>('all');
+  const [projectTaskLevelFilter, setProjectTaskLevelFilter] = useState<'all' | 'overdue' | 'in_progress' | 'completed' | 'not_started'>('all');
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
@@ -8072,50 +8074,78 @@ export default function Tasks() {
                     <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>
                       📋 Projects
                     </h1>
-                    <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
-                      <span style={{ 
-                        background: 'rgba(255,255,255,0.2)', 
-                        padding: '4px 12px', 
-                        borderRadius: '12px',
-                        fontWeight: '600'
-                      }}>
-                        Total: {projects.length}
-                      </span>
-                      <span style={{ 
-                        background: 'rgba(59, 130, 246, 0.3)', 
-                        padding: '4px 12px', 
-                        borderRadius: '12px',
-                        fontWeight: '600'
-                      }}>
-                        In Progress: {projects.filter(p => p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < new Date())).length}
-                      </span>
-                      <span style={{ 
-                        background: 'rgba(168, 85, 247, 0.3)', 
-                        padding: '4px 12px', 
-                        borderRadius: '12px',
-                        fontWeight: '600'
-                      }}>
-                        Not Started: {projects.filter(p => p.status === 'not_started' && !p.is_completed).length}
-                      </span>
-                      <span style={{ 
-                        background: 'rgba(16, 185, 129, 0.3)', 
-                        padding: '4px 12px', 
-                        borderRadius: '12px',
-                        fontWeight: '600'
-                      }}>
-                        Completed: {projects.filter(p => p.is_completed).length}
-                      </span>
-                      <span style={{ 
-                        background: 'rgba(239, 68, 68, 0.3)', 
-                        padding: '4px 12px', 
-                        borderRadius: '12px',
-                        fontWeight: '600'
-                      }}>
-                        Overdue: {projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date()).length}
-                      </span>
+                    <div style={{ display: 'flex', gap: '8px', fontSize: '13px', flexWrap: 'wrap' }}>
+                      {/* Row 1: Project-level filter buttons */}
+                      {(
+                        [
+                          { key: 'all', label: 'All', count: projects.length, bg: 'rgba(255,255,255,0.2)', activeBg: 'rgba(255,255,255,0.5)' },
+                          { key: 'in_progress', label: 'In Progress', count: projects.filter(p => p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < new Date())).length, bg: 'rgba(59,130,246,0.3)', activeBg: 'rgba(59,130,246,0.7)' },
+                          { key: 'not_started', label: 'Not Started', count: projects.filter(p => p.status === 'not_started' && !p.is_completed).length, bg: 'rgba(168,85,247,0.3)', activeBg: 'rgba(168,85,247,0.7)' },
+                          { key: 'completed', label: 'Completed', count: projects.filter(p => p.is_completed).length, bg: 'rgba(16,185,129,0.3)', activeBg: 'rgba(16,185,129,0.7)' },
+                          { key: 'overdue', label: 'Overdue', count: projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date()).length, bg: 'rgba(239,68,68,0.3)', activeBg: 'rgba(239,68,68,0.7)' },
+                        ] as const
+                      ).map(({ key, label, count, bg, activeBg }) => (
+                        <button
+                          key={key}
+                          onClick={() => setProjectListFilter(prev => prev === key ? 'all' : key)}
+                          style={{
+                            background: projectListFilter === key ? activeBg : bg,
+                            padding: '4px 12px',
+                            borderRadius: '12px',
+                            fontWeight: '600',
+                            border: projectListFilter === key ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {label}: {count}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  {/* Category breakdown - Removed for now until categories are loaded */}
+                  {/* Row 2: Task-level filter buttons */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', alignSelf: 'center', marginRight: '4px' }}>By tasks:</span>
+                    {(() => {
+                      const tlToday = new Date(); tlToday.setHours(0,0,0,0);
+                      const taskLevelCounts: Record<string, number> = {
+                        all: projects.length,
+                        overdue: projects.filter(p => projectTasks.some(t => t.project_id === p.id && !t.is_completed && t.due_date && (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < tlToday; })())).length,
+                        in_progress: projects.filter(p => projectTasks.some(t => t.project_id === p.id && !t.is_completed)).length,
+                        completed: projects.filter(p => { const pt = projectTasks.filter(t => t.project_id === p.id); return pt.length > 0 && pt.every(t => t.is_completed); }).length,
+                        not_started: projects.filter(p => projectTasks.filter(t => t.project_id === p.id).length === 0).length,
+                      };
+                      return (
+                        [
+                          { key: 'all', label: 'All Projects', emoji: '📋' },
+                          { key: 'overdue', label: 'Has Overdue Tasks', emoji: '🚨' },
+                          { key: 'in_progress', label: 'Has Active Tasks', emoji: '🔄' },
+                          { key: 'completed', label: 'All Tasks Done', emoji: '✅' },
+                          { key: 'not_started', label: 'No Tasks Yet', emoji: '🆕' },
+                        ] as const
+                      ).map(({ key, label, emoji }) => (
+                        <button
+                          key={key}
+                          onClick={() => setProjectTaskLevelFilter(prev => prev === key ? 'all' : key)}
+                          style={{
+                            background: projectTaskLevelFilter === key ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
+                            padding: '3px 10px',
+                            borderRadius: '10px',
+                            fontWeight: '500',
+                            border: projectTaskLevelFilter === key ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {emoji} {label} ({taskLevelCounts[key]})
+                        </button>
+                      ));
+                    })()}
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                   <button 
@@ -8536,9 +8566,32 @@ export default function Tasks() {
                       );
                     };
 
+                    // Apply project-level filter
+                    const today_pf = new Date(); today_pf.setHours(0,0,0,0);
+                    const applyProjectListFilter = (p: ProjectData): boolean => {
+                      if (projectListFilter === 'all') return true;
+                      if (projectListFilter === 'in_progress') return p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < today_pf);
+                      if (projectListFilter === 'not_started') return p.status === 'not_started' && !p.is_completed;
+                      if (projectListFilter === 'completed') return !!p.is_completed;
+                      if (projectListFilter === 'overdue') return !p.is_completed && !!p.target_completion_date && new Date(p.target_completion_date) < today_pf;
+                      return true;
+                    };
+                    // Apply task-level filter
+                    const applyTaskLevelFilter = (p: ProjectData): boolean => {
+                      if (projectTaskLevelFilter === 'all') return true;
+                      const pTasks = projectTasks.filter(t => t.project_id === p.id);
+                      if (projectTaskLevelFilter === 'overdue') {
+                        return pTasks.some(t => !t.is_completed && t.due_date && (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < today_pf; })());
+                      }
+                      if (projectTaskLevelFilter === 'in_progress') return pTasks.some(t => !t.is_completed);
+                      if (projectTaskLevelFilter === 'completed') return pTasks.length > 0 && pTasks.every(t => t.is_completed);
+                      if (projectTaskLevelFilter === 'not_started') return pTasks.length === 0;
+                      return true;
+                    };
+
                     // Group active projects by category (exclude completed)
-                    const activeProjects = projects.filter(p => !p.is_completed);
-                    const completedProjects = projects.filter(p => p.is_completed);
+                    const activeProjects = projects.filter(p => !p.is_completed && applyProjectListFilter(p) && applyTaskLevelFilter(p));
+                    const completedProjects = projects.filter(p => p.is_completed && applyProjectListFilter(p) && applyTaskLevelFilter(p));
                     
                     const projectsByCategory = activeProjects.reduce((acc, project) => {
                       const category = projectCategories.find(c => c.id === project.category_id);
