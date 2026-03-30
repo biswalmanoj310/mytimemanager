@@ -542,10 +542,45 @@ const DreamTasksDisplay = ({ selectedWish, onEditTask, onAddSubtask, onTasksLoad
   if (dreamTasks.length === 0) return null;
 
   const topLevelTasks = dreamTasks.filter(t => !t.parent_task_id);
+  const activeDreamTasks = topLevelTasks.filter(t => !t.is_completed);
+  const completedDreamTasks = topLevelTasks.filter(t => t.is_completed);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      {topLevelTasks.map(task => renderTask(task, 0))}
+      {/* Active tasks */}
+      {activeDreamTasks.length === 0 && completedDreamTasks.length > 0 && (
+        <p style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic', margin: '0 0 4px 0' }}>All tasks completed! 🎉</p>
+      )}
+      {activeDreamTasks.map(task => renderTask(task, 0))}
+
+      {/* Completed tasks subsection */}
+      {completedDreamTasks.length > 0 && (
+        <DreamCompletedTasksSection
+          completedTasks={completedDreamTasks}
+          renderTask={renderTask}
+        />
+      )}
+    </div>
+  );
+};
+
+// Small helper to avoid hooks-in-callback issues
+const DreamCompletedTasksSection = ({ completedTasks, renderTask }: { completedTasks: any[], renderTask: (t: any, level: number) => React.ReactNode }) => {
+  const [show, setShow] = React.useState(false);
+  return (
+    <div style={{ borderTop: '1px dashed #d1d5db', paddingTop: '8px', marginTop: '4px' }}>
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: show ? '8px' : '0' }}
+        onClick={() => setShow(v => !v)}
+      >
+        <span style={{ fontSize: '12px', color: '#6b7280' }}>{show ? '▼' : '▶'}</span>
+        <span style={{ fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>✅ Completed Tasks ({completedTasks.length})</span>
+      </div>
+      {show && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', opacity: 0.8 }}>
+          {completedTasks.map(task => renderTask(task, 0))}
+        </div>
+      )}
     </div>
   );
 };
@@ -585,17 +620,21 @@ const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selected
       // Filter by related_wish_id (same pattern as loadWishStats)
       const directlyLinkedTasks = (Array.isArray(allTasks) ? allTasks : []).filter((t: any) => t.related_wish_id === selectedWish.id);
       
-      // Include child tasks whose parents are linked to this dream
+      // Include child tasks whose parents are linked to this dream (recursively, up to grandchildren)
       const allTasksList = Array.isArray(allTasks) ? allTasks : [];
       const linkedTaskIds = new Set(directlyLinkedTasks.map((t: any) => t.id));
-      const childTasks = allTasksList.filter((t: any) => 
-        t.parent_task_id && 
-        linkedTaskIds.has(t.parent_task_id) &&
-        t.related_wish_id !== selectedWish.id  // Exclude if already in directlyLinkedTasks
-      );
-      
-      // Combine directly linked tasks and their children (no duplicates now)
-      const tasks = [...directlyLinkedTasks, ...childTasks];
+      // Collect all descendants (children whose parent is already in the set)
+      let prevSize = 0;
+      while (linkedTaskIds.size !== prevSize) {
+        prevSize = linkedTaskIds.size;
+        allTasksList.forEach((t: any) => {
+          if (t.parent_task_id && linkedTaskIds.has(t.parent_task_id)) {
+            linkedTaskIds.add(t.id);
+          }
+        });
+      }
+      // All related tasks (deduplicated)
+      const tasks = allTasksList.filter((t: any) => linkedTaskIds.has(t.id));
       
       const projects = (Array.isArray(allProjects) ? allProjects : []).filter((p: any) => p.related_wish_id === selectedWish.id);
       const goals = (Array.isArray(allGoals) ? allGoals : []).filter((g: any) => g.related_wish_id === selectedWish.id);
@@ -1331,7 +1370,7 @@ const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selected
           {showLinkedTasks && (
             <div style={{ display: 'grid', gap: '8px' }}>
               {activities.linkedTasks.filter((t: any) => !t.parent_task_id).map((task: any) => 
-                renderTaskWithChildren(task, activities.linkedTasks, 0)
+                renderTaskWithChildren(task, activities.tasks, 0)
               )}
             </div>
           )}
@@ -1352,70 +1391,39 @@ const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selected
           </div>
           {showSupportingTasks && (
             <div style={{ display: 'grid', gap: '12px' }}>
-            {activities.supportingTasks.daily.length > 0 && (
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Daily Tasks ({activities.supportingTasks.daily.length})</div>
-                <div style={{ display: 'grid', gap: '6px' }}>
-                  {activities.supportingTasks.daily.map((task: any) => (
-                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
+            {(['daily', 'weekly', 'monthly', 'yearly'] as const).map(freq => {
+              const freqTasks: any[] = activities.supportingTasks[freq];
+              if (freqTasks.length === 0) return null;
+              const freqTaskIds = new Set(freqTasks.map((t: any) => t.id));
+              const rootFreqTasks = freqTasks.filter((t: any) => !freqTaskIds.has(t.parent_task_id));
+              const freqLabels = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' };
+
+              const renderSupportTask = (task: any, level: number = 0): React.ReactNode => {
+                const children = activities.tasks.filter((t: any) => t.parent_task_id === task.id);
+                return (
+                  <div key={task.id}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 10px', marginLeft: `${level * 20}px`, background: 'white', borderRadius: '6px', border: `1px solid ${level > 0 ? '#bfdbfe' : '#93c5fd'}`, marginBottom: '4px' }}>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        {level > 0 && <span style={{ color: '#9ca3af', fontSize: '12px' }}>↳</span>}
                         <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
-                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
+                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af' }}>({task.allocated_minutes} min)</span>}
                       </div>
-                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
+                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600', flexShrink: 0 }}>✓</button>
                     </div>
-                  ))}
+                    {children.map((child: any) => renderSupportTask(child, level + 1))}
+                  </div>
+                );
+              };
+
+              return (
+                <div key={freq}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>{freqLabels[freq]} Tasks ({freqTasks.length})</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {rootFreqTasks.map((task: any) => renderSupportTask(task, 0))}
+                  </div>
                 </div>
-              </div>
-            )}
-            {activities.supportingTasks.weekly.length > 0 && (
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Weekly Tasks ({activities.supportingTasks.weekly.length})</div>
-                <div style={{ display: 'grid', gap: '6px' }}>
-                  {activities.supportingTasks.weekly.map((task: any) => (
-                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
-                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
-                      </div>
-                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {activities.supportingTasks.monthly.length > 0 && (
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Monthly Tasks ({activities.supportingTasks.monthly.length})</div>
-                <div style={{ display: 'grid', gap: '6px' }}>
-                  {activities.supportingTasks.monthly.map((task: any) => (
-                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
-                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
-                      </div>
-                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {activities.supportingTasks.yearly.length > 0 && (
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>Yearly Tasks ({activities.supportingTasks.yearly.length})</div>
-                <div style={{ display: 'grid', gap: '6px' }}>
-                  {activities.supportingTasks.yearly.map((task: any) => (
-                    <div key={task.id} style={{ padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #93c5fd', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e3a8a' }}>{task.name}</span>
-                        {task.allocated_minutes && <span style={{ fontSize: '11px', color: '#1e40af', marginLeft: '8px' }}>({task.allocated_minutes} min)</span>}
-                      </div>
-                      <button onClick={() => handleCompleteTask(task.id)} style={{ padding: '2px 6px', background: '#10b981', color: 'white', border: 'none', borderRadius: '3px', fontSize: '10px', cursor: 'pointer', fontWeight: '600' }} title="Complete task">✓</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              );
+            })}
           </div>
           )}
         </div>
@@ -1559,68 +1567,76 @@ const WishActivitiesSection = ({ selectedWish, showToast, navigate }: { selected
             </h5>
             <span style={{ fontSize: '18px', color: '#6b7280' }}>{showCompleted ? '▼' : '▶'}</span>
           </div>
-          {showCompleted && (
-            <div style={{ display: 'grid', gap: '6px', marginTop: '12px' }}>
-              {activities.completedItems.map((item: any) => (
-                <div key={`${item.type}-${item.id}`} style={{ 
-                  fontSize: '13px', 
-                  color: '#6b7280', 
-                  padding: '8px 12px', 
-                  background: 'white', 
-                  borderRadius: '6px',
-                  border: '1px solid #e5e7eb',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '8px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                    <span>{item.type === 'task' ? '✅' : item.type === 'project' ? '📁' : item.type === 'step' ? '🔍' : item.type === 'reflection' ? '💭' : '🎯'}</span>
-                    <span style={{ 
-                      fontSize: '10px', 
-                      fontWeight: '600', 
-                      color: '#9ca3af', 
-                      textTransform: 'uppercase',
-                      backgroundColor: '#f3f4f6',
-                      padding: '2px 6px',
-                      borderRadius: '4px'
-                    }}>
-                      {item.type}
-                    </span>
-                    <span style={{ textDecoration: 'line-through' }}>{item.name}</span>
-                    {item.completed_at && (
-                      <span style={{ fontSize: '11px', color: '#9ca3af' }}>
-                        {new Date(item.completed_at).toLocaleDateString()}
-                      </span>
-                    )}
+          {showCompleted && (() => {
+            // Group by type for clarity
+            const byType: Record<string, any[]> = {};
+            activities.completedItems.forEach((item: any) => {
+              if (!byType[item.type]) byType[item.type] = [];
+              byType[item.type].push(item);
+            });
+            const typeOrder = ['task', 'project', 'goal', 'step', 'reflection'];
+            const typeLabel: Record<string, string> = { task: '✅ Tasks', project: '📁 Projects', goal: '🎯 Goals', step: '🔍 Steps', reflection: '💭 Reflections' };
+
+            return (
+              <div style={{ display: 'grid', gap: '12px', marginTop: '12px' }}>
+                {typeOrder.filter(t => byType[t]?.length > 0).map(type => (
+                  <div key={type}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px' }}>
+                      {typeLabel[type]} ({byType[type].length})
+                    </div>
+                    <div style={{ display: 'grid', gap: '6px' }}>
+                      {byType[type].map((item: any) => (
+                        <div key={`${item.type}-${item.id}`} style={{ 
+                          fontSize: '13px', 
+                          color: '#6b7280', 
+                          padding: '8px 12px', 
+                          background: 'white', 
+                          borderRadius: '6px',
+                          border: '1px solid #e5e7eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px'
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                            <span style={{ textDecoration: 'line-through' }}>{item.name}</span>
+                            {(item.completed_at || item.actual_completion_date) && (
+                              <span style={{ fontSize: '11px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                                {new Date(item.completed_at || item.actual_completion_date).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (item.type === 'goal') handleRestoreGoal(item.id);
+                              else if (item.type === 'project') handleRestoreProject(item.id);
+                              else if (item.type === 'task') handleRestoreTask(item.id);
+                              else if (item.type === 'step') handleRestoreStep(item.id);
+                              else if (item.type === 'reflection') handleRestoreReflection(item.id);
+                            }}
+                            style={{ 
+                              padding: '4px 8px', 
+                              background: '#3b82f6', 
+                              color: 'white', 
+                              border: 'none', 
+                              borderRadius: '4px', 
+                              fontSize: '11px',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              flexShrink: 0
+                            }}
+                          >
+                            🔄 Restore
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (item.type === 'goal') handleRestoreGoal(item.id);
-                      else if (item.type === 'project') handleRestoreProject(item.id);
-                      else if (item.type === 'task') handleRestoreTask(item.id);
-                      else if (item.type === 'step') handleRestoreStep(item.id);
-                      else if (item.type === 'reflection') handleRestoreReflection(item.id);
-                    }}
-                    style={{ 
-                      padding: '4px 8px', 
-                      background: '#3b82f6', 
-                      color: 'white', 
-                      border: 'none', 
-                      borderRadius: '4px', 
-                      fontSize: '11px',
-                      cursor: 'pointer',
-                      fontWeight: '600'
-                    }}
-                    title="Restore"
-                  >
-                    🔄 Restore
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
       
@@ -2254,6 +2270,8 @@ export default function Goals() {
   const [lifeGoals, setLifeGoals] = useState<LifeGoalData[]>([]);
   const [selectedGoal, setSelectedGoal] = useState<LifeGoalData | null>(null);
   const [editingGoal, setEditingGoal] = useState<LifeGoalData | null>(null);
+  const [goalListFilter, setGoalListFilter] = useState<'all' | 'on_track' | 'at_risk' | 'behind' | 'not_started' | 'completed'>('all');
+  const [goalTaskLevelFilter, setGoalTaskLevelFilter] = useState<'all' | 'overdue' | 'has_tasks' | 'no_tasks' | 'all_done'>('all');
   const [goalMilestones, setGoalMilestones] = useState<MilestoneData[]>([]);
   const [goalTasks, setGoalTasks] = useState<GoalTaskData[]>([]);
   const [linkedTasks, setLinkedTasks] = useState<GoalTaskLinkData[]>([]);
@@ -2269,6 +2287,7 @@ export default function Goals() {
   const [showAddGoalTaskModal, setShowAddGoalTaskModal] = useState(false);
   const [editingGoalTask, setEditingGoalTask] = useState<GoalTaskData | null>(null); // For adding subtasks
   const [showLinkTaskModal, setShowLinkTaskModal] = useState(false);
+  const [showCompletedGoalTasks, setShowCompletedGoalTasks] = useState(false);
   const [showCreateTrackingProjectModal, setShowCreateTrackingProjectModal] = useState(false); // NEW
   const [showLinkProjectsModal, setShowLinkProjectsModal] = useState(false); // Link projects to milestone
   const [selectedMilestone, setSelectedMilestone] = useState<MilestoneData | null>(null); // Selected milestone for linking
@@ -3335,7 +3354,7 @@ export default function Goals() {
         {/* Bottom Row: Stats & Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', borderTop: '1px solid #e5e3d0' }}>
           {/* Left: Quick Stats */}
-          <div style={{ display: 'flex', gap: '24px', fontSize: '12px' }}>
+          <div style={{ display: 'flex', gap: '16px', fontSize: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '14px' }}>📊</span>
               <span style={{ color: '#718096' }}>Progress:</span>
@@ -3346,6 +3365,39 @@ export default function Goals() {
               <span style={{ color: '#718096' }}>Projects:</span>
               <span style={{ fontWeight: '600', color: '#2d3748' }}>{goal.stats?.goal_projects?.total || 0}</span>
             </div>
+            {/* Consolidated task summary */}
+            {(() => {
+              const total = goal.stats?.all_tasks?.total || 0;
+              const completed = goal.stats?.all_tasks?.completed || 0;
+              const overdue = goal.stats?.overdue_tasks || 0;
+              const goalTaskCount = goal.stats?.goal_tasks?.total || 0;
+              const projectTaskCount = goal.stats?.project_tasks?.total || 0;
+              const miscTaskCount = goal.stats?.misc_tasks?.total || 0;
+              if (total === 0) return null;
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '14px' }}>📋</span>
+                  <span style={{ color: '#718096' }}>All Tasks:</span>
+                  <span style={{ fontWeight: '600', color: '#2d3748' }}>{completed}/{total}</span>
+                  {overdue > 0 && (
+                    <span style={{
+                      background: '#fee2e2',
+                      color: '#dc2626',
+                      fontWeight: '700',
+                      fontSize: '11px',
+                      padding: '2px 7px',
+                      borderRadius: '8px',
+                      border: '1px solid #fca5a5'
+                    }}>
+                      🚨 {overdue} overdue
+                    </span>
+                  )}
+                  <span style={{ color: '#94a3b8', fontSize: '11px' }}>
+                    ({goalTaskCount > 0 ? `G:${goalTaskCount}` : ''}{projectTaskCount > 0 ? ` P:${projectTaskCount}` : ''}{miscTaskCount > 0 ? ` M:${miscTaskCount}` : ''})
+                  </span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right: Action Buttons */}
@@ -4623,59 +4675,78 @@ return (
               borderRadius: '12px',
               color: 'white'
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>
-                  🎯 Life Goals
-                </h1>
-                <div style={{ display: 'flex', gap: '12px', fontSize: '13px' }}>
-                  <span style={{ 
-                    background: 'rgba(255,255,255,0.2)', 
-                    padding: '4px 12px', 
-                    borderRadius: '12px',
-                    fontWeight: '600'
-                  }}>
-                    Total: {lifeGoals.length}
-                  </span>
-                  <span style={{ 
-                    background: 'rgba(16, 185, 129, 0.3)', 
-                    padding: '4px 12px', 
-                    borderRadius: '12px',
-                    fontWeight: '600'
-                  }}>
-                    On Track: {lifeGoals.filter(g => g.status === 'on_track').length}
-                  </span>
-                  <span style={{ 
-                    background: 'rgba(245, 158, 11, 0.3)', 
-                    padding: '4px 12px', 
-                    borderRadius: '12px',
-                    fontWeight: '600'
-                  }}>
-                    At Risk: {lifeGoals.filter(g => g.status === 'at_risk').length}
-                  </span>
-                  <span style={{ 
-                    background: 'rgba(239, 68, 68, 0.3)', 
-                    padding: '4px 12px', 
-                    borderRadius: '12px',
-                    fontWeight: '600'
-                  }}>
-                    Behind: {lifeGoals.filter(g => g.status === 'behind').length}
-                  </span>
-                  <span style={{ 
-                    background: 'rgba(168, 85, 247, 0.3)', 
-                    padding: '4px 12px', 
-                    borderRadius: '12px',
-                    fontWeight: '600'
-                  }}>
-                    Not Started: {lifeGoals.filter(g => g.status === 'not_started').length}
-                  </span>
-                  <span style={{ 
-                    background: 'rgba(34, 197, 94, 0.3)', 
-                    padding: '4px 12px', 
-                    borderRadius: '12px',
-                    fontWeight: '600'
-                  }}>
-                    Completed: {lifeGoals.filter(g => g.status === 'completed').length}
-                  </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>
+                    🎯 Life Goals
+                  </h1>
+                  {/* Row 1: Goal-status filter buttons */}
+                  <div style={{ display: 'flex', gap: '8px', fontSize: '13px', flexWrap: 'wrap' }}>
+                    {(
+                      [
+                        { key: 'all', label: 'Total', count: lifeGoals.length, bg: 'rgba(255,255,255,0.2)', activeBg: 'rgba(255,255,255,0.5)' },
+                        { key: 'on_track', label: 'On Track', count: lifeGoals.filter(g => g.status === 'on_track').length, bg: 'rgba(16,185,129,0.3)', activeBg: 'rgba(16,185,129,0.7)' },
+                        { key: 'at_risk', label: 'At Risk', count: lifeGoals.filter(g => g.status === 'at_risk').length, bg: 'rgba(245,158,11,0.3)', activeBg: 'rgba(245,158,11,0.7)' },
+                        { key: 'behind', label: 'Behind', count: lifeGoals.filter(g => g.status === 'behind').length, bg: 'rgba(239,68,68,0.3)', activeBg: 'rgba(239,68,68,0.7)' },
+                        { key: 'not_started', label: 'Not Started', count: lifeGoals.filter(g => g.status === 'not_started').length, bg: 'rgba(168,85,247,0.3)', activeBg: 'rgba(168,85,247,0.7)' },
+                        { key: 'completed', label: 'Completed', count: lifeGoals.filter(g => g.status === 'completed').length, bg: 'rgba(34,197,94,0.3)', activeBg: 'rgba(34,197,94,0.7)' },
+                      ] as const
+                    ).map(({ key, label, count, bg, activeBg }) => (
+                      <button
+                        key={key}
+                        onClick={() => setGoalListFilter(prev => prev === key ? 'all' : key)}
+                        style={{
+                          background: goalListFilter === key ? activeBg : bg,
+                          padding: '4px 12px',
+                          borderRadius: '12px',
+                          fontWeight: '600',
+                          border: goalListFilter === key ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {label}: {count}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Row 2: Goal task-level filter buttons */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', alignSelf: 'center', marginRight: '4px' }}>By tasks:</span>
+                  {(
+                    [
+                      { key: 'all', label: 'All Goals', emoji: '🎯',
+                        count: lifeGoals.length },
+                      { key: 'overdue', label: 'Has Overdue Tasks', emoji: '🚨',
+                        count: lifeGoals.filter(g => g.stats && g.stats.overdue_tasks > 0).length },
+                      { key: 'has_tasks', label: 'Has Active Tasks', emoji: '🔄',
+                        count: lifeGoals.filter(g => g.stats && (g.stats.total_tasks - (g.stats.completed_tasks || 0)) > 0).length },
+                      { key: 'all_done', label: 'All Tasks Done', emoji: '✅',
+                        count: lifeGoals.filter(g => g.stats && g.stats.total_tasks > 0 && g.stats.total_tasks === (g.stats.completed_tasks || 0)).length },
+                      { key: 'no_tasks', label: 'No Tasks Yet', emoji: '🆕',
+                        count: lifeGoals.filter(g => !g.stats || g.stats.total_tasks === 0).length },
+                    ] as const
+                  ).map(({ key, label, emoji, count }) => (
+                    <button
+                      key={key}
+                      onClick={() => setGoalTaskLevelFilter(prev => prev === key ? 'all' : key)}
+                      style={{
+                        background: goalTaskLevelFilter === key ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)',
+                        padding: '3px 10px',
+                        borderRadius: '10px',
+                        fontWeight: '500',
+                        border: goalTaskLevelFilter === key ? '2px solid rgba(255,255,255,0.8)' : '2px solid transparent',
+                        color: 'white',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {emoji} {label} ({count})
+                    </button>
+                  ))}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -4754,7 +4825,18 @@ return (
 
                   // Group goals by category (pillar_id + category_id)
                   const goalsByCategory: { [key: string]: LifeGoalData[] } = {};
-                  const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed');
+
+                  // Apply filters
+                  const applyGoalFilters = (g: LifeGoalData): boolean => {
+                    if (goalListFilter !== 'all' && g.status !== goalListFilter) return false;
+                    if (goalTaskLevelFilter === 'overdue') return !!(g.stats && g.stats.overdue_tasks > 0);
+                    if (goalTaskLevelFilter === 'has_tasks') return !!(g.stats && (g.stats.total_tasks - (g.stats.completed_tasks || 0)) > 0);
+                    if (goalTaskLevelFilter === 'all_done') return !!(g.stats && g.stats.total_tasks > 0 && g.stats.total_tasks === (g.stats.completed_tasks || 0));
+                    if (goalTaskLevelFilter === 'no_tasks') return !g.stats || g.stats.total_tasks === 0;
+                    return true;
+                  };
+
+                  const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed' && applyGoalFilters(g));
                   
                   activeGoals.forEach(goal => {
                     if (goal.pillar_id && goal.category_id) {
@@ -4884,9 +4966,19 @@ return (
                     'Family|Time Waste': 8
                   };
 
+                  // Apply filters
+                  const applyGoalFilters2 = (g: LifeGoalData): boolean => {
+                    if (goalListFilter !== 'all' && g.status !== goalListFilter) return false;
+                    if (goalTaskLevelFilter === 'overdue') return !!(g.stats && g.stats.overdue_tasks > 0);
+                    if (goalTaskLevelFilter === 'has_tasks') return !!(g.stats && (g.stats.total_tasks - (g.stats.completed_tasks || 0)) > 0);
+                    if (goalTaskLevelFilter === 'all_done') return !!(g.stats && g.stats.total_tasks > 0 && g.stats.total_tasks === (g.stats.completed_tasks || 0));
+                    if (goalTaskLevelFilter === 'no_tasks') return !g.stats || g.stats.total_tasks === 0;
+                    return true;
+                  };
+
                   // Group active goals by category
                   const goalsByCategory: { [key: string]: LifeGoalData[] } = {};
-                  const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed');
+                  const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed' && applyGoalFilters2(g));
                   
                   activeGoals.forEach(goal => {
                     if (goal.pillar_id && goal.category_id) {
@@ -4995,7 +5087,18 @@ return (
                 })()}
 
                 {/* 🏆 Completed Section - Achieved */}
-                {lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length > 0 && (
+                {(() => {
+                  const completedGoals = lifeGoals.filter(g => {
+                    if (!(!g.parent_goal_id && g.status === 'completed')) return false;
+                    if (goalListFilter !== 'all' && goalListFilter !== 'completed') return false;
+                    if (goalTaskLevelFilter === 'overdue') return !!(g.stats && g.stats.overdue_tasks > 0);
+                    if (goalTaskLevelFilter === 'has_tasks') return !!(g.stats && (g.stats.total_tasks - (g.stats.completed_tasks || 0)) > 0);
+                    if (goalTaskLevelFilter === 'all_done') return !!(g.stats && g.stats.total_tasks > 0 && g.stats.total_tasks === (g.stats.completed_tasks || 0));
+                    if (goalTaskLevelFilter === 'no_tasks') return !g.stats || g.stats.total_tasks === 0;
+                    return true;
+                  });
+                  if (completedGoals.length === 0) return null;
+                  return (
                   <div style={{ marginBottom: '32px' }}>
                     <h3 
                       onClick={() => {
@@ -5017,16 +5120,17 @@ return (
                         justifyContent: 'space-between',
                         alignItems: 'center'
                       }}>
-                      <span>🏆 Goals: Completed ({lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed').length})</span>
+                      <span>🏆 Goals: Completed ({completedGoals.length})</span>
                       <span>{collapsedGoalCategories['completed'] ? '▶' : '▼'}</span>
                     </h3>
                     {!collapsedGoalCategories['completed'] && (
                       <div className="goals-grid">
-                        {lifeGoals.filter(goal => !goal.parent_goal_id && goal.status === 'completed').map((goal, index) => renderGoalCard(goal, index))}
+                        {completedGoals.map((goal, index) => renderGoalCard(goal, index))}
                       </div>
                     )}
                   </div>
-                )}
+                  );
+                })()}
               </>
             )}
           </>
@@ -5213,59 +5317,91 @@ return (
                     ➕ Add Task
                   </button>
                 </div>
-                {!collapsedSections['goal-tasks'] && (
-                  <>
-                    {goalTasks.length === 0 ? (
-                      <div className="empty-section">
-                        <p>No goal-specific tasks. Add tasks that belong uniquely to this goal!</p>
-                      </div>
-                    ) : (
-                      <div className="goal-tasks-tree" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {goalTasks.filter(t => !t.parent_task_id).map(task => (
-                      <GoalTaskNode
-                        key={task.id}
-                        task={task}
-                        allTasks={goalTasks}
-                        onToggleComplete={(taskId, currentStatus) => {
-                          // Check for incomplete subtasks before marking complete
-                          if (!currentStatus) {
-                            const hasIncompleteSubtasks = goalTasks.some(t => 
-                              t.parent_task_id === taskId && !t.is_completed
-                            );
-                            if (hasIncompleteSubtasks) {
-                              showAlert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.', 'warning');
-                              return;
-                            }
-                          }
-                          handleUpdateGoalTask(taskId, { is_completed: !currentStatus });
-                        }}
-                        onDelete={async (taskId) => {
-                          // Check for incomplete subtasks before deleting
-                          const hasIncompleteSubtasks = goalTasks.some(t => 
-                            t.parent_task_id === taskId && !t.is_completed
-                          );
-                          if (hasIncompleteSubtasks) {
-                            showAlert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.', 'warning');
-                            return;
-                          }
-                          if (window.confirm('Are you sure you want to delete this task and all its subtasks?')) {
-                            await handleDeleteGoalTask(taskId);
-                          }
-                        }}
-                        onAddSubtask={(parentTask) => {
-                          setEditingGoalTask(parentTask);
-                          setShowAddGoalTaskModal(true);
-                        }}
-                        onEdit={(task) => {
-                          setEditingGoalTask(task);
-                          setShowAddGoalTaskModal(true);
-                        }}
-                      />
-                    ))}
-                  </div>
-                    )}
-                  </>
-                )}
+                {!collapsedSections['goal-tasks'] && (() => {
+                  const activeGoalTasks = goalTasks.filter(t => !t.parent_task_id && !t.is_completed);
+                  const completedGoalTasks = goalTasks.filter(t => !t.parent_task_id && t.is_completed);
+
+                  const taskNodeProps = (taskId: number, currentStatus: boolean) => ({
+                    onToggleComplete: (tid: number, status: boolean) => {
+                      if (!status) {
+                        const hasIncompleteSubtasks = goalTasks.some(t => t.parent_task_id === tid && !t.is_completed);
+                        if (hasIncompleteSubtasks) {
+                          showAlert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.', 'warning');
+                          return;
+                        }
+                      }
+                      handleUpdateGoalTask(tid, { is_completed: !status });
+                    },
+                    onDelete: async (tid: number) => {
+                      const hasIncompleteSubtasks = goalTasks.some(t => t.parent_task_id === tid && !t.is_completed);
+                      if (hasIncompleteSubtasks) {
+                        showAlert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.', 'warning');
+                        return;
+                      }
+                      if (window.confirm('Are you sure you want to delete this task and all its subtasks?')) {
+                        await handleDeleteGoalTask(tid);
+                      }
+                    },
+                    onAddSubtask: (parentTask: GoalTaskData) => {
+                      setEditingGoalTask(parentTask);
+                      setShowAddGoalTaskModal(true);
+                    },
+                    onEdit: (task: GoalTaskData) => {
+                      setEditingGoalTask(task);
+                      setShowAddGoalTaskModal(true);
+                    }
+                  });
+
+                  return (
+                    <>
+                      {goalTasks.length === 0 ? (
+                        <div className="empty-section">
+                          <p>No goal-specific tasks. Add tasks that belong uniquely to this goal!</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {/* Active tasks */}
+                          {activeGoalTasks.length === 0 && completedGoalTasks.length > 0 && (
+                            <p style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic', margin: '0 0 4px 0' }}>All tasks completed! 🎉</p>
+                          )}
+                          {activeGoalTasks.map(task => (
+                            <GoalTaskNode
+                              key={task.id}
+                              task={task}
+                              allTasks={goalTasks}
+                              {...taskNodeProps(task.id, task.is_completed)}
+                            />
+                          ))}
+
+                          {/* Completed tasks subsection */}
+                          {completedGoalTasks.length > 0 && (
+                            <div style={{ marginTop: '8px', borderTop: '1px dashed #d1d5db', paddingTop: '10px' }}>
+                              <div
+                                style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: showCompletedGoalTasks ? '10px' : '0' }}
+                                onClick={() => setShowCompletedGoalTasks(v => !v)}
+                              >
+                                <span style={{ fontSize: '13px', color: '#6b7280' }}>{showCompletedGoalTasks ? '▼' : '▶'}</span>
+                                <span style={{ fontSize: '13px', fontWeight: '600', color: '#6b7280' }}>✅ Completed Tasks ({completedGoalTasks.length})</span>
+                              </div>
+                              {showCompletedGoalTasks && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', opacity: 0.8 }}>
+                                  {completedGoalTasks.map(task => (
+                                    <GoalTaskNode
+                                      key={task.id}
+                                      task={task}
+                                      allTasks={goalTasks}
+                                      {...taskNodeProps(task.id, task.is_completed)}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Linked Tasks (Misc/Important Tasks) */}
@@ -5312,80 +5448,87 @@ return (
                   </div>
                 ) : (
                   <div>
-                    {linkedTasks.map((link: any) => (
-                      <div key={link.id} style={{
-                        padding: '12px',
-                        marginBottom: '8px',
-                        background: 'white',
-                        borderRadius: '8px',
-                        borderLeft: '4px solid #f59e0b',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                      onClick={() => handleNavigateToTask(link.task_type)}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(245, 158, 11, 0.3)';
-                        e.currentTarget.style.transform = 'translateX(4px)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.boxShadow = 'none';
-                        e.currentTarget.style.transform = 'translateX(0)';
-                      }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '16px' }}>📌</span>
-                            <span style={{ fontWeight: '600', color: '#1f2937', fontSize: '15px' }}>
-                              {link.task?.name || 'Task'}
-                            </span>
-                            <span style={{
-                              fontSize: '11px',
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              background: '#fef3c7',
-                              color: '#92400e',
-                              fontWeight: '600'
+                    {(() => {
+                      // Build parent-child tree from flat linked-task list
+                      const linkedTaskIds = new Set(linkedTasks.map((l: any) => l.task?.id).filter(Boolean));
+                      const rootLinks = linkedTasks.filter((l: any) => !linkedTaskIds.has(l.task?.parent_task_id));
+                      const getChildLinks = (parentTaskId: number): any[] =>
+                        linkedTasks.filter((l: any) => l.task?.parent_task_id === parentTaskId);
+
+                      const renderLinkedTaskNode = (link: any, level: number = 0): React.ReactNode => {
+                        const children = getChildLinks(link.task?.id);
+                        const indent = level * 24;
+                        return (
+                          <div key={link.id}>
+                            <div style={{
+                              padding: '10px 14px',
+                              marginBottom: '6px',
+                              marginLeft: `${indent}px`,
+                              background: link.task?.parent_task_id ? '#fffbeb' : 'white',
+                              borderRadius: '8px',
+                              borderLeft: `4px solid ${level > 0 ? '#fcd34d' : '#f59e0b'}`,
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              gap: '8px'
                             }}>
-                              {link.task_type === 'one_time' ? 'Important Task' : link.task_type}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: '12px', color: '#6b7280', marginLeft: '24px' }}>
-                            {link.completion_count}/{link.expected_count} completed ({link.completion_percentage?.toFixed(0) || 0}%)
-                            {link.link_start_date && (
-                              <> • Started: {new Date(link.link_start_date).toLocaleDateString()}</>
-                            )}
-                            {link.last_completed && (
-                              <> • Last: {new Date(link.last_completed).toLocaleDateString()}</>
-                            )}
-                          </div>
-                          {link.notes && (
-                            <div style={{ fontSize: '12px', color: '#78716c', fontStyle: 'italic', marginLeft: '24px', marginTop: '4px' }}>
-                              💭 {link.notes}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  {level > 0 && <span style={{ color: '#9ca3af', fontSize: '13px' }}>↳</span>}
+                                  <span style={{ fontWeight: '600', color: '#1f2937', fontSize: '14px' }}>
+                                    {link.task?.name || 'Task'}
+                                  </span>
+                                  <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', background: '#fef3c7', color: '#92400e', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                                    {link.task_type === 'one_time' ? 'Important' : link.task_type}
+                                  </span>
+                                  <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                                    {link.completion_count}/{link.expected_count} ({link.completion_percentage?.toFixed(0) || 0}%)
+                                  </span>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (link.task?.id && window.confirm(`Mark "${link.task.name}" as done?`)) {
+                                      try {
+                                        await api.post(`/api/tasks/${link.task.id}/complete`);
+                                        if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+                                      } catch (err: any) {
+                                        showAlert('Failed to complete task: ' + (err.response?.data?.detail || err.message), 'error');
+                                      }
+                                    }
+                                  }}
+                                  style={{ padding: '3px 8px', fontSize: '11px', background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                >
+                                  ✓ Done
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (link.task?.id) navigate(`/tasks?tab=onetime&edit=${link.task.id}`);
+                                  }}
+                                  style={{ padding: '3px 8px', fontSize: '11px', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                >
+                                  ✏️
+                                </button>
+                                {typeof link.id === 'number' && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleUnlinkTask(link.id); }}
+                                    style={{ padding: '3px 8px', fontSize: '11px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                  >
+                                    Unlink
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                        <button
-                          className="btn btn-sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUnlinkTask(link.id);
-                          }}
-                          style={{
-                            padding: '4px 12px',
-                            fontSize: '12px',
-                            background: '#fee2e2',
-                            color: '#991b1b',
-                            border: '1px solid #fca5a5',
-                            borderRadius: '6px',
-                            fontWeight: '600'
-                          }}
-                        >
-                          Unlink
-                        </button>
-                      </div>
-                    ))}
+                            {children.map((child: any) => renderLinkedTaskNode(child, level + 1))}
+                          </div>
+                        );
+                      };
+
+                      return rootLinks.map((link: any) => renderLinkedTaskNode(link, 0));
+                    })()}
                   </div>
                 )}
                   </>
@@ -5453,45 +5596,65 @@ return (
                       return frequencyOrder.map(freq => {
                         const tasks = tasksByFrequency[freq];
                         if (tasks.length === 0) return null;
-                        
+
+                        // Build hierarchy within this frequency group
+                        const groupTaskIds = new Set(tasks.map((l: any) => l.task?.id).filter(Boolean));
+                        const rootTasks = tasks.filter((l: any) => !groupTaskIds.has(l.task?.parent_task_id));
+                        const getChildren = (parentId: number) => tasks.filter((l: any) => l.task?.parent_task_id === parentId);
+
+                        const renderSupportNode = (link: any, level: number = 0): React.ReactNode => {
+                          const children = getChildren(link.task?.id);
+                          return (
+                            <div key={link.id}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '8px 12px',
+                                marginLeft: `${level * 20}px`,
+                                background: 'white',
+                                borderRadius: '6px',
+                                borderLeft: `3px solid ${level > 0 ? '#6ee7b7' : '#10b981'}`,
+                                fontSize: '14px',
+                                marginBottom: '4px'
+                              }}>
+                                {level > 0 && <span style={{ color: '#9ca3af', fontSize: '12px' }}>↳</span>}
+                                <span style={{ fontWeight: '600', color: '#1f2937', flex: 1 }}>
+                                  {link.task?.name || 'Task'}
+                                </span>
+                                <span style={{ fontSize: '11px', color: '#6b7280', whiteSpace: 'nowrap' }}>
+                                  {link.completion_count}/{link.expected_count} ({link.completion_percentage?.toFixed(0) || 0}%)
+                                </span>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (link.task?.id && window.confirm(`Mark "${link.task.name}" as done?`)) {
+                                      try {
+                                        await api.post(`/api/tasks/${link.task.id}/complete`);
+                                        if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+                                      } catch (err: any) {
+                                        showAlert('Failed to complete task', 'error');
+                                      }
+                                    }
+                                  }}
+                                  style={{ padding: '2px 7px', fontSize: '11px', background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: '4px', cursor: 'pointer', fontWeight: '600', flexShrink: 0 }}
+                                >
+                                  ✓
+                                </button>
+                              </div>
+                              {children.map((child: any) => renderSupportNode(child, level + 1))}
+                            </div>
+                          );
+                        };
+
                         return (
                           <div key={freq} style={{ marginBottom: '16px' }}>
-                            <h4 style={{ 
-                              color: '#065f46', 
-                              fontSize: '15px',
-                              fontWeight: '700',
-                              marginBottom: '8px'
-                            }}>
+                            <h4 style={{ color: '#065f46', fontSize: '15px', fontWeight: '700', marginBottom: '8px' }}>
                               {frequencyLabels[freq]}:
                             </h4>
-                            <ul style={{ 
-                              listStyle: 'none', 
-                              padding: 0, 
-                              margin: 0,
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '6px'
-                            }}>
-                              {tasks.map(link => (
-                                <li key={link.id} style={{
-                                  padding: '8px 12px',
-                                  background: 'white',
-                                  borderRadius: '6px',
-                                  borderLeft: '3px solid #10b981',
-                                  fontSize: '14px'
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span>•</span>
-                                    <span style={{ fontWeight: '600', color: '#1f2937', flex: 1 }}>
-                                      {link.task?.name || 'Task'}
-                                    </span>
-                                    <span style={{ fontSize: '11px', color: '#6b7280' }}>
-                                      {link.completion_count}/{link.expected_count} ({link.completion_percentage?.toFixed(0) || 0}%)
-                                    </span>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {rootTasks.map((link: any) => renderSupportNode(link, 0))}
+                            </div>
                           </div>
                         );
                       });

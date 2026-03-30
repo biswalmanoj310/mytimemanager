@@ -3497,8 +3497,8 @@ export default function Tasks() {
           let consecutiveMissedDays = 0;
           
           if (!habit.completed_today) {
-            // Only count consecutive if today is also missed
-            for (let i = todayIndex; i >= 0; i--) {
+            // Start from yesterday — today isn't over yet, don't penalise for it
+            for (let i = todayIndex - 1; i >= 0; i--) {
               const dayStatus = completionArray[i];
               
               // Skip null days (before habit started)

@@ -556,7 +556,7 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
     goal_milestones = db.query(LifeGoalMilestone).filter(LifeGoalMilestone.goal_id == goal_id).all()
     
     # Get project milestones from linked projects
-    from app.models.models import Project, ProjectMilestone
+    from app.models.models import Project, ProjectMilestone, ProjectTask, MiscTaskGroup, MiscTaskItem
     linked_projects = db.query(Project).filter(Project.goal_id == goal_id).all()
     project_milestones = []
     for project in linked_projects:
@@ -566,25 +566,49 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
     goal_tasks = db.query(LifeGoalTask).filter(LifeGoalTask.goal_id == goal_id).all()
     linked_tasks = db.query(LifeGoalTaskLink).filter(LifeGoalTaskLink.goal_id == goal_id).all()
     
-    # Get all project tasks (including subtasks) from linked projects
-    from app.models.models import Project, ProjectTask
-    linked_projects = db.query(Project).filter(Project.goal_id == goal_id).all()
-    
-    def count_project_tasks_recursive(project_id):
-        """Count all tasks and subtasks in a project"""
-        all_tasks = db.query(ProjectTask).filter(ProjectTask.project_id == project_id).all()
-        total = len(all_tasks)
-        completed = sum(1 for t in all_tasks if t.is_completed)
-        return total, completed
-    
-    total_project_tasks = 0
-    completed_project_tasks = 0
-    for project in linked_projects:
-        total, completed = count_project_tasks_recursive(project.id)
-        total_project_tasks += total
-        completed_project_tasks += completed
-    
     today = date.today()
+
+    # --- Project tasks ---
+    def get_project_tasks(project_id):
+        return db.query(ProjectTask).filter(ProjectTask.project_id == project_id).all()
+
+    all_project_tasks = []
+    for project in linked_projects:
+        all_project_tasks.extend(get_project_tasks(project.id))
+
+    total_project_tasks = len(all_project_tasks)
+    completed_project_tasks = sum(1 for t in all_project_tasks if t.is_completed)
+    overdue_project_tasks = sum(
+        1 for t in all_project_tasks
+        if not t.is_completed and t.due_date and (
+            t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
+        ) < today
+    )
+
+    # --- Misc tasks (groups linked to this goal, count all items) ---
+    linked_misc_groups = db.query(MiscTaskGroup).filter(MiscTaskGroup.goal_id == goal_id).all()
+    misc_group_ids = [g.id for g in linked_misc_groups]
+    all_misc_items = db.query(MiscTaskItem).filter(MiscTaskItem.group_id.in_(misc_group_ids)).all() if misc_group_ids else []
+    total_misc_tasks = len(all_misc_items)
+    completed_misc_tasks = sum(1 for t in all_misc_items if t.is_completed)
+    overdue_misc_tasks = sum(
+        1 for t in all_misc_items
+        if not t.is_completed and t.due_date and (
+            t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
+        ) < today
+    )
+
+    # --- Goal tasks overdue ---
+    overdue_goal_tasks = sum(
+        1 for t in goal_tasks
+        if not t.is_completed and t.due_date and t.due_date < today
+    )
+
+    # --- Consolidated totals ---
+    total_all = len(goal_tasks) + total_project_tasks + total_misc_tasks
+    completed_all = sum(1 for t in goal_tasks if t.is_completed) + completed_project_tasks + completed_misc_tasks
+    overdue_all = overdue_goal_tasks + overdue_project_tasks + overdue_misc_tasks
+
     days_remaining = (goal.target_date - today).days if goal.target_date >= today else 0
     days_total = (goal.target_date - goal.start_date).days if goal.target_date >= goal.start_date else 1
     days_elapsed = days_total - days_remaining
@@ -596,6 +620,10 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
         "days_remaining": days_remaining,
         "days_elapsed": days_elapsed,
         "days_total": days_total,
+        # Top-level fields used by frontend filters
+        "total_tasks": total_all,
+        "completed_tasks": completed_all,
+        "overdue_tasks": overdue_all,
         "milestones": {
             "goal_milestones": {
                 "total": len(goal_milestones),
@@ -619,17 +647,27 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
         "goal_tasks": {
             "total": len(goal_tasks),
             "completed": sum(1 for t in goal_tasks if t.is_completed),
-            "remaining": sum(1 for t in goal_tasks if not t.is_completed)
+            "remaining": sum(1 for t in goal_tasks if not t.is_completed),
+            "overdue": overdue_goal_tasks
         },
         "project_tasks": {
             "total": total_project_tasks,
             "completed": completed_project_tasks,
-            "remaining": total_project_tasks - completed_project_tasks
+            "remaining": total_project_tasks - completed_project_tasks,
+            "overdue": overdue_project_tasks
+        },
+        "misc_tasks": {
+            "total": total_misc_tasks,
+            "completed": completed_misc_tasks,
+            "remaining": total_misc_tasks - completed_misc_tasks,
+            "overdue": overdue_misc_tasks,
+            "groups": len(linked_misc_groups)
         },
         "all_tasks": {
-            "total": len(goal_tasks) + total_project_tasks,
-            "completed": sum(1 for t in goal_tasks if t.is_completed) + completed_project_tasks,
-            "remaining": len(goal_tasks) - sum(1 for t in goal_tasks if t.is_completed) + (total_project_tasks - completed_project_tasks)
+            "total": total_all,
+            "completed": completed_all,
+            "remaining": total_all - completed_all,
+            "overdue": overdue_all
         },
         "linked_tasks": {
             "total": len(linked_tasks)
