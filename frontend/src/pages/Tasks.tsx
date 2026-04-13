@@ -6324,6 +6324,10 @@ export default function Tasks() {
                 if (projectTaskFilter === 'in-progress') return !subTask.is_completed;
                 if (projectTaskFilter === 'completed') return subTask.is_completed;
                 if (projectTaskFilter === 'no-milestone') return !subTask.milestone_id;
+                if (projectTaskFilter === 'overdue') {
+                  const todaySub = new Date(); todaySub.setHours(0, 0, 0, 0);
+                  return !subTask.is_completed && !!subTask.due_date && parseDateString(subTask.due_date.split('T')[0]) < todaySub;
+                }
                 return true;
               })
               .map(subTask => (
@@ -6957,34 +6961,31 @@ export default function Tasks() {
                     {tasks
                       .filter(task => {
                         if (task.follow_up_frequency !== 'daily') return false;
-                        
-                        // Exclude ALL completed tasks (global or daily)
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to quarterly
                         if (task.is_completed) return false;
-                        
-                        // Check if completed in daily status
                         const completionDateStr = dailyTaskCompletionDates.get(task.id);
                         if (completionDateStr) return false;
-                        
-                        // Check NA status
-                        const today = new Date();
-                        if (!task.is_active && task.na_marked_at) {
-                          const naMarkedDate = new Date(task.na_marked_at);
-                          return naMarkedDate.getTime() === today.getTime();
-                        }
                         return task.is_active;
                       })
                       .sort((a, b) => {
-                        const pillarCompare = (a.pillar_name || '').localeCompare(b.pillar_name || '');
-                        if (pillarCompare !== 0) return pillarCompare;
-                        const categoryCompare = (a.category_name || '').localeCompare(b.category_name || '');
-                        if (categoryCompare !== 0) return categoryCompare;
+                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+                        const orderA = hierarchyOrder[keyA] || 999;
+                        const orderB = hierarchyOrder[keyB] || 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
+                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
+                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
                         return (a.name || '').localeCompare(b.name || '');
                       })
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .map(task => {
+                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -7008,16 +7009,30 @@ export default function Tasks() {
                     {tasks
                       .filter(task => {
                         if (task.follow_up_frequency !== 'weekly') return false;
-                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly/quarterly
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to quarterly
                         if (weeklyTaskStatuses[task.id]) return false; // Exclude completed/NA weekly tasks
                         if (task.is_completed) return false;
                         return task.is_active;
                       })
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .sort((a, b) => {
+                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+                        const orderA = hierarchyOrder[keyA] || 999;
+                        const orderB = hierarchyOrder[keyB] || 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
+                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
+                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
+                        return (a.name || '').localeCompare(b.name || '');
+                      })
+                      .map(task => {
+                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -7041,15 +7056,29 @@ export default function Tasks() {
                     {tasks
                       .filter(task => {
                         if (task.follow_up_frequency !== 'monthly') return false;
-                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly/quarterly
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to quarterly
                         if (task.is_completed) return false;
                         return task.is_active;
                       })
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .sort((a, b) => {
+                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+                        const orderA = hierarchyOrder[keyA] || 999;
+                        const orderB = hierarchyOrder[keyB] || 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
+                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
+                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
+                        return (a.name || '').localeCompare(b.name || '');
+                      })
+                      .map(task => {
+                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -7180,7 +7209,6 @@ export default function Tasks() {
         {showAddYearlyTaskModal && (
           <div className="modal-overlay" onClick={() => setShowAddYearlyTaskModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              {/* {console.log('\uD83D\uDCCB Add Yearly Task SELECTION MODAL is rendering (OLD section)')} */}
               <div className="modal-header">
                 <h2>Add Yearly Task</h2>
                 <button className="btn-close" onClick={() => setShowAddYearlyTaskModal(false)}>×</button>
@@ -7209,22 +7237,32 @@ export default function Tasks() {
                     {tasks
                       .filter(task => {
                         if (task.follow_up_frequency !== 'daily') return false;
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly
                         if (!task.is_active) return false;
-                        
-                        // Exclude ALL completed tasks (global or daily)
                         if (task.is_completed) return false;
-                        
-                        // Check if completed in daily status
                         const completionDateStr = dailyTaskCompletionDates.get(task.id);
                         if (completionDateStr) return false;
-                        
                         return true;
                       })
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .sort((a, b) => {
+                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+                        const orderA = hierarchyOrder[keyA] || 999;
+                        const orderB = hierarchyOrder[keyB] || 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
+                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
+                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
+                        return (a.name || '').localeCompare(b.name || '');
+                      })
+                      .map(task => {
+                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -7254,11 +7292,25 @@ export default function Tasks() {
                         if (task.is_completed) return false;
                         return true;
                       })
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .sort((a, b) => {
+                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+                        const orderA = hierarchyOrder[keyA] || 999;
+                        const orderB = hierarchyOrder[keyB] || 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
+                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
+                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
+                        return (a.name || '').localeCompare(b.name || '');
+                      })
+                      .map(task => {
+                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -7282,15 +7334,30 @@ export default function Tasks() {
                     {tasks
                       .filter(task => {
                         if (task.follow_up_frequency !== 'monthly') return false;
+                        if (yearlyTaskStatuses[task.id]) return false; // Already added to yearly
                         if (!task.is_active) return false;
                         if (task.is_completed) return false;
                         return true;
                       })
-                      .map(task => (
-                        <option key={task.id} value={task.id}>
-                          {task.pillar_name} - {task.category_name}: {task.name}
-                        </option>
-                      ))
+                      .sort((a, b) => {
+                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
+                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
+                        const orderA = hierarchyOrder[keyA] || 999;
+                        const orderB = hierarchyOrder[keyB] || 999;
+                        if (orderA !== orderB) return orderA - orderB;
+                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
+                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
+                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
+                        return (a.name || '').localeCompare(b.name || '');
+                      })
+                      .map(task => {
+                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
+                        return (
+                          <option key={task.id} value={task.id}>
+                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                          </option>
+                        );
+                      })
                     }
                   </select>
                 </div>
@@ -8082,7 +8149,7 @@ export default function Tasks() {
                           { key: 'in_progress', label: 'In Progress', count: projects.filter(p => p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < new Date())).length, bg: 'rgba(59,130,246,0.3)', activeBg: 'rgba(59,130,246,0.7)' },
                           { key: 'not_started', label: 'Not Started', count: projects.filter(p => p.status === 'not_started' && !p.is_completed).length, bg: 'rgba(168,85,247,0.3)', activeBg: 'rgba(168,85,247,0.7)' },
                           { key: 'completed', label: 'Completed', count: projects.filter(p => p.is_completed).length, bg: 'rgba(16,185,129,0.3)', activeBg: 'rgba(16,185,129,0.7)' },
-                          { key: 'overdue', label: 'Overdue', count: projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date()).length, bg: 'rgba(239,68,68,0.3)', activeBg: 'rgba(239,68,68,0.7)' },
+                          { key: 'overdue', label: 'Overdue Projects', count: projects.filter(p => !p.is_completed && p.target_completion_date && new Date(p.target_completion_date) < new Date()).length, bg: 'rgba(239,68,68,0.3)', activeBg: 'rgba(239,68,68,0.7)' },
                         ] as const
                       ).map(({ key, label, count, bg, activeBg }) => (
                         <button
@@ -8110,19 +8177,23 @@ export default function Tasks() {
                     <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', alignSelf: 'center', marginRight: '4px' }}>By tasks:</span>
                     {(() => {
                       const tlToday = new Date(); tlToday.setHours(0,0,0,0);
+                      // All tasks = projectTasks + misc tasks linked to any project
+                      const allLinkedMiscTasks = miscTasks.filter(t => t.linked_project_id != null);
+                      const allProjectAndMiscTasks = [...projectTasks, ...allLinkedMiscTasks];
+                      const isOverdueTask = (t: ProjectTaskData) => !t.is_completed && !!t.due_date && (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < tlToday; })();
                       const taskLevelCounts: Record<string, number> = {
-                        all: projects.length,
-                        overdue: projects.filter(p => projectTasks.some(t => t.project_id === p.id && !t.is_completed && t.due_date && (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < tlToday; })())).length,
-                        in_progress: projects.filter(p => projectTasks.some(t => t.project_id === p.id && !t.is_completed)).length,
-                        completed: projects.filter(p => { const pt = projectTasks.filter(t => t.project_id === p.id); return pt.length > 0 && pt.every(t => t.is_completed); }).length,
+                        all: allProjectAndMiscTasks.length,
+                        overdue: allProjectAndMiscTasks.filter(isOverdueTask).length,
+                        in_progress: allProjectAndMiscTasks.filter(t => !t.is_completed).length,
+                        completed: allProjectAndMiscTasks.filter(t => t.is_completed).length,
                         not_started: projects.filter(p => projectTasks.filter(t => t.project_id === p.id).length === 0).length,
                       };
                       return (
                         [
-                          { key: 'all', label: 'All Projects', emoji: '📋' },
-                          { key: 'overdue', label: 'Has Overdue Tasks', emoji: '🚨' },
-                          { key: 'in_progress', label: 'Has Active Tasks', emoji: '🔄' },
-                          { key: 'completed', label: 'All Tasks Done', emoji: '✅' },
+                          { key: 'all', label: 'All Tasks', emoji: '📋' },
+                          { key: 'overdue', label: 'Overdue Tasks', emoji: '🚨' },
+                          { key: 'in_progress', label: 'Active Tasks', emoji: '🔄' },
+                          { key: 'completed', label: 'Completed Tasks', emoji: '✅' },
                           { key: 'not_started', label: 'No Tasks Yet', emoji: '🆕' },
                         ] as const
                       ).map(({ key, label, emoji }) => (
@@ -8489,6 +8560,26 @@ export default function Tasks() {
                                 <span style={{ fontWeight: '600', color: '#10b981' }}>{project.progress.completed_tasks}</span>
                               </div>
                               {(() => {
+                                const todayCard = new Date();
+                                todayCard.setHours(0, 0, 0, 0);
+                                const overdueProjectTasks = projectTasks.filter(t =>
+                                  t.project_id === project.id && !t.is_completed && t.due_date &&
+                                  (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < todayCard; })()
+                                ).length;
+                                const overdueMiscTasks = miscTasks.filter(t =>
+                                  t.linked_project_id === project.id && !t.is_completed && t.due_date &&
+                                  (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < todayCard; })()
+                                ).length;
+                                const totalOverdue = overdueProjectTasks + overdueMiscTasks;
+                                return totalOverdue > 0 ? (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <span style={{ fontSize: '14px' }}>🚨</span>
+                                    <span style={{ color: '#718096' }}>Overdue Tasks:</span>
+                                    <span style={{ fontWeight: '700', color: '#ef4444', background: '#fee2e2', padding: '1px 7px', borderRadius: '8px' }}>{totalOverdue}</span>
+                                  </div>
+                                ) : null;
+                              })()}
+                              {(() => {
                                 const nextMilestone = project.milestones?.filter(m => !m.is_completed).sort((a, b) => parseDateString(a.target_date).getTime() - parseDateString(b.target_date).getTime())[0];
                                 if (nextMilestone) {
                                   const milestoneDate = parseDateString(nextMilestone.target_date);
@@ -8580,8 +8671,10 @@ export default function Tasks() {
                     const applyTaskLevelFilter = (p: ProjectData): boolean => {
                       if (projectTaskLevelFilter === 'all') return true;
                       const pTasks = projectTasks.filter(t => t.project_id === p.id);
+                      const pMiscTasks = miscTasks.filter(t => t.linked_project_id === p.id);
                       if (projectTaskLevelFilter === 'overdue') {
-                        return pTasks.some(t => !t.is_completed && t.due_date && (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < today_pf; })());
+                        const isOverdue = (t: ProjectTaskData) => !t.is_completed && !!t.due_date && (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < today_pf; })();
+                        return pTasks.some(isOverdue) || pMiscTasks.some(isOverdue);
                       }
                       if (projectTaskLevelFilter === 'in_progress') return pTasks.some(t => !t.is_completed);
                       if (projectTaskLevelFilter === 'completed') return pTasks.length > 0 && pTasks.every(t => t.is_completed);
@@ -8670,8 +8763,41 @@ export default function Tasks() {
                               boxShadow: isExpanded ? 'none' : '0 1px 3px rgba(0,0,0,0.1)'
                             }}
                           >
-                            <span title={`${pillarName} - ${categoryName}`}>
-                              {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryProjects.length})
+                            <span title={`${pillarName} - ${categoryName}`} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px' }}>
+                              <span>{isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({categoryProjects.length})</span>
+                              {(() => {
+                                const today_hdr = new Date();
+                                today_hdr.setHours(0, 0, 0, 0);
+                                const overdueProjects = categoryProjects.filter(p =>
+                                  !p.is_completed && !!p.target_completion_date && new Date(p.target_completion_date) < today_hdr
+                                ).length;
+                                const overdueTaskCount = categoryProjects.reduce((sum, p) =>
+                                  sum + projectTasks.filter(t =>
+                                    t.project_id === p.id && !t.is_completed && t.due_date &&
+                                    (() => { const d = parseDateString(t.due_date!); d.setHours(0,0,0,0); return d < today_hdr; })()
+                                  ).length
+                                , 0);
+                                return (
+                                  <>
+                                    {overdueProjects > 0 && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setProjectListFilter(prev => prev === 'overdue' ? 'all' : 'overdue'); }}
+                                        style={{ fontSize: '12px', fontWeight: '700', color: '#ef4444', background: '#fee2e2', padding: '2px 8px', borderRadius: '10px', border: projectListFilter === 'overdue' ? '1.5px solid #ef4444' : '1.5px solid transparent', cursor: 'pointer' }}
+                                      >
+                                        ⚠ Overdue Projects: {overdueProjects}
+                                      </button>
+                                    )}
+                                    {overdueTaskCount > 0 && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setProjectTaskLevelFilter(prev => prev === 'overdue' ? 'all' : 'overdue'); }}
+                                        style={{ fontSize: '12px', fontWeight: '700', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: '10px', border: projectTaskLevelFilter === 'overdue' ? '1.5px solid #b45309' : '1.5px solid transparent', cursor: 'pointer' }}
+                                      >
+                                        🚨 Overdue Tasks: {overdueTaskCount}
+                                      </button>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </span>
                             <span style={{ fontSize: '14px', color: '#666', fontWeight: 'normal' }} title={`${pillarName} - ${categoryName}`}>
                               {pillarName}
@@ -8830,7 +8956,37 @@ export default function Tasks() {
                   const inProgressTasks = thisProjectTasks.filter(t => !t.is_completed).length;
                   const rootTasks = thisProjectTasks.filter(t => !t.parent_task_id).length;
                   const subTasks = thisProjectTasks.filter(t => t.parent_task_id).length;
-                  
+                  const todayStat = new Date(); todayStat.setHours(0, 0, 0, 0);
+                  const overdueTasks = thisProjectTasks.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date.split('T')[0]) < todayStat).length;
+
+                  const makeStatBtn = (
+                    label: string,
+                    value: number,
+                    color: string,
+                    filter: 'all' | 'in-progress' | 'completed' | 'overdue' | 'no-milestone',
+                    activeBg: string
+                  ) => {
+                    const isActive = projectTaskFilter === filter;
+                    return (
+                      <button
+                        onClick={() => { setProjectTaskFilter(isActive ? 'all' : filter); setExpandedSections(prev => ({ ...prev, allTasks: true })); }}
+                        style={{
+                          textAlign: 'center',
+                          background: isActive ? activeBg : 'transparent',
+                          border: isActive ? `2px solid ${color}` : '2px solid transparent',
+                          borderRadius: '10px',
+                          padding: '6px 14px',
+                          cursor: 'pointer',
+                          transition: 'all 0.15s'
+                        }}
+                        title={`Click to filter by ${label}`}
+                      >
+                        <div style={{ fontSize: '11px', color: isActive ? color : '#64748b', fontWeight: '600', marginBottom: '2px' }}>{label}</div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color }}>{value}</div>
+                      </button>
+                    );
+                  };
+
                   return (
                     <div style={{ 
                       flex: 1, 
@@ -8841,35 +8997,14 @@ export default function Tasks() {
                       paddingLeft: '20px',
                       paddingRight: '20px'
                     }}>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Total Tasks (All Levels)</div>
-                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#0f172a' }}>
-                          {thisProjectTasks.length}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Completed</div>
-                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#10b981' }}>
-                          {completedTasks}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>In Progress</div>
-                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#3b82f6' }}>
-                          {inProgressTasks}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Root Tasks</div>
-                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#8b5cf6' }}>
-                          {rootTasks}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'center' }}>
+                      {makeStatBtn('Total Tasks (All Levels)', thisProjectTasks.length, '#0f172a', 'all', '#f1f5f9')}
+                      {makeStatBtn('Completed', completedTasks, '#10b981', 'completed', '#d1fae5')}
+                      {makeStatBtn('In Progress', inProgressTasks, '#3b82f6', 'in-progress', '#dbeafe')}
+                      {makeStatBtn('Overdue', overdueTasks, '#e53e3e', 'overdue', '#fee2e2')}
+                      {makeStatBtn('Root Tasks', rootTasks, '#8b5cf6', 'no-milestone', '#ede9fe')}
+                      <div style={{ textAlign: 'center', padding: '6px 14px' }}>
                         <div style={{ fontSize: '11px', color: '#64748b', fontWeight: '600', marginBottom: '2px' }}>Sub-tasks</div>
-                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f97316' }}>
-                          {subTasks}
-                        </div>
+                        <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#f97316' }}>{subTasks}</div>
                       </div>
                     </div>
                   );
@@ -8968,16 +9103,15 @@ export default function Tasks() {
                         return result;
                       }
                       
-                      // Only count true project tasks (not reference tasks from other tabs)
-                      const thisProjectTasks = projectTasks.filter(t => 
-                        t.project_id === selectedProject.id && 
-                        (!t.follow_up_frequency || t.follow_up_frequency === 'project_task')
-                      );
+                      // Count ALL tasks associated with this project (project tasks + reference/misc tasks)
+                      const thisProjectTasks = projectTasks.filter(t => t.project_id === selectedProject.id);
                       const allTasksRecursive = getAllTasksRecursive(thisProjectTasks);
                       const totalCount = allTasksRecursive.length;
                       const inProgressCount = allTasksRecursive.filter(t => !t.is_completed).length;
                       const completedCount = allTasksRecursive.filter(t => t.is_completed).length;
                       const noMilestoneCount = allTasksRecursive.filter(t => !t.milestone_id).length;
+                      const todayOd = new Date(); todayOd.setHours(0, 0, 0, 0);
+                      const overdueCount = allTasksRecursive.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date.split('T')[0]) < todayOd).length;
                       
                       return (
                         <>
@@ -9008,6 +9142,19 @@ export default function Tasks() {
                             style={{ fontSize: '13px', padding: '6px 12px' }}
                           >
                             🎯 No Milestone ({noMilestoneCount})
+                          </button>
+                          <button
+                            className={`btn ${projectTaskFilter === 'overdue' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setProjectTaskFilter('overdue')}
+                            style={{
+                              fontSize: '13px',
+                              padding: '6px 12px',
+                              backgroundColor: projectTaskFilter === 'overdue' ? '#e53e3e' : '#e2e8f0',
+                              color: projectTaskFilter === 'overdue' ? 'white' : '#2d3748',
+                              borderColor: projectTaskFilter === 'overdue' ? '#e53e3e' : '#e2e8f0'
+                            }}
+                          >
+                            🚨 Overdue ({overdueCount})
                           </button>
                         </>
                       );
@@ -9049,6 +9196,10 @@ export default function Tasks() {
                             if (filter === 'in-progress') return !task.is_completed;
                             if (filter === 'completed') return task.is_completed;
                             if (filter === 'no-milestone') return !task.milestone_id;
+                            if (filter === 'overdue') {
+                              const todayTm = new Date(); todayTm.setHours(0, 0, 0, 0);
+                              return !task.is_completed && !!task.due_date && parseDateString(task.due_date.split('T')[0]) < todayTm;
+                            }
                             return true;
                           }
                           
@@ -9474,8 +9625,17 @@ export default function Tasks() {
                   if (dailyStatus && dailyStatus.is_completed) return false;
                   return true;
                 });
-                const oneTimeTasks = activeTasks.filter(t => t.follow_up_frequency === 'one_time');
-                const miscTasks = activeTasks.filter(t => t.follow_up_frequency === 'misc');
+                const applyRefFilter = (tasks: ProjectTaskData[]) => {
+                  if (projectTaskFilter === 'overdue') {
+                    const todayRef = new Date(); todayRef.setHours(0, 0, 0, 0);
+                    return tasks.filter(t => !!t.due_date && parseDateString(t.due_date.split('T')[0]) < todayRef);
+                  }
+                  // 'completed' filter: reference tasks section already shows active-only, so return empty
+                  if (projectTaskFilter === 'completed') return [];
+                  return tasks; // 'all', 'in-progress', 'no-milestone' → show all active reference tasks
+                };
+                const oneTimeTasks = applyRefFilter(activeTasks.filter(t => t.follow_up_frequency === 'one_time'));
+                const miscTasks = applyRefFilter(activeTasks.filter(t => t.follow_up_frequency === 'misc'));
                 
                 if (oneTimeTasks.length === 0 && miscTasks.length === 0) return null;
                 
@@ -9500,7 +9660,7 @@ export default function Tasks() {
                       WebkitTextFillColor: 'transparent',
                       backgroundClip: 'text'
                     }}>
-                      {expandedSections.importantMiscTasks ? '▼' : '▶'} ⭐ Reference Tasks (Important & Misc)
+                      {expandedSections.importantMiscTasks ? '▼' : '▶'} ⭐ Reference Tasks (Important & Misc) ({oneTimeTasks.length + miscTasks.length})
                     </h3>
                     <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
                       Tasks from Important and Misc tabs linked to this project
@@ -10392,6 +10552,21 @@ export default function Tasks() {
                         >
                           <span>
                             {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({totalCategoryCount})
+                            {(() => {
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const countOverdue = (tasks: ProjectTaskData[]): number => tasks.reduce((sum, t) => {
+                                const selfOverdue = (!t.is_completed && t.due_date && parseDateString(t.due_date.split('T')[0]) < today) ? 1 : 0;
+                                const children = miscTasks.filter(c => c.parent_task_id === t.id);
+                                return sum + selfOverdue + countOverdue(children);
+                              }, 0);
+                              const overdue = countOverdue(categoryTasks);
+                              return overdue > 0 ? (
+                                <span style={{ marginLeft: '10px', fontSize: '13px', fontWeight: '700', color: '#ef4444', background: '#fee2e2', padding: '2px 8px', borderRadius: '10px' }}>
+                                  ⚠ Overdue: {overdue}
+                                </span>
+                              ) : null;
+                            })()}
                           </span>
                           <span style={{ fontSize: '13px', color: '#666', fontWeight: 'normal' }}>
                             {pillarName}

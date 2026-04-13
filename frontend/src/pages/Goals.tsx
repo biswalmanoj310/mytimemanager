@@ -43,11 +43,15 @@ interface LifeGoalData {
       goal_milestones?: { total: number; completed: number };
       project_milestones?: { total: number; completed: number };
     };
-    goal_tasks?: { total: number; completed: number };
-    project_tasks?: { total: number; completed: number };
-    all_tasks?: { total: number; completed: number };
+    goal_tasks?: { total: number; completed: number; overdue?: number };
+    project_tasks?: { total: number; completed: number; overdue?: number };
+    misc_tasks?: { total: number; completed: number; overdue?: number; groups?: number };
+    project_onetime_tasks?: { total: number; completed: number; remaining?: number; overdue?: number };
+    project_recurring_tasks?: { total: number; active?: number; overdue?: number };
+    all_tasks?: { total: number; completed: number; overdue?: number };
     linked_tasks?: { total: number; completed?: number };
     goal_projects?: { total: number; completed: number };
+    overdue_tasks?: number;
   };
   timeframe?: string;
   created_at: string;
@@ -547,26 +551,18 @@ const DreamTasksDisplay = ({ selectedWish, onEditTask, onAddSubtask, onTasksLoad
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      {/* Active tasks */}
+      {/* Active tasks only — completed tasks are shown at the bottom of the wish detail, after all sections */}
       {activeDreamTasks.length === 0 && completedDreamTasks.length > 0 && (
         <p style={{ fontSize: '13px', color: '#6b7280', fontStyle: 'italic', margin: '0 0 4px 0' }}>All tasks completed! 🎉</p>
       )}
       {activeDreamTasks.map(task => renderTask(task, 0))}
-
-      {/* Completed tasks subsection */}
-      {completedDreamTasks.length > 0 && (
-        <DreamCompletedTasksSection
-          completedTasks={completedDreamTasks}
-          renderTask={renderTask}
-        />
-      )}
     </div>
   );
 };
 
 // Small helper to avoid hooks-in-callback issues
 const DreamCompletedTasksSection = ({ completedTasks, renderTask }: { completedTasks: any[], renderTask: (t: any, level: number) => React.ReactNode }) => {
-  const [show, setShow] = React.useState(false);
+  const [show, setShow] = useState(false);
   return (
     <div style={{ borderTop: '1px dashed #d1d5db', paddingTop: '8px', marginTop: '4px' }}>
       <div
@@ -2272,6 +2268,7 @@ export default function Goals() {
   const [editingGoal, setEditingGoal] = useState<LifeGoalData | null>(null);
   const [goalListFilter, setGoalListFilter] = useState<'all' | 'on_track' | 'at_risk' | 'behind' | 'not_started' | 'completed'>('all');
   const [goalTaskLevelFilter, setGoalTaskLevelFilter] = useState<'all' | 'overdue' | 'has_tasks' | 'no_tasks' | 'all_done'>('all');
+  const [goalDetailFilter, setGoalDetailFilter] = useState<'all' | 'in-progress' | 'completed' | 'overdue'>('all');
   const [goalMilestones, setGoalMilestones] = useState<MilestoneData[]>([]);
   const [goalTasks, setGoalTasks] = useState<GoalTaskData[]>([]);
   const [linkedTasks, setLinkedTasks] = useState<GoalTaskLinkData[]>([]);
@@ -2823,6 +2820,7 @@ export default function Goals() {
       
       console.log('Goal details loaded successfully:', { goal, milestones, tasks, linkedTasks, projects });
       setSelectedGoal(goal);
+      setGoalDetailFilter('all');
       setGoalMilestones(milestones);
       setGoalTasks(tasks);
       setLinkedTasks(linkedTasks);
@@ -3324,6 +3322,58 @@ export default function Goals() {
                 />
               </svg>
             </div>
+            {/* One-time / Important Tasks Circle (regular tasks with one_time frequency linked to projects) */}
+            {(goal.stats?.project_onetime_tasks?.total || 0) > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>
+                  📌 Important Tasks ({goal.stats?.project_onetime_tasks?.completed || 0}/{goal.stats?.project_onetime_tasks?.total || 0})
+                  {(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 && (
+                    <span style={{ marginLeft: '4px', color: '#dc2626', fontWeight: '700', fontSize: '11px', background: '#fee2e2', padding: '1px 5px', borderRadius: '6px' }}>
+                      🚨{goal.stats.project_onetime_tasks!.overdue}
+                    </span>
+                  )}
+                </span>
+                <div style={{ position: 'relative' }}>
+                  <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                    <circle 
+                      cx="40" cy="40" r="32" fill="none"
+                      stroke={(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#dc2626' : '#f97316'} strokeWidth="8"
+                      strokeDasharray={`${2 * Math.PI * 32}`}
+                      strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.project_onetime_tasks?.total || 0) > 0 ? (goal.stats?.project_onetime_tasks?.completed || 0) / (goal.stats?.project_onetime_tasks?.total || 0) : 0))}`}
+                      strokeLinecap="round"
+                      style={{ transition: 'stroke-dashoffset 0.3s' }}
+                    />
+                  </svg>
+                </div>
+              </div>
+            )}
+            {/* Recurring Tasks Circle (daily/weekly/monthly/yearly tasks linked to projects) */}
+            {(goal.stats?.project_recurring_tasks?.total || 0) > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>
+                  🔄 Recurring Tasks ({goal.stats?.project_recurring_tasks?.active || 0} active/{goal.stats?.project_recurring_tasks?.total || 0})
+                  {(goal.stats?.project_recurring_tasks?.overdue || 0) > 0 && (
+                    <span style={{ marginLeft: '4px', color: '#dc2626', fontWeight: '700', fontSize: '11px', background: '#fee2e2', padding: '1px 5px', borderRadius: '6px' }}>
+                      🚨{goal.stats.project_recurring_tasks!.overdue}
+                    </span>
+                  )}
+                </span>
+                <div style={{ position: 'relative' }}>
+                  <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                    <circle 
+                      cx="40" cy="40" r="32" fill="none"
+                      stroke={(goal.stats?.project_recurring_tasks?.overdue || 0) > 0 ? '#dc2626' : '#8b5cf6'} strokeWidth="8"
+                      strokeDasharray={`${2 * Math.PI * 32}`}
+                      strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.project_recurring_tasks?.total || 0) > 0 ? (goal.stats?.project_recurring_tasks?.active || 0) / (goal.stats?.project_recurring_tasks?.total || 0) : 0))}`}
+                      strokeLinecap="round"
+                      style={{ transition: 'stroke-dashoffset 0.3s' }}
+                    />
+                  </svg>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right: Dates in one compact box */}
@@ -3365,17 +3415,36 @@ export default function Goals() {
               <span style={{ color: '#718096' }}>Projects:</span>
               <span style={{ fontWeight: '600', color: '#2d3748' }}>{goal.stats?.goal_projects?.total || 0}</span>
             </div>
+            {(goal.stats?.overdue_tasks || 0) > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center' }}>
+                <span style={{
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  fontWeight: '700',
+                  fontSize: '12px',
+                  padding: '3px 10px',
+                  borderRadius: '10px',
+                  border: '1px solid #fca5a5'
+                }}>
+                  🚨 Overdue Tasks: {goal.stats!.overdue_tasks}
+                </span>
+              </div>
+            )}
             {/* Consolidated task summary */}
             {(() => {
               const total = goal.stats?.all_tasks?.total || 0;
               const completed = goal.stats?.all_tasks?.completed || 0;
-              const overdue = goal.stats?.overdue_tasks || 0;
+              const overdue = goal.stats?.all_tasks?.overdue || 0;
               const goalTaskCount = goal.stats?.goal_tasks?.total || 0;
               const projectTaskCount = goal.stats?.project_tasks?.total || 0;
               const miscTaskCount = goal.stats?.misc_tasks?.total || 0;
+              const onetimeTaskCount = goal.stats?.project_onetime_tasks?.total || 0;
+              const recurringTaskCount = goal.stats?.project_recurring_tasks?.total || 0;
+              const onetimeOverdue = goal.stats?.project_onetime_tasks?.overdue || 0;
+              const recurringOverdue = goal.stats?.project_recurring_tasks?.overdue || 0;
               if (total === 0) return null;
               return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '14px' }}>📋</span>
                   <span style={{ color: '#718096' }}>All Tasks:</span>
                   <span style={{ fontWeight: '600', color: '#2d3748' }}>{completed}/{total}</span>
@@ -3393,7 +3462,7 @@ export default function Goals() {
                     </span>
                   )}
                   <span style={{ color: '#94a3b8', fontSize: '11px' }}>
-                    ({goalTaskCount > 0 ? `G:${goalTaskCount}` : ''}{projectTaskCount > 0 ? ` P:${projectTaskCount}` : ''}{miscTaskCount > 0 ? ` M:${miscTaskCount}` : ''})
+                    ({goalTaskCount > 0 ? `G:${goalTaskCount}` : ''}{projectTaskCount > 0 ? ` P:${projectTaskCount}` : ''}{miscTaskCount > 0 ? ` M:${miscTaskCount}` : ''}{onetimeTaskCount > 0 ? ` 📌${onetimeTaskCount}${onetimeOverdue > 0 ? `🚨${onetimeOverdue}` : ''}` : ''}{recurringTaskCount > 0 ? ` 🔄${recurringTaskCount}${recurringOverdue > 0 ? `🚨${recurringOverdue}` : ''}` : ''})
                   </span>
                 </div>
               );
@@ -4719,8 +4788,8 @@ return (
                     [
                       { key: 'all', label: 'All Goals', emoji: '🎯',
                         count: lifeGoals.length },
-                      { key: 'overdue', label: 'Has Overdue Tasks', emoji: '🚨',
-                        count: lifeGoals.filter(g => g.stats && g.stats.overdue_tasks > 0).length },
+                      { key: 'overdue', label: 'Overdue Tasks', emoji: '🚨',
+                        count: lifeGoals.reduce((sum, g) => sum + (g.stats?.overdue_tasks || 0), 0) },
                       { key: 'has_tasks', label: 'Has Active Tasks', emoji: '🔄',
                         count: lifeGoals.filter(g => g.stats && (g.stats.total_tasks - (g.stats.completed_tasks || 0)) > 0).length },
                       { key: 'all_done', label: 'All Tasks Done', emoji: '✅',
@@ -4913,6 +4982,14 @@ return (
                                 }}>
                                   {goals.length} goal{goals.length !== 1 ? 's' : ''}
                                 </div>
+                                {(() => {
+                                  const overdueCount = goals.reduce((sum, g) => sum + (g.stats?.overdue_tasks || 0), 0);
+                                  return overdueCount > 0 ? (
+                                    <div style={{ fontSize: '11px', color: '#dc2626', fontWeight: '700', marginTop: '2px' }}>
+                                      🚨 {overdueCount} overdue
+                                    </div>
+                                  ) : null;
+                                })()}
                               </div>
                             </div>
                           );
@@ -5036,7 +5113,20 @@ return (
                               }}
                               title={`${pillarName} - ${categoryName}`}
                             >
-                              <span>{pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {categoryName} ({categoryGoals.length})</span>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {categoryName} ({categoryGoals.length})
+                                {(() => {
+                                  const overdueCount = categoryGoals.reduce((sum, g) => sum + (g.stats?.overdue_tasks || 0), 0);
+                                  return overdueCount > 0 ? (
+                                    <span
+                                      onClick={(e) => { e.stopPropagation(); setGoalTaskLevelFilter(prev => prev === 'overdue' ? 'all' : 'overdue'); }}
+                                      style={{ background: '#fee2e2', color: '#dc2626', fontSize: '12px', fontWeight: '700', padding: '2px 8px', borderRadius: '8px', border: '1px solid #fca5a5', cursor: 'pointer' }}
+                                    >
+                                      🚨 Overdue Tasks: {overdueCount}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </span>
                               <span>{isCollapsed ? '▶' : '▼'}</span>
                             </h3>
                             {!isCollapsed && (
@@ -5285,6 +5375,69 @@ return (
               </div>
             </div>
 
+            {/* Goal Detail Stats Bar */}
+            {(() => {
+              const todayGd = new Date(); todayGd.setHours(0, 0, 0, 0);
+              const allGoalTasks = goalTasks;
+              const allLinkedTasks = linkedTasks.map(l => l.task).filter(Boolean) as any[];
+              const allTasks = [...allGoalTasks, ...allLinkedTasks];
+              const totalCount = allTasks.length;
+              const completedCount = allGoalTasks.filter(t => t.is_completed).length +
+                allLinkedTasks.filter(t => t.is_completed).length;
+              const inProgressCount = totalCount - completedCount;
+              const overdueCount = allGoalTasks.filter(t => !t.is_completed && t.due_date && new Date(t.due_date.split('T')[0]) < todayGd).length +
+                allLinkedTasks.filter(t => !t.is_completed && t.due_date && new Date(t.due_date.split('T')[0]) < todayGd).length;
+
+              const makeStatBtn = (
+                label: string,
+                value: number,
+                color: string,
+                filter: 'all' | 'in-progress' | 'completed' | 'overdue',
+                activeBg: string
+              ) => {
+                const isActive = goalDetailFilter === filter;
+                return (
+                  <button
+                    key={filter}
+                    onClick={() => setGoalDetailFilter(isActive ? 'all' : filter)}
+                    style={{
+                      textAlign: 'center',
+                      background: isActive ? activeBg : 'rgba(255,255,255,0.15)',
+                      border: isActive ? `2px solid ${color}` : '2px solid transparent',
+                      borderRadius: '10px',
+                      padding: '6px 18px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      color: 'white'
+                    }}
+                    title={`Click to filter by ${label}`}
+                  >
+                    <div style={{ fontSize: '11px', color: isActive ? color : 'rgba(255,255,255,0.7)', fontWeight: '600', marginBottom: '2px' }}>{label}</div>
+                    <div style={{ fontSize: '26px', fontWeight: 'bold', color: isActive ? color : 'white' }}>{value}</div>
+                  </button>
+                );
+              };
+
+              return (
+                <div style={{
+                  display: 'flex',
+                  gap: '8px',
+                  justifyContent: 'center',
+                  marginBottom: '20px',
+                  padding: '12px 20px',
+                  background: 'rgba(255,255,255,0.1)',
+                  borderRadius: '12px',
+                  border: '1px solid rgba(255,255,255,0.2)',
+                  flexWrap: 'wrap'
+                }}>
+                  {makeStatBtn('Total Tasks', totalCount, '#f8fafc', 'all', 'rgba(255,255,255,0.2)')}
+                  {makeStatBtn('In Progress', inProgressCount, '#60a5fa', 'in-progress', 'rgba(96,165,250,0.25)')}
+                  {makeStatBtn('Completed', completedCount, '#34d399', 'completed', 'rgba(52,211,153,0.25)')}
+                  {makeStatBtn('Overdue', overdueCount, '#f87171', 'overdue', 'rgba(248,113,113,0.25)')}
+                </div>
+              );
+            })()}
+
             <div className="goal-detail-body">
               {/* Goal-Specific Tasks - Moved to top for priority */}
               <div className="goal-section tasks-section" style={{
@@ -5318,8 +5471,14 @@ return (
                   </button>
                 </div>
                 {!collapsedSections['goal-tasks'] && (() => {
-                  const activeGoalTasks = goalTasks.filter(t => !t.parent_task_id && !t.is_completed);
-                  const completedGoalTasks = goalTasks.filter(t => !t.parent_task_id && t.is_completed);
+                  const todayGt = new Date(); todayGt.setHours(0, 0, 0, 0);
+                  const filteredGoalTasks = goalDetailFilter === 'all' ? goalTasks :
+                    goalDetailFilter === 'completed' ? goalTasks.filter(t => t.is_completed) :
+                    goalDetailFilter === 'in-progress' ? goalTasks.filter(t => !t.is_completed) :
+                    goalDetailFilter === 'overdue' ? goalTasks.filter(t => !t.is_completed && !!t.due_date && new Date(t.due_date.split('T')[0]) < todayGt) :
+                    goalTasks;
+                  const activeGoalTasks = filteredGoalTasks.filter(t => !t.parent_task_id && !t.is_completed);
+                  const completedGoalTasks = filteredGoalTasks.filter(t => !t.parent_task_id && t.is_completed);
 
                   const taskNodeProps = (taskId: number, currentStatus: boolean) => ({
                     onToggleComplete: (tid: number, status: boolean) => {
@@ -5449,11 +5608,17 @@ return (
                 ) : (
                   <div>
                     {(() => {
+                      const todayLt = new Date(); todayLt.setHours(0, 0, 0, 0);
+                      const filteredLinkedTasks = goalDetailFilter === 'all' ? linkedTasks :
+                        goalDetailFilter === 'completed' ? linkedTasks.filter((l: any) => l.task?.is_completed) :
+                        goalDetailFilter === 'in-progress' ? linkedTasks.filter((l: any) => !l.task?.is_completed) :
+                        goalDetailFilter === 'overdue' ? linkedTasks.filter((l: any) => !l.task?.is_completed && l.task?.due_date && new Date(l.task.due_date.split('T')[0]) < todayLt) :
+                        linkedTasks;
                       // Build parent-child tree from flat linked-task list
-                      const linkedTaskIds = new Set(linkedTasks.map((l: any) => l.task?.id).filter(Boolean));
-                      const rootLinks = linkedTasks.filter((l: any) => !linkedTaskIds.has(l.task?.parent_task_id));
+                      const linkedTaskIds = new Set(filteredLinkedTasks.map((l: any) => l.task?.id).filter(Boolean));
+                      const rootLinks = filteredLinkedTasks.filter((l: any) => !linkedTaskIds.has(l.task?.parent_task_id));
                       const getChildLinks = (parentTaskId: number): any[] =>
-                        linkedTasks.filter((l: any) => l.task?.parent_task_id === parentTaskId);
+                        filteredLinkedTasks.filter((l: any) => l.task?.parent_task_id === parentTaskId);
 
                       const renderLinkedTaskNode = (link: any, level: number = 0): React.ReactNode => {
                         const children = getChildLinks(link.task?.id);
@@ -8147,7 +8312,7 @@ return (
                     zIndex: 10
                   }}
                 >
-                  <span>📋 Dream Tasks ({dreamTasks.length})</span>
+                  <span>📋 Dream Tasks ({dreamTasks.filter(t => !t.parent_task_id && !t.is_completed).length})</span>
                   <span style={{ fontSize: '18px' }}>{showDreamTasksList ? '▼' : '▶'}</span>
                 </button>
                 
@@ -8224,6 +8389,49 @@ return (
 
               {/* Actual Task/Project/Goal Lists */}
               <WishActivitiesSection key={`activities-${selectedWish.id}-${Date.now()}`} selectedWish={selectedWish} showToast={showToast} navigate={navigate} />
+
+              {/* Completed Dream Tasks - at the very bottom after all sections */}
+              {dreamTasks.filter(t => !t.parent_task_id && t.is_completed).length > 0 && (
+                <DreamCompletedTasksSection
+                  completedTasks={dreamTasks.filter(t => !t.parent_task_id && t.is_completed)}
+                  renderTask={(task, level) => {
+                    const children = dreamTasks.filter(t => t.parent_task_id === task.id);
+                    const hasChildren = children.length > 0;
+                    return (
+                      <div key={task.id} style={{ marginLeft: level > 0 ? '24px' : '0' }}>
+                        <div style={{
+                          padding: '10px 12px', background: 'white', borderRadius: '8px',
+                          border: '2px solid #d1d5db', display: 'flex', alignItems: 'center',
+                          gap: '10px', marginBottom: '6px', opacity: 0.75
+                        }}>
+                          <input type="checkbox" checked={true}
+                            onChange={async () => {
+                              try {
+                                await api.put(`/api/wishes/${selectedWish.id}/tasks/${task.id}`, { is_completed: false });
+                                setDreamTasks(prev => prev.map(t => t.id === task.id ? { ...t, is_completed: false } : t));
+                              } catch (err) { console.error('Error updating task:', err); }
+                            }}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <span style={{ fontSize: '14px', fontWeight: '600', color: '#6b7280', textDecoration: 'line-through', flex: 1 }}>
+                            {task.name}
+                          </span>
+                          {task.due_date && (
+                            <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                              {new Date(task.due_date).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        {hasChildren && (
+                          <div style={{ marginLeft: '24px' }}>
+                            {children.map((c: any) => <div key={c.id} style={{ fontSize: '13px', color: '#9ca3af', textDecoration: 'line-through', padding: '4px 8px' }}>{c.name}</div>)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }}
+                />
+              )}
 
               {/* 🚀 Bottom Actions */}
               <div style={{ 
