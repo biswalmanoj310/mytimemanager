@@ -2318,6 +2318,9 @@ export default function Goals() {
   const [wishes, setWishes] = useState<WishData[]>([]);
   const [selectedWish, setSelectedWish] = useState<WishData | null>(null);
   const [showAddWishModal, setShowAddWishModal] = useState(false);
+  const [showWishListView, setShowWishListView] = useState(false);
+  const [wishListCollapsed, setWishListCollapsed] = useState(false);
+  const [wishListAchievedCollapsed, setWishListAchievedCollapsed] = useState(true);
   const [showWishDetailsModal, setShowWishDetailsModal] = useState(false);
   const [selectedTaskType, setSelectedTaskType] = useState<string>('');
   const [wishStats, setWishStats] = useState<{[key: number]: {projects: number, tasks: number, goals: number}}>({});
@@ -3597,23 +3600,60 @@ export default function Goals() {
                 🌱 A pressure-free space for your aspirations and dreams. No deadlines, no guilt – just possibilities. 🌠
               </p>
             </div>
-            <button 
-              className="btn btn-primary" 
-              onClick={() => setShowAddWishModal(true)}
-              style={{ 
-                padding: '14px 28px', 
-                fontSize: '16px',
-                background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
-                border: '2px solid #9333ea',
-                color: 'white',
-                fontWeight: '700',
-                borderRadius: '12px',
-                boxShadow: '0 4px 12px rgba(168, 85, 247, 0.4)',
-                whiteSpace: 'nowrap'
-              }}
-            >
-              ➕ Add New Wish
-            </button>
+            <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '10px', flexDirection: 'column', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => { setActiveTab('goals'); navigate('/goals?tab=goals'); }}
+                  style={{
+                    padding: '10px 18px',
+                    fontSize: '14px',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: '2px solid #5a67d8',
+                    color: 'white',
+                    fontWeight: '700',
+                    borderRadius: '10px',
+                    cursor: 'pointer',
+                    boxShadow: '0 3px 8px rgba(102,126,234,0.4)',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  🎯 Go to Goals
+                </button>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={() => setShowAddWishModal(true)}
+                  style={{ 
+                    padding: '14px 28px', 
+                    fontSize: '16px',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                    border: '2px solid #9333ea',
+                    color: 'white',
+                    fontWeight: '700',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 12px rgba(168, 85, 247, 0.4)',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  ➕ Add New Wish
+                </button>
+              </div>
+              <button
+                onClick={() => setShowWishListView(prev => !prev)}
+                style={{
+                  padding: '7px 16px',
+                  fontSize: '13px',
+                  background: showWishListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
+                  border: showWishListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
+                  color: 'white',
+                  fontWeight: '600',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                📋 {showWishListView ? 'Card View' : 'Dream List View'}
+              </button>
+            </div>
           </div>
 
           {wishes.length === 0 ? (
@@ -3638,6 +3678,158 @@ export default function Goals() {
                 <span style={{ color: '#a855f7', fontWeight: '600' }}>Start with the dream.</span>
               </p>
             </div>
+          ) : showWishListView ? (
+            (() => {
+              const wishStatusOrder = ['exploring', 'dreaming', 'planning', 'achieved', 'released'];
+              const wishStatusLabels: { [key: string]: string } = {
+                exploring: '🔍 Exploring', dreaming: '💭 Dreaming', planning: '📋 Planning',
+                achieved: '🏆 Achieved', released: '🕊️ Released',
+              };
+              const wishStatusColors: { [key: string]: { bg: string; text: string } } = {
+                exploring: { bg: '#ccfbf1', text: '#0f766e' },
+                dreaming:  { bg: '#ede9fe', text: '#7c3aed' },
+                planning:  { bg: '#dbeafe', text: '#1d4ed8' },
+                achieved:  { bg: '#dcfce7', text: '#166534' },
+                released:  { bg: '#f1f5f9', text: '#64748b' },
+              };
+              const wishPriorityLabels: { [key: string]: string } = { high: '🔴 High', medium: '🟡 Med', low: '🟢 Low' };
+              const wishPriorityColors: { [key: string]: { bg: string; text: string } } = {
+                high:   { bg: '#fee2e2', text: '#dc2626' },
+                medium: { bg: '#fef9c3', text: '#b45309' },
+                low:    { bg: '#f1f5f9', text: '#64748b' },
+              };
+              const wishPillarBg: { [key: string]: { bg: string; text: string } } = {
+                'Hard Work': { bg: '#dbeafe', text: '#1d4ed8' },
+                'Calmness':  { bg: '#dcfce7', text: '#166534' },
+                'Family':    { bg: '#f3e8ff', text: '#7e22ce' },
+              };
+              const activeWishes = wishes
+                .filter(w => w.status !== 'achieved' && w.status !== 'released')
+                .sort((a, b) => {
+                  const so = wishStatusOrder.indexOf(a.status) - wishStatusOrder.indexOf(b.status);
+                  return so !== 0 ? so : a.title.localeCompare(b.title);
+                });
+              const doneWishes = wishes
+                .filter(w => w.status === 'achieved' || w.status === 'released')
+                .sort((a, b) => a.title.localeCompare(b.title));
+              const wishColDefs = [
+                { label: '#', w: '36px' },
+                { label: 'Dream / Wish', w: '230px' },
+                { label: 'Status', w: '110px' },
+                { label: 'Priority', w: '80px' },
+                { label: 'Timeframe', w: '110px' },
+                { label: 'Pillar', w: '145px' },
+                { label: 'Category', w: '115px' },
+                { label: 'Linked Goal', w: '90px' },
+                { label: 'Days Dreaming', w: '110px' },
+              ];
+              const renderWishRow = (wish: WishData, idx: number, isDone: boolean) => {
+                const sc = wishStatusColors[wish.status] || { bg: '#f1f5f9', text: '#64748b' };
+                const prc = wishPriorityColors[wish.priority] || wishPriorityColors['low'];
+                const pillarName = goalPillars.find(p => p.id === wish.pillar_id)?.name || '';
+                const pb = wishPillarBg[pillarName];
+                const catName = goalCategories.find(c => c.id === wish.category_id)?.name || '';
+                const linkedGoal = lifeGoals.find(g => g.id === wish.linked_goal_id);
+                const rowBg = isDone ? '#f9fafb' : idx % 2 === 0 ? '#fdf4ff' : 'white';
+                return (
+                  <tr key={wish.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
+                    onClick={() => { setSelectedWish(wish); setShowWishDetailsModal(true); }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
+                  >
+                    <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                    <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '230px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {isDone && '🌟 '}{wish.title}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
+                        {wishStatusLabels[wish.status] || wish.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+                      <span style={{ padding: '2px 7px', borderRadius: '7px', fontSize: '11px', fontWeight: '700', background: prc.bg, color: prc.text }}>
+                        {wishPriorityLabels[wish.priority] || '🟢 Low'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {wish.estimated_timeframe || <span style={{ color: '#cbd5e1' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                      {pb
+                        ? <span style={{ background: pb.bg, color: pb.text, padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>
+                            {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {pillarName}
+                          </span>
+                        : <span style={{ color: '#cbd5e1' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                      {catName || <span style={{ color: '#cbd5e1' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                      {linkedGoal
+                        ? <span title={linkedGoal.title} style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 7px', borderRadius: '7px', fontSize: '11px', fontWeight: '600', cursor: 'help' }}>🎯 Linked</span>
+                        : <span style={{ color: '#cbd5e1' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', color: '#6b7280', fontSize: '12px' }}>
+                      {wish.stats?.days_dreaming != null ? `${wish.stats.days_dreaming}d` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                    </td>
+                  </tr>
+                );
+              };
+              const wishColHeaderRow = (
+                <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+                  {wishColDefs.map(({ label, w }) => (
+                    <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
+                  ))}
+                </tr>
+              );
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {/* Active Dreams */}
+                  <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                    <div onClick={() => setWishListCollapsed(prev => !prev)}
+                      style={{ background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}>
+                      <span style={{ fontSize: '12px', display: 'inline-block', transform: wishListCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                      <span style={{ fontWeight: '700', fontSize: '14px' }}>Dreams (Active)</span>
+                      <span style={{ opacity: 0.8, fontSize: '13px' }}>• {activeWishes.length} dreams</span>
+                      {activeWishes.filter(w => w.linked_goal_id).length > 0 && (
+                        <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px' }}>
+                          🎯 {activeWishes.filter(w => w.linked_goal_id).length} linked to goals
+                        </span>
+                      )}
+                      <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{wishListCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                    </div>
+                    {!wishListCollapsed && (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                          <thead>{wishColHeaderRow}</thead>
+                          <tbody>{activeWishes.map((w, i) => renderWishRow(w, i, false))}</tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  {/* Achieved / Released */}
+                  {doneWishes.length > 0 && (
+                    <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                      <div onClick={() => setWishListAchievedCollapsed(prev => !prev)}
+                        style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}>
+                        <span style={{ fontSize: '12px', display: 'inline-block', transform: wishListAchievedCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                        <span style={{ fontWeight: '700', fontSize: '14px' }}>Dreams (Achieved / Released)</span>
+                        <span style={{ opacity: 0.8, fontSize: '13px' }}>• {doneWishes.length} dreams</span>
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{wishListAchievedCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                      </div>
+                      {!wishListAchievedCollapsed && (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                            <thead>{wishColHeaderRow}</thead>
+                            <tbody>{doneWishes.map((w, i) => renderWishRow(w, i, true))}</tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()
           ) : (
             <>
               {/* � EXPLORING DREAMS SECTION - Move to top */}

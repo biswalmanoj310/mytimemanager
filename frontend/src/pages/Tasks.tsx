@@ -621,6 +621,9 @@ export default function Tasks() {
   const [habits, setHabits] = useState<HabitData[]>([]);
   const [completedHabits, setCompletedHabits] = useState<HabitData[]>([]);
   const [showCompletedHabits, setShowCompletedHabits] = useState(false);
+  const [showHabitListView, setShowHabitListView] = useState(false);
+  const [habitListActiveCollapsed, setHabitListActiveCollapsed] = useState(false);
+  const [habitListCompletedCollapsed, setHabitListCompletedCollapsed] = useState(true);
   const [selectedHabit, setSelectedHabit] = useState<HabitData | null>(null);
   const [habitEntries, setHabitEntries] = useState<HabitEntry[]>([]);
   const [habitStreaks, setHabitStreaks] = useState<HabitStreak[]>([]);
@@ -708,6 +711,7 @@ export default function Tasks() {
 
   const [todaysHabits, setTodaysHabits] = useState<TodaysHabit[]>([]);
   const [todaysChallenges, setTodaysChallenges] = useState<TodaysChallenge[]>([]);
+  const [showChallengeListView, setShowChallengeListView] = useState(false);
   const [currentPeriodStats, setCurrentPeriodStats] = useState<Record<number, PeriodStats>>({});
   
   // NOW habits - stored in localStorage
@@ -11253,6 +11257,24 @@ export default function Tasks() {
                         >
                           ➕ Add New Habit
                         </button>
+                        <button
+                          onClick={() => setShowHabitListView(prev => !prev)}
+                          style={{
+                            background: showHabitListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
+                            border: showHabitListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
+                            color: 'white',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            transition: 'all 0.2s',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = showHabitListView ? 'rgba(251,191,36,0.95)' : 'rgba(251,191,36,0.55)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = showHabitListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)'}
+                        >
+                          📋 {showHabitListView ? 'Card View' : 'Habit List View'}
+                        </button>
                         <div 
                           style={{
                             fontSize: '11px',
@@ -11268,8 +11290,131 @@ export default function Tasks() {
                 );
               })()}
 
+              {/* Habit List View */}
+              {showHabitListView && (() => {
+                const habitPillarBg: { [key: string]: { bg: string; text: string } } = {
+                  'Hard Work': { bg: '#dbeafe', text: '#1d4ed8' },
+                  'Calmness':  { bg: '#dcfce7', text: '#166534' },
+                  'Family':    { bg: '#f3e8ff', text: '#7e22ce' },
+                };
+                const freqLabel = (f: string) => {
+                  const m: { [k: string]: string } = { daily:'Daily', weekly:'Weekly', monthly:'Monthly', yearly:'Yearly', once:'Once' };
+                  return m[f] || f;
+                };
+                const colDefs = [
+                  { label: '#', w: '36px' },
+                  { label: 'Habit Name', w: '220px' },
+                  { label: 'Type', w: '90px' },
+                  { label: 'Frequency', w: '90px' },
+                  { label: 'Pillar', w: '145px' },
+                  { label: 'Category', w: '115px' },
+                  { label: 'Streak', w: '70px' },
+                  { label: 'Week %', w: '70px' },
+                  { label: 'Month %', w: '75px' },
+                  { label: 'Overall %', w: '80px' },
+                ];
+                const renderHabitRow = (habit: HabitData, idx: number, isDone: boolean) => {
+                  const pillarName = habit.pillar_name || '';
+                  const pb = habitPillarBg[pillarName];
+                  const streak = habit.stats?.current_streak ?? 0;
+                  const weekPct = habit.stats?.week_success_rate ?? null;
+                  const monthPct = habit.stats?.month_success_rate ?? null;
+                  const overallPct = habit.stats?.success_rate ?? null;
+                  const pctColor = (v: number | null) => v == null ? '#cbd5e1' : v >= 70 ? '#059669' : v >= 40 ? '#b45309' : '#dc2626';
+                  const rowBg = isDone ? '#f0fdf4' : idx % 2 === 0 ? '#f8f9ff' : 'white';
+                  return (
+                    <tr key={habit.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
+                      onClick={() => { setSelectedHabit(habit); setShowHabitDetailsModal(true); }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
+                    >
+                      <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                      <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {isDone && '✅ '}{habit.name}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.habit_type || '—'}</td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{freqLabel(habit.target_frequency || '')}</td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                        {pb
+                          ? <span style={{ background: pb.bg, color: pb.text, padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>
+                              {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {pillarName}
+                            </span>
+                          : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: streak >= 7 ? '#f59e0b' : '#374151' }}>
+                        {streak > 0 ? `${streak}🔥` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(weekPct) }}>
+                        {weekPct != null ? `${weekPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(monthPct) }}>
+                        {monthPct != null ? `${monthPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(overallPct) }}>
+                        {overallPct != null ? `${overallPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                };
+                const colHeaderRow = (
+                  <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+                    {colDefs.map(({ label, w }) => (
+                      <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
+                    ))}
+                  </tr>
+                );
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                    {/* Active Habits */}
+                    <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                      <div onClick={() => setHabitListActiveCollapsed(prev => !prev)}
+                        style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}>
+                        <span style={{ fontSize: '12px', display: 'inline-block', transform: habitListActiveCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                        <span style={{ fontWeight: '700', fontSize: '14px' }}>Habits (Active)</span>
+                        <span style={{ opacity: 0.8, fontSize: '13px' }}>• {habits.length} habits</span>
+                        {habits.filter(h => (h.stats?.current_streak ?? 0) >= 7).length > 0 && (
+                          <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px' }}>
+                            🔥 {habits.filter(h => (h.stats?.current_streak ?? 0) >= 7).length} on streak
+                          </span>
+                        )}
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{habitListActiveCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                      </div>
+                      {!habitListActiveCollapsed && (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                            <thead>{colHeaderRow}</thead>
+                            <tbody>{habits.map((h, i) => renderHabitRow(h, i, false))}</tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    {/* Completed Habits */}
+                    {completedHabits.length > 0 && (
+                      <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                        <div onClick={() => setHabitListCompletedCollapsed(prev => !prev)}
+                          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}>
+                          <span style={{ fontSize: '12px', display: 'inline-block', transform: habitListCompletedCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                          <span style={{ fontWeight: '700', fontSize: '14px' }}>Habits (Completed)</span>
+                          <span style={{ opacity: 0.8, fontSize: '13px' }}>• {completedHabits.length} habits</span>
+                          <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{habitListCompletedCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                        </div>
+                        {!habitListCompletedCollapsed && (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                              <thead>{colHeaderRow}</thead>
+                              <tbody>{completedHabits.map((h, i) => renderHabitRow(h, i, true))}</tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Category-Based Sections (Collapsible) */}
-              {(() => {
+              {!showHabitListView && (() => {
                 // Define hierarchy order (same as Daily tab)
                 const hierarchyOrder: { [key: string]: number } = {
                   'Hard Work|Office-Tasks': 1,
@@ -11999,7 +12144,7 @@ export default function Tasks() {
               })()}
 
               {/* Completed Habits Section */}
-              {completedHabits.length > 0 && (
+              {!showHabitListView && completedHabits.length > 0 && (
               <div style={{ marginTop: '30px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: '600', margin: 0, color: '#718096' }}>
@@ -14554,11 +14699,119 @@ export default function Tasks() {
               {/* Active Challenges Section */}
               {todaysChallenges.length > 0 && (
                 <div>
-                  <h3 style={{ marginBottom: '15px', color: '#2d3748', fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h3 style={{ marginBottom: '15px', color: '#2d3748', fontSize: '22px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <span>🎯</span>
                     <span>Active Challenges</span>
                     <span style={{ fontSize: '14px', fontWeight: '400', color: '#718096' }}>({todaysChallenges.length})</span>
+                    <button
+                      onClick={() => setShowChallengeListView(prev => !prev)}
+                      style={{
+                        marginLeft: 'auto',
+                        background: showChallengeListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
+                        border: showChallengeListView ? '2px solid rgba(251,191,36,0.9)' : '2px solid rgba(251,191,36,0.6)',
+                        color: '#92400e',
+                        padding: '4px 12px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      📋 {showChallengeListView ? 'Card View' : 'List View'}
+                    </button>
                   </h3>
+                  {showChallengeListView ? (
+                    (() => {
+                      const statusColors: { [k: string]: { bg: string; text: string } } = {
+                        on_track: { bg: '#dcfce7', text: '#166534' },
+                        at_risk:  { bg: '#fef9c3', text: '#b45309' },
+                        behind:   { bg: '#fee2e2', text: '#dc2626' },
+                      };
+                      const challengePillarBg: { [k: string]: { bg: string; text: string } } = {
+                        'Hard Work': { bg: '#dbeafe', text: '#1d4ed8' },
+                        'Calmness':  { bg: '#dcfce7', text: '#166634' },
+                        'Family':    { bg: '#f3e8ff', text: '#7e22ce' },
+                      };
+                      const colDefs = [
+                        { label: '#', w: '36px' },
+                        { label: 'Challenge', w: '225px' },
+                        { label: 'Status', w: '100px' },
+                        { label: 'Difficulty', w: '90px' },
+                        { label: 'Progress', w: '120px' },
+                        { label: 'Days Left', w: '80px' },
+                        { label: 'Pillar', w: '145px' },
+                        { label: 'Category', w: '115px' },
+                        { label: 'Done Today', w: '90px' },
+                      ];
+                      const colHeaderRow = (
+                        <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+                          {colDefs.map(({ label, w }) => (
+                            <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
+                          ))}
+                        </tr>
+                      );
+                      return (
+                        <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.10)' }}>
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                              <thead>{colHeaderRow}</thead>
+                              <tbody>
+                                {todaysChallenges.map((challenge, idx) => {
+                                  const sc = statusColors[challenge.status_indicator] || { bg: '#f1f5f9', text: '#64748b' };
+                                  const pb = challengePillarBg[challenge.pillar_name || ''];
+                                  const rowBg = challenge.completed_today ? '#f0fdf4' : idx % 2 === 0 ? '#fafafa' : 'white';
+                                  const pct = Math.round(challenge.progress_percentage || 0);
+                                  const diffColors: { [k: string]: string } = { easy: '#059669', medium: '#b45309', hard: '#dc2626', extreme: '#7c3aed' };
+                                  return (
+                                    <tr key={challenge.id} style={{ background: rowBg, transition: 'background 0.15s' }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
+                                    >
+                                      <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                                      <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '225px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{challenge.name}</td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+                                        <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
+                                          {challenge.status_indicator === 'on_track' ? '🟢 On Track' : challenge.status_indicator === 'at_risk' ? '🟡 At Risk' : '🔴 Behind'}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: diffColors[challenge.difficulty || ''] || '#374151', fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                        {challenge.difficulty ? challenge.difficulty.charAt(0).toUpperCase() + challenge.difficulty.slice(1) : '—'}
+                                      </td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <div style={{ flex: 1, height: '6px', background: '#e5e7eb', borderRadius: '3px', overflow: 'hidden', minWidth: '60px' }}>
+                                            <div style={{ height: '100%', width: `${pct}%`, background: pct >= 70 ? '#059669' : pct >= 40 ? '#f59e0b' : '#ef4444', borderRadius: '3px', transition: 'width 0.3s' }}></div>
+                                          </div>
+                                          <span style={{ fontSize: '11px', fontWeight: '600', color: '#374151', whiteSpace: 'nowrap' }}>{pct}%</span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: (challenge.days_remaining ?? 0) <= 3 ? '#dc2626' : '#374151' }}>
+                                        {challenge.days_remaining != null ? `${challenge.days_remaining}d` : '—'}
+                                      </td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                                        {pb
+                                          ? <span style={{ background: pb.bg, color: pb.text, padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>
+                                              {challenge.pillar_name === 'Hard Work' ? '💼' : challenge.pillar_name === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {challenge.pillar_name}
+                                            </span>
+                                          : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                      </td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{challenge.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center' }}>
+                                        {challenge.completed_today
+                                          ? <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}>✓ Done</span>
+                                          : <span style={{ background: '#fef9c3', color: '#b45309', padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}>Pending</span>}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '15px' }}>
                     {todaysChallenges.map(challenge => {
                       const statusColors = {
@@ -14690,6 +14943,7 @@ export default function Tasks() {
                       );
                     })}
                   </div>
+                  )}
                 </div>
               )}
             </div>
