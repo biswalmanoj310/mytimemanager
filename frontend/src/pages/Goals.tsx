@@ -2280,6 +2280,9 @@ export default function Goals() {
   const [goalPillars, setGoalPillars] = useState<any[]>([]);
   const [goalCategories, setGoalCategories] = useState<any[]>([]);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
+  const [showGoalListView, setShowGoalListView] = useState(false);
+  const [goalListActiveCollapsed, setGoalListActiveCollapsed] = useState(false);
+  const [goalListCompletedCollapsed, setGoalListCompletedCollapsed] = useState(true);
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
   const [showAddGoalTaskModal, setShowAddGoalTaskModal] = useState(false);
   const [editingGoalTask, setEditingGoalTask] = useState<GoalTaskData | null>(null); // For adding subtasks
@@ -4837,23 +4840,43 @@ return (
                 >
                   ✨ Dream Board
                 </button>
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => {
-                    setEditingGoal(null);
-                    setShowAddGoalModal(true);
-                  }}
-                  style={{
-                    background: 'rgba(255,255,255,0.25)',
-                    border: '2px solid rgba(255,255,255,0.4)',
-                    color: 'white',
-                    fontWeight: '700',
-                    padding: '10px 20px',
-                    borderRadius: '8px'
-                  }}
-                >
-                  ➕ Add Life Goal
-                </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => {
+                      setEditingGoal(null);
+                      setShowAddGoalModal(true);
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.25)',
+                      border: '2px solid rgba(255,255,255,0.4)',
+                      color: 'white',
+                      fontWeight: '700',
+                      padding: '10px 20px',
+                      borderRadius: '8px',
+                      width: '100%'
+                    }}
+                  >
+                    ➕ Add Life Goal
+                  </button>
+                  <button
+                    onClick={() => setShowGoalListView(prev => !prev)}
+                    style={{
+                      background: showGoalListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
+                      border: showGoalListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
+                      color: 'white',
+                      fontWeight: '600',
+                      padding: '8px 18px',
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      transition: 'all 0.2s',
+                      width: '100%'
+                    }}
+                  >
+                    📋 {showGoalListView ? 'Card View' : 'Goals List View'}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -4876,6 +4899,185 @@ return (
                   Create Your First Goal
                 </button>
               </div>
+            ) : showGoalListView ? (
+              /* ── Goals List View (table) ── */
+              (() => {
+                const pillarColors: { [key: string]: { bg: string; text: string } } = {
+                  'Hard Work': { bg: '#dbeafe', text: '#1d4ed8' },
+                  'Calmness':  { bg: '#dcfce7', text: '#166534' },
+                  'Family':    { bg: '#f3e8ff', text: '#7e22ce' },
+                };
+                const statusColors: { [key: string]: { bg: string; text: string } } = {
+                  completed:   { bg: '#dcfce7', text: '#059669' },
+                  on_track:    { bg: '#dbeafe', text: '#1d4ed8' },
+                  in_progress: { bg: '#e0f2fe', text: '#0284c7' },
+                  at_risk:     { bg: '#fef9c3', text: '#b45309' },
+                  behind:      { bg: '#fee2e2', text: '#dc2626' },
+                  not_started: { bg: '#f1f5f9', text: '#64748b' },
+                  abandoned:   { bg: '#f3f4f6', text: '#9ca3af' },
+                };
+                const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed')
+                  .sort((a, b) => (b.stats?.overdue_tasks || 0) - (a.stats?.overdue_tasks || 0) || a.name.localeCompare(b.name));
+                const completedGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed')
+                  .sort((a, b) => a.name.localeCompare(b.name));
+                const colHeaders = [
+                  { label: '#', w: '36px' },
+                  { label: 'Goal Name', w: '210px' },
+                  { label: 'Projects', w: '75px' },
+                  { label: 'Total', w: '60px' },
+                  { label: 'Done', w: '75px' },
+                  { label: 'Remaining', w: '82px' },
+                  { label: 'Overdue', w: '88px' },
+                  { label: 'Target Date', w: '110px' },
+                  { label: 'Pillar', w: '145px' },
+                  { label: 'Category', w: '115px' },
+                  { label: 'Status', w: '110px' },
+                ];
+                const renderGoalRow = (goal: LifeGoalData, idx: number, isCompleted: boolean) => {
+                  const overdue = goal.stats?.overdue_tasks || 0;
+                  const total = goal.stats?.total_tasks || 0;
+                  const done = goal.stats?.completed_tasks || 0;
+                  const remaining = total - done;
+                  const numProjects = goal.stats?.goal_projects?.total || 0;
+                  const pillar = goalPillars.find(p => p.id === goal.pillar_id);
+                  const category = goalCategories.find(c => c.id === goal.category_id);
+                  const pillarName = pillar?.name || '';
+                  const pc = pillarColors[pillarName];
+                  const sc = statusColors[goal.status] || statusColors['not_started'];
+                  const rowBg = isCompleted ? '#f0fdf4' : overdue > 0 ? '#fff1f2' : idx % 2 === 0 ? '#fafafa' : 'white';
+                  const targetDateStr = goal.target_date;
+                  const targetPast = (() => {
+                    if (!targetDateStr || isCompleted) return false;
+                    const d = new Date(targetDateStr); d.setHours(0,0,0,0);
+                    const t = new Date(); t.setHours(0,0,0,0);
+                    return d < t;
+                  })();
+                  return (
+                    <tr key={goal.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
+                      onClick={() => { setSelectedGoal(goal); loadGoalDetails(goal.id); navigate(`/goals?goal=${goal.id}`); }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
+                    >
+                      <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                      <td style={{ padding: '8px 10px', fontWeight: '600', color: isCompleted ? '#059669' : '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '210px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {isCompleted && <span style={{ marginRight: '4px' }}>🏆</span>}{goal.name}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', fontWeight: '600', color: numProjects > 0 ? '#374151' : '#cbd5e1' }}>
+                        {numProjects > 0 ? numProjects : '—'}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', fontWeight: '600', color: '#374151' }}>{total > 0 ? total : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                        {total > 0
+                          ? <><span style={{ fontWeight: '600', color: done === total ? '#059669' : '#374151' }}>{done}</span>
+                              <span style={{ color: '#94a3b8', fontSize: '11px', marginLeft: '3px' }}>({Math.round((done/total)*100)}%)</span></>
+                          : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                        {remaining > 0
+                          ? <span style={{ fontWeight: '700', color: '#0284c7' }}>{remaining}</span>
+                          : <span style={{ color: '#86efac', fontWeight: '600' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                        {overdue > 0
+                          ? <span style={{ background: '#fee2e2', color: '#dc2626', fontWeight: '700', fontSize: '12px', padding: '2px 7px', borderRadius: '10px', border: '1px solid #fca5a5' }}>🚨 {overdue}</span>
+                          : <span style={{ color: '#86efac', fontWeight: '600' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                        {targetDateStr
+                          ? <span style={{ color: targetPast ? '#dc2626' : '#374151', fontWeight: targetPast ? '700' : '400' }}>{targetPast && '⚠ '}{targetDateStr}</span>
+                          : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                        {pc
+                          ? <span style={{ background: pc.bg, color: pc.text, padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                              {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {pillarName}
+                            </span>
+                          : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{category?.name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
+                          {goal.status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                };
+                const totalFooterRow = (rows: LifeGoalData[], label: string) => (
+                  <tr style={{ background: '#f8fafc', fontWeight: '700', borderTop: '2px solid #e2e8f0' }}>
+                    <td colSpan={2} style={{ padding: '9px 10px', color: '#374151', fontSize: '13px' }}>{label} ({rows.length})</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', color: '#374151' }}>{rows.reduce((s, g) => s + (g.stats?.goal_projects?.total || 0), 0)}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', color: '#374151' }}>{rows.reduce((s, g) => s + (g.stats?.total_tasks || 0), 0)}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', color: '#059669' }}>{rows.reduce((s, g) => s + (g.stats?.completed_tasks || 0), 0)}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center', color: '#0284c7', fontWeight: '700' }}>{rows.reduce((s, g) => s + ((g.stats?.total_tasks || 0) - (g.stats?.completed_tasks || 0)), 0)}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'center' }}>
+                      {rows.reduce((s, g) => s + (g.stats?.overdue_tasks || 0), 0) > 0
+                        ? <span style={{ background: '#fee2e2', color: '#dc2626', fontWeight: '700', padding: '2px 8px', borderRadius: '10px' }}>🚨 {rows.reduce((s, g) => s + (g.stats?.overdue_tasks || 0), 0)}</span>
+                        : <span style={{ color: '#86efac' }}>—</span>}
+                    </td>
+                    <td colSpan={4} style={{ padding: '9px 10px' }}></td>
+                  </tr>
+                );
+                const colHeaderRow = (
+                  <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+                    {colHeaders.map(({ label, w }) => (
+                      <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
+                    ))}
+                  </tr>
+                );
+                const activeOverdue = activeGoals.reduce((s, g) => s + (g.stats?.overdue_tasks || 0), 0);
+                const activeRemaining = activeGoals.reduce((s, g) => s + ((g.stats?.total_tasks || 0) - (g.stats?.completed_tasks || 0)), 0);
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {/* ─ Goals (Active) section ─ */}
+                    <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                      <div
+                        onClick={() => setGoalListActiveCollapsed(prev => !prev)}
+                        style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}
+                      >
+                        <span style={{ fontSize: '12px', display: 'inline-block', transform: goalListActiveCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                        <span style={{ fontWeight: '700', fontSize: '14px' }}>Goals (Active)</span>
+                        <span style={{ opacity: 0.8, fontSize: '13px' }}>• {activeGoals.length} goals</span>
+                        {activeRemaining > 0 && <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px' }}>⏳ {activeRemaining} remaining tasks</span>}
+                        {activeOverdue > 0 && <span style={{ background: 'rgba(239,68,68,0.35)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '700' }}>🚨 {activeOverdue} overdue</span>}
+                        <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{goalListActiveCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                      </div>
+                      {!goalListActiveCollapsed && (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                            <thead>{colHeaderRow}</thead>
+                            <tbody>{activeGoals.map((g, i) => renderGoalRow(g, i, false))}</tbody>
+                            <tfoot>{totalFooterRow(activeGoals, 'Active Goals')}</tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    {/* ─ Goals (Completed) section ─ */}
+                    {completedGoals.length > 0 && (
+                      <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                        <div
+                          onClick={() => setGoalListCompletedCollapsed(prev => !prev)}
+                          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}
+                        >
+                          <span style={{ fontSize: '12px', display: 'inline-block', transform: goalListCompletedCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                          <span style={{ fontWeight: '700', fontSize: '14px' }}>Goals (Completed)</span>
+                          <span style={{ opacity: 0.8, fontSize: '13px' }}>• {completedGoals.length} goals</span>
+                          <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{goalListCompletedCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                        </div>
+                        {!goalListCompletedCollapsed && (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                              <thead>{colHeaderRow}</thead>
+                              <tbody>{completedGoals.map((g, i) => renderGoalRow(g, i, true))}</tbody>
+                              <tfoot>{totalFooterRow(completedGoals, '🏆 Completed Goals')}</tfoot>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
             ) : (
               <>
                 {/* Summary Panel - Goal counts by category */}

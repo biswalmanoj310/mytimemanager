@@ -384,6 +384,9 @@ export default function Tasks() {
   const [projectMilestones, setProjectMilestones] = useState<ProjectMilestoneData[]>([]);
   const [projectChallenges, setProjectChallenges] = useState<{direct_challenges: any[], goal_challenges: any[]} | null>(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
+  const [showProjectListView, setShowProjectListView] = useState(false);
+  const [projectListActiveCollapsed, setProjectListActiveCollapsed] = useState(false);
+  const [projectListCompletedCollapsed, setProjectListCompletedCollapsed] = useState(true);
   const [projectFormGoalId, setProjectFormGoalId] = useState<number | null>(null);
   const [projectFormPillarId, setProjectFormPillarId] = useState<number | null>(null);
   const [projectFormCategoryId, setProjectFormCategoryId] = useState<number | null>(null);
@@ -8218,7 +8221,7 @@ export default function Tasks() {
                     })()}
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexDirection: 'column' }}>
                   <button 
                     className="btn btn-primary" 
                     onClick={() => { setEditingProject(null); setProjectFormGoalId(null); setProjectFormPillarId(null); setProjectFormCategoryId(null); setProjectFormSubCategoryId(null); setShowAddProjectModal(true); }}
@@ -8231,12 +8234,32 @@ export default function Tasks() {
                       cursor: 'pointer',
                       borderRadius: '8px',
                       transition: 'all 0.2s',
-                      fontSize: '14px'
+                      fontSize: '14px',
+                      width: '100%'
                     }}
                     onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.3)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
                   >
                     ➕ Add Project
+                  </button>
+                  <button
+                    onClick={() => setShowProjectListView(prev => !prev)}
+                    style={{
+                      background: showProjectListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
+                      border: showProjectListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
+                      color: 'white',
+                      fontWeight: '600',
+                      padding: '7px 14px',
+                      cursor: 'pointer',
+                      borderRadius: '8px',
+                      transition: 'all 0.2s',
+                      fontSize: '13px',
+                      width: '100%'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(251,191,36,0.65)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = showProjectListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)'}
+                  >
+                    📋 {showProjectListView ? 'Card View' : 'Project List View'}
                   </button>
                 </div>
               </div>
@@ -8245,6 +8268,162 @@ export default function Tasks() {
                 <div className="empty-state">
                   <p>No projects yet. Click "Add Project" to get started.</p>
                 </div>
+              ) : showProjectListView ? (
+                /* ── Project List View (table) ── */
+                (() => {
+                  const activeProj = [...projects].filter(p => !p.is_completed).sort((a, b) => {
+                    const aO = a.progress?.overdue_tasks || 0, bO = b.progress?.overdue_tasks || 0;
+                    if (bO !== aO) return bO - aO;
+                    return a.name.localeCompare(b.name);
+                  });
+                  const completedProj = [...projects].filter(p => p.is_completed).sort((a, b) => a.name.localeCompare(b.name));
+                  const colHeaders = [
+                    { label: '#', w: '36px' },
+                    { label: 'Project Name', w: '200px' },
+                    { label: 'Total', w: '55px' },
+                    { label: 'Done', w: '75px' },
+                    { label: 'Remaining', w: '82px' },
+                    { label: 'Overdue', w: '88px' },
+                    { label: 'Target Date', w: '110px' },
+                    { label: 'Pillar', w: '145px' },
+                    { label: 'Category', w: '115px' },
+                    { label: 'Status', w: '100px' },
+                  ];
+                  const pillarColors: { [key: string]: string } = { 'Hard Work': '#dbeafe', 'Calmness': '#dcfce7', 'Family': '#f3e8ff' };
+                  const renderRow = (project: ProjectData, idx: number, isCompleted: boolean) => {
+                    const overdue = project.progress?.overdue_tasks || 0;
+                    const total = project.progress?.total_tasks || 0;
+                    const done = project.progress?.completed_tasks || 0;
+                    const remaining = total - done;
+                    const pillar = projectPillars.find(p => p.id === project.pillar_id);
+                    const category = projectCategories.find(c => c.id === project.category_id);
+                    const pillarName = pillar?.name || '';
+                    const rowBg = isCompleted ? '#f0fdf4' : overdue > 0 ? '#fff1f2' : idx % 2 === 0 ? '#fafafa' : 'white';
+                    const targetDate = project.target_completion_date
+                      ? (() => { const d = parseDateString(project.target_completion_date); d.setHours(0,0,0,0); const today = new Date(); today.setHours(0,0,0,0); return { label: project.target_completion_date, past: !isCompleted && d < today }; })()
+                      : null;
+                    return (
+                      <tr key={project.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
+                        onClick={() => setSelectedProject(project)}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
+                      >
+                        <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
+                        <td style={{ padding: '8px 10px', fontWeight: '600', color: isCompleted ? '#059669' : '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {isCompleted && <span style={{ marginRight: '4px' }}>✅</span>}{project.name}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', color: '#374151', borderBottom: '1px solid #e5e7eb', fontWeight: '600' }}>{total}</td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                          <span style={{ fontWeight: '600', color: done === total && total > 0 ? '#059669' : '#374151' }}>{done}</span>
+                          {total > 0 && <span style={{ color: '#94a3b8', fontSize: '11px', marginLeft: '3px' }}>({Math.round((done/total)*100)}%)</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                          {remaining > 0
+                            ? <span style={{ fontWeight: '700', color: '#0284c7' }}>{remaining}</span>
+                            : <span style={{ color: '#86efac', fontWeight: '600' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                          {overdue > 0
+                            ? <span style={{ background: '#fee2e2', color: '#dc2626', fontWeight: '700', fontSize: '12px', padding: '2px 7px', borderRadius: '10px', border: '1px solid #fca5a5' }}>🚨 {overdue}</span>
+                            : <span style={{ color: '#86efac', fontWeight: '600' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                          {targetDate
+                            ? <span style={{ color: targetDate.past ? '#dc2626' : '#374151', fontWeight: targetDate.past ? '700' : '400' }}>{targetDate.past && '⚠ '}{targetDate.label}</span>
+                            : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                          {pillarName
+                            ? <span style={{ background: pillarColors[pillarName] || '#f1f5f9', padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', color: '#374151', whiteSpace: 'nowrap' }}>
+                                {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : pillarName === 'Family' ? '👨‍👩‍👦' : ''} {pillarName}
+                              </span>
+                            : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', whiteSpace: 'nowrap' }}>{category?.name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
+                          <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700',
+                            background: isCompleted ? '#dcfce7' : project.status === 'in_progress' ? '#dbeafe' : project.status === 'not_started' ? '#f1f5f9' : '#fef9c3',
+                            color: isCompleted ? '#059669' : project.status === 'in_progress' ? '#1d4ed8' : project.status === 'not_started' ? '#64748b' : '#b45309' }}>
+                            {isCompleted ? 'Completed' : project.status === 'in_progress' ? 'In Progress' : project.status === 'not_started' ? 'Not Started' : project.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  };
+                  const totalRow = (rows: ProjectData[], label: string) => (
+                    <tr style={{ background: '#f8fafc', fontWeight: '700', borderTop: '2px solid #e2e8f0' }}>
+                      <td colSpan={2} style={{ padding: '9px 10px', color: '#374151', fontSize: '13px' }}>{label} ({rows.length})</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'center', color: '#374151' }}>{rows.reduce((s, p) => s + (p.progress?.total_tasks || 0), 0)}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'center', color: '#059669' }}>{rows.reduce((s, p) => s + (p.progress?.completed_tasks || 0), 0)}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'center', color: '#0284c7', fontWeight: '700' }}>{rows.reduce((s, p) => s + ((p.progress?.total_tasks || 0) - (p.progress?.completed_tasks || 0)), 0)}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'center' }}>
+                        {rows.reduce((s, p) => s + (p.progress?.overdue_tasks || 0), 0) > 0
+                          ? <span style={{ background: '#fee2e2', color: '#dc2626', fontWeight: '700', padding: '2px 8px', borderRadius: '10px' }}>🚨 {rows.reduce((s, p) => s + (p.progress?.overdue_tasks || 0), 0)}</span>
+                          : <span style={{ color: '#86efac' }}>—</span>}
+                      </td>
+                      <td colSpan={4} style={{ padding: '9px 10px' }}></td>
+                    </tr>
+                  );
+                  const colHeaderRow = (
+                    <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
+                      {colHeaders.map(({ label, w }) => (
+                        <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
+                      ))}
+                    </tr>
+                  );
+                  const activeOverdue = activeProj.reduce((s, p) => s + (p.progress?.overdue_tasks || 0), 0);
+                  const activeRemaining = activeProj.reduce((s, p) => s + ((p.progress?.total_tasks || 0) - (p.progress?.completed_tasks || 0)), 0);
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      {/* ─ Projects (Active) section ─ */}
+                      <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                        <div
+                          onClick={() => setProjectListActiveCollapsed(prev => !prev)}
+                          style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}
+                        >
+                          <span style={{ fontSize: '12px', display: 'inline-block', transform: projectListActiveCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                          <span style={{ fontWeight: '700', fontSize: '14px' }}>Projects (Active)</span>
+                          <span style={{ opacity: 0.8, fontSize: '13px' }}>• {activeProj.length} projects</span>
+                          {activeRemaining > 0 && <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px' }}>⏳ {activeRemaining} remaining</span>}
+                          {activeOverdue > 0 && <span style={{ background: 'rgba(239,68,68,0.35)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '700' }}>🚨 {activeOverdue} overdue</span>}
+                          <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{projectListActiveCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                        </div>
+                        {!projectListActiveCollapsed && (
+                          <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                              <thead>{colHeaderRow}</thead>
+                              <tbody>{activeProj.map((p, i) => renderRow(p, i, false))}</tbody>
+                              <tfoot>{totalRow(activeProj, 'Active Projects')}</tfoot>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                      {/* ─ Projects (Completed) section ─ */}
+                      {completedProj.length > 0 && (
+                        <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                          <div
+                            onClick={() => setProjectListCompletedCollapsed(prev => !prev)}
+                            style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}
+                          >
+                            <span style={{ fontSize: '12px', display: 'inline-block', transform: projectListCompletedCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                            <span style={{ fontWeight: '700', fontSize: '14px' }}>Projects (Completed)</span>
+                            <span style={{ opacity: 0.8, fontSize: '13px' }}>• {completedProj.length} projects</span>
+                            <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{projectListCompletedCollapsed ? 'click to expand' : 'click to collapse'}</span>
+                          </div>
+                          {!projectListCompletedCollapsed && (
+                            <div style={{ overflowX: 'auto' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
+                                <thead>{colHeaderRow}</thead>
+                                <tbody>{completedProj.map((p, i) => renderRow(p, i, true))}</tbody>
+                                <tfoot>{totalRow(completedProj, '✅ Completed Projects')}</tfoot>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 <>
                   {/* Summary Panel - Project counts by category */}
