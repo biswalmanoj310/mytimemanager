@@ -311,6 +311,25 @@ const MonthlyTasks: React.FC = () => {
     else return value > 0 ? 'Yes' : 'No';
   };
 
+  /**
+   * Get inline style for boolean success rate badge based on 70% threshold.
+   * ≥70% = green, 55-69% = yellow/orange, <55% = red
+   */
+  const getBooleanSuccessStyle = (pct: number): React.CSSProperties => {
+    if (pct >= 70) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: '12px'
+    };
+    if (pct >= 55) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '12px'
+    };
+    return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fee2e2', color: '#b91c1c', fontWeight: 700, fontSize: '12px'
+    };
+  };
+
   const renderTaskRow = (task: Task) => {
     const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
     const today = new Date();
@@ -382,13 +401,36 @@ const MonthlyTasks: React.FC = () => {
           </div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, dailyIdeal)}
+          {task.task_type === TaskType.BOOLEAN ? (
+            <span style={{ fontSize: '12px', color: '#4a5568' }}>
+              1/day<br/><span style={{ fontSize: '10px', color: '#718096' }}>Goal: ≥70%</span>
+            </span>
+          ) : formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, avgSpentPerDay)}
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const totalDays = task.follow_up_frequency === 'daily' ? daysInMonth
+              : task.follow_up_frequency === 'weekly' ? Math.ceil(daysInMonth / 7)
+              : 1;
+            const pct = Math.round((totalSpent / totalDays) * 100);
+            const icon = pct >= 75 ? '✅' : pct >= 60 ? '⚠️' : '🔴';
+            return (
+              <span style={getBooleanSuccessStyle(pct)} title={pct >= 70 ? 'Achieved ≥70% goal' : pct >= 55 ? 'At risk' : 'Needs recovery'}>
+                {totalSpent}/{totalDays} {icon}<br/>{pct}%
+              </span>
+            );
+          })() : formatValue(task, avgSpentPerDay)}
         </td>
         <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, avgRemainingPerDay)}
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const totalDays = task.follow_up_frequency === 'daily' ? daysInMonth
+              : task.follow_up_frequency === 'weekly' ? Math.ceil(daysInMonth / 7)
+              : 1;
+            const targetSuccesses = Math.ceil(totalDays * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            if (needed === 0) return <span style={{ color: '#15803d', fontSize: '12px', fontWeight: 600 }}>✅ Goal met</span>;
+            return <span style={{ color: '#b91c1c', fontSize: '12px' }}>Need {needed} more</span>;
+          })() : formatValue(task, avgRemainingPerDay)}
         </td>
         {monthDays.map(day => {
           const dayValue = getMonthlyTime(task.id, day.day);
@@ -577,7 +619,7 @@ const MonthlyTasks: React.FC = () => {
       nativeTotal: nativeTasks.length, nativeAchieved, nativeBehind,
       monTotal: monitoringTasks.length, monAchieved, monBehind,
     };
-  }, [tasksByType, monthDays]);
+  }, [tasksByType, monthDays, dailyAggregatesMonthly]);
 
   const renderTaskSection = (sectionTitle: string, emoji: string, sectionClass: string, tasks: Task[], subtitle?: string) => {
     if (tasks.length === 0) return null;

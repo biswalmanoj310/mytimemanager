@@ -731,6 +731,25 @@ const WeeklyTasks: React.FC = () => {
     return `${percentage}%`;
   };
 
+  /**
+   * Get inline style for boolean success rate badge based on 70% threshold.
+   * ≥70% = green, 55-69% = yellow/orange, <55% = red
+   */
+  const getBooleanSuccessStyle = (pct: number): React.CSSProperties => {
+    if (pct >= 70) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: '12px'
+    };
+    if (pct >= 55) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '12px'
+    };
+    return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fee2e2', color: '#b91c1c', fontWeight: 700, fontSize: '12px'
+    };
+  };
+
   // Compute summary data for weekly home tab banner
   const weeklySummaryData = useMemo(() => {
     // --- Home weekly tasks ---
@@ -772,8 +791,7 @@ const WeeklyTasks: React.FC = () => {
     });
 
     return { totalTasks, achievedCount, behindCount, totalMonitoring, achievedMonitoring, notAchievedMonitoring };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tasksByType, monitoringTasksByType, weekDays, pendingChanges, weeklyDailyEntries, weekStartDate]);
+  }, [tasksByType, monitoringTasksByType, weekDays, pendingChanges, weeklyDailyEntries, weekStartDate, dailyAggregatesWeekly]);
 
   // ============================================================================
   // RENDERING HELPERS
@@ -902,21 +920,30 @@ const WeeklyTasks: React.FC = () => {
           className={`col-time sticky-col sticky-col-2 ${rowColorClass}`}
           style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
-          {task.task_type === TaskType.BOOLEAN 
-            ? '1/1 day' 
-            : formatValue(task, dailyIdeal)
-          }
+          {task.task_type === TaskType.BOOLEAN ? (
+            <span style={{ fontSize: '12px', color: '#4a5568' }}>
+              1/day
+              <br/>
+              <span style={{ fontSize: '10px', color: '#718096' }}>Goal: ≥70%</span>
+            </span>
+          ) : formatValue(task, dailyIdeal)}
         </td>
         
         {/* Actual Avg/Day - Sticky Column 3 */}
         <td 
           className={`col-time sticky-col sticky-col-3 ${rowColorClass}`}
-          style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
+          style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
-          {task.task_type === TaskType.BOOLEAN 
-            ? `${formatBooleanPercentage(totalSpent, 7)} (${totalSpent}/7)` 
-            : formatValue(task, avgSpentPerDay)
-          }
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const totalDays = task.follow_up_frequency === 'daily' ? 7 : 1;
+            const pct = Math.round((totalSpent / totalDays) * 100);
+            const icon = pct >= 75 ? '✅' : pct >= 60 ? '⚠️' : '🔴';
+            return (
+              <span style={getBooleanSuccessStyle(pct)} title={pct >= 70 ? 'Achieved ≥70% goal' : pct >= 55 ? 'At risk — below 70%' : 'Needs recovery'}>
+                {totalSpent}/{totalDays} {icon}<br/>{pct}%
+              </span>
+            );
+          })() : formatValue(task, avgSpentPerDay)}
         </td>
         
         {/* Needed Avg/Day - Sticky Column 4 */}
@@ -924,10 +951,13 @@ const WeeklyTasks: React.FC = () => {
           className={`col-time sticky-col sticky-col-4 ${rowColorClass}`}
           style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
-          {task.task_type === TaskType.BOOLEAN 
-            ? `${formatBooleanPercentage(7 - totalSpent, 7)} (${7 - totalSpent}/7)`
-            : formatValue(task, avgRemainingPerDay)
-          }
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const totalDays = task.follow_up_frequency === 'daily' ? 7 : 1;
+            const targetSuccesses = Math.ceil(totalDays * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            if (needed === 0) return <span style={{ color: '#15803d', fontSize: '12px', fontWeight: 600 }}>✅ Goal met</span>;
+            return <span style={{ color: '#b91c1c', fontSize: '12px' }}>Need {needed} more</span>;
+          })() : formatValue(task, avgRemainingPerDay)}
         </td>
         
         {/* 7 Day Columns */}

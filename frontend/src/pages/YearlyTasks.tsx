@@ -363,23 +363,43 @@ const YearlyTasks: React.FC = () => {
     else return value > 0 ? 'Yes' : 'No';
   };
 
+  /**
+   * Get inline style for boolean success rate badge based on 70% threshold.
+   * ≥70% = green, 55-69% = yellow/orange, <55% = red
+   */
+  const getBooleanSuccessStyle = (pct: number): React.CSSProperties => {
+    if (pct >= 70) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: '12px'
+    };
+    if (pct >= 55) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '12px'
+    };
+    return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fee2e2', color: '#b91c1c', fontWeight: 700, fontSize: '12px'
+    };
+  };
+
   const renderTaskRow = (task: Task) => {
     const totalSpent = months.reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
     
-    // Determine tracking start month from task created_at
+    // Determine tracking start month from when task was ADDED to yearly tab (not task created_at)
     const yearlyStatus = yearlyTaskStatuses[task.id];
-    let trackingStartMonth: number | null = 1; // Default to January if no created_at
+    let trackingStartMonth: number | null = 1; // Default to January
+    const addedToYearlyDate = yearlyStatus?.created_at;
     
-    if (task.created_at) {
-      const createdDate = new Date(task.created_at);
-      // Only apply tracking start if created in current year
-      if (createdDate.getFullYear() === yearStartDate.getFullYear()) {
-        trackingStartMonth = createdDate.getMonth() + 1; // 1-based month
-      } else if (createdDate.getFullYear() < yearStartDate.getFullYear()) {
-        // Task created in previous year, track from January
+    if (addedToYearlyDate) {
+      const addedDate = new Date(addedToYearlyDate);
+      // Only apply tracking start if added in current year
+      if (addedDate.getFullYear() === yearStartDate.getFullYear()) {
+        trackingStartMonth = addedDate.getMonth() + 1; // 1-based month
+      } else if (addedDate.getFullYear() < yearStartDate.getFullYear()) {
+        // Added in previous year, track from January
         trackingStartMonth = 1;
       } else {
-        // Task created in future year (shouldn't happen), track from January
+        // Added in a future year (shouldn't happen), track from January
         trackingStartMonth = 1;
       }
     }
@@ -387,9 +407,9 @@ const YearlyTasks: React.FC = () => {
     const today = new Date();
     const yearStart = new Date(yearStartDate);
     
-    // Calculate effective start date (task creation or year start)
-    const effectiveStart = task.created_at
-      ? new Date(Math.max(new Date(task.created_at).getTime(), yearStartDate.getTime()))
+    // Calculate effective start date (when added to yearly tab, or year start - whichever is later)
+    const effectiveStart = addedToYearlyDate
+      ? new Date(Math.max(new Date(addedToYearlyDate).getTime(), yearStartDate.getTime()))
       : yearStartDate;
     
     // Calculate days elapsed from effective start
@@ -465,13 +485,30 @@ const YearlyTasks: React.FC = () => {
           </div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, dailyIdeal)}
+          {task.task_type === TaskType.BOOLEAN ? (
+            <span style={{ fontSize: '12px', color: '#4a5568' }}>
+              1/day<br/><span style={{ fontSize: '10px', color: '#718096' }}>Goal: ≥70%</span>
+            </span>
+          ) : formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, avgSpentPerDay)}
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const pct = Math.round((totalSpent / Math.max(1, daysElapsed)) * 100);
+            const icon = pct >= 75 ? '✅' : pct >= 60 ? '⚠️' : '🔴';
+            return (
+              <span style={getBooleanSuccessStyle(pct)} title={pct >= 70 ? 'Achieved ≥70% goal' : pct >= 55 ? 'At risk' : 'Needs recovery'}>
+                {totalSpent}/{daysElapsed}d {icon}<br/>{pct}%
+              </span>
+            );
+          })() : formatValue(task, avgSpentPerDay)}
         </td>
         <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
-          {formatValue(task, avgRemainingPerDay)}
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const targetSuccesses = Math.ceil(daysInTrackingPeriod * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            if (needed === 0) return <span style={{ color: '#15803d', fontSize: '12px', fontWeight: 600 }}>✅ Goal met</span>;
+            return <span style={{ color: '#b91c1c', fontSize: '12px' }}>Need {needed} more</span>;
+          })() : formatValue(task, avgRemainingPerDay)}
         </td>
         {months.map(m => {
           const monthValue = getYearlyTime(task.id, m.month);
@@ -697,9 +734,11 @@ const YearlyTasks: React.FC = () => {
   // Summary banner data
   const yearlySummaryData = useMemo(() => {
     const getTrackingStartMonth = (task: Task): number => {
-      if (!task.created_at) return 1;
-      const createdDate = new Date(task.created_at);
-      return createdDate.getFullYear() === yearStartDate.getFullYear() ? createdDate.getMonth() + 1 : 1;
+      const status = yearlyTaskStatuses[task.id];
+      const dateToUse = status?.created_at;
+      if (!dateToUse) return 1;
+      const addedDate = new Date(dateToUse);
+      return addedDate.getFullYear() === yearStartDate.getFullYear() ? addedDate.getMonth() + 1 : 1;
     };
     const nativeTasks = [...tasksByType.timeYearly, ...tasksByType.countYearly, ...tasksByType.booleanYearly];
     const monitoringTasks = [
@@ -724,7 +763,7 @@ const YearlyTasks: React.FC = () => {
       nativeTotal: nativeTasks.length, nativeAchieved, nativeBehind,
       monTotal: monitoringTasks.length, monAchieved, monBehind,
     };
-  }, [tasksByType, months, yearStartDate]);
+  }, [tasksByType, months, yearStartDate, yearlyMonthlyAggregates]);
 
   if (loading && tasks.length === 0) {
     return (

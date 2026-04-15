@@ -5731,7 +5731,19 @@ export default function Tasks() {
         // 1. Behind schedule from past days (deficit > 0), OR
         // 2. Haven't completed today's target yet (totalSpent < expected including today)
         const expectedIncludingToday = dailyTarget * totalDaysIncludingToday;
-        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+
+        // Special 75% threshold handling for boolean (Yes/No) tasks
+        let shouldShowInAttention: boolean;
+        if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+          // For daily boolean tasks: use 70% threshold over the full 7-day week
+          const targetSuccesses = Math.ceil(7 * 0.70); // 5 out of 7
+          const daysStillLeft = Math.max(0, 7 - totalDaysIncludingToday); // days remaining after today
+          const maxAchievable = totalSpent + daysStillLeft + 1; // +1 for today
+          // Show if not yet at 75% target AND still within view of the week
+          shouldShowInAttention = totalSpent < targetSuccesses && daysLeft > 0;
+        } else {
+          shouldShowInAttention = totalSpent < expectedIncludingToday;
+        }
         
         if (shouldShowInAttention) {
           // Count red days for display purposes only
@@ -5750,11 +5762,19 @@ export default function Tasks() {
               }
             }
           });
-          
-          const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
-          const recommendation = daysLeft > 0 
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
-            : `Need ${Math.ceil(remaining)} ${unit} today to hit target`;
+
+          let recommendation: string;
+          if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+            const targetSuccesses = Math.ceil(7 * 0.70); // 5 out of 7
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            const currentPct = Math.round((totalSpent / 7) * 100);
+            recommendation = `${totalSpent}/7 (${currentPct}%) — need ${needed} more day(s) for 70% target (${daysLeft} days left)`;
+          } else {
+            const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
+            recommendation = daysLeft > 0 
+              ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
+              : `Need ${Math.ceil(remaining)} ${unit} today to hit target`;
+          }
 
           needsAttention.push({
             task,
@@ -5840,13 +5860,28 @@ export default function Tasks() {
           expectedIncludingToday = task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysIncludingToday : task.allocated_minutes * (daysIncludingToday / daysInMonth);
         }
         
-        const shouldShowInAttention = totalSpent < expectedIncludingToday;
+        // For boolean tasks: use 70% threshold over the full month; ignore daily catch-up logic
+        let shouldShowInAttention: boolean;
+        if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+          const targetSuccesses = Math.ceil(daysInMonth * 0.70);
+          shouldShowInAttention = totalSpent < targetSuccesses && daysLeft > 0;
+        } else {
+          shouldShowInAttention = totalSpent < expectedIncludingToday;
+        }
         
         if (shouldShowInAttention) {
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
-          const recommendation = daysLeft > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
-            : `Need ${Math.ceil(deficit)} ${unit} today to hit target (month ended)`;
+          let recommendation: string;
+          if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+            const targetSuccesses = Math.ceil(daysInMonth * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            const currentPct = Math.round((totalSpent / daysInMonth) * 100);
+            recommendation = `${totalSpent}/${daysInMonth} (${currentPct}%) — need ${needed} more day(s) for 70% target (${daysLeft} days left)`;
+          } else {
+            recommendation = daysLeft > 0
+              ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
+              : `Need ${Math.ceil(deficit)} ${unit} today to hit target (month ended)`;
+          }
 
           // Check if already added from weekly - if so, also add as separate monthly entry
           // This allows tasks to appear in both Weekly and Monthly "Needs Attention" sections
@@ -5932,8 +5967,14 @@ export default function Tasks() {
         // Calculate actual average per day (since start of year)
         const actualAverage = daysElapsedInYear > 0 ? totalSpent / daysElapsedInYear : 0;
         
-        // Only show in attention if actual average < ideal average
-        const shouldShowInAttention = actualAverage < dailyTarget;
+        // Only show in attention if actual average < 70% threshold for boolean, or below daily target otherwise
+        let shouldShowInAttention: boolean;
+        if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+          // For yearly boolean: show only if success rate < 70%
+          shouldShowInAttention = daysElapsedInYear > 0 && (totalSpent / daysElapsedInYear) < 0.70;
+        } else {
+          shouldShowInAttention = actualAverage < dailyTarget;
+        }
         
         if (shouldShowInAttention) {
           const expectedPastOnly = dailyTarget * (daysElapsedInYear - 1); // Past days only
@@ -5941,9 +5982,17 @@ export default function Tasks() {
           const neededToday = dailyTarget + deficit;
           
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
-          const recommendation = daysLeftInYear > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
-            : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
+          let recommendation: string;
+          if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+            const targetSuccesses = Math.ceil(daysElapsedInYear * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            const currentPct = Math.round((totalSpent / daysElapsedInYear) * 100);
+            recommendation = `${totalSpent}/${daysElapsedInYear}d (${currentPct}%) — need ${needed} more day(s) for 70% target (${daysLeftInYear} days left)`;
+          } else {
+            recommendation = daysLeftInYear > 0
+              ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
+              : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
+          }
           
           needsAttention.push({
             task,
@@ -6027,19 +6076,32 @@ export default function Tasks() {
         // Calculate actual average per day (since start of year)
         const actualAverage = daysElapsedInYear > 0 ? totalSpent / daysElapsedInYear : 0;
         
-        // Only show in attention if actual average < ideal average
-        const shouldShowInAttention = actualAverage < dailyTarget;
+        // Only show in attention if actual average < 70% threshold for boolean, or below daily target otherwise
+        let shouldShowInAttentionQ: boolean;
+        if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+          shouldShowInAttentionQ = daysElapsedInYear > 0 && (totalSpent / daysElapsedInYear) < 0.70;
+        } else {
+          shouldShowInAttentionQ = actualAverage < dailyTarget;
+        }
         
-        if (shouldShowInAttention) {
+        if (shouldShowInAttentionQ) {
           const daysLeftInYear = 365 - daysElapsedInYear + 1;
           const expectedSoFar = dailyTarget * (daysElapsedInYear - 1); // Past days only
           const deficit = Math.max(0, expectedSoFar - totalSpent);
           const neededToday = dailyTarget + deficit;
           
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
-          const recommendation = daysLeftInYear > 0
-            ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
-            : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
+          let recommendation: string;
+          if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
+            const targetSuccesses = Math.ceil(daysElapsedInYear * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            const currentPct = Math.round((totalSpent / daysElapsedInYear) * 100);
+            recommendation = `${totalSpent}/${daysElapsedInYear}d (${currentPct}%) — need ${needed} more day(s) for 70% target (${daysLeftInYear} days left)`;
+          } else {
+            recommendation = daysLeftInYear > 0
+              ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${Math.round(dailyTarget)}, Lagged: ${Math.round(deficit)}, ${daysLeftInYear} days left)`
+              : `Need ${Math.ceil(deficit)} ${unit} today to hit target`;
+          }
           
           needsAttention.push({
             task,
@@ -17676,11 +17738,26 @@ export default function Tasks() {
                               <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
                                 {item.task.name}
                               </span>
-                              {item.weeklyIssue && (
+                              {item.task.task_type === TaskType.BOOLEAN && item.weeklyIssue ? (() => {
+                                // Boolean (Yes/No) task — show 75% recovery status
+                                const done = item.weeklyIssue.totalDays; // days elapsed/done
+                                // recalculate from recommendation string or weeklyIssue
+                                const totalSpentVal = item.weeklyIssue.totalDays - item.weeklyIssue.redDays;
+                                const targetSuccesses = Math.ceil(7 * 0.75); // 6
+                                const needed = Math.max(0, targetSuccesses - totalSpentVal);
+                                const currentPct = Math.round((totalSpentVal / 7) * 100);
+                                const daysLeft = item.weeklyIssue.daysLeft || 0;
+                                const canRecover = totalSpentVal + daysLeft >= targetSuccesses;
+                                return (
+                                  <span style={{ fontSize: '13px', color: canRecover ? '#d97706' : '#b91c1c', fontWeight: '600' }}>
+                                    {canRecover ? '⚠️' : '🔴'} Yes/No: <strong>{totalSpentVal}/7 ({currentPct}%)</strong> — need <strong>{needed} more day(s)</strong> to reach 70% ({daysLeft} days left)
+                                  </span>
+                                );
+                              })() : item.weeklyIssue ? (
                                 <span style={{ fontSize: '14px', color: '#dc2626', fontWeight: '600' }}>
                                   Need <strong>{item.weeklyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.weeklyIssue.dailyTarget}, Lagged: {item.weeklyIssue.deficit || 0}, {item.weeklyIssue.daysLeft} days left)
                                 </span>
-                              )}
+                              ) : null}
                               {item.monthlyIssue && !item.weeklyIssue && (
                                 <span style={{ fontSize: '14px', color: '#d97706', fontWeight: '600' }}>
                                   Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
@@ -17820,11 +17897,24 @@ export default function Tasks() {
                               <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
                                 {item.task.name}
                               </span>
-                              {item.monthlyIssue && (
+                              {item.task.task_type === TaskType.BOOLEAN && item.monthlyIssue ? (() => {
+                                const daysInMonth = new Date(selectedMonthStart.getFullYear(), selectedMonthStart.getMonth() + 1, 0).getDate();
+                                const totalSpentVal = item.monthlyIssue.totalSpent;
+                                const targetSuccesses = Math.ceil(daysInMonth * 0.70);
+                                const needed = Math.max(0, targetSuccesses - totalSpentVal);
+                                const currentPct = Math.round((totalSpentVal / daysInMonth) * 100);
+                                const daysLeft = daysInMonth - new Date().getDate() + 1;
+                                const canRecover = totalSpentVal + daysLeft >= targetSuccesses;
+                                return (
+                                  <span style={{ fontSize: '13px', color: canRecover ? '#d97706' : '#b91c1c', fontWeight: '600' }}>
+                                    {canRecover ? '⚠️' : '🔴'} Yes/No: <strong>{totalSpentVal}/{daysInMonth} ({currentPct}%)</strong> — need <strong>{needed} more day(s)</strong> to reach 70% ({daysLeft} days left)
+                                  </span>
+                                );
+                              })() : item.monthlyIssue ? (
                                 <span style={{ fontSize: '14px', color: '#d97706', fontWeight: '600' }}>
                                   Need <strong>{item.monthlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.monthlyIssue.dailyTarget}, {item.monthlyIssue.percentBehind}% behind)
                                 </span>
-                              )}
+                              ) : null}
                               {(() => {
                                 const priority = item.task.priority;
                                 const isInNOW = priority && priority <= 3;
@@ -17958,11 +18048,24 @@ export default function Tasks() {
                               <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
                                 {item.task.name}
                               </span>
-                              {item.quarterlyIssue && (
+                              {item.task.task_type === TaskType.BOOLEAN && item.quarterlyIssue ? (() => {
+                                const daysElapsed = item.quarterlyIssue.daysElapsed;
+                                const totalSpentVal = item.quarterlyIssue ? (daysElapsed - (item.quarterlyIssue.deficit || 0)) : 0;
+                                const targetSuccesses = Math.ceil(daysElapsed * 0.70);
+                                const needed = Math.max(0, targetSuccesses - totalSpentVal);
+                                const currentPct = Math.round((totalSpentVal / daysElapsed) * 100);
+                                const daysLeft = item.quarterlyIssue.daysLeft || 0;
+                                const canRecover = totalSpentVal + daysLeft >= targetSuccesses;
+                                return (
+                                  <span style={{ fontSize: '13px', color: canRecover ? '#8b5cf6' : '#b91c1c', fontWeight: '600' }}>
+                                    {canRecover ? '⚠️' : '🔴'} Yes/No: <strong>{totalSpentVal}/{daysElapsed}d ({currentPct}%)</strong> — need <strong>{needed} more day(s)</strong> to reach 70% ({daysLeft} days left)
+                                  </span>
+                                );
+                              })() : item.quarterlyIssue ? (
                                 <span style={{ fontSize: '14px', color: '#8b5cf6', fontWeight: '600' }}>
                                   Need <strong>{item.quarterlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.quarterlyIssue.dailyTarget}, Lagged: {item.quarterlyIssue.deficit || 0}, {item.quarterlyIssue.daysLeft} days left)
                                 </span>
-                              )}
+                              ) : null}
                               {(() => {
                                 const priority = item.task.priority;
                                 const isInNOW = priority && priority <= 3;
@@ -18097,11 +18200,24 @@ export default function Tasks() {
                               <span style={{ fontSize: '14px', fontWeight: '600', color: '#2d3748', minWidth: '200px' }}>
                                 {item.task.name}
                               </span>
-                              {item.yearlyIssue && (
+                              {item.task.task_type === TaskType.BOOLEAN && item.yearlyIssue ? (() => {
+                                const daysElapsed = item.yearlyIssue.daysElapsed;
+                                const totalSpentVal = item.yearlyIssue ? (daysElapsed - (item.yearlyIssue.deficit || 0)) : 0;
+                                const targetSuccesses = Math.ceil(daysElapsed * 0.70);
+                                const needed = Math.max(0, targetSuccesses - totalSpentVal);
+                                const currentPct = Math.round((totalSpentVal / daysElapsed) * 100);
+                                const daysLeft = item.yearlyIssue.daysLeft || 0;
+                                const canRecover = totalSpentVal + daysLeft >= targetSuccesses;
+                                return (
+                                  <span style={{ fontSize: '13px', color: canRecover ? '#06b6d4' : '#b91c1c', fontWeight: '600' }}>
+                                    {canRecover ? '⚠️' : '🔴'} Yes/No: <strong>{totalSpentVal}/{daysElapsed}d ({currentPct}%)</strong> — need <strong>{needed} more day(s)</strong> to reach 70% ({daysLeft} days left)
+                                  </span>
+                                );
+                              })() : item.yearlyIssue ? (
                                 <span style={{ fontSize: '14px', color: '#06b6d4', fontWeight: '600' }}>
                                   Need <strong>{item.yearlyIssue.neededToday} {item.task.task_type === TaskType.TIME ? 'min' : item.task.unit || ''}</strong> today (Ideal: {item.yearlyIssue.dailyTarget}, Lagged: {item.yearlyIssue.deficit || 0}, {item.yearlyIssue.daysLeft} days left)
                                 </span>
-                              )}
+                              ) : null}
                               {(() => {
                                 const priority = item.task.priority;
                                 const isInNOW = priority && priority <= 3;

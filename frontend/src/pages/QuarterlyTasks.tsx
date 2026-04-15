@@ -174,33 +174,51 @@ const QuarterlyTasks: React.FC = () => {
     else return value > 0 ? 'Yes' : 'No';
   };
 
-  const getQuarterlyRowColorClass = (task: Task, totalSpent: number, trackingStartQuarter: number | null): string => {
-    // Row color based on YEAR-TO-DATE progress (days elapsed from task creation or Jan 1)
+  /**
+   * Get inline style for boolean success rate badge based on 70% threshold.
+   * ≥70% = green, 55-69% = yellow/orange, <55% = red
+   */
+  const getBooleanSuccessStyle = (pct: number): React.CSSProperties => {
+    if (pct >= 70) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#dcfce7', color: '#15803d', fontWeight: 700, fontSize: '12px'
+    };
+    if (pct >= 55) return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fef3c7', color: '#b45309', fontWeight: 700, fontSize: '12px'
+    };
+    return {
+      display: 'inline-block', padding: '3px 8px', borderRadius: '12px',
+      background: '#fee2e2', color: '#b91c1c', fontWeight: 700, fontSize: '12px'
+    };
+  };
+
+  const getQuarterlyRowColorClass = (task: Task, totalSpent: number, trackingStartQuarter: number | null, addedDate?: string | null): string => {
+    // Row color based on YEAR-TO-DATE progress from when task was ADDED to quarterly tab
     const currentYear = today.getFullYear();
     const selectedYear = yearStartDate.getFullYear();
     
     // Don't color future years
     if (selectedYear > currentYear) return '';
     
-    // Calculate days elapsed from task creation date or year start (whichever is later)
+    // Calculate days elapsed from addedDate (when task was added to quarterly) or year start
     let daysElapsed = 0;
     if (selectedYear === currentYear) {
       const startOfYear = new Date(currentYear, 0, 1);
       startOfYear.setHours(0, 0, 0, 0);
       
-      // Use task creation date as effective start
-      const taskCreatedAt = task.created_at ? new Date(task.created_at) : startOfYear;
-      taskCreatedAt.setHours(0, 0, 0, 0);
-      const effectiveStart = taskCreatedAt > startOfYear ? taskCreatedAt : startOfYear;
+      const addedAt = addedDate ? new Date(addedDate) : startOfYear;
+      addedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = addedAt > startOfYear ? addedAt : startOfYear;
       
       daysElapsed = Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     } else {
-      // Past year: calculate from task creation or Jan 1 to Dec 31
+      // Past year: calculate from addedDate or Jan 1 to Dec 31
       const startOfYear = new Date(selectedYear, 0, 1);
       startOfYear.setHours(0, 0, 0, 0);
-      const taskCreatedAt = task.created_at ? new Date(task.created_at) : startOfYear;
-      taskCreatedAt.setHours(0, 0, 0, 0);
-      const effectiveStart = taskCreatedAt > startOfYear ? taskCreatedAt : startOfYear;
+      const addedAt = addedDate ? new Date(addedDate) : startOfYear;
+      addedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = addedAt > startOfYear ? addedAt : startOfYear;
       
       const endOfYear = new Date(selectedYear, 11, 31);
       endOfYear.setHours(23, 59, 59, 999);
@@ -248,7 +266,7 @@ const QuarterlyTasks: React.FC = () => {
     return '';
   };
 
-  const getQuarterlyCellColorClass = (task: Task, actualValue: number, quarter: number): string => {
+  const getQuarterlyCellColorClass = (task: Task, actualValue: number, quarter: number, addedDate?: string | null): string => {
     const currentYear = today.getFullYear();
     const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
     const selectedYear = yearStartDate.getFullYear();
@@ -257,22 +275,21 @@ const QuarterlyTasks: React.FC = () => {
     if (selectedYear > currentYear) return '';
     if (selectedYear === currentYear && quarter > currentQuarter) return '';
     
-    // Calculate days elapsed in this specific quarter from task creation or quarter start
+    // Calculate days elapsed in this specific quarter from addedDate (when task was added) or quarter start
     let daysElapsed = 0;
     if (selectedYear === currentYear && quarter === currentQuarter) {
-      // Current quarter: calculate days from quarter start OR task creation to today
+      // Current quarter: calculate days from quarter start OR addedDate to today
       const quarterStartMonth = (quarter - 1) * 3;
       const quarterStart = new Date(currentYear, quarterStartMonth, 1);
       quarterStart.setHours(0, 0, 0, 0);
       
-      // Use task creation date as effective start if created mid-quarter
-      const taskCreatedAt = task.created_at ? new Date(task.created_at) : quarterStart;
-      taskCreatedAt.setHours(0, 0, 0, 0);
-      const effectiveStart = taskCreatedAt > quarterStart ? taskCreatedAt : quarterStart;
+      const addedAt = addedDate ? new Date(addedDate) : quarterStart;
+      addedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = addedAt > quarterStart ? addedAt : quarterStart;
       
       daysElapsed = Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     } else {
-      // Past quarter: calculate from task creation or quarter start to quarter end
+      // Past quarter: calculate from addedDate or quarter start to quarter end
       const quarterStartMonth = (quarter - 1) * 3;
       const quarterStart = new Date(selectedYear, quarterStartMonth, 1);
       quarterStart.setHours(0, 0, 0, 0);
@@ -281,11 +298,11 @@ const QuarterlyTasks: React.FC = () => {
       const quarterEnd = new Date(selectedYear, quarterEndMonth + 1, 0); // Last day of quarter
       quarterEnd.setHours(23, 59, 59, 999);
       
-      const taskCreatedAt = task.created_at ? new Date(task.created_at) : quarterStart;
-      taskCreatedAt.setHours(0, 0, 0, 0);
-      const effectiveStart = taskCreatedAt > quarterStart ? taskCreatedAt : quarterStart;
+      const addedAt = addedDate ? new Date(addedDate) : quarterStart;
+      addedAt.setHours(0, 0, 0, 0);
+      const effectiveStart = addedAt > quarterStart ? addedAt : quarterStart;
       
-      // If task created after quarter ended, no expectation
+      // If task was added after quarter ended, no expectation
       if (effectiveStart > quarterEnd) {
         daysElapsed = 0;
       } else {
@@ -333,6 +350,32 @@ const QuarterlyTasks: React.FC = () => {
     else if (actualValue > 0) return 'cell-below-target';
     return '';
   };
+
+  // Summary banner data
+  const quarterlySummaryData = useMemo(() => {
+    const nativeTasks = tasksByFrequency.quarterly;
+    const monitoringTasks = [
+      ...tasksByFrequency.daily,
+      ...tasksByFrequency.weekly,
+      ...tasksByFrequency.monthly,
+    ];
+    let nativeAchieved = 0, nativeBehind = 0;
+    nativeTasks.forEach(task => {
+      const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
+      const cls = getQuarterlyRowColorClass(task, totalSpent, null, yearlyTaskStatuses[task.id]?.created_at);
+      if (cls === 'weekly-on-track') nativeAchieved++; else nativeBehind++;
+    });
+    let monAchieved = 0, monBehind = 0;
+    monitoringTasks.forEach(task => {
+      const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
+      const cls = getQuarterlyRowColorClass(task, totalSpent, null, yearlyTaskStatuses[task.id]?.created_at);
+      if (cls === 'weekly-on-track') monAchieved++; else monBehind++;
+    });
+    return {
+      nativeTotal: nativeTasks.length, nativeAchieved, nativeBehind,
+      monTotal: monitoringTasks.length, monAchieved, monBehind,
+    };
+  }, [tasksByFrequency, quarters, yearlyMonthlyAggregates]);
 
   const handleCompleteTask = async (taskId: number) => {
     try {
@@ -473,7 +516,7 @@ const QuarterlyTasks: React.FC = () => {
     const remainingTarget = Math.max(0, yearlyTarget - totalSpent);
     const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remainingTarget / daysRemaining) : 0;
 
-    const rowColorClass = getQuarterlyRowColorClass(task, totalSpent, trackingStartQuarter);
+    const rowColorClass = getQuarterlyRowColorClass(task, totalSpent, trackingStartQuarter, yearlyStatus?.created_at);
 
     // Task type indicator
     let taskTypeIndicator = '';
@@ -491,17 +534,34 @@ const QuarterlyTasks: React.FC = () => {
           <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>{task.pillar_name} → {task.category_name}</div>
         </td>
         <td className={`col-time sticky-col sticky-col-2 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
-          {formatValue(task, dailyIdeal)}
+          {task.task_type === TaskType.BOOLEAN ? (
+            <span style={{ fontSize: '12px', color: '#4a5568' }}>
+              1/day<br/><span style={{ fontSize: '10px', color: '#718096' }}>Goal: ≥70%</span>
+            </span>
+          ) : formatValue(task, dailyIdeal)}
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
-          {formatValue(task, avgSpentPerDay)}
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const pct = Math.round((totalSpent / Math.max(1, daysElapsed)) * 100);
+            const icon = pct >= 75 ? '✅' : pct >= 60 ? '⚠️' : '🔴';
+            return (
+              <span style={getBooleanSuccessStyle(pct)} title={pct >= 70 ? 'Achieved ≥70% goal' : pct >= 55 ? 'At risk' : 'Needs recovery'}>
+                {totalSpent}/{daysElapsed}d {icon}<br/>{pct}%
+              </span>
+            );
+          })() : formatValue(task, avgSpentPerDay)}
         </td>
         <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', minWidth: '100px' }}>
-          {formatValue(task, avgRemainingPerDay)}
+          {task.task_type === TaskType.BOOLEAN ? (() => {
+            const targetSuccesses = Math.ceil(daysInTrackingPeriod * 0.70);
+            const needed = Math.max(0, targetSuccesses - totalSpent);
+            if (needed === 0) return <span style={{ color: '#15803d', fontSize: '12px', fontWeight: 600 }}>✅ Goal met</span>;
+            return <span style={{ color: '#b91c1c', fontSize: '12px' }}>Need {needed} more</span>;
+          })() : formatValue(task, avgRemainingPerDay)}
         </td>
         {quarters.map(q => {
           const quarterValue = getQuarterlyTime(task.id, q.quarter);
-          const cellColorClass = getQuarterlyCellColorClass(task, quarterValue, q.quarter);
+          const cellColorClass = getQuarterlyCellColorClass(task, quarterValue, q.quarter, yearlyStatus?.created_at);
           // Only show background color if this quarter is >= tracking start quarter
           const shouldShowColor = trackingStartQuarter !== null && q.quarter >= trackingStartQuarter;
           const bgColor = shouldShowColor && quarterValue > 0 && !cellColorClass ? '#e6ffed' : undefined;
@@ -598,6 +658,36 @@ const QuarterlyTasks: React.FC = () => {
             </div>
           ) : (
         <>
+          {/* Quarterly Summary Banner */}
+          {(quarterlySummaryData.nativeTotal > 0 || quarterlySummaryData.monTotal > 0) && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 16px',
+              marginBottom: '12px', flexWrap: 'wrap',
+              background: quarterlySummaryData.nativeBehind > 0 || quarterlySummaryData.monBehind > 0 ? '#fff5f5' : '#f0fdf4',
+              border: `1.5px solid ${quarterlySummaryData.nativeBehind > 0 || quarterlySummaryData.monBehind > 0 ? '#fca5a5' : '#86efac'}`,
+              borderRadius: '8px', fontSize: '14px', fontWeight: 500
+            }}>
+              <span>{quarterlySummaryData.nativeBehind > 0 || quarterlySummaryData.monBehind > 0 ? '⚠️' : '✅'}</span>
+              {quarterlySummaryData.nativeTotal > 0 && (<>
+                <span style={{ color: '#374151' }}>Total Quarterly Tasks: <strong>{quarterlySummaryData.nativeTotal}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: '#16a34a' }}>Achieved: <strong>{quarterlySummaryData.nativeAchieved}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: quarterlySummaryData.nativeBehind > 0 ? '#dc2626' : '#16a34a' }}>Not reached Target: <strong>{quarterlySummaryData.nativeBehind}</strong></span>
+              </>)}
+              {quarterlySummaryData.nativeTotal > 0 && quarterlySummaryData.monTotal > 0 && (
+                <span style={{ color: '#d1d5db', margin: '0 4px' }}>｜</span>
+              )}
+              {quarterlySummaryData.monTotal > 0 && (<>
+                <span style={{ color: '#374151' }}>Total Daily Tasks (on Quarterly): <strong>{quarterlySummaryData.monTotal}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: '#16a34a' }}>Achieved: <strong>{quarterlySummaryData.monAchieved}</strong></span>
+                <span style={{ color: '#9ca3af' }}>|</span>
+                <span style={{ color: quarterlySummaryData.monBehind > 0 ? '#dc2626' : '#16a34a' }}>Not Achieved: <strong>{quarterlySummaryData.monBehind}</strong></span>
+              </>)}
+            </div>
+          )}
+
           {/* DAILY TASKS */}
           {tasksByFrequency.daily.filter(t => t.task_type === TaskType.TIME).length > 0 && (
             <div style={{ marginBottom: '32px' }}>
