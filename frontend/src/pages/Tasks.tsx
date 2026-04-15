@@ -18,6 +18,7 @@ import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import ImportantTasks from './ImportantTasks';
 import UpcomingTasks from './UpcomingTasks';
+import QuickAddTask from '../components/QuickAddTask';
 import { useUserPreferencesContext } from '../contexts/UserPreferencesContext';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'upcoming' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
@@ -2292,6 +2293,14 @@ export default function Tasks() {
     setSelectedTaskId(null);
     setIsCreatingNewTask(false);
     setAddToTrackingAfterCreate(null);
+  };
+
+  // Handle quick-add task created — refresh tasks and today sections
+  const handleQuickAddSuccess = async () => {
+    const freshTasks = await loadTasks();
+    await loadTodaysOnlyTasks(freshTasks);
+    await loadProjectTasksDueToday();
+    await loadGoalTasksDueToday();
   };
 
   // Handle adding weekly task from daily task
@@ -6367,6 +6376,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -6583,6 +6593,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -6851,6 +6862,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -6896,6 +6908,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7145,6 +7158,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7420,6 +7434,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
             ➕ Add Task
           </button>
@@ -7918,6 +7933,7 @@ export default function Tasks() {
     <div className="tasks-page">
       <header className="tasks-header">
         <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
+        <QuickAddTask onSuccess={handleQuickAddSuccess} />
         <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
           ➕ Add Task
         </button>
