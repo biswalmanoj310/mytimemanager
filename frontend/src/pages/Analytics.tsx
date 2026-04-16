@@ -205,7 +205,14 @@ export default function Analytics() {
   const [selectedTasks, setSelectedTasks] = useState<number[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
-  const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars'>('tasks');
+  const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life'>('tasks');
+  const [circleOfLifePeriod, setCircleOfLifePeriod] = useState<'week' | 'month'>('week');
+  const [circleOfLifeType, setCircleOfLifeType] = useState<'pillar' | 'category' | 'tasks' | 'one_time'>('pillar');
+  const [circleOfLifeData, setCircleOfLifeData] = useState<{label: string; start: string; end: string; data: any[]}[]>([]);
+  const [circleOfLifeLoading, setCircleOfLifeLoading] = useState(false);
+  // Balance viz period: 'today' | 'week' | 'month'
+  const [balancePeriod, setBalancePeriod] = useState<'today' | 'week' | 'month'>('today');
+
   
   // Detailed view - Week/Month-over-Week/Month toggles
   const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
@@ -241,27 +248,27 @@ export default function Analytics() {
   const [monthOneTimeTaskData, setMonthOneTimeTaskData] = useState<TaskData[]>([]);
   const [allOneTimeTasksData, setAllOneTimeTasksData] = useState<TaskData[]>([]); // Base one-time tasks
   
-  const [showMonthColumn, setShowMonthColumn] = useState(() => localStorage.getItem('showMonthColumn') === 'true'); // Toggle for month average column (Pillars)
-  const [showWeekColumn, setShowWeekColumn] = useState(() => localStorage.getItem('showWeekColumn') === 'true'); // Toggle for week average column (Pillars)
-  const [showCategoryMonth, setShowCategoryMonth] = useState(() => localStorage.getItem('showCategoryMonth') === 'true'); // Toggle for Categories
-  const [showCategoryWeek, setShowCategoryWeek] = useState(() => localStorage.getItem('showCategoryWeek') === 'true'); // Toggle for Categories weekly
-  const [showTaskMonth, setShowTaskMonth] = useState(() => localStorage.getItem('showTaskMonth') === 'true'); // Toggle for Tasks
-  const [showTaskWeek, setShowTaskWeek] = useState(() => localStorage.getItem('showTaskWeek') === 'true'); // Toggle for Tasks weekly
-  const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(() => localStorage.getItem('showOneTimeTaskMonth') === 'true'); // Toggle for One-Time Tasks
-  const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(() => localStorage.getItem('showOneTimeTaskWeek') === 'true'); // Toggle for One-Time Tasks weekly
-  const [showPillarWeek, setShowPillarWeek] = useState(() => localStorage.getItem('showPillarWeek') === 'true'); // Toggle for Pillar weekly data
+  const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Pillars)
+  const [showWeekColumn, setShowWeekColumn] = useState(false); // Toggle for week average column (Pillars)
+  const [showCategoryMonth, setShowCategoryMonth] = useState(false); // Toggle for Categories
+  const [showCategoryWeek, setShowCategoryWeek] = useState(false); // Toggle for Categories weekly
+  const [showTaskMonth, setShowTaskMonth] = useState(false); // Toggle for Tasks
+  const [showTaskWeek, setShowTaskWeek] = useState(false); // Toggle for Tasks weekly
+  const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(false); // Toggle for One-Time Tasks
+  const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(false); // Toggle for One-Time Tasks weekly
+  const [showPillarWeek, setShowPillarWeek] = useState(false); // Toggle for Pillar weekly data
   const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showCategoryBreakdownWeekAll, setShowCategoryBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeekAll, setShowTaskBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
-  const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(() => localStorage.getItem('showUtilizationTaskWeek') === 'true');
-  const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(() => localStorage.getItem('showUtilizationTaskMonth') === 'true');
-  const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(() => localStorage.getItem('showUtilizationCategoryWeek') === 'true');
-  const [showUtilizationCategoryMonth, setShowUtilizationCategoryMonth] = useState(() => localStorage.getItem('showUtilizationCategoryMonth') === 'true');
-  const [showUtilizationOneTimeWeek, setShowUtilizationOneTimeWeek] = useState(() => localStorage.getItem('showUtilizationOneTimeWeek') === 'true');
-  const [showUtilizationOneTimeMonth, setShowUtilizationOneTimeMonth] = useState(() => localStorage.getItem('showUtilizationOneTimeMonth') === 'true');
+  const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(false);
+  const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(false);
+  const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(false);
+  const [showUtilizationCategoryMonth, setShowUtilizationCategoryMonth] = useState(false);
+  const [showUtilizationOneTimeWeek, setShowUtilizationOneTimeWeek] = useState(false);
+  const [showUtilizationOneTimeMonth, setShowUtilizationOneTimeMonth] = useState(false);
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -274,63 +281,7 @@ export default function Analytics() {
   const [modalWeekDate, setModalWeekDate] = useState(formatDateForInput(new Date()));
   const [modalMonth, setModalMonth] = useState(formatDateForInput(new Date()).substring(0, 7)); // YYYY-MM format
 
-  // Persist toggle states to localStorage
-  useEffect(() => {
-    localStorage.setItem('showUtilizationTaskWeek', showUtilizationTaskWeek.toString());
-  }, [showUtilizationTaskWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showUtilizationTaskMonth', showUtilizationTaskMonth.toString());
-  }, [showUtilizationTaskMonth]);
-  
-  useEffect(() => {
-    localStorage.setItem('showUtilizationCategoryWeek', showUtilizationCategoryWeek.toString());
-  }, [showUtilizationCategoryWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showUtilizationCategoryMonth', showUtilizationCategoryMonth.toString());
-  }, [showUtilizationCategoryMonth]);
-  
-  useEffect(() => {
-    localStorage.setItem('showUtilizationOneTimeWeek', showUtilizationOneTimeWeek.toString());
-  }, [showUtilizationOneTimeWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showUtilizationOneTimeMonth', showUtilizationOneTimeMonth.toString());
-  }, [showUtilizationOneTimeMonth]);
-  
-  // Persist Weekly/Monthly toggle states to localStorage
-  useEffect(() => {
-    localStorage.setItem('showPillarWeek', showPillarWeek.toString());
-  }, [showPillarWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showMonthColumn', showMonthColumn.toString());
-  }, [showMonthColumn]);
-  
-  useEffect(() => {
-    localStorage.setItem('showCategoryWeek', showCategoryWeek.toString());
-  }, [showCategoryWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showCategoryMonth', showCategoryMonth.toString());
-  }, [showCategoryMonth]);
-  
-  useEffect(() => {
-    localStorage.setItem('showTaskWeek', showTaskWeek.toString());
-  }, [showTaskWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showTaskMonth', showTaskMonth.toString());
-  }, [showTaskMonth]);
-  
-  useEffect(() => {
-    localStorage.setItem('showOneTimeTaskWeek', showOneTimeTaskWeek.toString());
-  }, [showOneTimeTaskWeek]);
-  
-  useEffect(() => {
-    localStorage.setItem('showOneTimeTaskMonth', showOneTimeTaskMonth.toString());
-  }, [showOneTimeTaskMonth]);
+  // Note: Weekly/Monthly toggles intentionally reset to false on every page load/refresh
 
   // Load dynamic configuration on mount
   useEffect(() => {
@@ -380,6 +331,13 @@ export default function Analytics() {
       loadDetailedTrendData();
     }
   }, [viewMode, detailedViewType, selectedTasks, selectedCategories, selectedPillars]);
+
+  // Load circle of life data when view type or period changes
+  useEffect(() => {
+    if (viewMode === 'detailed' && detailedViewType === 'circle_of_life') {
+      loadCircleOfLifeData(circleOfLifePeriod, circleOfLifeType);
+    }
+  }, [viewMode, detailedViewType, circleOfLifePeriod, circleOfLifeType]);
 
   // Load pillars, categories, and tasks configuration from API
   const loadConfiguration = async () => {
@@ -461,6 +419,70 @@ export default function Analytics() {
   const getTaskOrder = (taskName: string): number => {
     const task = tasksConfig.find(t => t.name === taskName);
     return task ? task.order : 999;
+  };
+
+  const loadCircleOfLifeData = async (period: 'week' | 'month', cType: 'pillar' | 'category' | 'tasks' | 'one_time') => {
+    setCircleOfLifeLoading(true);
+    const PILLAR_ORDER_LOCAL = ['Hard Work', 'Calmness', 'Family'];
+    const CATEGORY_ORDER_LOCAL = ['Office-Tasks', 'Learning', 'Confidence', 'Yoga', 'Sleep', 'My Tasks', 'Home Tasks', 'Time Waste'];
+
+    const fetchData = async (startStr: string, endStr: string) => {
+      if (cType === 'pillar') {
+        const resp = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${startStr}&end_date=${endStr}`);
+        return (resp.data.pillars || []).sort((a: PillarData, b: PillarData) =>
+          PILLAR_ORDER_LOCAL.indexOf(a.pillar_name) - PILLAR_ORDER_LOCAL.indexOf(b.pillar_name)
+        );
+      } else {
+        const resp = await apiClient.get(`/api/analytics/category-breakdown?start_date=${startStr}&end_date=${endStr}`);
+        const cats: CategoryData[] = resp.data.categories || [];
+        if (cType === 'category') {
+          return cats.sort((a, b) => CATEGORY_ORDER_LOCAL.indexOf(a.category_name) - CATEGORY_ORDER_LOCAL.indexOf(b.category_name));
+        }
+        // tasks / one_time — need task-level data, use category data as proxy grouped by pillar
+        return cats.sort((a, b) => CATEGORY_ORDER_LOCAL.indexOf(a.category_name) - CATEGORY_ORDER_LOCAL.indexOf(b.category_name));
+      }
+    };
+
+    try {
+      const today = new Date();
+      const periods: {label: string; start: string; end: string; data: any[]}[] = [];
+
+      if (period === 'week') {
+        const currentWeekMonday = getWeekStart(today);
+        for (let i = 7; i >= 0; i--) {
+          const weekStart = new Date(currentWeekMonday);
+          weekStart.setDate(currentWeekMonday.getDate() - i * 7);
+          const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 6);
+          const actualEnd = weekEnd > today ? today : weekEnd;
+          const startStr = formatDateForInput(weekStart);
+          const endStr = formatDateForInput(actualEnd);
+          const label = i === 0 ? 'This Week' : i === 1 ? 'Last Week' :
+            `${weekStart.toLocaleString('en-US', { month: 'short', day: 'numeric' })}–${actualEnd.toLocaleString('en-US', { month: 'short', day: 'numeric' })}`;
+          try {
+            const data = await fetchData(startStr, endStr);
+            periods.push({ label, start: startStr, end: endStr, data });
+          } catch { periods.push({ label, start: startStr, end: endStr, data: [] }); }
+        }
+      } else {
+        for (let i = 7; i >= 0; i--) {
+          const monthStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
+          const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
+          const actualEnd = monthEnd > today ? today : monthEnd;
+          const startStr = formatDateForInput(monthStart);
+          const endStr = formatDateForInput(actualEnd);
+          const label = monthStart.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+          try {
+            const data = await fetchData(startStr, endStr);
+            periods.push({ label, start: startStr, end: endStr, data });
+          } catch { periods.push({ label, start: startStr, end: endStr, data: [] }); }
+        }
+      }
+      setCircleOfLifeData([...periods].reverse()); // newest first
+    } catch (error) {
+      console.error('Error loading circle of life data:', error);
+    } finally {
+      setCircleOfLifeLoading(false);
+    }
   };
 
   const loadComparativePillarData = async () => {
@@ -563,7 +585,7 @@ export default function Analytics() {
       }
       
       // Load ALL tasks with allocated time
-      const allTasksResponse = await apiClient.get('/api/tasks?limit=1000');
+      const allTasksResponse = await apiClient.get('/api/tasks?limit=1000&is_active=true&is_completed=false');
       console.log('📥 Tasks API response:', allTasksResponse.data?.length, 'tasks received');
       const tasks = allTasksResponse.data || [];
       
@@ -583,7 +605,19 @@ export default function Analytics() {
           // Only include tasks that are NOT completed and NOT marked as NA
           if (task.is_completed) return false;
           if (task.na_marked_at) return false;
-          
+
+          // Exclude tasks completed on a previous day via daily_task_status
+          // (matches Daily tab behaviour — same check used for one-time tasks)
+          const completionDateStr = dailyTaskCompletionDates.get(task.id);
+          if (completionDateStr) {
+            const [year, month, day] = completionDateStr.split('-').map(Number);
+            const completionDate = new Date(year, month - 1, day);
+            completionDate.setHours(0, 0, 0, 0);
+            const todayMidnight = new Date();
+            todayMidnight.setHours(0, 0, 0, 0);
+            if (completionDate < todayMidnight) return false;
+          }
+
           return true;
         })
         .map((task: any) => ({
@@ -3021,6 +3055,13 @@ export default function Analytics() {
               >
                 🎯 Pillars
               </button>
+              <button
+                className={`tab-button ${detailedViewType === 'circle_of_life' ? 'active' : ''}`}
+                onClick={() => { setDetailedViewType('circle_of_life'); setSelectedTasks([]); setSelectedCategories([]); setSelectedPillars([]); }}
+                style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+              >
+                ⭕ Circle of Life
+              </button>
             </div>
           </div>
 
@@ -3279,7 +3320,11 @@ export default function Analytics() {
               {showWeekOverWeek && (
                 <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                    <h3 style={{ margin: 0 }}>📊 Weekly Average (Last 8 Weeks) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>
+                    {(() => {
+                      const trendLen = (detailedViewType === 'tasks' ? taskTrendData : detailedViewType === 'categories' ? categoryTrendData : pillarTrendData).length;
+                      const actualWeeks = Math.ceil(trendLen / 7);
+                      return <h3 style={{ margin: 0 }}>📊 Weekly Average (Last {actualWeeks} Week{actualWeeks !== 1 ? 's' : ''}) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>;
+                    })()}
                     <button
                       onClick={() => setShowAsHours(!showAsHours)}
                       style={{ fontSize: '11px', padding: '4px 10px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
@@ -3293,28 +3338,34 @@ export default function Analytics() {
                           const trendData = detailedViewType === 'tasks' ? taskTrendData : 
                                           detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
                           
-                          // Calculate weekly averages from daily data (last 8 weeks = 56 days)
+                          // Calculate weekly averages from daily data — trendData is oldest→newest
+                          const totalDays = trendData.length;
+                          const numWeeks = Math.ceil(totalDays / 7);
                           const weeklyData: any[] = [];
-                          for (let weekIdx = 0; weekIdx < 8; weekIdx++) {
+                          for (let weekIdx = 0; weekIdx < numWeeks; weekIdx++) {
                             const weekStart = weekIdx * 7;
-                            const weekEnd = weekStart + 7;
+                            const weekEnd = Math.min(weekStart + 7, totalDays);
                             const weekData = trendData.slice(weekStart, weekEnd);
                             
                             if (weekData.length === 0) continue;
                             
                             // Calculate actual date range for this week
                             const today = new Date();
+                            const daysFromToday = totalDays - 1 - weekStart; // how many days ago this week started
                             const weekStartDate = new Date(today);
-                            weekStartDate.setDate(today.getDate() - (55 - weekStart)); // 55 days ago to today
+                            weekStartDate.setDate(today.getDate() - daysFromToday);
                             const weekEndDate = new Date(weekStartDate);
-                            weekEndDate.setDate(weekStartDate.getDate() + 6);
-                            const weekLabel = `${weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}-${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                            weekEndDate.setDate(weekStartDate.getDate() + weekData.length - 1);
+                            const isCurrentWeek = weekIdx === numWeeks - 1;
+                            const weekLabel = isCurrentWeek
+                              ? 'This Week'
+                              : `${weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
                             
                             const weekEntry: any = { week: weekLabel };
                             
                             // Calculate average for each selected item
                             if (detailedViewType === 'tasks') {
-                              selectedTasks.forEach((taskId, index) => {
+                              selectedTasks.forEach((taskId) => {
                                 const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                                 const dataKey = showAsHours ? `task_${taskId}_hours` : `task_${taskId}`;
                                 const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
@@ -3541,6 +3592,276 @@ export default function Analytics() {
               </p>
             </div>
           )}
+
+          {/* Balance Visualisation removed */}
+          {detailedViewType === 'balance_visualization' && false && (() => {
+            const PILLAR_ORDER_LOCAL = ['Hard Work', 'Calmness', 'Family'];
+            const periodOptions: { key: 'today' | 'week' | 'month'; label: string; emoji: string; color: string; data: PillarData[] }[] = [
+              { key: 'today', label: 'Today', emoji: '📅', color: '#4299e1', data: dailyPillarData },
+              { key: 'week', label: 'This Week', emoji: '📊', color: '#48bb78', data: weeklyPillarData },
+              { key: 'month', label: 'This Month', emoji: '📈', color: '#ed8936', data: monthlyPillarData },
+            ];
+            // normalize daily avg %
+            const getDaysElapsed = (key: 'today' | 'week' | 'month') => {
+              const today = new Date();
+              if (key === 'today') return 1;
+              if (key === 'week') { const d = today.getDay(); return d === 0 ? 7 : d; }
+              return today.getDate();
+            };
+            const buildRadar = (pillarData: PillarData[], key: 'today' | 'week' | 'month') => {
+              const days = getDaysElapsed(key);
+              const sorted = [...pillarData].sort((a, b) =>
+                (PILLAR_ORDER_LOCAL.indexOf(a.pillar_name) ?? 999) - (PILLAR_ORDER_LOCAL.indexOf(b.pillar_name) ?? 999)
+              );
+              return sorted.map(p => ({
+                pillar: p.pillar_name,
+                icon: p.icon,
+                color: p.color_code,
+                allocated: 100,
+                spent: p.allocated_hours > 0 ? Math.round((p.spent_hours / days / p.allocated_hours) * 100) : 0,
+                actualAllocated: p.allocated_hours,
+                actualSpent: p.allocated_hours > 0 ? (p.spent_hours / days) : 0,
+              }));
+            };
+            const selected = periodOptions.find(o => o.key === balancePeriod) || periodOptions[0];
+            const radarData = buildRadar(selected.data, selected.key);
+            const maxPct = Math.max(...radarData.map(d => d.spent), 100);
+            const dynMax = Math.max(100, Math.ceil(maxPct / 50) * 50);
+            return (
+              <div>
+                {/* Period selector */}
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', alignItems: 'center' }}>
+                  <span style={{ fontWeight: '700', color: '#374151', fontSize: '14px' }}>Period:</span>
+                  {periodOptions.map(opt => (
+                    <button key={opt.key} onClick={() => setBalancePeriod(opt.key)}
+                      style={{ padding: '8px 18px', borderRadius: '8px', border: `2px solid ${balancePeriod === opt.key ? opt.color : '#e2e8f0'}`, background: balancePeriod === opt.key ? opt.color : 'white', color: balancePeriod === opt.key ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}>
+                      {opt.emoji} {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {/* Single radar + table */}
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <div style={{ flex: '0 0 340px', background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `2px solid ${selected.color}` }}>
+                    <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '8px', color: selected.color }}>{selected.emoji} {selected.label} — Pillar Balance</div>
+                    <ResponsiveContainer width="100%" height={280}>
+                      <RadarChart data={radarData}>
+                        <PolarGrid strokeDasharray="3 3" />
+                        <PolarAngleAxis dataKey="pillar" tick={{ fontSize: 12, fontWeight: 600, fill: '#2b6cb0' }} />
+                        <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1}
+                          tickFormatter={v => `${v}%`} tick={{ fontSize: 10, fill: '#f97316', fontWeight: 600 }} />
+                        <Radar name="Target (100%)" dataKey="allocated" stroke="#cbd5e0" fill="#cbd5e0" fillOpacity={0.2} strokeWidth={2} />
+                        <Radar name="Actual % Achieved" dataKey="spent" stroke={selected.color} fill={selected.color} fillOpacity={0.5} strokeWidth={2} />
+                        <Tooltip formatter={(value: any, name: string, props: any) => {
+                          if (name === 'Actual % Achieved') return [`${props.payload.actualSpent?.toFixed(1)}h (${value}%)`, name];
+                          return [`${value}%`, name];
+                        }} />
+                        <Legend wrapperStyle={{ fontSize: '12px' }} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {/* Breakdown table */}
+                  <div style={{ flex: '1 1 260px', background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+                    <div style={{ fontWeight: '700', fontSize: '14px', marginBottom: '12px', color: '#374151' }}>📋 Breakdown</div>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ background: '#f0f4ff' }}>
+                          <th style={{ padding: '8px', textAlign: 'left', borderBottom: '2px solid #c7d2fe' }}>Pillar</th>
+                          <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #c7d2fe' }}>Allocated</th>
+                          <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #c7d2fe' }}>Spent/day</th>
+                          <th style={{ padding: '8px', textAlign: 'center', borderBottom: '2px solid #c7d2fe' }}>%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {radarData.map(row => {
+                          const pct = row.actualAllocated > 0 ? Math.round((row.actualSpent / row.actualAllocated) * 100) : 0;
+                          return (
+                            <tr key={row.pillar} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '8px', fontWeight: '600', color: row.color || '#374151' }}>{row.icon} {row.pillar}</td>
+                              <td style={{ padding: '8px', textAlign: 'center' }}>{row.actualAllocated?.toFixed(1)}h</td>
+                              <td style={{ padding: '8px', textAlign: 'center' }}>{row.actualSpent?.toFixed(1)}h</td>
+                              <td style={{ padding: '8px', textAlign: 'center', fontWeight: '700', color: pct >= 80 ? '#16a34a' : pct >= 60 ? '#b45309' : '#dc2626', background: pct >= 80 ? '#d1fae5' : pct >= 60 ? '#fef3c7' : '#fee2e2', borderRadius: '4px' }}>{pct}%</td>
+                            </tr>
+                          );
+                        })}
+                        <tr style={{ borderTop: '2px solid #cbd5e0', fontWeight: '700', background: '#f7fafc' }}>
+                          <td style={{ padding: '8px' }}>Total</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>{radarData.reduce((s, r) => s + (r.actualAllocated || 0), 0).toFixed(1)}h</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>{radarData.reduce((s, r) => s + (r.actualSpent || 0), 0).toFixed(1)}h</td>
+                          <td style={{ padding: '8px', textAlign: 'center' }}>
+                            {radarData.reduce((s, r) => s + (r.actualAllocated || 0), 0) > 0
+                              ? Math.round((radarData.reduce((s, r) => s + (r.actualSpent || 0), 0) / radarData.reduce((s, r) => s + (r.actualAllocated || 0), 0)) * 100)
+                              : 0}%
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Circle of Life — 8 individual radar charts week-over-week or month-over-month */}
+          {detailedViewType === 'circle_of_life' && (() => {
+            const PILLAR_COLORS: Record<string, string> = {
+              'Hard Work': '#2563eb',
+              'Calmness': '#16a34a',
+              'Family': '#9333ea',
+            };
+            const PILLAR_ORDER_LOCAL = ['Hard Work', 'Calmness', 'Family'];
+
+            const circleTypeOptions: { key: 'pillar' | 'category' | 'tasks' | 'one_time'; label: string; desc: string }[] = [
+              { key: 'pillar',    label: '🎯 Pillar Balance',         desc: '3 Life Pillars' },
+              { key: 'category',  label: '📁 Category Distribution',  desc: 'Categories across pillars' },
+              { key: 'tasks',     label: '⏱️ Time-Based Tasks',       desc: 'Recurring task time' },
+              { key: 'one_time',  label: '🗂️ One-Time Tasks',         desc: 'Projects & one-offs' },
+            ];
+
+            const getDaysInPeriod = (start: string, end: string) => {
+              const s = new Date(start); const e = new Date(end);
+              return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
+            };
+
+            // Negative categories: spending MORE than allocated is bad, so invert their score.
+            // Score (used for radar shape + avg) is capped 0-100.
+            // spent (raw %) is stored separately for the tooltip table.
+            const DRAIN_CATEGORIES = ['Time Waste'];
+            const buildRadarData = (data: any[], start: string, end: string) => {
+              const days = getDaysInPeriod(start, end);
+              if (circleOfLifeType === 'pillar') {
+                return PILLAR_ORDER_LOCAL.map(name => {
+                  const p = data.find((d: any) => d.pillar_name === name);
+                  const raw = p && p.allocated_hours > 0 ? Math.round((p.spent_hours / days / p.allocated_hours) * 100) : 0;
+                  const score = Math.min(100, raw); // cap at 100 — overspend doesn't inflate
+                  return { name, spent: raw, score, allocated: 100 };
+                });
+              } else {
+                // category / tasks / one_time — data is CategoryData[]
+                const items = data.filter((c: any) => c.category_name !== 'My Tasks').slice(0, 10);
+                return items.map((c: any) => {
+                  const raw = c.allocated_hours > 0 ? Math.round((c.spent_hours / days / c.allocated_hours) * 100) : 0;
+                  const isDrain = DRAIN_CATEGORIES.includes(c.category_name);
+                  // Drain: score = max(0, 200 - raw) → spending half = 150% → penalise overspend
+                  // Cap at 100 so perfect drain = 100 (spent exactly as budgeted)
+                  const score = isDrain ? Math.min(100, Math.max(0, 200 - raw)) : Math.min(100, raw);
+                  return { name: c.category_name || c.name || 'Unknown', spent: raw, score, allocated: 100, isDrain };
+                });
+              }
+            };
+
+            const periodColor = (idx: number, total: number) => {
+              const ratio = total > 1 ? idx / (total - 1) : 1;
+              const r = Math.round(191 + (29 - 191) * ratio);
+              const g = Math.round(219 + (78 - 219) * ratio);
+              const b = Math.round(254 + (216 - 254) * ratio);
+              return `rgb(${r},${g},${b})`;
+            };
+
+            const selectedType = circleTypeOptions.find(o => o.key === circleOfLifeType) || circleTypeOptions[0];
+
+            return (
+              <div>
+                {/* Circle type selector */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontWeight: '700', color: '#374151', fontSize: '14px', marginBottom: '10px' }}>Select Circle Type:</div>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {circleTypeOptions.map(opt => (
+                      <button key={opt.key} onClick={() => setCircleOfLifeType(opt.key)}
+                        style={{ padding: '10px 16px', borderRadius: '10px', border: `2px solid ${circleOfLifeType === opt.key ? '#4299e1' : '#e2e8f0'}`, background: circleOfLifeType === opt.key ? '#ebf4ff' : 'white', color: circleOfLifeType === opt.key ? '#1d4ed8' : '#374151', fontWeight: circleOfLifeType === opt.key ? '700' : '500', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}>
+                        <div>{opt.label}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Period selector */}
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', alignItems: 'center' }}>
+                  <span style={{ fontWeight: '700', color: '#374151', fontSize: '14px' }}>Show last 8:</span>
+                  <button
+                    onClick={() => setCircleOfLifePeriod('week')}
+                    style={{ padding: '8px 20px', borderRadius: '8px', border: circleOfLifePeriod === 'week' ? '2px solid #4299e1' : '2px solid #e2e8f0', background: circleOfLifePeriod === 'week' ? '#4299e1' : 'white', color: circleOfLifePeriod === 'week' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                  >📆 Weeks</button>
+                  <button
+                    onClick={() => setCircleOfLifePeriod('month')}
+                    style={{ padding: '8px 20px', borderRadius: '8px', border: circleOfLifePeriod === 'month' ? '2px solid #ed8936' : '2px solid #e2e8f0', background: circleOfLifePeriod === 'month' ? '#ed8936' : 'white', color: circleOfLifePeriod === 'month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                  >📅 Months</button>
+                </div>
+
+                {circleOfLifeLoading ? (
+                  <div style={{ textAlign: 'center', padding: '80px', fontSize: '16px', color: '#64748b' }}>⏳ Loading {selectedType.desc} data...</div>
+                ) : circleOfLifeData.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>No data available. Try a different type or period.</div>
+                ) : (
+                  <>
+                    <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
+                      Each circle shows daily-average % of allocated time for <strong>{selectedType.desc}</strong> per {circleOfLifePeriod}. Target (grey ring) = 100%.
+                    </p>
+                    {/* 8 radar charts in a responsive grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                      {circleOfLifeData.map((period, idx) => {
+                        const radarData = buildRadarData(period.data, period.start, period.end);
+                        if (radarData.length === 0) return null;
+                        const maxSpent = Math.max(...radarData.map(d => d.spent), 100);
+                        const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50); // expands if overspent
+                        const avgPct = radarData.reduce((s, d) => s + d.score, 0) / radarData.length; // success score for badge
+                        const isNewest = idx === 0;
+                        const radarColor = isNewest ? '#2563eb' : periodColor(idx, circleOfLifeData.length);
+                        return (
+                          <div key={period.label} style={{ background: 'white', borderRadius: '12px', padding: '16px', boxShadow: isNewest ? '0 0 0 3px #2563eb, 0 4px 12px rgba(0,0,0,0.1)' : '0 2px 8px rgba(0,0,0,0.07)', border: isNewest ? '2px solid #2563eb' : '1px solid #e5e7eb' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                              <div style={{ fontSize: '13px', fontWeight: '700', color: isNewest ? '#1d4ed8' : '#374151' }}>
+                                {isNewest && '★ '}{period.label}
+                              </div>
+                              <div style={{ fontSize: '12px', fontWeight: '600', color: avgPct >= 80 ? '#16a34a' : avgPct >= 60 ? '#b45309' : '#dc2626', background: avgPct >= 80 ? '#d1fae5' : avgPct >= 60 ? '#fef3c7' : '#fee2e2', padding: '2px 8px', borderRadius: '12px' }}>
+                                {Math.round(avgPct)}% avg
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '8px' }}>{period.start} → {period.end}</div>
+                            <ResponsiveContainer width="100%" height={200}>
+                              <RadarChart data={radarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+                                <PolarGrid strokeDasharray="3 3" />
+                                <PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 600, fill: '#374151' }} />
+                                <PolarRadiusAxis angle={90} domain={[0, dynMax]} tick={false} axisLine={false} />
+                                <Radar name="Allocated" dataKey="allocated" stroke="#cbd5e0" fill="#cbd5e0" fillOpacity={0.15} strokeWidth={1} />
+                                <Radar name="Actual %" dataKey="spent" stroke={radarColor} fill={radarColor} fillOpacity={0.45} strokeWidth={2} />
+                                <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
+                              </RadarChart>
+                            </ResponsiveContainer>
+                            {/* Mini table — spent% (picture) + success% (goal adherence) */}
+                            <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse', marginTop: '6px' }}>
+                              <thead>
+                                <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#94a3b8' }}>
+                                  <th style={{ padding: '2px 4px', textAlign: 'left', fontWeight: 500 }}>Category</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 500 }} title="Actual time spent vs allocated (matches the picture)">Spent%</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 500 }} title="Goal adherence: productive=min(spent,100), drain=max(0,200-spent)">✓ Goal</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {radarData.map(row => (
+                                  <tr key={row.name}>
+                                    <td style={{ padding: '2px 4px', fontWeight: '600', color: circleOfLifeType === 'pillar' ? (PILLAR_COLORS[row.name] || '#374151') : '#374151' }}>
+                                      {circleOfLifeType === 'pillar' ? (row.name === 'Hard Work' ? '💼' : row.name === 'Calmness' ? '🧘' : '👨‍👩‍👦') : (row.isDrain ? '⚠️' : '📌')} {row.name}
+                                    </td>
+                                    <td style={{ padding: '2px 4px', textAlign: 'right', fontWeight: '700', color: row.isDrain ? (row.spent > 100 ? '#dc2626' : '#16a34a') : (row.spent >= 80 ? '#16a34a' : row.spent >= 60 ? '#b45309' : '#dc2626') }}>
+                                      {row.spent}%
+                                    </td>
+                                    <td style={{ padding: '2px 4px', textAlign: 'right', fontWeight: '700', color: row.score >= 80 ? '#16a34a' : row.score >= 60 ? '#b45309' : '#dc2626' }}>
+                                      {row.score}%
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Old comparison charts - keep below as additional context */}
           <div style={{ marginTop: '40px', paddingTop: '40px', borderTop: '2px solid #e2e8f0' }}>
