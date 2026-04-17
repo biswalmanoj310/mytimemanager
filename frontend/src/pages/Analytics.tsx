@@ -432,14 +432,35 @@ export default function Analytics() {
         return (resp.data.pillars || []).sort((a: PillarData, b: PillarData) =>
           PILLAR_ORDER_LOCAL.indexOf(a.pillar_name) - PILLAR_ORDER_LOCAL.indexOf(b.pillar_name)
         );
-      } else {
+      } else if (cType === 'category') {
         const resp = await apiClient.get(`/api/analytics/category-breakdown?start_date=${startStr}&end_date=${endStr}`);
         const cats: CategoryData[] = resp.data.categories || [];
-        if (cType === 'category') {
-          return cats.sort((a, b) => CATEGORY_ORDER_LOCAL.indexOf(a.category_name) - CATEGORY_ORDER_LOCAL.indexOf(b.category_name));
-        }
-        // tasks / one_time — need task-level data, use category data as proxy grouped by pillar
         return cats.sort((a, b) => CATEGORY_ORDER_LOCAL.indexOf(a.category_name) - CATEGORY_ORDER_LOCAL.indexOf(b.category_name));
+      } else {
+        // tasks / one_time — fetch actual task-level time entries
+        const baseTaskList = cType === 'tasks' ? allTasksData : allOneTimeTasksData;
+        const entriesResp = await apiClient.get(`/api/daily-time?start_date=${startStr}&end_date=${endStr}`);
+        const entries: any[] = entriesResp.data || [];
+        const spentMap = new Map<number, number>();
+        entries.forEach((e: any) => { spentMap.set(e.task_id, (spentMap.get(e.task_id) || 0) + e.minutes); });
+        // Sort by pillar → category → task name, same order as Wheel of Life tab
+        const sorted = [...baseTaskList]
+          .filter(t => t.allocated_minutes > 0)
+          .sort((a, b) => {
+            const pa = PILLAR_ORDER_LOCAL.indexOf(a.pillar_name || '');
+            const pb = PILLAR_ORDER_LOCAL.indexOf(b.pillar_name || '');
+            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+            const ca = CATEGORY_ORDER_LOCAL.indexOf(a.category_name || '');
+            const cb = CATEGORY_ORDER_LOCAL.indexOf(b.category_name || '');
+            if (ca !== cb) return (ca === -1 ? 999 : ca) - (cb === -1 ? 999 : cb);
+            return (a.task_name || '').localeCompare(b.task_name || '');
+          });
+        return sorted.map(task => ({
+          name: task.task_name,
+          category_name: task.category_name || '',
+          allocated_hours: task.allocated_minutes / 60,
+          spent_hours: (spentMap.get(task.task_id) || 0) / 60
+        }));
       }
     };
 
@@ -3732,19 +3753,24 @@ export default function Analytics() {
                 return PILLAR_ORDER_LOCAL.map(name => {
                   const p = data.find((d: any) => d.pillar_name === name);
                   const raw = p && p.allocated_hours > 0 ? Math.round((p.spent_hours / days / p.allocated_hours) * 100) : 0;
-                  const score = Math.min(100, raw); // cap at 100 — overspend doesn't inflate
+                  const score = Math.min(100, raw);
                   return { name, spent: raw, score, allocated: 100 };
                 });
-              } else {
-                // category / tasks / one_time — data is CategoryData[]
+              } else if (circleOfLifeType === 'category') {
                 const items = data.filter((c: any) => c.category_name !== 'My Tasks').slice(0, 10);
                 return items.map((c: any) => {
                   const raw = c.allocated_hours > 0 ? Math.round((c.spent_hours / days / c.allocated_hours) * 100) : 0;
                   const isDrain = DRAIN_CATEGORIES.includes(c.category_name);
-                  // Drain: score = max(0, 200 - raw) → spending half = 150% → penalise overspend
-                  // Cap at 100 so perfect drain = 100 (spent exactly as budgeted)
                   const score = isDrain ? Math.min(100, Math.max(0, 200 - raw)) : Math.min(100, raw);
                   return { name: c.category_name || c.name || 'Unknown', spent: raw, score, allocated: 100, isDrain };
+                });
+              } else {
+                // tasks / one_time — data is [{name, category_name, allocated_hours, spent_hours}]
+                return data.slice(0, 10).map((t: any) => {
+                  const raw = t.allocated_hours > 0 ? Math.round((t.spent_hours / days / t.allocated_hours) * 100) : 0;
+                  const isDrain = DRAIN_CATEGORIES.includes(t.category_name || '');
+                  const score = isDrain ? Math.min(100, Math.max(0, 200 - raw)) : Math.min(100, raw);
+                  return { name: t.name || 'Unknown', spent: raw, score, allocated: 100, isDrain };
                 });
               }
             };
@@ -3795,7 +3821,7 @@ export default function Analytics() {
                 ) : (
                   <>
                     <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
-                      Each circle shows daily-average % of allocated time for <strong>{selectedType.desc}</strong> per {circleOfLifePeriod}. Target (grey ring) = 100%.
+                      Each circle shows daily-average % of allocated time for <strong>{selectedType.desc}</strong> per {circleOfLifePeriod}. Dark green ring = 100% goal. Labels show highest (green) &amp; lowest (red) only.
                     </p>
                     {/* 8 radar charts in a responsive grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
@@ -3818,13 +3844,46 @@ export default function Analytics() {
                               </div>
                             </div>
                             <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '8px' }}>{period.start} → {period.end}</div>
-                            <ResponsiveContainer width="100%" height={200}>
-                              <RadarChart data={radarData} margin={{ top: 10, right: 20, bottom: 10, left: 20 }}>
+                            <ResponsiveContainer width="100%" height={240}>
+                              <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
                                 <PolarGrid strokeDasharray="3 3" />
-                                <PolarAngleAxis dataKey="name" tick={{ fontSize: 10, fontWeight: 600, fill: '#374151' }} />
+                                <PolarAngleAxis dataKey="name" tick={(props: any) => {
+                                    const { x, y, payload, textAnchor } = props;
+                                    const name: string = payload.value;
+                                    const maxVal = Math.max(...radarData.map((d: any) => d.spent));
+                                    const minVal = Math.min(...radarData.map((d: any) => d.spent));
+                                    const item = radarData.find((d: any) => d.name === name);
+                                    const val = item ? item.spent : null;
+                                    const isMax = val !== null && val === maxVal;
+                                    const isMin = val !== null && val === minVal && maxVal !== minVal;
+                                    // Word-wrap: split into lines of ~12 chars (same as WheelsOfLife)
+                                    const words = name.split(' ');
+                                    const lines: string[] = [];
+                                    let cur = '';
+                                    words.forEach((w: string) => {
+                                      if ((cur + (cur ? ' ' : '') + w).length <= 12) {
+                                        cur = cur ? cur + ' ' + w : w;
+                                      } else {
+                                        if (cur) lines.push(cur);
+                                        cur = w;
+                                      }
+                                    });
+                                    if (cur) lines.push(cur);
+                                    return (
+                                      <text x={x} y={y} textAnchor={textAnchor || 'middle'} fontSize={10} fontWeight={600} fill="#374151">
+                                        {lines.map((line: string, i: number) => (
+                                          <tspan key={i} x={x} dy={i === 0 ? 0 : 12}>{line}</tspan>
+                                        ))}
+                                        {(isMax || isMin) && (
+                                          <tspan x={x} dy="13" fontSize={10} fontWeight={700} fill={isMax ? '#16a34a' : '#dc2626'}>{val}%</tspan>
+                                        )}
+                                      </text>
+                                    );
+                                  }} />
                                 <PolarRadiusAxis angle={90} domain={[0, dynMax]} tick={false} axisLine={false} />
-                                <Radar name="Allocated" dataKey="allocated" stroke="#cbd5e0" fill="#cbd5e0" fillOpacity={0.15} strokeWidth={1} />
-                                <Radar name="Actual %" dataKey="spent" stroke={radarColor} fill={radarColor} fillOpacity={0.45} strokeWidth={2} />
+                                <Radar name="100% Goal" dataKey="allocated" stroke="#276749" fill="#276749" fillOpacity={0.08} strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                                <Radar name="Actual %" dataKey="spent" stroke={radarColor} fill={radarColor} fillOpacity={0.45} strokeWidth={2}
+                                />
                                 <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
                               </RadarChart>
                             </ResponsiveContainer>
