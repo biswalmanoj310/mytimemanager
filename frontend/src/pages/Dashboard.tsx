@@ -3,12 +3,16 @@
  * Main dashboard with overview of tasks, goals, and time tracking
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import TaskForm from '../components/TaskForm';
 import GoalForm from '../components/GoalForm';
 import { AddChallengeModal } from '../components/AddChallengeModal';
+import {
+  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  Radar, Tooltip, ResponsiveContainer
+} from 'recharts';
 import './Dashboard.css';
 
 interface GoalsSummary {
@@ -134,7 +138,18 @@ export default function Dashboard() {
   const [backgroundColor, setBackgroundColor] = useState(() => {
     return localStorage.getItem('dashboardBgColor') || '#ffffff';
   });
-  
+
+  // Circle-of-life chart data for dashboard
+  interface CirclePeriod { label: string; start: string; end: string; data: any[]; }
+  const [weekCategoryCircle, setWeekCategoryCircle] = useState<CirclePeriod[]>([]);
+  const [monthCategoryCircle, setMonthCategoryCircle] = useState<CirclePeriod[]>([]);
+  const [weekTasksCircle, setWeekTasksCircle] = useState<CirclePeriod[]>([]);
+  const [monthTasksCircle, setMonthTasksCircle] = useState<CirclePeriod[]>([]);
+  const [weekOneTimeCircle, setWeekOneTimeCircle] = useState<CirclePeriod[]>([]);
+  const [monthOneTimeCircle, setMonthOneTimeCircle] = useState<CirclePeriod[]>([]);
+  const [circleLoading, setCircleLoading] = useState(true);
+  const [circlePeriod, setCirclePeriod] = useState<'week'|'month'>('week');
+
   const navigate = useNavigate();
   
   console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
@@ -310,9 +325,160 @@ export default function Dashboard() {
     }
   };
 
+  // ─── Circle-of-Life chart loader ───────────────────────────────────────────
+  const loadCircleCharts = async () => {
+    setCircleLoading(true);
+    const fmt = (d: Date) => d.toISOString().split('T')[0];
+    const weekStart = (d: Date) => {
+      const day = d.getDay(); // 0=Sun
+      const diff = day === 0 ? -6 : 1 - day; // Monday
+      const m = new Date(d); m.setDate(d.getDate() + diff); m.setHours(0,0,0,0); return m;
+    };
+    const today = new Date();
+
+    try {
+      // --- base task lists (active daily tasks) ---
+      const [tasksResp, completionResp] = await Promise.all([
+        api.get<any[]>('/api/tasks?limit=1000&is_active=true&is_completed=false'),
+        api.get<any>('/api/daily-tasks-history/completion-dates').catch(() => ({}))
+      ]);
+      const tasks: any[] = tasksResp || [];
+      const completionDates = new Map<number, string>(
+        Object.entries(completionResp || {}).map(([id, dt]) => [parseInt(id), dt as string])
+      );
+      const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
+
+      const isStillActive = (task: any) => {
+        if (!task.is_active || task.is_completed || task.na_marked_at) return false;
+        const cd = completionDates.get(task.id);
+        if (cd) {
+          const [y,m,d] = cd.split('-').map(Number);
+          const cDate = new Date(y,m-1,d); cDate.setHours(0,0,0,0);
+          if (cDate < todayMidnight) return false;
+        }
+        return true;
+      };
+
+      const baseTimeTasks = tasks.filter(t =>
+        t.follow_up_frequency === 'daily' &&
+        t.task_type?.toLowerCase() === 'time' &&
+        !t.is_daily_one_time &&
+        isStillActive(t)
+      );
+      const baseOneTimeTasks = tasks.filter(t =>
+        t.follow_up_frequency === 'daily' &&
+        t.task_type?.toLowerCase() === 'time' &&
+        t.is_daily_one_time === true &&
+        isStillActive(t)
+      );
+
+      const DRAIN = ['Time Waste'];
+      const CATEGORY_ORDER = ['Office-Tasks','Learning','Confidence','Yoga','Sleep','My Tasks','Home Tasks','Time Waste'];
+      const PILLAR_ORDER = ['Hard Work', 'Calmness', 'Family'];
+
+      const buildRadar = (data: any[], startStr: string, endStr: string, cType: 'category'|'tasks'|'one_time') => {
+        const s = new Date(startStr); const e = new Date(endStr);
+        const days = Math.max(1, Math.round((e.getTime()-s.getTime())/86400000)+1);
+        if (cType === 'category') {
+          return (data as any[]).map((c: any) => {
+            const raw = c.allocated_hours > 0 ? Math.round((c.spent_hours/days/c.allocated_hours)*100) : 0;
+            const isDrain = DRAIN.includes(c.category_name);
+            const score = isDrain ? Math.min(100,Math.max(0,200-raw)) : Math.min(100,raw);
+            return { name: c.category_name||'Unknown', spent: raw, score, allocated: 100 };
+          });
+        } else {
+          return (data as any[]).map((t: any) => {
+            const raw = t.allocated_hours > 0 ? Math.round((t.spent_hours/days/t.allocated_hours)*100) : 0;
+            const score = Math.min(100, raw);
+            return { name: t.name||'Unknown', spent: raw, score, allocated: 100 };
+          });
+        }
+      };
+
+      const fetchForPeriod = async (startStr: string, endStr: string) => {
+        const [catResp, entriesResp] = await Promise.all([
+          api.get<any>(`/api/analytics/category-breakdown?start_date=${startStr}&end_date=${endStr}`),
+          api.get<any[]>(`/api/daily-time?start_date=${startStr}&end_date=${endStr}`)
+        ]);
+        const cats: any[] = (catResp.categories || [])
+          .filter((c: any) => c.allocated_hours > 0)
+          .sort((a: any, b: any) => CATEGORY_ORDER.indexOf(a.category_name)-CATEGORY_ORDER.indexOf(b.category_name));
+        const entries: any[] = entriesResp || [];
+        const spentMap = new Map<number,number>();
+        entries.forEach((e: any) => { spentMap.set(e.task_id,(spentMap.get(e.task_id)||0)+e.minutes); });
+        const toTaskRows = (list: any[]) => list
+          .filter(t => t.allocated_minutes > 0)
+          .sort((a: any, b: any) => {
+            const pa = PILLAR_ORDER.indexOf(a.pillar_name || '');
+            const pb = PILLAR_ORDER.indexOf(b.pillar_name || '');
+            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+            const ca = CATEGORY_ORDER.indexOf(a.category_name || '');
+            const cb = CATEGORY_ORDER.indexOf(b.category_name || '');
+            if (ca !== cb) return (ca === -1 ? 999 : ca) - (cb === -1 ? 999 : cb);
+            return (a.name || '').localeCompare(b.name || '');
+          })
+          .map(t => ({ name: t.name, allocated_hours: t.allocated_minutes/60, spent_hours: (spentMap.get(t.id)||0)/60 }));
+        return { cats, timeTasks: toTaskRows(baseTimeTasks), oneTimeTasks: toTaskRows(baseOneTimeTasks), startStr, endStr };
+      };
+
+      // Build 4 weeks
+      const weekPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[]];
+      for (let i = 3; i >= 0; i--) {
+        const wStart = weekStart(today);
+        wStart.setDate(wStart.getDate() - i*7);
+        const wEnd = new Date(wStart); wEnd.setDate(wStart.getDate()+6);
+        const actualEnd = wEnd > today ? today : wEnd;
+        const startStr = fmt(wStart); const endStr = fmt(actualEnd);
+        const label = i===0 ? 'This Week' : i===1 ? 'Last Week' :
+          `${wStart.toLocaleString('en-US',{month:'short',day:'numeric'})}–${actualEnd.toLocaleString('en-US',{month:'short',day:'numeric'})}`;
+        try {
+          const { cats, timeTasks, oneTimeTasks } = await fetchForPeriod(startStr, endStr);
+          weekPeriods[0].push({ label, start: startStr, end: endStr, data: buildRadar(cats, startStr, endStr, 'category') });
+          weekPeriods[1].push({ label, start: startStr, end: endStr, data: buildRadar(timeTasks, startStr, endStr, 'tasks') });
+          weekPeriods[2].push({ label, start: startStr, end: endStr, data: buildRadar(oneTimeTasks, startStr, endStr, 'one_time') });
+        } catch {
+          weekPeriods[0].push({ label, start: startStr, end: endStr, data: [] });
+          weekPeriods[1].push({ label, start: startStr, end: endStr, data: [] });
+          weekPeriods[2].push({ label, start: startStr, end: endStr, data: [] });
+        }
+      }
+      setWeekCategoryCircle(weekPeriods[0]);
+      setWeekTasksCircle(weekPeriods[1]);
+      setWeekOneTimeCircle(weekPeriods[2]);
+
+      // Build 4 months
+      const monthPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[]];
+      for (let i = 3; i >= 0; i--) {
+        const mStart = new Date(today.getFullYear(), today.getMonth()-i, 1);
+        const mEnd = new Date(today.getFullYear(), today.getMonth()-i+1, 0);
+        const actualEnd = mEnd > today ? today : mEnd;
+        const startStr = fmt(mStart); const endStr = fmt(actualEnd);
+        const label = mStart.toLocaleString('en-US',{month:'short',year:'numeric'});
+        try {
+          const { cats, timeTasks, oneTimeTasks } = await fetchForPeriod(startStr, endStr);
+          monthPeriods[0].push({ label, start: startStr, end: endStr, data: buildRadar(cats, startStr, endStr, 'category') });
+          monthPeriods[1].push({ label, start: startStr, end: endStr, data: buildRadar(timeTasks, startStr, endStr, 'tasks') });
+          monthPeriods[2].push({ label, start: startStr, end: endStr, data: buildRadar(oneTimeTasks, startStr, endStr, 'one_time') });
+        } catch {
+          monthPeriods[0].push({ label, start: startStr, end: endStr, data: [] });
+          monthPeriods[1].push({ label, start: startStr, end: endStr, data: [] });
+          monthPeriods[2].push({ label, start: startStr, end: endStr, data: [] });
+        }
+      }
+      setMonthCategoryCircle(monthPeriods[0]);
+      setMonthTasksCircle(monthPeriods[1]);
+      setMonthOneTimeCircle(monthPeriods[2]);
+    } catch (err) {
+      console.error('[Dashboard] Error loading circle charts:', err);
+    } finally {
+      setCircleLoading(false);
+    }
+  };
+
   useEffect(() => {
     console.log('[Dashboard] useEffect running, about to load data');
     loadDashboardData();
+    loadCircleCharts();
   }, []);
   
   useEffect(() => {
@@ -406,6 +572,101 @@ export default function Dashboard() {
         <h1 style={{ color: '#3B82F6' }}>Dashboard</h1>
         <p className="subtitle">Welcome to MakingMeHappier - My journey to a balanced, joyful life</p>
       </header>
+
+      {/* ─── Circle of Life Charts ─────────────────────────────────────────── */}
+      {(() => {
+        const CHART_TYPES = [
+          { label: '📁 Category Distribution', desc: 'Categories across pillars', weekData: weekCategoryCircle, monthData: monthCategoryCircle, color: '#4299e1' },
+          { label: '⏱️ Time-Based Tasks',       desc: 'Recurring task time',      weekData: weekTasksCircle,    monthData: monthTasksCircle,   color: '#10b981' },
+          { label: '🗂️ One-Time Tasks',         desc: 'Projects & one-offs',      weekData: weekOneTimeCircle,  monthData: monthOneTimeCircle, color: '#a855f7' },
+        ];
+
+        const RadarCard = ({ period, isNewest, accentColor }: { period: { label: string; start: string; end: string; data: any[] }; isNewest: boolean; accentColor: string }) => {
+          const avg = period.data.length ? period.data.reduce((s: number, d: any) => s + d.score, 0) / period.data.length : 0;
+          return (
+            <div style={{ background: 'white', borderRadius: '12px', padding: '12px', boxShadow: isNewest ? `0 0 0 2px ${accentColor}, 0 4px 12px rgba(0,0,0,0.1)` : '0 2px 8px rgba(0,0,0,0.07)', border: isNewest ? `2px solid ${accentColor}` : '1px solid #e5e7eb', flex: '1', minWidth: '180px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: isNewest ? accentColor : '#374151' }}>{isNewest && '★ '}{period.label}</div>
+                {period.data.length > 0 && (
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: avg>=80?'#16a34a':avg>=60?'#b45309':'#dc2626', background: avg>=80?'#d1fae5':avg>=60?'#fef3c7':'#fee2e2', padding: '2px 6px', borderRadius: '10px' }}>{Math.round(avg)}%</div>
+                )}
+              </div>
+              {period.data.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: '12px' }}>No data</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <RadarChart data={period.data} margin={{ top: 15, right: 25, bottom: 15, left: 25 }}>
+                    <PolarGrid strokeDasharray="3 3" />
+                    <PolarAngleAxis dataKey="name" tick={(props: any) => {
+                      const { x, y, payload, textAnchor } = props;
+                      const name: string = payload.value;
+                      const words = name.split(' ');
+                      const lines: string[] = [];
+                      let cur = '';
+                      words.forEach((w: string) => {
+                        if ((cur+(cur?' ':'')+w).length <= 12) { cur = cur?cur+' '+w:w; }
+                        else { if (cur) lines.push(cur); cur = w; }
+                      });
+                      if (cur) lines.push(cur);
+                      return (
+                        <text x={x} y={y} textAnchor={textAnchor||'middle'} fontSize={9} fontWeight={600} fill="#374151">
+                          {lines.map((l: string, i: number) => <tspan key={i} x={x} dy={i===0?0:11}>{l}</tspan>)}
+                        </text>
+                      );
+                    }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
+                    <Radar name="Goal" dataKey="allocated" stroke="#276749" fill="#276749" fillOpacity={0.06} strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
+                    <Radar name="Actual" dataKey="spent" stroke={isNewest ? accentColor : '#93c5fd'} fill={isNewest ? accentColor : '#93c5fd'} fillOpacity={0.4} strokeWidth={2} />
+                    <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          );
+        };
+
+        return (
+          <section style={{ marginBottom: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <h2 style={{ color: '#3B82F6', margin: 0 }}>🔮 Circle of Life</h2>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => setCirclePeriod('week')}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='week' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='week' ? '#3B82F6' : 'white', color: circlePeriod==='week' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                >📆 Last 4 Weeks</button>
+                <button
+                  onClick={() => setCirclePeriod('month')}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='month' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='month' ? '#3B82F6' : 'white', color: circlePeriod==='month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                >📅 Last 4 Months</button>
+              </div>
+            </div>
+            {circleLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>⏳ Loading charts...</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                {CHART_TYPES.map((ct) => {
+                  const activeData = circlePeriod === 'week' ? ct.weekData : ct.monthData;
+                  const reversedData = [...activeData].reverse();
+                  return (
+                    <div key={ct.label} style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px', border: `2px solid ${ct.color}22` }}>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '700', color: ct.color }}>{ct.label}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{ct.desc}</div>
+                      </div>
+                      {/* 4 charts in a row — latest first */}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {reversedData.map((p, i) => (
+                          <RadarCard key={p.label} period={p} isNewest={i === 0} accentColor={ct.color} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Stats in Grouped Panels */}
       <div className="stats-panels-grid">
