@@ -6,6 +6,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatDateForInput, getWeekStart } from '../utils/dateHelpers';
 import TaskForm from '../components/TaskForm';
 import GoalForm from '../components/GoalForm';
 import { AddChallengeModal } from '../components/AddChallengeModal';
@@ -164,7 +165,7 @@ export default function Dashboard() {
       
       // Get today's date for Daily tab filtering
       const today = new Date();
-      const todayStr = today.toISOString().split('T')[0];
+      const todayStr = formatDateForInput(today);
       
       const [dashboardData, tasks, projects, habits, pillars, categories, dailyStatuses, completionDatesResp] = await Promise.all([
         api.get<DashboardData>('/api/dashboard/goals/overview'),
@@ -328,12 +329,8 @@ export default function Dashboard() {
   // ─── Circle-of-Life chart loader ───────────────────────────────────────────
   const loadCircleCharts = async () => {
     setCircleLoading(true);
-    const fmt = (d: Date) => d.toISOString().split('T')[0];
-    const weekStart = (d: Date) => {
-      const day = d.getDay(); // 0=Sun
-      const diff = day === 0 ? -6 : 1 - day; // Monday
-      const m = new Date(d); m.setDate(d.getDate() + diff); m.setHours(0,0,0,0); return m;
-    };
+    const fmt = formatDateForInput; // Use local date (not UTC) to match Analytics
+    const weekStart = getWeekStart; // Shared helper ensures same Monday calculation
     const today = new Date();
 
     try {
@@ -583,6 +580,8 @@ export default function Dashboard() {
 
         const RadarCard = ({ period, isNewest, accentColor }: { period: { label: string; start: string; end: string; data: any[] }; isNewest: boolean; accentColor: string }) => {
           const avg = period.data.length ? period.data.reduce((s: number, d: any) => s + d.score, 0) / period.data.length : 0;
+          const maxSpent = period.data.length ? Math.max(...period.data.map((d: any) => d.spent), 100) : 100;
+          const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50);
           return (
             <div style={{ background: 'white', borderRadius: '12px', padding: '12px', boxShadow: isNewest ? `0 0 0 2px ${accentColor}, 0 4px 12px rgba(0,0,0,0.1)` : '0 2px 8px rgba(0,0,0,0.07)', border: isNewest ? `2px solid ${accentColor}` : '1px solid #e5e7eb', flex: '1', minWidth: '180px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
@@ -614,7 +613,7 @@ export default function Dashboard() {
                         </text>
                       );
                     }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
+                    <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} />
                     <Radar name="Goal" dataKey="allocated" stroke="#276749" fill="#276749" fillOpacity={0.06} strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
                     <Radar name="Actual" dataKey="spent" stroke={isNewest ? accentColor : '#93c5fd'} fill={isNewest ? accentColor : '#93c5fd'} fillOpacity={0.4} strokeWidth={2} />
                     <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />

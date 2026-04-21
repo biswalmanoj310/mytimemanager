@@ -133,8 +133,8 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       const percentage = p.allocated_hours > 0 ? (dailyAvgSpent / p.allocated_hours) * 100 : 0;
       return {
         pillar: p.pillar_name,
-        allocated: 100, // Always 100% as the target
-        spent: percentage, // No cap - let it scale naturally
+        allocated: 100,
+        spent: percentage,
         actualAllocated: p.allocated_hours,
         actualSpent: dailyAvgSpent,
         icon: p.icon,
@@ -142,7 +142,6 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       };
     });
 
-    // Dynamic scaling: minimum 100%, round up to nearest 50 if exceeds 100%
     const maxPercent = Math.max(...radarData.map(d => d.spent), 100);
     const dynamicMax = Math.max(100, Math.ceil(maxPercent / 50) * 50);
 
@@ -151,7 +150,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
         <h3>{emoji} {title}</h3>
 
         <ResponsiveContainer width="100%" height={300}>
-          <RadarChart data={radarData}>
+          <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
             <PolarGrid strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="pillar" 
@@ -185,7 +184,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
                 const data = props.payload;
                 if (name === 'Actual % Achieved') {
                   return [
-                    `${data.actualSpent.toFixed(1)}h (${value.toFixed(0)}%)`,
+                    `${data.actualSpent.toFixed(1)}h (${Number(value).toFixed(0)}%)`,
                     name
                   ];
                 }
@@ -258,25 +257,24 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       return (orderA === -1 ? 999 : orderA) - (orderB === -1 ? 999 : orderB);
     }).slice(0, 8);
 
+    const DRAIN_CATS = ['Time Waste', 'Screen Relaxing'];
+    void DRAIN_CATS;
+    const radarColor = title.includes('Today') ? '#4299e1' :
+                       title.includes('Week') ? '#48bb78' : '#ed8936';
     const radarData = sortedData.map(c => {
       const dailyAvgSpent = normalizeToDailyAverage(c.spent_hours, periodType);
       const percentage = c.allocated_hours > 0 ? (dailyAvgSpent / c.allocated_hours) * 100 : 0;
       return {
         category: c.category_name,
         fullName: c.category_name,
-        spent: percentage, // No cap - let it scale naturally
+        spent: percentage,
         actualAllocated: c.allocated_hours,
         actualSpent: dailyAvgSpent
       };
     });
 
-    // Dynamic scaling: minimum 100%, round up to nearest 50 if exceeds 100%
     const maxPercent = Math.max(...radarData.map(d => d.spent), 100);
     const dynamicMax = Math.max(100, Math.ceil(maxPercent / 50) * 50);
-
-    // Determine color based on title (Today/Weekly/Monthly)
-    const radarColor = title.includes('Today') ? '#4299e1' : 
-                       title.includes('Week') ? '#48bb78' : '#ed8936';
 
     // Custom tick renderer for multi-line text
     const CustomTick = (props: any) => {
@@ -310,7 +308,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
         <h3>{emoji} {title}</h3>
 
         <ResponsiveContainer width="100%" height={400}>
-          <RadarChart data={radarData}>
+          <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
             <PolarGrid strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="category" 
@@ -333,7 +331,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
             />
             <Tooltip 
               formatter={(value: any, name: string) => [
-                `${Number(value).toFixed(1)}h`,
+                `${Number(value).toFixed(0)}%`,
                 name
               ]}
             />
@@ -423,18 +421,19 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       const actualSpentHours = t.spent_minutes / 60;
       const dailyAvgSpent = normalizeToDailyAverage(actualSpentHours, periodType);
       const percentage = allocatedHours > 0 ? (dailyAvgSpent / allocatedHours) * 100 : 0;
+      const isDrain = ['Time Waste', 'Screen Relaxing'].includes(t.category_name || '');
+      void isDrain;
       return {
         task: t.task_name.length > 20 
           ? t.task_name.substring(0, 17) + '...' 
           : t.task_name,
         fullName: t.task_name,
-        spent: percentage, // No cap - let it scale naturally
+        spent: percentage,
         actualAllocated: allocatedHours,
         actualSpent: dailyAvgSpent
       };
     });
 
-    // Dynamic scaling: minimum 100%, round up to nearest 50 if exceeds 100%
     const maxPercent = Math.max(...radarData.map(d => d.spent), 100);
     const dynamicMax = Math.max(100, Math.ceil(maxPercent / 50) * 50);
 
@@ -499,7 +498,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
         <h3>{emoji} {title}</h3>
 
         <ResponsiveContainer width="100%" height={400}>
-          <RadarChart data={radarData}>
+          <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
             <PolarGrid strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="task" 
@@ -522,7 +521,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
             />
             <Tooltip 
               formatter={(value: any, name: string) => [
-                `${Number(value).toFixed(1)}h`,
+                `${Number(value).toFixed(0)}%`,
                 name
               ]}
             />

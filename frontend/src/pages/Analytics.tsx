@@ -3829,7 +3829,7 @@ export default function Analytics() {
                         const radarData = buildRadarData(period.data, period.start, period.end);
                         if (radarData.length === 0) return null;
                         const maxSpent = Math.max(...radarData.map(d => d.spent), 100);
-                        const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50); // expands if overspent
+                        const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50);
                         const avgPct = radarData.reduce((s, d) => s + d.score, 0) / radarData.length; // success score for badge
                         const isNewest = idx === 0;
                         const radarColor = isNewest ? '#2563eb' : periodColor(idx, circleOfLifeData.length);
@@ -3880,7 +3880,7 @@ export default function Analytics() {
                                       </text>
                                     );
                                   }} />
-                                <PolarRadiusAxis angle={90} domain={[0, dynMax]} tick={false} axisLine={false} />
+                                <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} />
                                 <Radar name="100% Goal" dataKey="allocated" stroke="#276749" fill="#276749" fillOpacity={0.08} strokeWidth={2} strokeDasharray="6 3" dot={false} />
                                 <Radar name="Actual %" dataKey="spent" stroke={radarColor} fill={radarColor} fillOpacity={0.45} strokeWidth={2}
                                 />
