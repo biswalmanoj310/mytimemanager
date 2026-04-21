@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
 import WheelsOfLife from '../components/WheelsOfLife';
 import {
@@ -192,6 +192,16 @@ export default function Analytics() {
     }
     return 'overview';
   };
+
+  // Get initial detailedViewType from URL params or default to 'tasks'
+  const getInitialDetailedViewType = (): 'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life' => {
+    const params = new URLSearchParams(window.location.search);
+    const detailView = params.get('detailView');
+    if (detailView === 'categories' || detailView === 'pillars' || detailView === 'balance_visualization' || detailView === 'circle_of_life') {
+      return detailView;
+    }
+    return 'tasks';
+  };
   
   const [viewMode, setViewMode] = useState<'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed'>(getInitialViewMode());
   const [streakData, setStreakData] = useState<StreakData | null>(null);
@@ -205,9 +215,20 @@ export default function Analytics() {
   const [selectedTasks, setSelectedTasks] = useState<number[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
-  const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life'>('tasks');
-  const [circleOfLifePeriod, setCircleOfLifePeriod] = useState<'week' | 'month'>('week');
-  const [circleOfLifeType, setCircleOfLifeType] = useState<'pillar' | 'category' | 'tasks' | 'one_time'>('pillar');
+  const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life'>(getInitialDetailedViewType());
+  const getInitialCircleType = (): 'pillar' | 'category' | 'tasks' | 'one_time' => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('circleType');
+    if (v === 'category' || v === 'tasks' || v === 'one_time') return v;
+    return 'pillar';
+  };
+  const getInitialCirclePeriod = (): 'week' | 'month' => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('circlePeriod') === 'month' ? 'month' : 'week';
+  };
+
+  const [circleOfLifePeriod, setCircleOfLifePeriod] = useState<'week' | 'month'>(getInitialCirclePeriod());
+  const [circleOfLifeType, setCircleOfLifeType] = useState<'pillar' | 'category' | 'tasks' | 'one_time'>(getInitialCircleType());
   const [circleOfLifeData, setCircleOfLifeData] = useState<{label: string; start: string; end: string; data: any[]}[]>([]);
   const [circleOfLifeLoading, setCircleOfLifeLoading] = useState(false);
   // Balance viz period: 'today' | 'week' | 'month'
@@ -282,6 +303,36 @@ export default function Analytics() {
   const [modalMonth, setModalMonth] = useState(formatDateForInput(new Date()).substring(0, 7)); // YYYY-MM format
 
   // Note: Weekly/Monthly toggles intentionally reset to false on every page load/refresh
+
+  // Ref holding the scroll Y to restore after data loads
+  const pendingScrollRef = useRef<number | null>(null);
+
+  // On mount: read saved scroll position and store in ref for later restoration
+  useEffect(() => {
+    const savedScroll = sessionStorage.getItem('analytics-scroll-y');
+    if (savedScroll) {
+      pendingScrollRef.current = parseInt(savedScroll, 10);
+      sessionStorage.removeItem('analytics-scroll-y');
+    }
+  }, []);
+
+  // Restore scroll once the heaviest loading state settles (circle data or main data)
+  useEffect(() => {
+    if (!circleOfLifeLoading && !loading && pendingScrollRef.current !== null) {
+      const y = pendingScrollRef.current;
+      pendingScrollRef.current = null;
+      // Small frame delay so the DOM has painted
+      const t = setTimeout(() => window.scrollTo({ top: y, behavior: 'instant' as ScrollBehavior }), 80);
+      return () => clearTimeout(t);
+    }
+  }, [circleOfLifeLoading, loading]);
+
+  // Save scroll position before page unload
+  useEffect(() => {
+    const saveScroll = () => sessionStorage.setItem('analytics-scroll-y', window.scrollY.toString());
+    window.addEventListener('beforeunload', saveScroll);
+    return () => window.removeEventListener('beforeunload', saveScroll);
+  }, []);
 
   // Load dynamic configuration on mount
   useEffect(() => {
@@ -3047,6 +3098,9 @@ export default function Analytics() {
                   setSelectedTasks([]);
                   setSelectedCategories([]);
                   setSelectedPillars([]);
+                  const params = new URLSearchParams(window.location.search);
+                  params.set('detailView', 'tasks');
+                  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
                 }}
                 style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
               >
@@ -3059,6 +3113,9 @@ export default function Analytics() {
                   setSelectedTasks([]);
                   setSelectedCategories([]);
                   setSelectedPillars([]);
+                  const params = new URLSearchParams(window.location.search);
+                  params.set('detailView', 'categories');
+                  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
                 }}
                 style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
               >
@@ -3071,6 +3128,9 @@ export default function Analytics() {
                   setSelectedTasks([]);
                   setSelectedCategories([]);
                   setSelectedPillars([]);
+                  const params = new URLSearchParams(window.location.search);
+                  params.set('detailView', 'pillars');
+                  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
                 }}
                 style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
               >
@@ -3078,7 +3138,15 @@ export default function Analytics() {
               </button>
               <button
                 className={`tab-button ${detailedViewType === 'circle_of_life' ? 'active' : ''}`}
-                onClick={() => { setDetailedViewType('circle_of_life'); setSelectedTasks([]); setSelectedCategories([]); setSelectedPillars([]); }}
+                onClick={() => {
+                  setDetailedViewType('circle_of_life');
+                  setSelectedTasks([]);
+                  setSelectedCategories([]);
+                  setSelectedPillars([]);
+                  const params = new URLSearchParams(window.location.search);
+                  params.set('detailView', 'circle_of_life');
+                  window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                }}
                 style={{ padding: '8px 16px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
               >
                 ⭕ Circle of Life
@@ -3666,12 +3734,12 @@ export default function Analytics() {
                     <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '8px', color: selected.color }}>{selected.emoji} {selected.label} — Pillar Balance</div>
                     <ResponsiveContainer width="100%" height={280}>
                       <RadarChart data={radarData}>
-                        <PolarGrid strokeDasharray="3 3" />
+                        <PolarGrid gridType="circle" strokeDasharray="3 3" />
                         <PolarAngleAxis dataKey="pillar" tick={{ fontSize: 12, fontWeight: 600, fill: '#2b6cb0' }} />
                         <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1}
                           tickFormatter={v => `${v}%`} tick={{ fontSize: 10, fill: '#f97316', fontWeight: 600 }} />
-                        <Radar name="Target (100%)" dataKey="allocated" stroke="#cbd5e0" fill="#cbd5e0" fillOpacity={0.2} strokeWidth={2} />
                         <Radar name="Actual % Achieved" dataKey="spent" stroke={selected.color} fill={selected.color} fillOpacity={0.5} strokeWidth={2} />
+                        <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,points}=props; if(!points||!points.length) return <g/>; const r=Math.sqrt(Math.pow(points[0].x-(cx||0),2)+Math.pow(points[0].y-(cy||0),2)); if(r<=0) return <g/>; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
                         <Tooltip formatter={(value: any, name: string, props: any) => {
                           if (name === 'Actual % Achieved') return [`${props.payload.actualSpent?.toFixed(1)}h (${value}%)`, name];
                           return [`${value}%`, name];
@@ -3792,7 +3860,12 @@ export default function Analytics() {
                   <div style={{ fontWeight: '700', color: '#374151', fontSize: '14px', marginBottom: '10px' }}>Select Circle Type:</div>
                   <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                     {circleTypeOptions.map(opt => (
-                      <button key={opt.key} onClick={() => setCircleOfLifeType(opt.key)}
+                      <button key={opt.key} onClick={() => {
+                        setCircleOfLifeType(opt.key);
+                        const params = new URLSearchParams(window.location.search);
+                        params.set('circleType', opt.key);
+                        window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                      }}
                         style={{ padding: '10px 16px', borderRadius: '10px', border: `2px solid ${circleOfLifeType === opt.key ? '#4299e1' : '#e2e8f0'}`, background: circleOfLifeType === opt.key ? '#ebf4ff' : 'white', color: circleOfLifeType === opt.key ? '#1d4ed8' : '#374151', fontWeight: circleOfLifeType === opt.key ? '700' : '500', cursor: 'pointer', fontSize: '13px', textAlign: 'left' }}>
                         <div>{opt.label}</div>
                         <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{opt.desc}</div>
@@ -3805,11 +3878,21 @@ export default function Analytics() {
                 <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', alignItems: 'center' }}>
                   <span style={{ fontWeight: '700', color: '#374151', fontSize: '14px' }}>Show last 8:</span>
                   <button
-                    onClick={() => setCircleOfLifePeriod('week')}
+                    onClick={() => {
+                      setCircleOfLifePeriod('week');
+                      const params = new URLSearchParams(window.location.search);
+                      params.set('circlePeriod', 'week');
+                      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                    }}
                     style={{ padding: '8px 20px', borderRadius: '8px', border: circleOfLifePeriod === 'week' ? '2px solid #4299e1' : '2px solid #e2e8f0', background: circleOfLifePeriod === 'week' ? '#4299e1' : 'white', color: circleOfLifePeriod === 'week' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
                   >📆 Weeks</button>
                   <button
-                    onClick={() => setCircleOfLifePeriod('month')}
+                    onClick={() => {
+                      setCircleOfLifePeriod('month');
+                      const params = new URLSearchParams(window.location.search);
+                      params.set('circlePeriod', 'month');
+                      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                    }}
                     style={{ padding: '8px 20px', borderRadius: '8px', border: circleOfLifePeriod === 'month' ? '2px solid #ed8936' : '2px solid #e2e8f0', background: circleOfLifePeriod === 'month' ? '#ed8936' : 'white', color: circleOfLifePeriod === 'month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
                   >📅 Months</button>
                 </div>
@@ -3846,7 +3929,7 @@ export default function Analytics() {
                             <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '8px' }}>{period.start} → {period.end}</div>
                             <ResponsiveContainer width="100%" height={240}>
                               <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
-                                <PolarGrid strokeDasharray="3 3" />
+                                <PolarGrid gridType="circle" strokeDasharray="3 3" />
                                 <PolarAngleAxis dataKey="name" tick={(props: any) => {
                                     const { x, y, payload, textAnchor } = props;
                                     const name: string = payload.value;
@@ -3881,9 +3964,9 @@ export default function Analytics() {
                                     );
                                   }} />
                                 <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} />
-                                <Radar name="100% Goal" dataKey="allocated" stroke="#276749" fill="#276749" fillOpacity={0.08} strokeWidth={2} strokeDasharray="6 3" dot={false} />
                                 <Radar name="Actual %" dataKey="spent" stroke={radarColor} fill={radarColor} fillOpacity={0.45} strokeWidth={2}
                                 />
+                                <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
                                 <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
                               </RadarChart>
                             </ResponsiveContainer>
