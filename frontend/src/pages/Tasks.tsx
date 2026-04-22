@@ -385,9 +385,11 @@ export default function Tasks() {
   const [projectMilestones, setProjectMilestones] = useState<ProjectMilestoneData[]>([]);
   const [projectChallenges, setProjectChallenges] = useState<{direct_challenges: any[], goal_challenges: any[]} | null>(null);
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
-  const [showProjectListView, setShowProjectListView] = useState(false);
+  const [showProjectListView, setShowProjectListView] = useState(() => localStorage.getItem('listView_projects') === 'true');
   const [projectListActiveCollapsed, setProjectListActiveCollapsed] = useState(false);
   const [projectListCompletedCollapsed, setProjectListCompletedCollapsed] = useState(true);
+  const [projectListSortCol, setProjectListSortCol] = useState<string>('');
+  const [projectListSortDir, setProjectListSortDir] = useState<'asc' | 'desc'>('asc');
   const [projectFormGoalId, setProjectFormGoalId] = useState<number | null>(null);
   const [projectFormPillarId, setProjectFormPillarId] = useState<number | null>(null);
   const [projectFormCategoryId, setProjectFormCategoryId] = useState<number | null>(null);
@@ -622,9 +624,12 @@ export default function Tasks() {
   const [habits, setHabits] = useState<HabitData[]>([]);
   const [completedHabits, setCompletedHabits] = useState<HabitData[]>([]);
   const [showCompletedHabits, setShowCompletedHabits] = useState(false);
-  const [showHabitListView, setShowHabitListView] = useState(false);
+  const [showHabitListView, setShowHabitListView] = useState(() => localStorage.getItem('listView_habits') === 'true');
   const [habitListActiveCollapsed, setHabitListActiveCollapsed] = useState(false);
   const [habitListCompletedCollapsed, setHabitListCompletedCollapsed] = useState(true);
+  const [habitListSortCol, setHabitListSortCol] = useState<string>('');
+  const [habitListSortDir, setHabitListSortDir] = useState<'asc' | 'desc'>('asc');
+  const [expandedHabitId, setExpandedHabitId] = useState<number | null>(null);
   const [selectedHabit, setSelectedHabit] = useState<HabitData | null>(null);
   const [habitEntries, setHabitEntries] = useState<HabitEntry[]>([]);
   const [habitStreaks, setHabitStreaks] = useState<HabitStreak[]>([]);
@@ -712,7 +717,7 @@ export default function Tasks() {
 
   const [todaysHabits, setTodaysHabits] = useState<TodaysHabit[]>([]);
   const [todaysChallenges, setTodaysChallenges] = useState<TodaysChallenge[]>([]);
-  const [showChallengeListView, setShowChallengeListView] = useState(false);
+  const [showChallengeListView, setShowChallengeListView] = useState(() => localStorage.getItem('listView_challenges') === 'true');
   const [currentPeriodStats, setCurrentPeriodStats] = useState<Record<number, PeriodStats>>({});
   
   // NOW habits - stored in localStorage
@@ -1390,6 +1395,7 @@ export default function Tasks() {
         loadTodaysHabits(); // Load habits so NOW habits can be displayed
       } else if (activeTab === 'daily') {
         loadDailyEntries(selectedDate);
+        loadWeeklyEntries(selectedWeekStart); // Load weekly aggregates to compute boolean task success rate
       } else if (activeTab === 'weekly') {
         loadWeeklyEntries(selectedWeekStart);
       } else if (activeTab === 'monthly') {
@@ -1429,6 +1435,7 @@ export default function Tasks() {
       loadTodaysHabits(); // Load habits so NOW habits can be displayed
     } else if (activeTab === 'daily') {
       loadDailyEntries(selectedDate);
+      loadWeeklyEntries(selectedWeekStart); // Load weekly aggregates to compute boolean task success rate
     } else if (activeTab === 'weekly') {
       loadWeeklyEntries(selectedWeekStart);
     } else if (activeTab === 'monthly') {
@@ -1987,10 +1994,21 @@ export default function Tasks() {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table
       if (activeTab === 'daily') {
+        // Compute days elapsed in current week (Mon=0 ... Sun=6)
+        const todayD = new Date(); todayD.setHours(0,0,0,0);
+        const wkStartD = new Date(selectedWeekStart); wkStartD.setHours(0,0,0,0);
+        const diffMs = todayD.getTime() - wkStartD.getTime();
+        const daysElapsedThisWeek = Math.min(7, Math.max(1, Math.floor(diffMs / 86400000) + 1));
+
         return filteredTasks.filter(task => {
           const status = dailyStatuses.get(task.id);
           const isCompletedOrNA = status && (status.is_completed || status.is_na);
-          return task.task_type === TaskType.BOOLEAN && !isCompletedOrNA;
+          if (task.task_type !== TaskType.BOOLEAN || isCompletedOrNA) return false;
+
+          // Hide if weekly success rate is already ≥70%
+          const daysCompleted = [0,1,2,3,4,5,6].filter(d => (dailyAggregates[`${task.id}-${d}`] || 0) > 0).length;
+          const weeklyPct = daysCompleted / daysElapsedThisWeek;
+          return weeklyPct < 0.70;
         });
       }
       // For weekly tab: exclude completed/NA tasks from main table
@@ -3562,12 +3580,12 @@ export default function Tasks() {
           
           // 3. Check if behind on averages
           const isBehindOnWeekly = weeklyCompletionRate < 60;
-          const isBehindOnMonthly = habit.completion_rate !== undefined && habit.completion_rate < 40;
+          const isBehindOnMonthly = habit.completion_rate !== undefined && habit.completion_rate < 60;
           
           // Show habit if ANY of these conditions are met:
           // 1. Currently missing 2+ consecutive days, OR
           // 2. Weekly average < 60%, OR
-          // 3. Monthly average < 40%
+          // 3. Monthly average < 60%
           const shouldShow = consecutiveMissedDays >= 2 || isBehindOnWeekly || isBehindOnMonthly;
           
           return shouldShow;
@@ -5735,12 +5753,10 @@ export default function Tasks() {
         // Special 75% threshold handling for boolean (Yes/No) tasks
         let shouldShowInAttention: boolean;
         if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
-          // For daily boolean tasks: use 70% threshold over the full 7-day week
-          const targetSuccesses = Math.ceil(7 * 0.70); // 5 out of 7
-          const daysStillLeft = Math.max(0, 7 - totalDaysIncludingToday); // days remaining after today
-          const maxAchievable = totalSpent + daysStillLeft + 1; // +1 for today
-          // Show if not yet at 75% target AND still within view of the week
-          shouldShowInAttention = totalSpent < targetSuccesses && daysLeft > 0;
+          // For daily boolean tasks: hide when current pace is already ≥70%
+          // Use days elapsed so far (not full 7) to match the weekly tab row color logic
+          const pct = totalDaysIncludingToday > 0 ? totalSpent / totalDaysIncludingToday : 0;
+          shouldShowInAttention = pct < 0.70 && daysLeft > 0;
         } else {
           shouldShowInAttention = totalSpent < expectedIncludingToday;
         }
@@ -5765,10 +5781,9 @@ export default function Tasks() {
 
           let recommendation: string;
           if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
-            const targetSuccesses = Math.ceil(7 * 0.70); // 5 out of 7
-            const needed = Math.max(0, targetSuccesses - totalSpent);
-            const currentPct = Math.round((totalSpent / 7) * 100);
-            recommendation = `${totalSpent}/7 (${currentPct}%) — need ${needed} more day(s) for 70% target (${daysLeft} days left)`;
+            const needed = Math.max(0, Math.ceil(totalDaysIncludingToday * 0.70) - totalSpent);
+            const currentPct = totalDaysIncludingToday > 0 ? Math.round((totalSpent / totalDaysIncludingToday) * 100) : 0;
+            recommendation = `${totalSpent}/${totalDaysIncludingToday} elapsed (${currentPct}%) — need ${needed} more day(s) for 70% pace (${daysLeft} days left)`;
           } else {
             const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
             recommendation = daysLeft > 0 
@@ -5860,11 +5875,12 @@ export default function Tasks() {
           expectedIncludingToday = task.follow_up_frequency === 'daily' ? task.allocated_minutes * daysIncludingToday : task.allocated_minutes * (daysIncludingToday / daysInMonth);
         }
         
-        // For boolean tasks: use 70% threshold over the full month; ignore daily catch-up logic
+        // For boolean tasks: use 70% threshold based on days elapsed (not full month)
         let shouldShowInAttention: boolean;
         if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
-          const targetSuccesses = Math.ceil(daysInMonth * 0.70);
-          shouldShowInAttention = totalSpent < targetSuccesses && daysLeft > 0;
+          // Hide when current pace is already ≥70% — matches monthly tab row color logic
+          const pct = daysIncludingToday > 0 ? totalSpent / daysIncludingToday : 0;
+          shouldShowInAttention = pct < 0.70 && daysLeft > 0;
         } else {
           shouldShowInAttention = totalSpent < expectedIncludingToday;
         }
@@ -5873,10 +5889,9 @@ export default function Tasks() {
           const unit = task.task_type === TaskType.TIME ? 'min' : task.task_type === TaskType.COUNT ? (task.unit || 'count') : '';
           let recommendation: string;
           if (task.task_type === TaskType.BOOLEAN && task.follow_up_frequency === 'daily') {
-            const targetSuccesses = Math.ceil(daysInMonth * 0.70);
-            const needed = Math.max(0, targetSuccesses - totalSpent);
-            const currentPct = Math.round((totalSpent / daysInMonth) * 100);
-            recommendation = `${totalSpent}/${daysInMonth} (${currentPct}%) — need ${needed} more day(s) for 70% target (${daysLeft} days left)`;
+            const needed = Math.max(0, Math.ceil(daysIncludingToday * 0.70) - totalSpent);
+            const currentPct = daysIncludingToday > 0 ? Math.round((totalSpent / daysIncludingToday) * 100) : 0;
+            recommendation = `${totalSpent}/${daysIncludingToday} elapsed (${currentPct}%) — need ${needed} more day(s) for 70% pace (${daysLeft} days left)`;
           } else {
             recommendation = daysLeft > 0
               ? `Need ${Math.ceil(neededToday)} ${unit} today (Ideal: ${dailyTarget.toFixed(1)}, Lagged: ${Math.round(deficit)}, ${daysLeft} days left)`
@@ -8325,7 +8340,7 @@ export default function Tasks() {
                     ➕ Add Project
                   </button>
                   <button
-                    onClick={() => setShowProjectListView(prev => !prev)}
+                    onClick={() => setShowProjectListView(prev => { const next = !prev; localStorage.setItem('listView_projects', String(next)); return next; })}
                     style={{
                       background: showProjectListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
                       border: showProjectListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
@@ -8353,24 +8368,72 @@ export default function Tasks() {
               ) : showProjectListView ? (
                 /* ── Project List View (table) ── */
                 (() => {
-                  const activeProj = [...projects].filter(p => !p.is_completed).sort((a, b) => {
-                    const aO = a.progress?.overdue_tasks || 0, bO = b.progress?.overdue_tasks || 0;
-                    if (bO !== aO) return bO - aO;
-                    return a.name.localeCompare(b.name);
-                  });
-                  const completedProj = [...projects].filter(p => p.is_completed).sort((a, b) => a.name.localeCompare(b.name));
+                  const byProjHierarchy = (pillarId: number | null | undefined, categoryId: number | null | undefined) => {
+                    const pName = projectPillars.find(p => p.id === pillarId)?.name || '';
+                    const cName = projectCategories.find(c => c.id === categoryId)?.name || '';
+                    return hierarchyOrder[`${pName}|${cName}`] ?? 999;
+                  };
                   const colHeaders = [
-                    { label: '#', w: '36px' },
-                    { label: 'Project Name', w: '200px' },
-                    { label: 'Total', w: '55px' },
-                    { label: 'Done', w: '75px' },
-                    { label: 'Remaining', w: '82px' },
-                    { label: 'Overdue', w: '88px' },
-                    { label: 'Target Date', w: '110px' },
-                    { label: 'Pillar', w: '145px' },
-                    { label: 'Category', w: '115px' },
-                    { label: 'Status', w: '100px' },
+                    { label: '#', w: '36px', sortKey: '' },
+                    { label: 'Project Name', w: '200px', sortKey: 'name' },
+                    { label: 'Total', w: '55px', sortKey: 'total' },
+                    { label: 'Done', w: '75px', sortKey: 'done' },
+                    { label: 'Remaining', w: '82px', sortKey: 'remaining' },
+                    { label: 'Overdue', w: '88px', sortKey: 'overdue' },
+                    { label: 'Target Date', w: '110px', sortKey: 'target' },
+                    { label: 'Pillar', w: '145px', sortKey: 'pillar' },
+                    { label: 'Category', w: '115px', sortKey: 'category' },
+                    { label: 'Status', w: '100px', sortKey: 'status' },
                   ];
+                  const handleProjSort = (key: string) => {
+                    if (!key) return;
+                    if (projectListSortCol === key) { setProjectListSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
+                    else { setProjectListSortCol(key); setProjectListSortDir('asc'); }
+                  };
+                  const projSortBy = (a: ProjectData, b: ProjectData): number => {
+                    if (!projectListSortCol) {
+                      const hA = byProjHierarchy(a.pillar_id, a.category_id), hB = byProjHierarchy(b.pillar_id, b.category_id);
+                      if (hA !== hB) return hA - hB;
+                      const aO = a.progress?.overdue_tasks || 0, bO = b.progress?.overdue_tasks || 0;
+                      return bO !== aO ? bO - aO : a.name.localeCompare(b.name);
+                    }
+                    let valA: any, valB: any;
+                    const pA = projectPillars.find(p => p.id === a.pillar_id), pB = projectPillars.find(p => p.id === b.pillar_id);
+                    const cA = projectCategories.find(c => c.id === a.category_id), cB = projectCategories.find(c => c.id === b.category_id);
+                    switch (projectListSortCol) {
+                      case 'name':      valA = a.name || ''; valB = b.name || ''; break;
+                      case 'total':     valA = a.progress?.total_tasks || 0; valB = b.progress?.total_tasks || 0; break;
+                      case 'done':      valA = a.progress?.completed_tasks || 0; valB = b.progress?.completed_tasks || 0; break;
+                      case 'remaining': valA = (a.progress?.total_tasks || 0) - (a.progress?.completed_tasks || 0); valB = (b.progress?.total_tasks || 0) - (b.progress?.completed_tasks || 0); break;
+                      case 'overdue':   valA = a.progress?.overdue_tasks || 0; valB = b.progress?.overdue_tasks || 0; break;
+                      case 'target':    valA = a.target_completion_date || 'zzzz'; valB = b.target_completion_date || 'zzzz'; break;
+                      case 'pillar':    valA = pA?.name || ''; valB = pB?.name || ''; break;
+                      case 'category':  valA = cA?.name || ''; valB = cB?.name || ''; break;
+                      case 'status':    valA = a.status || ''; valB = b.status || ''; break;
+                      default: valA = a.name; valB = b.name;
+                    }
+                    const cmp = typeof valA === 'string' ? valA.localeCompare(valB) : valA - valB;
+                    return projectListSortDir === 'asc' ? cmp : -cmp;
+                  };
+                  const today_lv = new Date(); today_lv.setHours(0, 0, 0, 0);
+                  const applyProjListFilter = (p: ProjectData): boolean => {
+                    if (projectListFilter !== 'all') {
+                      if (projectListFilter === 'in_progress') return p.status === 'in_progress' && !p.is_completed && !(p.target_completion_date && new Date(p.target_completion_date) < today_lv);
+                      if (projectListFilter === 'not_started') return p.status === 'not_started' && !p.is_completed;
+                      if (projectListFilter === 'completed') return !!p.is_completed;
+                      if (projectListFilter === 'overdue') return !p.is_completed && !!p.target_completion_date && new Date(p.target_completion_date) < today_lv;
+                    }
+                    if (projectTaskLevelFilter !== 'all') {
+                      const pTasks = projectTasks.filter(t => t.project_id === p.id);
+                      if (projectTaskLevelFilter === 'overdue') return pTasks.some(t => !t.is_completed && !!t.due_date && (() => { const d = new Date(t.due_date!); d.setHours(0,0,0,0); return d < today_lv; })());
+                      if (projectTaskLevelFilter === 'in_progress') return pTasks.some(t => !t.is_completed);
+                      if (projectTaskLevelFilter === 'completed') return pTasks.length > 0 && pTasks.every(t => t.is_completed);
+                      if (projectTaskLevelFilter === 'not_started') return pTasks.length === 0;
+                    }
+                    return true;
+                  };
+                  const activeProj = [...projects].filter(p => !p.is_completed && applyProjListFilter(p)).sort(projSortBy);
+                  const completedProj = [...projects].filter(p => p.is_completed && (projectListFilter === 'all' || projectListFilter === 'completed') && (projectTaskLevelFilter === 'all' || projectTaskLevelFilter === 'completed')).sort(projSortBy);
                   const pillarColors: { [key: string]: string } = { 'Hard Work': '#dbeafe', 'Calmness': '#dcfce7', 'Family': '#f3e8ff' };
                   const renderRow = (project: ProjectData, idx: number, isCompleted: boolean) => {
                     const overdue = project.progress?.overdue_tasks || 0;
@@ -8380,7 +8443,7 @@ export default function Tasks() {
                     const pillar = projectPillars.find(p => p.id === project.pillar_id);
                     const category = projectCategories.find(c => c.id === project.category_id);
                     const pillarName = pillar?.name || '';
-                    const rowBg = isCompleted ? '#f0fdf4' : overdue > 0 ? '#fff1f2' : idx % 2 === 0 ? '#fafafa' : 'white';
+                    const rowBg = isCompleted ? '#bbf7d0' : overdue > 0 ? '#fecdd3' : done > 0 ? '#bbf7d0' : '#fef08a';
                     const targetDate = project.target_completion_date
                       ? (() => { const d = parseDateString(project.target_completion_date); d.setHours(0,0,0,0); const today = new Date(); today.setHours(0,0,0,0); return { label: project.target_completion_date, past: !isCompleted && d < today }; })()
                       : null;
@@ -8448,9 +8511,15 @@ export default function Tasks() {
                   );
                   const colHeaderRow = (
                     <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                      {colHeaders.map(({ label, w }) => (
-                        <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
-                      ))}
+                      {colHeaders.map(({ label, w, sortKey }) => {
+                        const isActive = projectListSortCol === sortKey && sortKey !== '';
+                        return (
+                          <th key={label} onClick={() => handleProjSort(sortKey)}
+                            style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: isActive ? '#4338ca' : '#64748b', textTransform: 'uppercase' as const, cursor: sortKey ? 'pointer' : 'default', userSelect: 'none' as const, background: isActive ? '#e0e7ff' : undefined }}>
+                            {label}{sortKey && <span style={{ marginLeft: '4px', opacity: isActive ? 1 : 0.3 }}>{isActive ? (projectListSortDir === 'asc' ? '↑' : '↓') : '⇅'}</span>}
+                          </th>
+                        );
+                      })}
                     </tr>
                   );
                   const activeOverdue = activeProj.reduce((s, p) => s + (p.progress?.overdue_tasks || 0), 0);
@@ -11186,7 +11255,7 @@ export default function Tasks() {
                 const isHabitSuccessful = (habit: any) => {
                   const weekRate = habit.stats?.week_success_rate ?? 0;
                   const monthRate = habit.stats?.month_success_rate ?? 0;
-                  return weekRate > 60 || monthRate > 40;
+                  return weekRate > 60 || monthRate > 60;
                 };
 
                 // Calculate successful habits
@@ -11336,7 +11405,7 @@ export default function Tasks() {
                           ➕ Add New Habit
                         </button>
                         <button
-                          onClick={() => setShowHabitListView(prev => !prev)}
+                          onClick={() => setShowHabitListView(prev => { const next = !prev; localStorage.setItem('listView_habits', String(next)); return next; })}
                           style={{
                             background: showHabitListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
                             border: showHabitListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
@@ -11360,7 +11429,7 @@ export default function Tasks() {
                             fontStyle: 'italic'
                           }}
                         >
-                          💡 Success: Week &gt; 60% or Month &gt; 40%
+                          💡 Success: Week &gt; 60% or Month &gt; 60%
                         </div>
                       </div>
                     </div>
@@ -11380,66 +11449,317 @@ export default function Tasks() {
                   return m[f] || f;
                 };
                 const colDefs = [
-                  { label: '#', w: '36px' },
-                  { label: 'Habit Name', w: '220px' },
-                  { label: 'Type', w: '90px' },
-                  { label: 'Frequency', w: '90px' },
-                  { label: 'Pillar', w: '145px' },
-                  { label: 'Category', w: '115px' },
-                  { label: 'Streak', w: '70px' },
-                  { label: 'Week %', w: '70px' },
-                  { label: 'Month %', w: '75px' },
-                  { label: 'Overall %', w: '80px' },
+                  { label: '#', w: '36px', sortKey: '' },
+                  { label: 'Habit Name', w: '220px', sortKey: 'name' },
+                  { label: 'Type', w: '90px', sortKey: 'type' },
+                  { label: 'Frequency', w: '90px', sortKey: 'frequency' },
+                  { label: 'Pillar', w: '145px', sortKey: 'pillar' },
+                  { label: 'Category', w: '115px', sortKey: 'category' },
+                  { label: 'Streak', w: '70px', sortKey: 'streak' },
+                  { label: 'Week %', w: '70px', sortKey: 'week' },
+                  { label: 'Month %', w: '75px', sortKey: 'month' },
+                  { label: 'Overall %', w: '80px', sortKey: 'overall' },
                 ];
-                const renderHabitRow = (habit: HabitData, idx: number, isDone: boolean) => {
+                const renderHabitRow = (habit: HabitData, idx: number, isDone: boolean): React.ReactNode => {
                   const pillarName = habit.pillar_name || '';
                   const pb = habitPillarBg[pillarName];
                   const streak = habit.stats?.current_streak ?? 0;
+                  const longestStreak = habit.stats?.longest_streak ?? 0;
                   const weekPct = habit.stats?.week_success_rate ?? null;
                   const monthPct = habit.stats?.month_success_rate ?? null;
                   const overallPct = habit.stats?.success_rate ?? null;
                   const pctColor = (v: number | null) => v == null ? '#cbd5e1' : v >= 70 ? '#059669' : v >= 40 ? '#b45309' : '#dc2626';
-                  const rowBg = isDone ? '#f0fdf4' : idx % 2 === 0 ? '#f8f9ff' : 'white';
+                  const weekOk = weekPct !== null && weekPct > 60;
+                  const monthOk = monthPct !== null && monthPct > 60;
+                  const rowBg = isDone ? '#bbf7d0' : (weekOk && monthOk) ? '#bbf7d0' : (weekOk || monthOk) ? '#fef08a' : '#fecdd3';
+                  const isExpanded = expandedHabitId === habit.id;
+                  const statBar = (label: string, pct: number | null, threshold: number) => {
+                    const v = pct ?? 0;
+                    const color = v >= threshold ? '#059669' : v >= threshold * 0.7 ? '#f59e0b' : '#ef4444';
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '160px' }}>
+                        <span style={{ fontSize: '11px', color: '#64748b', width: '56px', flexShrink: 0 }}>{label}</span>
+                        <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${Math.min(v, 100)}%`, background: color, borderRadius: '4px', transition: 'width 0.4s' }} />
+                        </div>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color, width: '36px', textAlign: 'right' }}>{pct != null ? `${v}%` : '—'}</span>
+                      </div>
+                    );
+                  };
                   return (
-                    <tr key={habit.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
-                      onClick={() => { setSelectedHabit(habit); setShowHabitDetailsModal(true); }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
-                    >
-                      <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                      <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {isDone && '✅ '}{habit.name}
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.habit_type || '—'}</td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{freqLabel(habit.target_frequency || '')}</td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
-                        {pb
-                          ? <span style={{ background: pb.bg, color: pb.text, padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>
-                              {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {pillarName}
-                            </span>
-                          : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: streak >= 7 ? '#f59e0b' : '#374151' }}>
-                        {streak > 0 ? `${streak}🔥` : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(weekPct) }}>
-                        {weekPct != null ? `${weekPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(monthPct) }}>
-                        {monthPct != null ? `${monthPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(overallPct) }}>
-                        {overallPct != null ? `${overallPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
-                      </td>
-                    </tr>
+                    <React.Fragment key={habit.id}>
+                      <tr style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s', outline: isExpanded ? '2px solid #818cf8' : 'none' }}
+                        onClick={async () => {
+                          if (!isExpanded) {
+                            setExpandedHabitId(habit.id);
+                            if (!habitMonthDays[habit.id]) {
+                              await loadHabitMonthDays(habit.id, habitSelectedMonth[habit.id] || new Date());
+                            }
+                          } else {
+                            setExpandedHabitId(null);
+                          }
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
+                      >
+                        <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                          <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none', marginRight: '4px', fontSize: '10px', color: '#94a3b8' }}>▶</span>
+                          {idx + 1}
+                        </td>
+                        <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1e293b', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {isDone && '✅ '}{habit.name}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.habit_type || '—'}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{freqLabel(habit.target_frequency || '')}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                          {pb
+                            ? <span style={{ background: pb.bg, color: pb.text, padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600' }}>
+                                {pillarName === 'Hard Work' ? '💼' : pillarName === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {pillarName}
+                              </span>
+                            : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: streak >= 7 ? '#f59e0b' : '#374151' }}>
+                          {streak > 0 ? `${streak}🔥` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(weekPct) }}>
+                          {weekPct != null ? `${weekPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(monthPct) }}>
+                          {monthPct != null ? `${monthPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(overallPct) }}>
+                          {overallPct != null ? `${overallPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr style={{ background: '#fdfcff' }}>
+                          <td colSpan={10} style={{ padding: '0', borderBottom: '2px solid #818cf8' }}>
+                            {/* Calendar grid */}
+                            <div style={{ padding: '12px 20px 0 20px' }}>
+                              {/* Month navigation */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const cur = habitSelectedMonth[habit.id] || new Date();
+                                    const nm = new Date(cur); nm.setMonth(nm.getMonth() - 1);
+                                    const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                    const startMonth = habitStart ? new Date(habitStart.getFullYear(), habitStart.getMonth(), 1) : null;
+                                    if (!startMonth || nm >= startMonth) {
+                                      setHabitSelectedMonth(prev => ({ ...prev, [habit.id]: nm }));
+                                      await loadHabitMonthDays(habit.id, nm);
+                                    }
+                                  }}
+                                  style={{ padding: '4px 10px', fontSize: '12px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+                                >← Previous</button>
+                                <div style={{ fontSize: '13px', color: '#2d3748', fontWeight: '700', padding: '4px 14px', backgroundColor: '#edf2f7', borderRadius: '6px', border: '2px solid #cbd5e0' }}>
+                                  {(habitSelectedMonth[habit.id] || new Date()).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                                </div>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const cur = habitSelectedMonth[habit.id] || new Date();
+                                    const nm = new Date(cur); nm.setMonth(nm.getMonth() + 1);
+                                    const now = new Date();
+                                    if (nm.getFullYear() < now.getFullYear() || (nm.getFullYear() === now.getFullYear() && nm.getMonth() <= now.getMonth())) {
+                                      setHabitSelectedMonth(prev => ({ ...prev, [habit.id]: nm }));
+                                      await loadHabitMonthDays(habit.id, nm);
+                                    }
+                                  }}
+                                  style={{ padding: '4px 10px', fontSize: '12px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+                                >Next →</button>
+                              </div>
+                              {/* Day cells */}
+                              <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '4px', overflowX: 'auto', paddingBottom: '8px' }}>
+                                {(() => {
+                                  const habitMonth = habitSelectedMonth[habit.id] || new Date();
+                                  const year = habitMonth.getFullYear();
+                                  const month = habitMonth.getMonth();
+                                  const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+                                  const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                  const monthDays = habitMonthDays[habit.id] || [];
+                                  const habitStartDate = habit.start_date ? new Date(habit.start_date) : null;
+                                  const cells = [];
+                                  for (let dn = 1; dn <= daysInMonth; dn++) {
+                                    const dayData = monthDays.find((d: any) => d.dayNum === dn);
+                                    const isStartDt = habitStartDate && habitStartDate.getDate() === dn && habitStartDate.getMonth() === month && habitStartDate.getFullYear() === year;
+                                    let bgColor = '#e2e8f0', symbol = '', textColor = '#718096';
+                                    if (dayData?.beforeStart) { bgColor = '#e2e8f0'; }
+                                    else if (dayData?.exists) { bgColor = dayData.isSuccessful ? '#48bb78' : '#fc8181'; symbol = dayData.isSuccessful ? '✓' : '✗'; textColor = 'white'; }
+                                    const cellDate = new Date(year, month, dn); cellDate.setHours(0, 0, 0, 0);
+                                    const isToday = cellDate.getTime() === todayD.getTime();
+                                    const clickable = !dayData?.beforeStart && cellDate <= todayD && !habit.linked_task_id;
+                                    const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(dn).padStart(2,'0')}`;
+                                    cells.push(
+                                      <div key={dn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', minWidth: '32px' }}
+                                        title={`${habitMonth.toLocaleString('en-US', { month: 'short' })} ${dn}${dayData?.exists ? (dayData.isSuccessful ? ': Done ✓' : ': Missed ✗') : (dayData?.beforeStart ? ': Before start' : '')}`}
+                                      >
+                                        <div style={{ fontSize: isStartDt ? '8px' : '9px', color: isStartDt ? '#2b6cb0' : '#718096', fontWeight: isToday || isStartDt ? '700' : '500', height: '12px' }}>
+                                          {isStartDt ? 'Start' : dn}
+                                        </div>
+                                        <div
+                                          onClick={clickable ? async (e) => {
+                                            e.stopPropagation();
+                                            const nextVal = dayData?.exists ? (dayData.isSuccessful ? false : null) : true;
+                                            if (nextVal === null) return;
+                                            await handleMarkHabitEntry(habit.id, dateStr, nextVal);
+                                            await loadHabitMonthDays(habit.id, habitSelectedMonth[habit.id] || new Date());
+                                          } : undefined}
+                                          style={{ width: '32px', height: '32px', backgroundColor: bgColor, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: textColor, fontSize: '16px', fontWeight: 'bold', boxShadow: isToday ? '0 0 0 2px #4299e1' : '0 1px 2px rgba(0,0,0,0.1)', border: isToday ? '2px solid white' : 'none', cursor: clickable ? 'pointer' : 'default' }}
+                                        >{symbol}</div>
+                                      </div>
+                                    );
+                                  }
+                                  return cells;
+                                })()}
+                              </div>
+                            </div>
+                            <div style={{ padding: '14px 20px', display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                              {/* Linked task info */}
+                              {habit.linked_task_id && habit.linked_task_name ? (
+                                <div style={{ padding: '8px 12px', backgroundColor: '#e6fffa', border: '1px solid #81e6d9', borderRadius: '6px', fontSize: '11px', color: '#234e52', fontWeight: '600', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                  <div style={{ fontSize: '9px', opacity: 0.8 }}>Linked Task:</div>
+                                  <div>🔗 {habit.linked_task_name}</div>
+                                </div>
+                              ) : null}
+                              {/* Streak info box */}
+                              <div style={{ padding: '10px 14px', backgroundColor: '#fef5e7', border: '2px solid #f9e79f', borderRadius: '8px', fontSize: '15px', color: '#7d6608', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', whiteSpace: 'nowrap' }}>
+                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Current:</span> {habit.stats?.current_streak || 0}</div>
+                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Best:</span> {habit.stats?.longest_streak || 0}</div>
+                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Overall:</span> {habit.stats?.success_rate || 0}%</div>
+                              </div>
+                              {/* Success rates - threshold-aware colors */}
+                              {(() => {
+                                const wk = habit.stats?.week_success_rate ?? 0;
+                                const mo = habit.stats?.month_success_rate ?? 0;
+                                const ok = wk > 60 || mo > 60;
+                                return (
+                                  <div style={{ padding: '10px 14px', backgroundColor: ok ? '#f0fdf4' : '#fff1f2', border: `2px solid ${ok ? '#bbf7d0' : '#fecdd3'}`, borderRadius: '8px', fontSize: '15px', color: ok ? '#166534' : '#9f1239', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', whiteSpace: 'nowrap' }}>
+                                    <div><span style={{ fontSize: '13px', opacity: 0.8 }}>This Week:</span> {wk}%</div>
+                                    <div><span style={{ fontSize: '13px', opacity: 0.8 }}>This Month:</span> {mo}%</div>
+                                  </div>
+                                );
+                              })()}
+                              {/* Start date and Days info */}
+                              <div style={{ padding: '10px 14px', backgroundColor: '#f0f4ff', border: '2px solid #c3dafe', borderRadius: '8px', fontSize: '15px', color: '#2c5282', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', whiteSpace: 'nowrap' }}>
+                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> {parseDateString(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> {Math.floor((new Date().getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1}</div>
+                              </div>
+                              {/* Date + Done/Missed buttons (manual habits only) */}
+                              {!habit.linked_task_id && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                                  <input
+                                    type="date"
+                                    value={habitMarkDate[habit.id] || formatDateForInput(new Date())}
+                                    onChange={(e) => { e.stopPropagation(); setHabitMarkDate({ ...habitMarkDate, [habit.id]: e.target.value }); }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    max={formatDateForInput(new Date())}
+                                    style={{ padding: '4px 6px', border: '1px solid #cbd5e0', fontSize: '11px', borderRadius: '4px', backgroundColor: 'white' }}
+                                  />
+                                  <button
+                                    onClick={async (e) => { e.stopPropagation(); const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date()); await handleMarkHabitEntry(habit.id, dateStr, true); }}
+                                    style={{ padding: '4px 10px', backgroundColor: '#48bb78', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                  >✓ Done</button>
+                                  <button
+                                    onClick={async (e) => { e.stopPropagation(); const dateStr = habitMarkDate[habit.id] || formatDateForInput(new Date()); await handleMarkHabitEntry(habit.id, dateStr, false); }}
+                                    style={{ padding: '4px 10px', backgroundColor: '#fc8181', color: 'white', border: 'none', borderRadius: '4px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                                  >✗ Missed</button>
+                                </div>
+                              )}
+                              {/* Action buttons */}
+                              <div style={{ display: 'flex', gap: '4px', marginLeft: 'auto', alignItems: 'center' }}>
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setEditingHabit(habit); setShowAddHabitModal(true); }}
+                                  style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: '#667eea', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                >✏️ Edit</button>
+                                {!habit.end_date && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Mark habit "${habit.name}" as completed? This will set an end date to today.`)) {
+                                        try {
+                                          const today = new Date().toISOString().split('T')[0];
+                                          await api.put(`/api/habits/${habit.id}`, { name: habit.name, description: habit.description, pillar_id: habit.pillar_id, category_id: habit.category_id, subcategory_id: habit.subcategory_id, start_date: habit.start_date, end_date: today, is_active: false, tracking_mode: habit.tracking_mode, period_type: habit.period_type, target_count: habit.target_count, target_comparison: habit.target_comparison, linked_task_id: habit.linked_task_id, session_target_value: habit.session_target_value, session_target_unit: habit.session_target_unit });
+                                          await loadHabits();
+                                          alert('🎉 Congratulations! Habit marked as complete!');
+                                        } catch (err: any) {
+                                          alert('Failed to complete habit: ' + (err.response?.data?.detail || err.message || JSON.stringify(err)));
+                                        }
+                                      }
+                                    }}
+                                    style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: '#48bb78', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                  >✅ Done</button>
+                                )}
+                                <button
+                                  onClick={async (e) => { e.stopPropagation(); await handleSelectHabit(habit); }}
+                                  style={{ background: '#6d28d9', color: 'white', border: 'none', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}
+                                >Full Details →</button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
+                };
+                const handleHabitSort = (key: string) => {
+                  if (!key) return;
+                  if (habitListSortCol === key) {
+                    setHabitListSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+                  } else {
+                    setHabitListSortCol(key);
+                    setHabitListSortDir('asc');
+                  }
+                };
+                const habitSortBy = (a: HabitData, b: HabitData): number => {
+                  if (!habitListSortCol) {
+                    const hA = hierarchyOrder[`${a.pillar_name || ''}|${a.category_name || ''}`] ?? 999;
+                    const hB = hierarchyOrder[`${b.pillar_name || ''}|${b.category_name || ''}`] ?? 999;
+                    return hA !== hB ? hA - hB : a.name.localeCompare(b.name);
+                  }
+                  let valA: any, valB: any;
+                  switch (habitListSortCol) {
+                    case 'name':      valA = a.name || ''; valB = b.name || ''; break;
+                    case 'type':      valA = a.habit_type || ''; valB = b.habit_type || ''; break;
+                    case 'frequency': valA = a.target_frequency || ''; valB = b.target_frequency || ''; break;
+                    case 'pillar':    valA = a.pillar_name || ''; valB = b.pillar_name || ''; break;
+                    case 'category':  valA = a.category_name || ''; valB = b.category_name || ''; break;
+                    case 'streak':    valA = a.stats?.current_streak ?? 0; valB = b.stats?.current_streak ?? 0; break;
+                    case 'week':      valA = a.stats?.week_success_rate ?? -1; valB = b.stats?.week_success_rate ?? -1; break;
+                    case 'month':     valA = a.stats?.month_success_rate ?? -1; valB = b.stats?.month_success_rate ?? -1; break;
+                    case 'overall':   valA = a.stats?.success_rate ?? -1; valB = b.stats?.success_rate ?? -1; break;
+                    default: valA = a.name; valB = b.name;
+                  }
+                  const cmp = typeof valA === 'string' ? valA.localeCompare(valB) : valA - valB;
+                  return habitListSortDir === 'asc' ? cmp : -cmp;
                 };
                 const colHeaderRow = (
                   <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                    {colDefs.map(({ label, w }) => (
-                      <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
-                    ))}
+                    {colDefs.map(({ label, w, sortKey }) => {
+                      const isActive = habitListSortCol === sortKey && sortKey !== '';
+                      return (
+                        <th key={label}
+                          onClick={() => handleHabitSort(sortKey)}
+                          style={{
+                            padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px',
+                            letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap',
+                            color: isActive ? '#4338ca' : '#64748b',
+                            textTransform: 'uppercase' as const,
+                            cursor: sortKey ? 'pointer' : 'default',
+                            userSelect: 'none' as const,
+                            background: isActive ? '#e0e7ff' : undefined,
+                          }}
+                        >
+                          {label}
+                          {sortKey && (
+                            <span style={{ marginLeft: '4px', opacity: isActive ? 1 : 0.3 }}>
+                              {isActive ? (habitListSortDir === 'asc' ? '↑' : '↓') : '⇅'}
+                            </span>
+                          )}
+                        </th>
+                      );
+                    })}
                   </tr>
                 );
                 return (
@@ -11451,18 +11771,25 @@ export default function Tasks() {
                         <span style={{ fontSize: '12px', display: 'inline-block', transform: habitListActiveCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
                         <span style={{ fontWeight: '700', fontSize: '14px' }}>Habits (Active)</span>
                         <span style={{ opacity: 0.8, fontSize: '13px' }}>• {habits.length} habits</span>
-                        {habits.filter(h => (h.stats?.current_streak ?? 0) >= 7).length > 0 && (
-                          <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 8px', borderRadius: '8px', fontSize: '12px' }}>
-                            🔥 {habits.filter(h => (h.stats?.current_streak ?? 0) >= 7).length} on streak
-                          </span>
-                        )}
+                        {(() => {
+                          const streakHabits = habits.filter(h => (h.stats?.current_streak ?? 0) >= 7);
+                          if (streakHabits.length === 0) return null;
+                          return (
+                            <span style={{ background: 'rgba(255,255,255,0.2)', padding: '2px 10px', borderRadius: '8px', fontSize: '12px' }}
+                              title={streakHabits.map(h => `${h.name}: ${h.stats?.current_streak}d`).join(', ')}>
+                              🔥 {streakHabits.length === 1
+                                ? `${streakHabits[0].name} — ${streakHabits[0].stats?.current_streak}d streak`
+                                : `${streakHabits.length} on streak: ${streakHabits.map(h => h.name).join(', ')}`}
+                            </span>
+                          );
+                        })()}
                         <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{habitListActiveCollapsed ? 'click to expand' : 'click to collapse'}</span>
                       </div>
                       {!habitListActiveCollapsed && (
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                             <thead>{colHeaderRow}</thead>
-                            <tbody>{habits.map((h, i) => renderHabitRow(h, i, false))}</tbody>
+                            <tbody>{[...habits].sort(habitSortBy).map((h, i) => renderHabitRow(h, i, false))}</tbody>
                           </table>
                         </div>
                       )}
@@ -11481,7 +11808,7 @@ export default function Tasks() {
                           <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                               <thead>{colHeaderRow}</thead>
-                              <tbody>{completedHabits.map((h, i) => renderHabitRow(h, i, true))}</tbody>
+                              <tbody>{[...completedHabits].sort(habitSortBy).map((h, i) => renderHabitRow(h, i, true))}</tbody>
                             </table>
                           </div>
                         )}
@@ -11532,7 +11859,7 @@ export default function Tasks() {
                 const isHabitSuccessful = (habit: any) => {
                   const weekRate = habit.stats?.week_success_rate ?? 0;
                   const monthRate = habit.stats?.month_success_rate ?? 0;
-                  return weekRate > 60 || monthRate > 40;
+                  return weekRate > 60 || monthRate > 60;
                 };
 
                 // Sort categories by hierarchy order
@@ -12782,10 +13109,10 @@ export default function Tasks() {
                       if (dailyStatus && (dailyStatus.is_completed || dailyStatus.is_na)) {
                         return false;
                       }
-                      // Filter for simple one-time daily tasks
-                      return dailyStatus?.is_tracked !== false;
+                      // One-time daily tasks are never filtered by is_tracked
+                      // (is_tracked only applies to the hourly tracking table)
+                      return true;
                     })
-                    .slice(0, 10)
                     .map((task) => {
                       const dailyStatus = dailyStatuses.get(task.id);
                       const isDailyCompleted = dailyStatus?.is_completed;
@@ -14782,7 +15109,7 @@ export default function Tasks() {
                     <span>Active Challenges</span>
                     <span style={{ fontSize: '14px', fontWeight: '400', color: '#718096' }}>({todaysChallenges.length})</span>
                     <button
-                      onClick={() => setShowChallengeListView(prev => !prev)}
+                      onClick={() => setShowChallengeListView(prev => { const next = !prev; localStorage.setItem('listView_challenges', String(next)); return next; })}
                       style={{
                         marginLeft: 'auto',
                         background: showChallengeListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
@@ -14835,7 +15162,11 @@ export default function Tasks() {
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                               <thead>{colHeaderRow}</thead>
                               <tbody>
-                                {todaysChallenges.map((challenge, idx) => {
+                                {[...todaysChallenges].sort((a, b) => {
+                                    const hA = hierarchyOrder[`${a.pillar_name || ''}|${a.category_name || ''}`] ?? 999;
+                                    const hB = hierarchyOrder[`${b.pillar_name || ''}|${b.category_name || ''}`] ?? 999;
+                                    return hA !== hB ? hA - hB : a.name.localeCompare(b.name);
+                                  }).map((challenge, idx) => {
                                   const sc = statusColors[challenge.status_indicator] || { bg: '#f1f5f9', text: '#64748b' };
                                   const pb = challengePillarBg[challenge.pillar_name || ''];
                                   const rowBg = challenge.completed_today ? '#f0fdf4' : idx % 2 === 0 ? '#fafafa' : 'white';
@@ -18423,7 +18754,7 @@ export default function Tasks() {
                       </span>
                     </div>
                     <div style={{ fontSize: '12px', fontWeight: '400', opacity: 0.85, color: '#ffffff' }}>
-                      2+ consecutive days missed, weekly avg &lt;60%, or monthly avg &lt;40%
+                      2+ consecutive days missed, weekly avg &lt;60%, or monthly avg &lt;60%
                     </div>
                   </div>
                 </div>
@@ -18620,7 +18951,7 @@ export default function Tasks() {
                               {habit.stats.week_success_rate ?? 0}%
                             </strong>, Month: <strong style={{ 
                               color: (habit.stats.month_success_rate ?? 0) >= 80 ? '#10b981' : 
-                                     (habit.stats.month_success_rate ?? 0) >= 40 ? '#f59e0b' : '#ef4444' 
+                                     (habit.stats.month_success_rate ?? 0) >= 60 ? '#f59e0b' : '#ef4444' 
                             }}>
                               {habit.stats.month_success_rate ?? 0}%
                             </strong>, Overall: <strong style={{ 
@@ -21539,6 +21870,222 @@ export default function Tasks() {
         onSuccess={loadHabits}
         editingHabit={editingHabit}
       />
+
+      {/* Habit Details Modal */}
+      {showHabitDetailsModal && selectedHabit && (
+        <div
+          onClick={() => { setShowHabitDetailsModal(false); setSelectedHabit(null); }}
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ backgroundColor: 'white', borderRadius: '16px', width: '92%', maxWidth: '900px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
+          >
+            {/* Header */}
+            <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: '20px 24px', borderRadius: '16px 16px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h2 style={{ margin: 0, color: 'white', fontSize: '20px', fontWeight: '700' }}>{selectedHabit.name}</h2>
+                <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', marginTop: '4px' }}>
+                  {selectedHabit.pillar_name && <span>{selectedHabit.pillar_name === 'Hard Work' ? '💼' : selectedHabit.pillar_name === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {selectedHabit.pillar_name}</span>}
+                  {selectedHabit.category_name && <span> › {selectedHabit.category_name}</span>}
+                  {selectedHabit.habit_type && <span style={{ marginLeft: '12px', opacity: 0.7 }}>({selectedHabit.habit_type})</span>}
+                </div>
+              </div>
+              <button onClick={() => { setShowHabitDetailsModal(false); setSelectedHabit(null); }}
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', borderRadius: '8px', padding: '6px 14px', cursor: 'pointer', fontSize: '16px', fontWeight: '700' }}>✕ Close</button>
+            </div>
+
+            <div style={{ padding: '20px 24px' }}>
+              {/* Stats boxes row */}
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
+                {selectedHabit.linked_task_id && selectedHabit.linked_task_name && (
+                  <div style={{ padding: '10px 14px', backgroundColor: '#e6fffa', border: '1px solid #81e6d9', borderRadius: '8px', fontSize: '12px', color: '#234e52', fontWeight: '600' }}>
+                    <div style={{ fontSize: '10px', opacity: 0.7 }}>Linked Task</div>
+                    <div>🔗 {selectedHabit.linked_task_name}</div>
+                  </div>
+                )}
+                <div style={{ padding: '10px 14px', backgroundColor: '#fef5e7', border: '2px solid #f9e79f', borderRadius: '8px', fontSize: '15px', color: '#7d6608', fontWeight: '700', display: 'flex', gap: '14px', whiteSpace: 'nowrap' }}>
+                  <div><span style={{ fontSize: '12px', opacity: 0.8 }}>Current:</span> {selectedHabit.stats?.current_streak || 0}</div>
+                  <div><span style={{ fontSize: '12px', opacity: 0.8 }}>Best:</span> {selectedHabit.stats?.longest_streak || 0}</div>
+                  <div><span style={{ fontSize: '12px', opacity: 0.8 }}>Overall:</span> {selectedHabit.stats?.success_rate || 0}%</div>
+                </div>
+                {(() => {
+                  const wk = selectedHabit.stats?.week_success_rate ?? 0;
+                  const mo = selectedHabit.stats?.month_success_rate ?? 0;
+                  const ok = wk > 60 || mo > 60;
+                  return (
+                    <div style={{ padding: '10px 14px', backgroundColor: ok ? '#f0fdf4' : '#fff1f2', border: `2px solid ${ok ? '#bbf7d0' : '#fecdd3'}`, borderRadius: '8px', fontSize: '15px', color: ok ? '#166534' : '#9f1239', fontWeight: '700', display: 'flex', gap: '14px', whiteSpace: 'nowrap' }}>
+                      <div><span style={{ fontSize: '12px', opacity: 0.8 }}>This Week:</span> {wk}%</div>
+                      <div><span style={{ fontSize: '12px', opacity: 0.8 }}>This Month:</span> {mo}%</div>
+                    </div>
+                  );
+                })()}
+                <div style={{ padding: '10px 14px', backgroundColor: '#f0f4ff', border: '2px solid #c3dafe', borderRadius: '8px', fontSize: '15px', color: '#2c5282', fontWeight: '700', display: 'flex', gap: '14px', whiteSpace: 'nowrap' }}>
+                  <div><span style={{ fontSize: '12px', opacity: 0.8 }}>Start:</span> {parseDateString(selectedHabit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+                  <div><span style={{ fontSize: '12px', opacity: 0.8 }}>Days:</span> {Math.floor((new Date().getTime() - parseDateString(selectedHabit.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1}</div>
+                </div>
+              </div>
+
+              {/* Calendar */}
+              <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                {/* Month navigation */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <button
+                    onClick={async () => {
+                      const cur = habitSelectedMonth[selectedHabit.id] || new Date();
+                      const nm = new Date(cur); nm.setMonth(nm.getMonth() - 1);
+                      const habitStart = selectedHabit.start_date ? new Date(selectedHabit.start_date) : null;
+                      const startMonth = habitStart ? new Date(habitStart.getFullYear(), habitStart.getMonth(), 1) : null;
+                      if (!startMonth || nm >= startMonth) {
+                        setHabitSelectedMonth(prev => ({ ...prev, [selectedHabit.id]: nm }));
+                        await loadHabitMonthDays(selectedHabit.id, nm);
+                      }
+                    }}
+                    style={{ padding: '6px 14px', fontSize: '13px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+                  >← Previous</button>
+                  <div style={{ fontSize: '14px', color: '#2d3748', fontWeight: '700', padding: '6px 20px', backgroundColor: '#edf2f7', borderRadius: '6px', border: '2px solid #cbd5e0' }}>
+                    {(habitSelectedMonth[selectedHabit.id] || new Date()).toLocaleString('en-US', { month: 'long', year: 'numeric' })}
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const cur = habitSelectedMonth[selectedHabit.id] || new Date();
+                      const nm = new Date(cur); nm.setMonth(nm.getMonth() + 1);
+                      const now = new Date();
+                      if (nm.getFullYear() < now.getFullYear() || (nm.getFullYear() === now.getFullYear() && nm.getMonth() <= now.getMonth())) {
+                        setHabitSelectedMonth(prev => ({ ...prev, [selectedHabit.id]: nm }));
+                        await loadHabitMonthDays(selectedHabit.id, nm);
+                      }
+                    }}
+                    style={{ padding: '6px 14px', fontSize: '13px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '6px', fontWeight: '600', cursor: 'pointer' }}
+                  >Next →</button>
+                </div>
+                {/* Day cells */}
+                <div style={{ display: 'flex', flexWrap: 'nowrap', gap: '5px', overflowX: 'auto', paddingBottom: '4px' }}>
+                  {(() => {
+                    const habitMonth = habitSelectedMonth[selectedHabit.id] || new Date();
+                    const year = habitMonth.getFullYear();
+                    const month = habitMonth.getMonth();
+                    const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
+                    const daysInMonth = new Date(year, month + 1, 0).getDate();
+                    const monthDays = habitMonthDays[selectedHabit.id] || [];
+                    const habitStartDate = selectedHabit.start_date ? new Date(selectedHabit.start_date) : null;
+                    const cells = [];
+                    for (let dn = 1; dn <= daysInMonth; dn++) {
+                      const dayData = monthDays.find((d: any) => d.dayNum === dn);
+                      const isStartDt = habitStartDate && habitStartDate.getDate() === dn && habitStartDate.getMonth() === month && habitStartDate.getFullYear() === year;
+                      let bgColor = '#e2e8f0', symbol = '', textColor = '#718096';
+                      if (dayData?.beforeStart) { bgColor = '#e2e8f0'; }
+                      else if (dayData?.exists) { bgColor = dayData.isSuccessful ? '#48bb78' : '#fc8181'; symbol = dayData.isSuccessful ? '✓' : '✗'; textColor = 'white'; }
+                      const cellDate = new Date(year, month, dn); cellDate.setHours(0, 0, 0, 0);
+                      const isToday = cellDate.getTime() === todayD.getTime();
+                      const clickable = !dayData?.beforeStart && cellDate <= todayD && !selectedHabit.linked_task_id;
+                      const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(dn).padStart(2,'0')}`;
+                      cells.push(
+                        <div key={dn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', minWidth: '34px' }}>
+                          <div style={{ fontSize: isStartDt ? '8px' : '10px', color: isStartDt ? '#2b6cb0' : '#718096', fontWeight: isToday || isStartDt ? '700' : '500', height: '14px' }}>
+                            {isStartDt ? 'Start' : dn}
+                          </div>
+                          <div
+                            onClick={clickable ? async () => {
+                              const nextVal = dayData?.exists ? (dayData.isSuccessful ? false : null) : true;
+                              if (nextVal === null) return;
+                              await handleMarkHabitEntry(selectedHabit.id, dateStr, nextVal);
+                              await loadHabitMonthDays(selectedHabit.id, habitSelectedMonth[selectedHabit.id] || new Date());
+                              // refresh selected habit stats
+                              const updated = habits.find(h => h.id === selectedHabit.id);
+                              if (updated) setSelectedHabit(updated);
+                            } : undefined}
+                            style={{ width: '34px', height: '34px', backgroundColor: bgColor, borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: textColor, fontSize: '18px', fontWeight: 'bold', boxShadow: isToday ? '0 0 0 3px #4299e1' : '0 1px 2px rgba(0,0,0,0.1)', border: isToday ? '2px solid white' : 'none', cursor: clickable ? 'pointer' : 'default', transition: 'transform 0.1s' }}
+                            onMouseEnter={(e) => { if (clickable) e.currentTarget.style.transform = 'scale(1.15)'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                          >{symbol}</div>
+                        </div>
+                      );
+                    }
+                    return cells;
+                  })()}
+                </div>
+              </div>
+
+              {/* Date picker + Done/Missed for manual habits */}
+              {!selectedHabit.linked_task_id && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px', padding: '12px 16px', backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#4a5568' }}>Mark entry:</span>
+                  <input
+                    type="date"
+                    value={habitMarkDate[selectedHabit.id] || formatDateForInput(new Date())}
+                    onChange={(e) => setHabitMarkDate(prev => ({ ...prev, [selectedHabit.id]: e.target.value }))}
+                    max={formatDateForInput(new Date())}
+                    style={{ padding: '6px 10px', border: '1px solid #cbd5e0', fontSize: '13px', borderRadius: '6px', backgroundColor: 'white' }}
+                  />
+                  <button
+                    onClick={async () => { const d = habitMarkDate[selectedHabit.id] || formatDateForInput(new Date()); await handleMarkHabitEntry(selectedHabit.id, d, true); await loadHabitMonthDays(selectedHabit.id, habitSelectedMonth[selectedHabit.id] || new Date()); }}
+                    style={{ padding: '6px 16px', backgroundColor: '#48bb78', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                  >✓ Done</button>
+                  <button
+                    onClick={async () => { const d = habitMarkDate[selectedHabit.id] || formatDateForInput(new Date()); await handleMarkHabitEntry(selectedHabit.id, d, false); await loadHabitMonthDays(selectedHabit.id, habitSelectedMonth[selectedHabit.id] || new Date()); }}
+                    style={{ padding: '6px 16px', backgroundColor: '#fc8181', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                  >✗ Missed</button>
+                </div>
+              )}
+
+              {/* Recent entries */}
+              {habitEntries.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#4a5568', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recent Entries</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {habitEntries.slice(0, 30).map((entry: any) => (
+                      <div key={entry.id} style={{ padding: '4px 10px', backgroundColor: entry.is_successful ? '#d1fae5' : '#fee2e2', color: entry.is_successful ? '#065f46' : '#991b1b', borderRadius: '6px', fontSize: '12px', fontWeight: '600' }}>
+                        {entry.is_successful ? '✓' : '✗'} {entry.entry_date}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Top streaks */}
+              {habitStreaks.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#4a5568', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Top Streaks 🔥</div>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {habitStreaks.map((streak: any, i: number) => (
+                      <div key={i} style={{ padding: '8px 14px', backgroundColor: '#fef5e7', border: '2px solid #f9e79f', borderRadius: '8px', fontSize: '13px', color: '#7d6608', fontWeight: '700' }}>
+                        🔥 {streak.length} days <span style={{ fontSize: '11px', fontWeight: '400', opacity: 0.7 }}>{streak.start_date} → {streak.end_date}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action buttons */}
+              <div style={{ display: 'flex', gap: '8px', paddingTop: '8px', borderTop: '1px solid #e5e7eb' }}>
+                <button
+                  onClick={() => { setShowHabitDetailsModal(false); setSelectedHabit(null); setEditingHabit(selectedHabit); setShowAddHabitModal(true); }}
+                  style={{ padding: '8px 18px', backgroundColor: '#667eea', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                >✏️ Edit</button>
+                {!selectedHabit.end_date && (
+                  <button
+                    onClick={async () => {
+                      if (confirm(`Mark habit "${selectedHabit.name}" as completed?`)) {
+                        const today = new Date().toISOString().split('T')[0];
+                        await api.put(`/api/habits/${selectedHabit.id}`, { name: selectedHabit.name, description: selectedHabit.description, pillar_id: selectedHabit.pillar_id, category_id: selectedHabit.category_id, subcategory_id: selectedHabit.subcategory_id, start_date: selectedHabit.start_date, end_date: today, is_active: false, tracking_mode: selectedHabit.tracking_mode, period_type: selectedHabit.period_type, target_count: selectedHabit.target_count, target_comparison: selectedHabit.target_comparison, linked_task_id: selectedHabit.linked_task_id, session_target_value: selectedHabit.session_target_value, session_target_unit: selectedHabit.session_target_unit });
+                        await loadHabits();
+                        setShowHabitDetailsModal(false); setSelectedHabit(null);
+                        alert('🎉 Habit marked as complete!');
+                      }
+                    }}
+                    style={{ padding: '8px 18px', backgroundColor: '#48bb78', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                  >✅ Mark Complete</button>
+                )}
+                <button
+                  onClick={() => { setShowHabitDetailsModal(false); setSelectedHabit(null); }}
+                  style={{ padding: '8px 18px', backgroundColor: '#e5e7eb', color: '#374151', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', marginLeft: 'auto' }}
+                >Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Misc Task Modal - Same as Project Task Modal */}
       {showAddMiscTaskModal && (

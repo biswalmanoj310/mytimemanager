@@ -214,14 +214,12 @@ const MonthlyTasks: React.FC = () => {
         expectedTarget = (task.target_value || 0) * (daysElapsed / daysInMonth);
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
-      if (task.follow_up_frequency === 'daily') {
-        expectedTarget = daysElapsed;
-      } else if (task.follow_up_frequency === 'weekly') {
-        // For weekly tasks: expected progress = (1 / 7) * days_elapsed
-        expectedTarget = daysElapsed / 7;
-      } else {
-        expectedTarget = daysElapsed / daysInMonth;
-      }
+      // Boolean: row is green when ≥70% of elapsed units are successful
+      const effectiveUnits = task.follow_up_frequency === 'daily' ? daysElapsed
+        : task.follow_up_frequency === 'weekly' ? Math.max(1, Math.ceil(daysElapsed / 7))
+        : 1;
+      const pct = totalSpent / effectiveUnits;
+      return pct >= 0.70 ? 'weekly-on-track' : 'weekly-below-target';
     } else {
       if (task.follow_up_frequency === 'daily') {
         expectedTarget = task.allocated_minutes * daysElapsed;
@@ -409,24 +407,26 @@ const MonthlyTasks: React.FC = () => {
         </td>
         <td className={`col-time sticky-col sticky-col-3 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
           {task.task_type === TaskType.BOOLEAN ? (() => {
-            const totalDays = task.follow_up_frequency === 'daily' ? daysInMonth
-              : task.follow_up_frequency === 'weekly' ? Math.ceil(daysInMonth / 7)
+            // Use elapsed units (not full month) so early in the month reflects actual pace
+            const effectiveDays = task.follow_up_frequency === 'daily' ? daysElapsed
+              : task.follow_up_frequency === 'weekly' ? Math.ceil(daysElapsed / 7)
               : 1;
-            const pct = Math.round((totalSpent / totalDays) * 100);
+            const pct = effectiveDays > 0 ? Math.round((totalSpent / effectiveDays) * 100) : 0;
             const icon = pct >= 75 ? '✅' : pct >= 60 ? '⚠️' : '🔴';
             return (
               <span style={getBooleanSuccessStyle(pct)} title={pct >= 70 ? 'Achieved ≥70% goal' : pct >= 55 ? 'At risk' : 'Needs recovery'}>
-                {totalSpent}/{totalDays} {icon}<br/>{pct}%
+                {totalSpent}/{effectiveDays} {task.follow_up_frequency === 'weekly' ? 'wks' : 'days'} {icon}<br/>{pct}%
               </span>
             );
           })() : formatValue(task, avgSpentPerDay)}
         </td>
         <td className={`col-time sticky-col sticky-col-4 ${rowColorClass}`} style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}>
           {task.task_type === TaskType.BOOLEAN ? (() => {
-            const totalDays = task.follow_up_frequency === 'daily' ? daysInMonth
-              : task.follow_up_frequency === 'weekly' ? Math.ceil(daysInMonth / 7)
+            // Target is 70% of the full tracking period; needed = remaining successes required
+            const trackingUnits = task.follow_up_frequency === 'daily' ? daysInTrackingPeriod
+              : task.follow_up_frequency === 'weekly' ? Math.ceil(daysInTrackingPeriod / 7)
               : 1;
-            const targetSuccesses = Math.ceil(totalDays * 0.70);
+            const targetSuccesses = Math.ceil(trackingUnits * 0.70);
             const needed = Math.max(0, targetSuccesses - totalSpent);
             if (needed === 0) return <span style={{ color: '#15803d', fontSize: '12px', fontWeight: 600 }}>✅ Goal met</span>;
             return <span style={{ color: '#b91c1c', fontSize: '12px' }}>Need {needed} more</span>;

@@ -421,8 +421,10 @@ const WeeklyTasks: React.FC = () => {
         expectedTarget = (task.target_value || 0) * (daysElapsed / 7);
       }
     } else if (task.task_type === TaskType.BOOLEAN) {
-      // Boolean: 1 per day for daily tasks, flexible for weekly
-      expectedTarget = task.follow_up_frequency === 'daily' ? daysElapsed : (daysElapsed / 7);
+      // Boolean: row is green when ≥70% of elapsed days are successful
+      const effectiveDays = task.follow_up_frequency === 'daily' ? daysElapsed : Math.max(1, Math.ceil(daysElapsed / 7));
+      const pct = totalSpent / effectiveDays;
+      return pct >= 0.70 ? 'weekly-on-track' : 'weekly-below-target';
     } else {
       // TIME tasks
       if (task.follow_up_frequency === 'daily') {
@@ -935,12 +937,13 @@ const WeeklyTasks: React.FC = () => {
           style={{ textAlign: 'center', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
           {task.task_type === TaskType.BOOLEAN ? (() => {
-            const totalDays = task.follow_up_frequency === 'daily' ? 7 : 1;
-            const pct = Math.round((totalSpent / totalDays) * 100);
+            // Use daysElapsed (not full 7) so Monday with 1 Yes = 1/1 = 100%, not 1/7 = 14%
+            const effectiveDays = task.follow_up_frequency === 'daily' ? daysElapsed : 1;
+            const pct = effectiveDays > 0 ? Math.round((totalSpent / effectiveDays) * 100) : 0;
             const icon = pct >= 75 ? '✅' : pct >= 60 ? '⚠️' : '🔴';
             return (
               <span style={getBooleanSuccessStyle(pct)} title={pct >= 70 ? 'Achieved ≥70% goal' : pct >= 55 ? 'At risk — below 70%' : 'Needs recovery'}>
-                {totalSpent}/{totalDays} {icon}<br/>{pct}%
+                {totalSpent}/{effectiveDays} days {icon}<br/>{pct}%
               </span>
             );
           })() : formatValue(task, avgSpentPerDay)}
@@ -952,8 +955,9 @@ const WeeklyTasks: React.FC = () => {
           style={{ textAlign: 'center', color: '#2d3748', ...(bgColor ? { backgroundColor: bgColor } : {}) }}
         >
           {task.task_type === TaskType.BOOLEAN ? (() => {
-            const totalDays = task.follow_up_frequency === 'daily' ? 7 : 1;
-            const targetSuccesses = Math.ceil(totalDays * 0.70);
+            // Target is 70% of the full tracking period; needed = remaining successes required
+            const trackingDays = task.follow_up_frequency === 'daily' ? daysInTrackingPeriod : 1;
+            const targetSuccesses = Math.ceil(trackingDays * 0.70);
             const needed = Math.max(0, targetSuccesses - totalSpent);
             if (needed === 0) return <span style={{ color: '#15803d', fontSize: '12px', fontWeight: 600 }}>✅ Goal met</span>;
             return <span style={{ color: '#b91c1c', fontSize: '12px' }}>Need {needed} more</span>;
