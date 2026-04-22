@@ -1544,6 +1544,19 @@ export default function Tasks() {
     'Dark Future': 32,
   };
 
+  // Reusable sort comparator — matches daily tab's time-based task table order
+  const sortByHierarchy = (a: any, b: any): number => {
+    const keyA = `${a.pillar_name}|${a.category_name}`;
+    const keyB = `${b.pillar_name}|${b.category_name}`;
+    const orderA = hierarchyOrder[keyA] ?? 999;
+    const orderB = hierarchyOrder[keyB] ?? 999;
+    if (orderA !== orderB) return orderA - orderB;
+    const nameOrderA = taskNameOrder[a.name] ?? 999;
+    const nameOrderB = taskNameOrder[b.name] ?? 999;
+    if (nameOrderA !== nameOrderB) return nameOrderA - nameOrderB;
+    return (a.name || '').localeCompare(b.name || '');
+  };
+
   const weekDays = generateWeekDays(selectedWeekStart);
 
   // Memoized version that will recompute when dependencies change
@@ -17063,7 +17076,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {todaysOnlyTasks.map(task => {
+                      {[...todaysOnlyTasks].sort(sortByHierarchy).map(task => {
                         const isCompleted = task.is_completed;
                         const baseBackgroundColor = isCompleted ? '#d1fae5' : '#fff'; // Green for completed, white for active
                         const hoverBackgroundColor = isCompleted ? '#a7f3d0' : '#f1f5f9';
@@ -17309,7 +17322,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredTasks.map((task) => {
+                      {[...filteredTasks].sort(sortByHierarchy).map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         const isOverdue = dueDateClass.includes('overdue'); // Only 'overdue', not 'urgent'
                         const isCompleted = task.is_completed;
@@ -17482,7 +17495,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredTasks.map((task) => {
+                      {[...filteredTasks].sort(sortByHierarchy).map((task) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         // IMPORTANT: Only mark as overdue if task HAS a due date AND it's past due
                         const isOverdue = task.due_date && dueDateClass.includes('overdue');
@@ -17642,7 +17655,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredTasks.map((task) => {
+                      {[...filteredTasks].sort(sortByHierarchy).map((task) => {
                         // IMPORTANT: Only mark as overdue if task HAS a due date AND daysOverdue > 0
                         // (tasks without due dates are already filtered out by loadMiscTasksDueToday)
                         const isOverdue = task.due_date && (task.daysOverdue || 0) > 0;
@@ -17889,7 +17902,7 @@ export default function Tasks() {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredTasks.map((task) => {
+                        {[...filteredTasks].sort(sortByHierarchy).map((task) => {
                             const isRed = task.status === 'red';
                             const isGray = task.status === 'gray';
                             
@@ -18051,7 +18064,7 @@ export default function Tasks() {
 
                     {todayTabSections.weeklyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {weeklyTasks.map((item, index) => (
+                        {[...weeklyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
                           <div 
                             key={item.task.id}
                             style={{
@@ -18210,7 +18223,7 @@ export default function Tasks() {
 
                     {todayTabSections.monthlyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {monthlyTasks.map((item, index) => (
+                        {[...monthlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
                           <div 
                             key={item.task.id}
                             style={{
@@ -18361,7 +18374,7 @@ export default function Tasks() {
 
                     {todayTabSections.quarterlyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {quarterlyTasks.map((item, index) => (
+                        {[...quarterlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
                           <div 
                             key={item.task.id}
                             style={{
@@ -18513,7 +18526,7 @@ export default function Tasks() {
 
                     {todayTabSections.yearlyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {yearlyTasks.map((item, index) => (
+                        {[...yearlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
                           <div 
                             key={item.task.id}
                             style={{
