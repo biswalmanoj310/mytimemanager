@@ -2007,21 +2007,11 @@ export default function Tasks() {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table
       if (activeTab === 'daily') {
-        // Compute days elapsed in current week (Mon=0 ... Sun=6)
-        const todayD = new Date(); todayD.setHours(0,0,0,0);
-        const wkStartD = new Date(selectedWeekStart); wkStartD.setHours(0,0,0,0);
-        const diffMs = todayD.getTime() - wkStartD.getTime();
-        const daysElapsedThisWeek = Math.min(7, Math.max(1, Math.floor(diffMs / 86400000) + 1));
-
         return filteredTasks.filter(task => {
           const status = dailyStatuses.get(task.id);
           const isCompletedOrNA = status && (status.is_completed || status.is_na);
-          if (task.task_type !== TaskType.BOOLEAN || isCompletedOrNA) return false;
-
-          // Hide if weekly success rate is already ≥70%
-          const daysCompleted = [0,1,2,3,4,5,6].filter(d => (dailyAggregates[`${task.id}-${d}`] || 0) > 0).length;
-          const weeklyPct = daysCompleted / daysElapsedThisWeek;
-          return weeklyPct < 0.70;
+          // Only hide if explicitly marked complete or NA — never auto-hide based on weekly rate
+          return task.task_type === TaskType.BOOLEAN && !isCompletedOrNA;
         });
       }
       // For weekly tab: exclude completed/NA tasks from main table
@@ -13692,71 +13682,13 @@ export default function Tasks() {
           {(() => {
             const completedToday = filteredTasks.filter(t => {
               const status = dailyStatuses.get(t.id);
-              // Check both daily status completion AND global task completion
               const isCompletedViaStatus = status && status.is_completed;
               const isCompletedGlobally = t.is_completed;
-              
-              if (t.name.includes('Testing a project task')) {
-                console.log('🔍 Testing task check:', {
-                  name: t.name,
-                  taskId: t.id,
-                  hasStatus: !!status,
-                  status: status,
-                  isCompletedViaStatus,
-                  isCompletedGlobally,
-                  willShow: isCompletedViaStatus || isCompletedGlobally
-                });
-              }
-              
               return isCompletedViaStatus || isCompletedGlobally;
             });
-            
-            console.log('Daily tab - Total filteredTasks:', filteredTasks.length);
-            console.log('Daily tab - Completed today:', completedToday.length, completedToday.map(t => t.name));
-            console.log('Daily tab - All daily statuses:', Array.from(dailyStatuses.entries()).map(([id, status]) => ({
-              taskId: id,
-              taskName: filteredTasks.find(t => t.id === id)?.name,
-              isCompleted: status.is_completed,
-              isNA: status.is_na
-            })));
-            
-            // Debug: Check for inactive tasks
-            const inactiveTasks = filteredTasks.filter(t => !t.is_active);
-            if (inactiveTasks.length > 0) {
-              console.log('⚠️ Found INACTIVE tasks in filteredTasks:', inactiveTasks.map(t => ({ name: t.name, id: t.id, is_active: t.is_active, is_completed: t.is_completed })));
-            }
-            
-            // Debug: Check which task is "anothe task 3"
-            const anotherTask3 = filteredTasks.find(t => t.name.includes('anothe task 3'));
-            if (anotherTask3) {
-              const status = dailyStatuses.get(anotherTask3.id);
-              console.log('🔍 Found "anothe task 3" in filteredTasks:', {
-                id: anotherTask3.id,
-                is_active: anotherTask3.is_active,
-                is_completed: anotherTask3.is_completed,
-                hasStatus: !!status,
-                statusIsCompleted: status?.is_completed,
-                willShowInCompleted: (status && status.is_completed) || anotherTask3.is_completed
-              });
-            } else {
-              // Task not in filteredTasks - check if it exists in tasks array at all
-              const taskInAll = tasks.find(t => t.name.includes('anothe task 3'));
-              if (taskInAll) {
-                const status = dailyStatuses.get(taskInAll.id);
-                console.log('❌ "anothe task 3" NOT in filteredTasks but exists in tasks array:', {
-                  id: taskInAll.id,
-                  is_active: taskInAll.is_active,
-                  is_completed: taskInAll.is_completed,
-                  hasStatus: !!status,
-                  statusIsCompleted: status?.is_completed,
-                  reason: !taskInAll.is_active ? 'is_active = false' : (taskInAll.is_completed ? 'is_completed = true (other tabs)' : 'unknown')
-                });
-              }
-            }
-            
-            // Always show section if we're on daily tab, even if empty (for debugging)
-            // if (completedToday.length === 0) return null;
-            
+
+            if (completedToday.length === 0) return null;
+
             return (
               <div style={{ marginTop: '40px' }}>
                 <h3 
@@ -13831,15 +13763,10 @@ export default function Tasks() {
                             onClick={async () => {
                               if (confirm(`Restore "${task.name}" back to active tasks?`)) {
                                 try {
-                                  // Format date as YYYY-MM-DD
                                   const dateStr = selectedDate instanceof Date 
                                     ? selectedDate.toISOString().split('T')[0]
                                     : selectedDate;
-                                  
-                                  // Reset task status (undo completed/NA)
                                   await api.post(`/api/daily-task-status/${task.id}/reset?status_date=${dateStr}`);
-                                  
-                                  // Reload statuses
                                   await loadDailyStatuses(selectedDate);
                                   await loadTasks();
                                 } catch (err: any) {

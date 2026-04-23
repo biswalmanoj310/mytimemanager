@@ -87,7 +87,8 @@ def get_completed_tasks(
     completed_tasks = []
 
     # ── Daily / Misc / One-time tasks (all from Task table) ──
-    daily_query = db.query(Task).filter(Task.is_completed == True)
+    # Exclude soft-deleted tasks (deleted_at IS NOT NULL) — fixes Q1
+    daily_query = db.query(Task).filter(Task.is_completed == True, Task.deleted_at == None)
     if start_date:
         daily_query = daily_query.filter(
             or_(Task.completed_at >= start_date, Task.updated_at >= start_date)
@@ -109,6 +110,69 @@ def get_completed_tasks(
             "completed_at": _get_completed_at(task),
             "task_type": task.follow_up_frequency or "daily",
             "source_table": "task",
+            "status": "completed",
+            "category_name": task.category.name if task.category else None,
+            "pillar_name": task.pillar.name if task.pillar else None,
+            "project_name": task.project.name if task.project else None,
+            "priority": task.priority,
+            "due_date": task.due_date.date() if task.due_date else None,
+        })
+
+    # ── NA (Skipped) tasks — tasks marked as Not Applicable ──
+    # Only include tasks that were marked NA but NOT completed (avoid double-listing)
+    na_query = db.query(Task).filter(
+        Task.na_marked_at != None,
+        Task.is_completed == False,
+        Task.deleted_at == None,
+    )
+    if start_date:
+        na_query = na_query.filter(Task.na_marked_at >= start_date)
+    if end_date:
+        na_query = na_query.filter(Task.na_marked_at <= end_date)
+    if pillar_name:
+        na_query = na_query.join(Task.pillar).filter(Task.pillar.has(name=pillar_name))
+    if category_name:
+        na_query = na_query.join(Task.category).filter(Task.category.has(name=category_name))
+
+    for task in na_query.all():
+        completed_tasks.append({
+            "id": task.id,
+            "name": task.name,
+            "description": task.description,
+            "completed_at": task.na_marked_at,  # use na_marked_at as the timestamp
+            "task_type": task.follow_up_frequency or "daily",
+            "source_table": "task",
+            "status": "na",
+            "category_name": task.category.name if task.category else None,
+            "pillar_name": task.pillar.name if task.pillar else None,
+            "project_name": task.project.name if task.project else None,
+            "priority": task.priority,
+            "due_date": task.due_date.date() if task.due_date else None,
+        })
+
+    # ── Soft-deleted tasks — so the user can see when/what they deleted ──
+    deleted_query = db.query(Task).filter(
+        Task.deleted_at != None,
+        Task.is_completed == False,  # exclude tasks that were completed then deleted
+    )
+    if start_date:
+        deleted_query = deleted_query.filter(Task.deleted_at >= start_date)
+    if end_date:
+        deleted_query = deleted_query.filter(Task.deleted_at <= end_date)
+    if pillar_name:
+        deleted_query = deleted_query.join(Task.pillar).filter(Task.pillar.has(name=pillar_name))
+    if category_name:
+        deleted_query = deleted_query.join(Task.category).filter(Task.category.has(name=category_name))
+
+    for task in deleted_query.all():
+        completed_tasks.append({
+            "id": task.id,
+            "name": task.name,
+            "description": task.description,
+            "completed_at": task.deleted_at,  # use deleted_at as the timestamp
+            "task_type": task.follow_up_frequency or "daily",
+            "source_table": "task",
+            "status": "deleted",
             "category_name": task.category.name if task.category else None,
             "pillar_name": task.pillar.name if task.pillar else None,
             "project_name": task.project.name if task.project else None,
@@ -156,7 +220,8 @@ def get_completed_tasks(
     completed_tasks.sort(key=lambda x: x["completed_at"] or datetime.min, reverse=True)
 
     # ── Stats: always calculated over the full unfiltered dataset ──
-    all_daily = db.query(Task).filter(Task.is_completed == True).all()
+    # Exclude deleted tasks from stats
+    all_daily = db.query(Task).filter(Task.is_completed == True, Task.deleted_at == None).all()
     all_project = db.query(ProjectTask).filter(ProjectTask.is_completed == True).all()
 
     today = get_local_now().date()
@@ -201,6 +266,9 @@ def restore_task(
             raise HTTPException(status_code=404, detail="Task not found")
         task.is_completed = False
         task.completed_at = None
+        task.na_marked_at = None   # Clear NA flag if it was marked NA
+        task.deleted_at = None     # Clear deleted flag if it was soft-deleted
+        task.is_active = True       # Re-activate (handles NA/deleted tasks that set is_active=False)
         db.commit()
         return {"message": "Task restored successfully"}
 

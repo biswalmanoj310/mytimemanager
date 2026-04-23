@@ -9,6 +9,7 @@ interface CompletedTask {
   completed_at: string;
   task_type: string;
   source_table: 'task' | 'project_task';
+  status?: 'completed' | 'na' | 'deleted';
   category_name?: string;
   project_name?: string;
   pillar_name?: string;
@@ -183,8 +184,8 @@ function Completed() {
     <div className="completed-container">
       <div className="completed-header">
         <div className="header-title">
-          <h1>✅ Completed Tasks</h1>
-          <p>Your accomplishment journal - track what you've achieved!</p>
+          <h1>✅ Completed, Skipped & Deleted Tasks</h1>
+          <p>Your activity journal — completed tasks, NA (skipped) tasks, and deleted tasks.</p>
         </div>
       </div>
 
@@ -288,8 +289,8 @@ function Completed() {
         ) : Object.keys(grouped).length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon">📭</div>
-            <h3>No completed tasks found</h3>
-            <p>Complete some tasks and they'll appear here!</p>
+            <h3>No completed or skipped tasks found</h3>
+            <p>Complete or skip some tasks and they'll appear here!</p>
           </div>
         ) : (
           Object.entries(grouped).map(([dateLabel, pillarGroups]) => {
@@ -333,15 +334,25 @@ function Completed() {
                               <th>Task Name</th>
                               <th>Type / Project</th>
                               <th>Category</th>
-                              <th>Completed At</th>
+                              <th>Date</th>
                               <th>Action</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {tasks.map(task => (
-                              <tr key={`${task.source_table}-${task.id}`} className="completed-task-row">
+                            {tasks.map(task => {
+                              const isNA = task.status === 'na';
+                              const isDeleted = task.status === 'deleted';
+                              return (
+                              <tr
+                                key={`${task.source_table}-${task.id}`}
+                                className={`completed-task-row${isNA ? ' na-task-row' : isDeleted ? ' deleted-task-row' : ''}`}
+                              >
                                 <td>
-                                  <span className="task-name-text">{task.name}</span>
+                                  <span className="task-name-text">
+                                    {isNA && <span className="na-badge" title="Marked as Not Applicable">⊘ NA &nbsp;</span>}
+                                    {isDeleted && <span className="deleted-badge" title="Task was deleted">🗑 Deleted &nbsp;</span>}
+                                    {task.name}
+                                  </span>
                                   {task.description && (
                                     <div className="task-desc">{task.description}</div>
                                   )}
@@ -365,16 +376,35 @@ function Completed() {
                                   </div>
                                 </td>
                                 <td>
-                                  <button
-                                    className="restore-btn"
-                                    onClick={() => handleRestore(task)}
-                                    title="Restore this task to active"
-                                  >
-                                    ↩ Restore
-                                  </button>
+                                  {isDeleted ? (
+                                    <button
+                                      className="restore-btn deleted-restore-btn"
+                                      onClick={() => handleRestore(task)}
+                                      title="Restore this deleted task"
+                                    >
+                                      ↺ Restore
+                                    </button>
+                                  ) : isNA ? (
+                                    <button
+                                      className="restore-btn na-restore-btn"
+                                      onClick={() => handleRestore(task)}
+                                      title="Re-activate this task"
+                                    >
+                                      ↺ Re-activate
+                                    </button>
+                                  ) : (
+                                    <button
+                                      className="restore-btn"
+                                      onClick={() => handleRestore(task)}
+                                      title="Restore this task to active"
+                                    >
+                                      ↩ Restore
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
                       )}

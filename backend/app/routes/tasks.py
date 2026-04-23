@@ -6,6 +6,7 @@ Comprehensive CRUD operations with filtering and statistics
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from datetime import date
 import json
 
 from app.database.config import get_db
@@ -233,12 +234,50 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
     Use POST /tasks/{task_id}/restore to restore a deleted task
     """
     from app.services.task_deletion_service import TaskDeletionService
-    
+    from app.services.daily_time_service import update_daily_summary
+    from datetime import timedelta
+
     task = TaskDeletionService.soft_delete_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
-    
+
+    # Recalculate recent daily summaries so is_complete flags stay accurate
+    # after the task list changes (covers up to 60 past days).
+    active_start = date(2025, 11, 1)
+    today = date.today()
+    recalc_start = max(active_start, today - timedelta(days=60))
+    current = recalc_start
+    while current <= today:
+        try:
+            update_daily_summary(db, current)
+        except Exception:
+            pass
+        current += timedelta(days=1)
+
     return None
+
+
+@router.get("/{task_id}/monitoring-tabs")
+def get_task_monitoring_tabs(task_id: int, db: Session = Depends(get_db)):
+    """
+    Check which tabs (weekly, monthly, yearly) are monitoring this task.
+    Returns a list of tab names that have status entries for this task.
+    Used to warn users before deleting a monitored task.
+    """
+    from app.models.models import WeeklyTaskStatus, MonthlyTaskStatus, YearlyTaskStatus
+
+    monitoring_tabs = []
+
+    if db.query(WeeklyTaskStatus).filter(WeeklyTaskStatus.task_id == task_id).first():
+        monitoring_tabs.append("Weekly")
+
+    if db.query(MonthlyTaskStatus).filter(MonthlyTaskStatus.task_id == task_id).first():
+        monitoring_tabs.append("Monthly")
+
+    if db.query(YearlyTaskStatus).filter(YearlyTaskStatus.task_id == task_id).first():
+        monitoring_tabs.append("Yearly")
+
+    return {"task_id": task_id, "monitoring_tabs": monitoring_tabs}
 
 
 @router.post("/{task_id}/restore", status_code=200)

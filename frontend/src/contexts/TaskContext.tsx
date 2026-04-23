@@ -192,6 +192,21 @@ export const TaskProvider: React.FC<TaskProviderProps> = ({ children }) => {
    */
   const deleteTask = useCallback(async (taskId: number): Promise<void> => {
     try {
+      // Check if this task is being monitored in other tabs before deleting
+      const monitoringRes = await api.get(`/api/tasks/${taskId}/monitoring-tabs`);
+      const monitoringTabs: string[] = monitoringRes.data?.monitoring_tabs ?? [];
+
+      if (monitoringTabs.length > 0) {
+        const tabList = monitoringTabs.join(', ');
+        const confirmed = window.confirm(
+          `⚠️ This task is also being monitored in the following tab(s): ${tabList}.\n\n` +
+          `Deleting it here will remove it from those tabs too.\n\n` +
+          `If you only want to stop monitoring it in one tab, remove it from that tab's tracking instead.\n\n` +
+          `Do you still want to delete this task?`
+        );
+        if (!confirmed) return;
+      }
+
       await api.delete(`/api/tasks/${taskId}`);
       setTasks((prev) => prev.filter((task) => task.id !== taskId));
     } catch (err: any) {
