@@ -11547,7 +11547,7 @@ export default function Tasks() {
                                     e.stopPropagation();
                                     const cur = habitSelectedMonth[habit.id] || new Date();
                                     const nm = new Date(cur); nm.setMonth(nm.getMonth() - 1);
-                                    const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                    const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
                                     const startMonth = habitStart ? new Date(habitStart.getFullYear(), habitStart.getMonth(), 1) : null;
                                     if (!startMonth || nm >= startMonth) {
                                       setHabitSelectedMonth(prev => ({ ...prev, [habit.id]: nm }));
@@ -11582,7 +11582,7 @@ export default function Tasks() {
                                   const todayD = new Date(); todayD.setHours(0, 0, 0, 0);
                                   const daysInMonth = new Date(year, month + 1, 0).getDate();
                                   const monthDays = habitMonthDays[habit.id] || [];
-                                  const habitStartDate = habit.start_date ? new Date(habit.start_date) : null;
+                                  const habitStartDate = habit.start_date ? parseDateString(habit.start_date) : null;
                                   const cells = [];
                                   for (let dn = 1; dn <= daysInMonth; dn++) {
                                     const dayData = monthDays.find((d: any) => d.dayNum === dn);
@@ -12024,7 +12024,7 @@ export default function Tasks() {
                                 const newMonth = new Date(currentMonth);
                                 newMonth.setMonth(newMonth.getMonth() - 1);
                                 // Check if new month is before habit start month
-                                const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
                                 if (habitStart) {
                                   const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
                                   if (newMonth >= startMonth) {
@@ -12037,7 +12037,7 @@ export default function Tasks() {
                                 }
                               }}
                               disabled={(() => {
-                                const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
                                 if (!habitStart) return false;
                                 const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
                                 const currentMonth = habitSelectedMonth[habit.id] || new Date();
@@ -12049,7 +12049,7 @@ export default function Tasks() {
                                 padding: '6px 12px', 
                                 fontSize: '12px',
                                 backgroundColor: (() => {
-                                  const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                  const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
                                   if (!habitStart) return '#4299e1';
                                   const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
                                   const currentMonth = habitSelectedMonth[habit.id] || new Date();
@@ -12058,7 +12058,7 @@ export default function Tasks() {
                                   return prevMonth < startMonth ? '#e2e8f0' : '#4299e1';
                                 })(),
                                 color: (() => {
-                                  const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                  const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
                                   if (!habitStart) return 'white';
                                   const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
                                   const currentMonth = habitSelectedMonth[habit.id] || new Date();
@@ -12070,7 +12070,7 @@ export default function Tasks() {
                                 borderRadius: '6px',
                                 fontWeight: '600',
                                 cursor: (() => {
-                                  const habitStart = habit.start_date ? new Date(habit.start_date) : null;
+                                  const habitStart = habit.start_date ? parseDateString(habit.start_date) : null;
                                   if (!habitStart) return 'pointer';
                                   const startMonth = new Date(habitStart.getFullYear(), habitStart.getMonth(), 1);
                                   const currentMonth = habitSelectedMonth[habit.id] || new Date();
@@ -12179,7 +12179,7 @@ export default function Tasks() {
                                 const dayData = habitMonthDays[habit.id].find((d: any) => d.dayNum === dayNum);
                                 
                                 // Check if this is the habit start date
-                                const habitStartDate = habit.start_date ? new Date(habit.start_date) : null;
+                                const habitStartDate = habit.start_date ? parseDateString(habit.start_date) : null;
                                 const isStartDate = habitStartDate && 
                                   habitStartDate.getDate() === dayNum && 
                                   habitStartDate.getMonth() === habitMonth.getMonth() && 
@@ -18812,7 +18812,7 @@ export default function Tasks() {
                           let displayText = String(index + 1); // Default: day number
                           
                           // Check if this day is the habit start date
-                          const habitStartDate = habit.start_date ? new Date(habit.start_date) : null;
+                          const habitStartDate = habit.start_date ? parseDateString(habit.start_date) : null;
                           const isStartDate = habitStartDate && (index + 1) === habitStartDate.getDate();
                           
                           if (completed === null) {

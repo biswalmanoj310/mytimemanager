@@ -126,25 +126,28 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ show, onClose, onS
     
     // Calculate end_date based on monitoring duration
     const monitoringDays = formData.get('monitoring_duration_days') as string;
-    const startDate = new Date();
+    // Use local date (not UTC via toISOString) to avoid timezone-induced off-by-one day
+    const now = new Date();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     let endDate: string | undefined = undefined;
     
     if (monitoringDays) {
       const daysToAdd = parseInt(monitoringDays);
-      const end = new Date(startDate);
+      const end = new Date(now);
       end.setDate(end.getDate() + daysToAdd);
-      endDate = end.toISOString().split('T')[0];
+      endDate = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`;
     }
     
     const habitData: any = {
       name: formData.get('name') as string,
       description: formData.get('description') as string || undefined,
-      habit_type: formData.get('habit_type') as string,
+      // habit_type select only renders for daily_streak mode; fall back to state value
+      habit_type: (formData.get('habit_type') as string) || habitType,
       target_frequency: 'daily', // Auto-set based on tracking mode
       is_positive: formData.get('is_positive') === 'true',
       why_reason: formData.get('why_reason') as string || undefined,
       linked_task_id: formData.get('linked_task_id') ? parseInt(formData.get('linked_task_id') as string) : undefined,
-      start_date: startDate.toISOString().split('T')[0],
+      start_date: localToday,
       end_date: endDate,
       // Use state values directly instead of form data for pillar/category
       pillar_id: selectedPillar || undefined,
@@ -189,6 +192,9 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ show, onClose, onS
 
     try {
       if (editingHabit) {
+        // When editing, allow overriding start_date and strip create-only fields
+        const startDateOverride = formData.get('start_date_override') as string;
+        if (startDateOverride) habitData.start_date = startDateOverride;
         // Update existing habit
         await api.put(`/api/habits/${editingHabit.id}`, habitData);
       } else {
@@ -199,7 +205,9 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ show, onClose, onS
       onClose();
     } catch (error: any) {
       console.error(`Error ${editingHabit ? 'updating' : 'creating'} habit:`, error);
-      alert(`Failed to ${editingHabit ? 'update' : 'create'} habit: ` + (error.response?.data?.detail || error.message));
+      const detail = error.response?.data?.detail;
+      const detailMsg = typeof detail === 'string' ? detail : detail ? JSON.stringify(detail) : error.message;
+      alert(`Failed to ${editingHabit ? 'update' : 'create'} habit: ` + detailMsg);
     }
   };
 
@@ -818,6 +826,29 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ show, onClose, onS
               </div>
             )}
           </div>
+
+          {/* Start Date (edit mode only) */}
+          {editingHabit && (
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
+                Start Date
+              </label>
+              <input
+                type="date"
+                name="start_date_override"
+                defaultValue={editingHabit.start_date ? editingHabit.start_date.split('T')[0] : ''}
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #ddd',
+                  borderRadius: '4px'
+                }}
+              />
+              <small style={{ color: '#666', display: 'block', marginTop: '4px' }}>
+                Change if the habit started on a different day.
+              </small>
+            </div>
+          )}
 
           {/* Monitoring Duration */}
           <div style={{ marginBottom: '16px' }}>

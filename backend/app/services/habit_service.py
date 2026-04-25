@@ -8,6 +8,7 @@ from sqlalchemy import and_, or_, func, desc
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Tuple
 from app.models.models import Habit, HabitEntry, HabitStreak, HabitSession, HabitPeriod, Task, DailyTimeEntry
+from app.utils.timezone_utils import get_local_now
 
 
 class HabitService:
@@ -292,10 +293,16 @@ class HabitService:
         entry_date: date,
         actual_minutes: int
     ) -> List[HabitEntry]:
-        """Auto-populate habit entries from linked task time entries"""
-        
+        """Auto-populate habit entries from linked task time entries.
+
+        Routes to the correct sync strategy based on tracking_mode and period_type:
+          - occurrence / occurrence_with_value + weekly or monthly  → session-based sync
+          - aggregate + weekly or monthly                           → aggregate period recalc
+          - everything else (daily_streak / time_based)            → habit_entries (existing logic)
+        """
+
         print(f"🎯 auto_sync_from_task called: task_id={task_id}, date={entry_date}, minutes={actual_minutes}")
-        
+
         # Find all habits linked to this task
         linked_habits = db.query(Habit).filter(
             and_(
@@ -303,43 +310,168 @@ class HabitService:
                 Habit.is_active == True
             )
         ).all()
-        
+
         print(f"🎯 Found {len(linked_habits)} linked habits")
-        
+
         created_entries = []
-        
+
         for habit in linked_habits:
             print(f"🎯 Processing habit: {habit.name} (id={habit.id})")
-            print(f"   - habit_type: {habit.habit_type}")
-            print(f"   - target_value: {habit.target_value}")
-            print(f"   - target_comparison: {habit.target_comparison}")
-            
-            # Determine if habit criteria was met
-            is_successful = False
-            
-            if habit.habit_type == 'time_based' and habit.target_value:
-                if habit.target_comparison == 'at_least':
-                    is_successful = actual_minutes >= habit.target_value
-                elif habit.target_comparison == 'at_most':
-                    is_successful = actual_minutes <= habit.target_value
-                elif habit.target_comparison == 'exactly':
-                    is_successful = actual_minutes == habit.target_value
-            
-            print(f"   - is_successful: {is_successful} ({actual_minutes} vs {habit.target_value})")
-            
-            # Create or update habit entry
-            entry = HabitService.mark_habit_entry(
-                db=db,
-                habit_id=habit.id,
-                entry_date=entry_date,
-                is_successful=is_successful,
-                actual_value=actual_minutes,
-                note=f"Auto-synced from task (actual: {actual_minutes} min)"
-            )
-            print(f"   ✅ Habit entry created/updated: entry_id={entry.id}")
-            created_entries.append(entry)
-        
+            print(f"   - tracking_mode: {habit.tracking_mode}, period_type: {habit.period_type}")
+            print(f"   - habit_type: {habit.habit_type}, target_value: {habit.target_value}")
+
+            # --- Weekly / Monthly occurrence habits (session-based) ---
+            if habit.tracking_mode in ('occurrence', 'occurrence_with_value') and \
+                    habit.period_type in ('weekly', 'monthly'):
+                HabitService._sync_occurrence_period_habit(db, habit, entry_date, actual_minutes)
+
+            # --- Weekly / Monthly aggregate habits ---
+            elif habit.tracking_mode == 'aggregate' and habit.period_type in ('weekly', 'monthly'):
+                HabitService._sync_aggregate_period_habit(db, habit, entry_date, actual_minutes)
+
+            # --- Daily streak / time_based habits (original logic) ---
+            else:
+                is_successful = False
+                if habit.habit_type == 'time_based' and habit.target_value:
+                    if habit.target_comparison == 'at_least':
+                        is_successful = actual_minutes >= habit.target_value
+                    elif habit.target_comparison == 'at_most':
+                        is_successful = actual_minutes <= habit.target_value
+                    elif habit.target_comparison == 'exactly':
+                        is_successful = actual_minutes == habit.target_value
+
+                print(f"   - is_successful: {is_successful} ({actual_minutes} vs {habit.target_value})")
+
+                entry = HabitService.mark_habit_entry(
+                    db=db,
+                    habit_id=habit.id,
+                    entry_date=entry_date,
+                    is_successful=is_successful,
+                    actual_value=actual_minutes,
+                    note=f"Auto-synced from task (actual: {actual_minutes} min)"
+                )
+                print(f"   ✅ Habit entry created/updated: entry_id={entry.id}")
+                created_entries.append(entry)
+
         return created_entries
+
+    # ------------------------------------------------------------------ #
+    # PRIVATE HELPERS FOR PERIOD-BASED AUTO-SYNC                          #
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def _sync_occurrence_period_habit(
+        db: Session,
+        habit: 'Habit',
+        entry_date: date,
+        actual_minutes: int
+    ):
+        """Auto-sync an occurrence / occurrence_with_value weekly or monthly habit.
+
+        Idempotency strategy: a unique marker ``auto-sync:YYYY-MM-DD`` is stored in
+        the session's notes field.  Repeated saves for the same calendar day update
+        the existing session rather than creating a new one.  Removing all time
+        (actual_minutes == 0) un-completes the session.
+        """
+        period_type = habit.period_type
+        sync_note = f"auto-sync:{entry_date}"
+
+        # Ensure period record and session slot(s) exist
+        HabitService.get_or_create_period(db, habit.id, period_type, entry_date)
+        HabitService.initialize_period_sessions(db, habit.id, period_type, entry_date)
+
+        period_start, _ = HabitService.get_period_bounds(period_type, entry_date)
+        all_sessions = HabitService.get_period_sessions(db, habit.id, period_start)
+
+        # Find a session previously auto-synced from this calendar date
+        existing_synced = next(
+            (s for s in all_sessions if s.notes and sync_note in s.notes),
+            None
+        )
+
+        if actual_minutes > 0:
+            if existing_synced:
+                # Same day logged again — update value for occurrence_with_value
+                if habit.tracking_mode == 'occurrence_with_value' and habit.session_target_value:
+                    existing_synced.value_achieved = actual_minutes
+                    if habit.target_comparison == 'at_least':
+                        existing_synced.meets_target = actual_minutes >= habit.session_target_value
+                    elif habit.target_comparison == 'at_most':
+                        existing_synced.meets_target = actual_minutes <= habit.session_target_value
+                    elif habit.target_comparison == 'exactly':
+                        existing_synced.meets_target = actual_minutes == habit.session_target_value
+                    db.commit()
+                    HabitService.update_period_summary(db, habit.id, period_start)
+                print(f"   ✅ Session #{existing_synced.session_number} already synced for {entry_date}")
+            else:
+                # First time this day has any time — mark the next open session
+                next_incomplete = next((s for s in all_sessions if not s.is_completed), None)
+                if next_incomplete:
+                    next_incomplete.is_completed = True
+                    next_incomplete.completed_at = get_local_now()
+                    next_incomplete.value_achieved = actual_minutes
+                    next_incomplete.notes = f"Auto-synced from task ({sync_note})"
+                    if habit.tracking_mode == 'occurrence_with_value' and habit.session_target_value:
+                        if habit.target_comparison == 'at_least':
+                            next_incomplete.meets_target = actual_minutes >= habit.session_target_value
+                        elif habit.target_comparison == 'at_most':
+                            next_incomplete.meets_target = actual_minutes <= habit.session_target_value
+                        elif habit.target_comparison == 'exactly':
+                            next_incomplete.meets_target = actual_minutes == habit.session_target_value
+                    db.commit()
+                    HabitService.update_period_summary(db, habit.id, period_start)
+                    print(f"   ✅ Marked session #{next_incomplete.session_number} complete for {entry_date} ({period_type})")
+                else:
+                    print(f"   ⚠️  All sessions already completed for this {period_type} period")
+        else:
+            # actual_minutes == 0: un-complete the session that was synced from this date
+            if existing_synced:
+                existing_synced.is_completed = False
+                existing_synced.completed_at = None
+                existing_synced.value_achieved = None
+                existing_synced.meets_target = None
+                existing_synced.notes = None
+                db.commit()
+                HabitService.update_period_summary(db, habit.id, period_start)
+                print(f"   ↩️  Un-completed session #{existing_synced.session_number} (time removed for {entry_date})")
+
+    @staticmethod
+    def _sync_aggregate_period_habit(
+        db: Session,
+        habit: 'Habit',
+        entry_date: date,
+        actual_minutes: int
+    ):
+        """Auto-sync an aggregate weekly or monthly habit.
+
+        Recalculates the aggregate total from ALL daily time entries for the linked
+        task within the current period.  This is fully idempotent — calling it many
+        times always converges to the correct total.
+        """
+        from app.models.models import DailyTimeEntry
+
+        period_type = habit.period_type
+        period_start, period_end = HabitService.get_period_bounds(period_type, entry_date)
+        period = HabitService.get_or_create_period(db, habit.id, period_type, entry_date)
+
+        # Sum all task minutes logged within this period (recalculate from scratch)
+        day_entries = db.query(DailyTimeEntry).filter(
+            and_(
+                DailyTimeEntry.task_id == habit.linked_task_id,
+                func.date(DailyTimeEntry.entry_date) >= period_start,
+                func.date(DailyTimeEntry.entry_date) <= period_end
+            )
+        ).all()
+
+        total_minutes = sum(e.minutes for e in day_entries if e.minutes)
+        period.aggregate_achieved = total_minutes
+
+        if period.aggregate_target and period.aggregate_target > 0:
+            period.success_percentage = min(100.0, (total_minutes / period.aggregate_target) * 100)
+            period.is_successful = total_minutes >= period.aggregate_target
+
+        db.commit()
+        print(f"   ✅ Aggregate ({period_type}) updated: total={total_minutes} min for period {period_start}")
     
     # ============================================
     # ANALYTICS & INSIGHTS

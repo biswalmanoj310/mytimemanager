@@ -56,6 +56,7 @@ class HabitUpdate(BaseModel):
     target_comparison: Optional[str] = None
     why_reason: Optional[str] = None
     is_active: Optional[bool] = None
+    start_date: Optional[date] = None
     end_date: Optional[date] = None
     # Organization fields
     pillar_id: Optional[int] = None
