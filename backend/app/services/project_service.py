@@ -133,14 +133,27 @@ def get_project_tasks(db: Session, project_id: int, include_completed: bool = Tr
         query = query.filter(ProjectTask.is_completed == False)
     project_tasks = query.order_by(ProjectTask.order, ProjectTask.created_at.desc()).all()
     
-    # Get regular Task entries linked to this project (new system with frequency)
+    # Get regular Task entries linked directly to this project (new system with frequency)
     task_query = db.query(Task).filter(Task.project_id == project_id)
     if not include_completed:
         task_query = task_query.filter(Task.is_completed == False)
     regular_tasks = task_query.order_by(Task.created_at.desc()).all()
     
-    # Combine both lists
-    return list(project_tasks) + list(regular_tasks)
+    # Also fetch subtasks whose parent is linked to this project but subtask itself
+    # may have been created before the project_id inheritance fix
+    direct_task_ids = {t.id for t in regular_tasks}
+    orphan_subtasks = db.query(Task).filter(
+        Task.parent_task_id.in_(direct_task_ids),
+        Task.project_id.is_(None)
+    ).all()
+    # Stamp project_id on orphaned subtasks so future queries find them directly
+    for subtask in orphan_subtasks:
+        subtask.project_id = project_id
+    if orphan_subtasks:
+        db.commit()
+    
+    # Combine all lists
+    return list(project_tasks) + list(regular_tasks) + orphan_subtasks
 
 
 def get_task_by_id(db: Session, task_id: int) -> Optional[ProjectTask]:

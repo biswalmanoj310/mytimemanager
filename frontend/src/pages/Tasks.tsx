@@ -1279,8 +1279,9 @@ export default function Tasks() {
       setProjectChallenges(null);
     }
     
-    // Update URL to include project ID for refresh persistence
+    // Update URL to include project ID AND tab for refresh persistence
     const searchParams = new URLSearchParams(location.search);
+    searchParams.set('tab', 'projects');
     searchParams.set('project', project.id.toString());
     navigate(`?${searchParams.toString()}`, { replace: true });
   };
@@ -22092,7 +22093,9 @@ export default function Tasks() {
                   // Inherit parent's linkage fields
                   if (editingMiscTask.goal_id) taskPayload.goal_id = editingMiscTask.goal_id;
                   if (editingMiscTask.related_wish_id) taskPayload.related_wish_id = editingMiscTask.related_wish_id;
-                  if (editingMiscTask.linked_project_id) taskPayload.project_id = editingMiscTask.linked_project_id;
+                  // linked_project_id is only mapped in the Misc tab path; project_id is the raw field from the Project tab path
+                  const inheritedProjectId = editingMiscTask.linked_project_id || editingMiscTask.project_id;
+                  if (inheritedProjectId) taskPayload.project_id = inheritedProjectId;
                 }
 
                 // Only add due_date if it's provided
