@@ -368,6 +368,7 @@ def get_linked_tasks(goal_id: int, db: Session = Depends(get_db)):
             "task": {
                 "id": link.task.id,
                 "name": link.task.name,
+                "parent_task_id": link.task.parent_task_id,
                 "pillar_name": link.task.pillar.name if link.task.pillar else None
             } if link.task else None
         }
@@ -395,6 +396,7 @@ def get_linked_tasks(goal_id: int, db: Session = Depends(get_db)):
             "task": {
                 "id": task.id,
                 "name": task.name,
+                "parent_task_id": task.parent_task_id,
                 "pillar_name": task.pillar.name if task.pillar else None
             },
             # Add basic stats for regular tasks

@@ -109,13 +109,15 @@ export default function Tasks() {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get('tab');
     if (tabParam) {
-      const validTabs: TabType[] = ['today', 'daily', 'weekly', 'monthly', 'upcoming', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
+      const validTabs: TabType[] = ['now', 'today', 'daily', 'weekly', 'monthly', 'upcoming', 'quarterly', 'yearly', 'onetime', 'misc', 'projects', 'habits'];
       if (validTabs.includes(tabParam as TabType)) {
         return tabParam as TabType;
       }
     }
     return 'today';
   });
+  // Tracks whether the component has fully mounted (used to prevent premature selectedProject clear)
+  const hasMountedRef = useRef(false);
   // Hourly time entries for daily tab - key format: "taskId-hour"
   const [hourlyEntries, setHourlyEntries] = useState<Record<string, number>>({});
   // Ref to track latest hourly entries (avoids stale closure issues)
@@ -380,7 +382,21 @@ export default function Tasks() {
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [projectCategories, setProjectCategories] = useState<any[]>([]);
   const [projectPillars, setProjectPillars] = useState<any[]>([]);
-  const [selectedProject, setSelectedProject] = useState<ProjectData | null>(null);
+  const [selectedProject, setSelectedProject] = useState<ProjectData | null>(() => {
+    // Instant restore on refresh: if URL has ?project=ID and sessionStorage has the project data, use it
+    try {
+      const urlProjectId = new URLSearchParams(window.location.search).get('project');
+      const tabParam = new URLSearchParams(window.location.search).get('tab');
+      if (urlProjectId && tabParam === 'projects') {
+        const stored = sessionStorage.getItem('selectedProject');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed && String(parsed.id) === urlProjectId) return parsed;
+        }
+      }
+    } catch {}
+    return null;
+  });
   const [projectTasks, setProjectTasks] = useState<ProjectTaskData[]>([]);
   const [projectMilestones, setProjectMilestones] = useState<ProjectMilestoneData[]>([]);
   const [projectChallenges, setProjectChallenges] = useState<{direct_challenges: any[], goal_challenges: any[]} | null>(null);
@@ -449,7 +465,8 @@ export default function Tasks() {
   const [projectTasksDueToday, setProjectTasksDueToday] = useState<Array<ProjectTaskData & { project_name?: string }>>([]);
   const [overdueOneTimeTasks, setOverdueOneTimeTasks] = useState<Array<OneTimeTaskData & { task_name?: string }>>([]);
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
-  const [pendingProjectId, setPendingProjectId] = useState<number | null>(null); // Track project ID from URL
+  const [pendingProjectId, setPendingProjectId] = useState<number | null>(null); // Track project ID from URL (kept for URL effect compat)
+  const pendingProjectIdRef = useRef<number | null>(null); // Ref version — reliable across async boundaries
   
   // Collapsible project sections state
   const [collapsedProjectSections, setCollapsedProjectSections] = useState<{[key: string]: boolean}>(() => {
@@ -502,10 +519,17 @@ export default function Tasks() {
     localStorage.setItem('todayTabSections', JSON.stringify(todayTabSections));
   }, [todayTabSections]);
   
-  // Reset selected project when navigating away from projects tab
+  // Reset selected project when navigating away from projects tab.
+  // Guard with hasMountedRef so initial render sequence never clears a
+  // sessionStorage-restored selectedProject before projects have loaded.
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
     if (activeTab !== 'projects' && selectedProject) {
       setSelectedProject(null);
+      try { sessionStorage.removeItem('selectedProject'); } catch {}
     }
   }, [activeTab, selectedProject]);
   
@@ -1266,6 +1290,8 @@ export default function Tasks() {
   // Handle selecting a project (moved here to avoid "before initialization" error)
   const handleSelectProject = async (project: ProjectData) => {
     setSelectedProject(project);
+    // Persist to sessionStorage so selectedProject can be restored instantly on refresh
+    try { sessionStorage.setItem('selectedProject', JSON.stringify(project)); } catch {}
     await loadProjectTasks(project.id);
     await loadProjectMilestones(project.id);
     
@@ -1280,10 +1306,14 @@ export default function Tasks() {
     }
     
     // Update URL to include project ID AND tab for refresh persistence
+    // Only navigate if URL doesn't already reflect this project (avoids re-trigger loop)
     const searchParams = new URLSearchParams(location.search);
-    searchParams.set('tab', 'projects');
-    searchParams.set('project', project.id.toString());
-    navigate(`?${searchParams.toString()}`, { replace: true });
+    const alreadySet = searchParams.get('tab') === 'projects' && searchParams.get('project') === project.id.toString();
+    if (!alreadySet) {
+      searchParams.set('tab', 'projects');
+      searchParams.set('project', project.id.toString());
+      navigate(`?${searchParams.toString()}`, { replace: true });
+    }
   };
 
   // Handle URL parameters on mount and when location changes
@@ -1331,14 +1361,17 @@ export default function Tasks() {
     }
 
     // Store project ID to select after projects are loaded (only if not already set)
+    // (project restore itself is handled by the dedicated useEffect watching [projects, activeTab])
     if (projectParam && tabParam === 'projects') {
       const projectId = parseInt(projectParam);
       if (!isNaN(projectId)) {
         setPendingProjectId(projectId);
+        // pendingProjectIdRef kept in sync for any legacy code paths
+        pendingProjectIdRef.current = projectId;
       }
     } else if (tabParam !== 'projects') {
-      // Clear pending project ID if we're not on projects tab
       setPendingProjectId(null);
+      pendingProjectIdRef.current = null;
     }
   }, [location.search]);
 
@@ -1358,18 +1391,45 @@ export default function Tasks() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, activeTab]);
 
-  // Select project when projects are loaded and we have a pending project ID
+  // NOTE: Project restoration is now handled directly inside loadProjects()
+  // using pendingProjectIdRef to avoid React state batching race conditions.
+
+  // Restore selected project from URL on refresh.
+  // Fires whenever `projects` list is populated or `activeTab` switches to 'projects'.
+  // Reads URL directly (never stale). selectedProject is intentionally NOT a dep
+  // so changing it doesn't re-trigger and cause a loop.
   useEffect(() => {
-    if (pendingProjectId !== null && projects.length > 0) {
-      const project = projects.find(p => p.id === pendingProjectId);
-      if (project) {
-        handleSelectProject(project);
-        setPendingProjectId(null); // Clear pending ID after selection
-      } else {
-        console.warn('Project not found with ID:', pendingProjectId);
-      }
+    if (activeTab !== 'projects') return;
+    if (projects.length === 0) return;
+    if (selectedProject) return; // already selected
+    const urlParam = new URLSearchParams(window.location.search).get('project');
+    if (!urlParam) return;
+    const id = parseInt(urlParam);
+    if (isNaN(id)) return;
+    const project = projects.find((p: any) => p.id === id);
+    if (project) handleSelectProject(project);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, activeTab]);
+
+  // Sync selectedProject with URL whenever projects load.
+  // Uses React.useLayoutEffect so selectedProject state is set before first paint,
+  // preventing any flash of the list view. Only sets state, does NOT call
+  // the full handleSelectProject (which loads tasks/milestones separately).
+  React.useLayoutEffect(() => {
+    if (activeTab !== 'projects') return;
+    if (projects.length === 0) return;
+    if (selectedProject) return;
+    const urlParam = new URLSearchParams(window.location.search).get('project');
+    if (!urlParam) return;
+    const id = parseInt(urlParam);
+    if (isNaN(id)) return;
+    const project = projects.find((p: any) => p.id === id);
+    if (project) {
+      setSelectedProject(project);
+      try { sessionStorage.setItem('selectedProject', JSON.stringify(project)); } catch {}
     }
-  }, [projects, pendingProjectId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects, activeTab]);
 
   useEffect(() => {
     loadTasks();
@@ -3397,7 +3457,8 @@ export default function Tasks() {
       setProjects(projectsList);
       setProjectCategories(categoriesList);
       setProjectPillars(pillarsList);
-      
+      // Note: project restore on refresh is handled by a dedicated useEffect below
+
       // Load all project tasks to check for overdue status
       if (projectsList.length > 0) {
         const allTasks: ProjectTaskData[] = [];
@@ -8453,7 +8514,7 @@ export default function Tasks() {
                       : null;
                     return (
                       <tr key={project.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
-                        onClick={() => setSelectedProject(project)}
+                        onClick={() => handleSelectProject(project)}
                         onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
                       >

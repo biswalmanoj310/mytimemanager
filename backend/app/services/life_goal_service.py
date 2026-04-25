@@ -598,6 +598,40 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
         ) < today
     )
 
+    # --- Regular tasks from main 'tasks' table linked to this goal's projects ---
+    project_ids = [p.id for p in linked_projects]
+    all_regular_tasks_in_projects = db.query(Task).filter(
+        Task.project_id.in_(project_ids)
+    ).all() if project_ids else []
+
+    # One-time / important tasks linked to projects
+    project_onetime_tasks = [
+        t for t in all_regular_tasks_in_projects
+        if t.follow_up_frequency in ('one_time', 'misc')
+    ]
+    total_project_onetime = len(project_onetime_tasks)
+    completed_project_onetime = sum(1 for t in project_onetime_tasks if t.is_completed)
+    overdue_project_onetime = sum(
+        1 for t in project_onetime_tasks
+        if not t.is_completed and t.due_date and (
+            (t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date) < today
+        )
+    )
+
+    # Recurring tasks (daily/weekly/monthly/yearly) linked to projects
+    project_recurring_tasks = [
+        t for t in all_regular_tasks_in_projects
+        if t.follow_up_frequency in ('daily', 'weekly', 'monthly', 'yearly')
+    ]
+    total_project_recurring = len(project_recurring_tasks)
+    active_project_recurring = sum(1 for t in project_recurring_tasks if not t.is_completed)
+    overdue_project_recurring = sum(
+        1 for t in project_recurring_tasks
+        if not t.is_completed and t.due_date and (
+            (t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date) < today
+        )
+    )
+
     # --- Goal tasks overdue ---
     overdue_goal_tasks = sum(
         1 for t in goal_tasks
@@ -605,9 +639,9 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
     )
 
     # --- Consolidated totals ---
-    total_all = len(goal_tasks) + total_project_tasks + total_misc_tasks
-    completed_all = sum(1 for t in goal_tasks if t.is_completed) + completed_project_tasks + completed_misc_tasks
-    overdue_all = overdue_goal_tasks + overdue_project_tasks + overdue_misc_tasks
+    total_all = len(goal_tasks) + total_project_tasks + total_misc_tasks + total_project_onetime + total_project_recurring
+    completed_all = sum(1 for t in goal_tasks if t.is_completed) + completed_project_tasks + completed_misc_tasks + completed_project_onetime
+    overdue_all = overdue_goal_tasks + overdue_project_tasks + overdue_misc_tasks + overdue_project_onetime + overdue_project_recurring
 
     days_remaining = (goal.target_date - today).days if goal.target_date >= today else 0
     days_total = (goal.target_date - goal.start_date).days if goal.target_date >= goal.start_date else 1
@@ -662,6 +696,17 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
             "remaining": total_misc_tasks - completed_misc_tasks,
             "overdue": overdue_misc_tasks,
             "groups": len(linked_misc_groups)
+        },
+        "project_onetime_tasks": {
+            "total": total_project_onetime,
+            "completed": completed_project_onetime,
+            "remaining": total_project_onetime - completed_project_onetime,
+            "overdue": overdue_project_onetime
+        },
+        "project_recurring_tasks": {
+            "total": total_project_recurring,
+            "active": active_project_recurring,
+            "overdue": overdue_project_recurring
         },
         "all_tasks": {
             "total": total_all,

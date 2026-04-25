@@ -670,6 +670,19 @@ const ImportantTasks: React.FC = () => {
               >
                 <span>
                   {isExpanded ? '▼' : '▶'} {pillarIcon} {categoryName} ({countTasksWithChildren(categoryTasks)})
+                  {(() => {
+                    const countOverdue = (tasks: ImportantTask[]): number => tasks.reduce((sum, t) => {
+                      const selfOverdue = t.status === 'red' ? 1 : 0;
+                      const childOverdue = t.children ? countOverdue(t.children) : 0;
+                      return sum + selfOverdue + childOverdue;
+                    }, 0);
+                    const overdue = countOverdue(categoryTasks);
+                    return overdue > 0 ? (
+                      <span style={{ marginLeft: '10px', fontSize: '13px', fontWeight: '700', color: '#ef4444', background: '#fee2e2', padding: '2px 8px', borderRadius: '10px' }}>
+                        ⚠ Overdue: {overdue}
+                      </span>
+                    ) : null;
+                  })()}
                 </span>
                 <span style={{ fontSize: '13px', color: '#666', fontWeight: 'normal' }}>
                   {pillarName}

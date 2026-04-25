@@ -151,7 +151,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
 
         <ResponsiveContainer width="100%" height={300}>
           <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
-            <PolarGrid strokeDasharray="3 3" />
+            <PolarGrid gridType="circle" strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="pillar" 
               tick={{ fontSize: 12, fontWeight: 500, fill: '#2b6cb0' }}
@@ -164,14 +164,6 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
               tick={{ fontSize: 10, fill: '#ff6b35', fontWeight: 600 }}
             />
             <Radar 
-              name="Allocated (Target)" 
-              dataKey="allocated" 
-              stroke="#cbd5e0" 
-              fill="#cbd5e0" 
-              fillOpacity={0.2} 
-              strokeWidth={2}
-            />
-            <Radar 
               name="Actual % Achieved" 
               dataKey="spent" 
               stroke={radarColor} 
@@ -179,6 +171,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
               fillOpacity={0.5} 
               strokeWidth={2}
             />
+            <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynamicMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
             <Tooltip 
               formatter={(value: any, name: string, props: any) => {
                 const data = props.payload;
@@ -309,7 +302,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
 
         <ResponsiveContainer width="100%" height={400}>
           <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
-            <PolarGrid strokeDasharray="3 3" />
+            <PolarGrid gridType="circle" strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="category" 
               tick={<CustomTick />}
@@ -329,6 +322,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
               fillOpacity={0.5} 
               strokeWidth={2}
             />
+            <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynamicMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
             <Tooltip 
               formatter={(value: any, name: string) => [
                 `${Number(value).toFixed(0)}%`,
@@ -499,7 +493,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
 
         <ResponsiveContainer width="100%" height={400}>
           <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
-            <PolarGrid strokeDasharray="3 3" />
+            <PolarGrid gridType="circle" strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="task" 
               tick={<CustomTick />}
@@ -519,6 +513,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
               fillOpacity={0.5} 
               strokeWidth={2}
             />
+            <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynamicMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
             <Tooltip 
               formatter={(value: any, name: string) => [
                 `${Number(value).toFixed(0)}%`,

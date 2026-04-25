@@ -204,13 +204,21 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
         )
     ).all()
 
-    # Get time entries for this date - ONLY for time-based tasks (exclude one-time tasks)
-    # Join with Task to filter by task properties
-    time_based_task_ids = [task.id for task in time_based_tasks]
+    # Get time entries for this date from ALL daily TIME tasks (active AND inactive/deleted).
+    # Using only active task IDs would cause us to miss entries on past dates for tasks that
+    # were later deleted, incorrectly reducing total_spent and flipping is_complete to False.
+    all_time_based_task_ids = db.query(Task.id).filter(
+        and_(
+            Task.follow_up_frequency == 'daily',
+            func.upper(Task.task_type) == 'TIME',
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
+        )
+    ).all()
+    all_time_based_task_ids = [t[0] for t in all_time_based_task_ids]
     entries = db.query(DailyTimeEntry).filter(
         and_(
             func.date(DailyTimeEntry.entry_date) == entry_date,
-            DailyTimeEntry.task_id.in_(time_based_task_ids)
+            DailyTimeEntry.task_id.in_(all_time_based_task_ids)
         )
     ).all()
     
@@ -262,7 +270,22 @@ def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayRespo
     """
     today = date.today()
     active_start_date = date(2025, 11, 1)  # Start of active usage
-    
+
+    # Calculate total_allocated dynamically from current active tasks.
+    # Stored summaries can become stale when tasks are added or deleted, so we
+    # always use the live task list to produce an accurate allocated figure.
+    current_allocated = (
+        db.query(func.sum(Task.allocated_minutes)).filter(
+            and_(
+                Task.follow_up_frequency == 'daily',
+                func.upper(Task.task_type) == 'TIME',
+                Task.is_active == True,
+                Task.is_completed == False,
+                or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
+            )
+        ).scalar() or 0
+    )
+
     summaries = db.query(DailySummary).filter(
         and_(
             DailySummary.is_complete == False,
@@ -276,9 +299,9 @@ def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayRespo
     for summary in summaries:
         result.append(IncompleteDayResponse(
             entry_date=summary.entry_date,
-            total_allocated=summary.total_allocated,
+            total_allocated=current_allocated,
             total_spent=summary.total_spent,
-            difference=abs(summary.total_allocated - summary.total_spent)
+            difference=abs(current_allocated - summary.total_spent)
         ))
 
     return result

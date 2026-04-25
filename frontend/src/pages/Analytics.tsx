@@ -3739,7 +3739,7 @@ export default function Analytics() {
                         <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1}
                           tickFormatter={v => `${v}%`} tick={{ fontSize: 10, fill: '#f97316', fontWeight: 600 }} />
                         <Radar name="Actual % Achieved" dataKey="spent" stroke={selected.color} fill={selected.color} fillOpacity={0.5} strokeWidth={2} />
-                        <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,points}=props; if(!points||!points.length) return <g/>; const r=Math.sqrt(Math.pow(points[0].x-(cx||0),2)+Math.pow(points[0].y-(cy||0),2)); if(r<=0) return <g/>; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
+                        <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,points}=props; if(!points||!points.length) return <g/>; const r=Math.sqrt(Math.pow(points[0].x-(cx||0),2)+Math.pow(points[0].y-(cy||0),2)); if(r<=0) return <g/>; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#16a34a" strokeWidth={4} strokeDasharray="10 5" />; }} />
                         <Tooltip formatter={(value: any, name: string, props: any) => {
                           if (name === 'Actual % Achieved') return [`${props.payload.actualSpent?.toFixed(1)}h (${value}%)`, name];
                           return [`${value}%`, name];
@@ -3966,7 +3966,7 @@ export default function Analytics() {
                                 <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} />
                                 <Radar name="Actual %" dataKey="spent" stroke={radarColor} fill={radarColor} fillOpacity={0.45} strokeWidth={2}
                                 />
-                                <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
+                                <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#16a34a" strokeWidth={4} strokeDasharray="10 5" />; }} />
                                 <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
                               </RadarChart>
                             </ResponsiveContainer>

@@ -7,7 +7,7 @@ Instead of hard deleting tasks, marks them as deleted with timestamp
 from sqlalchemy.orm import Session
 from datetime import datetime
 from typing import Optional
-from app.models.models import Task
+from app.models.models import Task, Habit
 
 
 class TaskDeletionService:
@@ -31,10 +31,21 @@ class TaskDeletionService:
         if not task:
             return None
         
+        now = datetime.now()
+
         # Mark as inactive and set deletion timestamp
         task.is_active = False
-        task.deleted_at = datetime.now()
-        task.updated_at = datetime.now()
+        task.deleted_at = now
+        task.updated_at = now
+
+        # Mark any linked habits as inactive (task no longer exists to track)
+        linked_habits = db.query(Habit).filter(
+            Habit.linked_task_id == task_id,
+            Habit.is_active == True
+        ).all()
+        for habit in linked_habits:
+            habit.is_active = False
+            habit.updated_at = now
         
         db.commit()
         db.refresh(task)
@@ -58,10 +69,22 @@ class TaskDeletionService:
         if not task:
             return None
         
+        now = datetime.now()
+
         # Restore task
         task.is_active = True
         task.deleted_at = None
-        task.updated_at = datetime.now()
+        task.updated_at = now
+
+        # Reactivate habits that were deactivated when this task was deleted
+        linked_habits = db.query(Habit).filter(
+            Habit.linked_task_id == task_id,
+            Habit.is_active == False,
+            Habit.is_completed == False  # only reactivate non-completed habits
+        ).all()
+        for habit in linked_habits:
+            habit.is_active = True
+            habit.updated_at = now
         
         db.commit()
         db.refresh(task)

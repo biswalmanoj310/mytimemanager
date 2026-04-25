@@ -595,7 +595,7 @@ export default function Dashboard() {
               ) : (
                 <ResponsiveContainer width="100%" height={220}>
                   <RadarChart data={period.data} margin={{ top: 15, right: 25, bottom: 15, left: 25 }}>
-                    <PolarGrid strokeDasharray="3 3" />
+                    <PolarGrid gridType="circle" strokeDasharray="3 3" />
                     <PolarAngleAxis dataKey="name" tick={(props: any) => {
                       const { x, y, payload, textAnchor } = props;
                       const name: string = payload.value;
@@ -614,8 +614,8 @@ export default function Dashboard() {
                       );
                     }} />
                     <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 9, fill: '#94a3b8' }} />
-                    <Radar name="Goal" dataKey="allocated" stroke="#276749" fill="#276749" fillOpacity={0.06} strokeWidth={1.5} strokeDasharray="5 3" dot={false} />
                     <Radar name="Actual" dataKey="spent" stroke={isNewest ? accentColor : '#93c5fd'} fill={isNewest ? accentColor : '#93c5fd'} fillOpacity={0.4} strokeWidth={2} />
+                    <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
                     <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
                   </RadarChart>
                 </ResponsiveContainer>

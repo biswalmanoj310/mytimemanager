@@ -2280,7 +2280,9 @@ export default function Goals() {
   const [goalPillars, setGoalPillars] = useState<any[]>([]);
   const [goalCategories, setGoalCategories] = useState<any[]>([]);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
-  const [showGoalListView, setShowGoalListView] = useState(false);
+  const [showGoalListView, setShowGoalListView] = useState(() => localStorage.getItem('listView_goals') === 'true');
+  const [goalListSortCol, setGoalListSortCol] = useState<string>('');
+  const [goalListSortDir, setGoalListSortDir] = useState<'asc' | 'desc'>('asc');
   const [goalListActiveCollapsed, setGoalListActiveCollapsed] = useState(false);
   const [goalListCompletedCollapsed, setGoalListCompletedCollapsed] = useState(true);
   const [showAddMilestoneModal, setShowAddMilestoneModal] = useState(false);
@@ -2318,7 +2320,9 @@ export default function Goals() {
   const [wishes, setWishes] = useState<WishData[]>([]);
   const [selectedWish, setSelectedWish] = useState<WishData | null>(null);
   const [showAddWishModal, setShowAddWishModal] = useState(false);
-  const [showWishListView, setShowWishListView] = useState(false);
+  const [showWishListView, setShowWishListView] = useState(() => localStorage.getItem('listView_wishes') === 'true');
+  const [wishListSortCol, setWishListSortCol] = useState<string>('');
+  const [wishListSortDir, setWishListSortDir] = useState<'asc' | 'desc'>('asc');
   const [wishListCollapsed, setWishListCollapsed] = useState(false);
   const [wishListAchievedCollapsed, setWishListAchievedCollapsed] = useState(true);
   const [showWishDetailsModal, setShowWishDetailsModal] = useState(false);
@@ -3638,7 +3642,7 @@ export default function Goals() {
                 </button>
               </div>
               <button
-                onClick={() => setShowWishListView(prev => !prev)}
+                onClick={() => setShowWishListView(prev => { const next = !prev; localStorage.setItem('listView_wishes', String(next)); return next; })}
                 style={{
                   padding: '7px 16px',
                   fontSize: '13px',
@@ -3703,26 +3707,71 @@ export default function Goals() {
                 'Calmness':  { bg: '#dcfce7', text: '#166534' },
                 'Family':    { bg: '#f3e8ff', text: '#7e22ce' },
               };
+              const wishHierarchyOrder: { [key: string]: number } = {
+                'Hard Work|Office-Tasks': 1, 'Hard Work|Learning': 2, 'Hard Work|Confidence': 3,
+                'Calmness|Yoga': 4, 'Calmness|Sleep': 5,
+                'Family|My Tasks': 6, 'Family|Home Tasks': 7, 'Family|Time Waste': 8,
+              };
+              const byWishHierarchy = (w: WishData) => {
+                const pName = goalPillars.find(p => p.id === w.pillar_id)?.name || '';
+                const cName = goalCategories.find(c => c.id === w.category_id)?.name || '';
+                return wishHierarchyOrder[`${pName}|${cName}`] ?? 999;
+              };
               const activeWishes = wishes
                 .filter(w => w.status !== 'achieved' && w.status !== 'released')
                 .sort((a, b) => {
+                  const hA = byWishHierarchy(a), hB = byWishHierarchy(b);
+                  if (hA !== hB) return hA - hB;
                   const so = wishStatusOrder.indexOf(a.status) - wishStatusOrder.indexOf(b.status);
                   return so !== 0 ? so : a.title.localeCompare(b.title);
                 });
               const doneWishes = wishes
                 .filter(w => w.status === 'achieved' || w.status === 'released')
-                .sort((a, b) => a.title.localeCompare(b.title));
+                .sort((a, b) => {
+                  const hA = byWishHierarchy(a), hB = byWishHierarchy(b);
+                  return hA !== hB ? hA - hB : a.title.localeCompare(b.title);
+                });
               const wishColDefs = [
-                { label: '#', w: '36px' },
-                { label: 'Dream / Wish', w: '230px' },
-                { label: 'Status', w: '110px' },
-                { label: 'Priority', w: '80px' },
-                { label: 'Timeframe', w: '110px' },
-                { label: 'Pillar', w: '145px' },
-                { label: 'Category', w: '115px' },
-                { label: 'Linked Goal', w: '90px' },
-                { label: 'Days Dreaming', w: '110px' },
+                { label: '#', w: '36px', sortKey: '' },
+                { label: 'Dream / Wish', w: '230px', sortKey: 'title' },
+                { label: 'Status', w: '110px', sortKey: 'status' },
+                { label: 'Priority', w: '80px', sortKey: 'priority' },
+                { label: 'Timeframe', w: '110px', sortKey: 'timeframe' },
+                { label: 'Pillar', w: '145px', sortKey: 'pillar' },
+                { label: 'Category', w: '115px', sortKey: 'category' },
+                { label: 'Linked Goal', w: '90px', sortKey: 'linked' },
+                { label: 'Days Dreaming', w: '110px', sortKey: 'days' },
               ];
+              const handleWishSort = (key: string) => {
+                if (!key) return;
+                if (wishListSortCol === key) { setWishListSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
+                else { setWishListSortCol(key); setWishListSortDir('asc'); }
+              };
+              const priorityOrder: { [k: string]: number } = { high: 0, medium: 1, low: 2 };
+              const wishSortBy = (a: WishData, b: WishData): number => {
+                if (!wishListSortCol) {
+                  const hA = byWishHierarchy(a), hB = byWishHierarchy(b);
+                  if (hA !== hB) return hA - hB;
+                  const so = wishStatusOrder.indexOf(a.status) - wishStatusOrder.indexOf(b.status);
+                  return so !== 0 ? so : a.title.localeCompare(b.title);
+                }
+                let valA: any, valB: any;
+                const pA = goalPillars.find(p => p.id === a.pillar_id), pB = goalPillars.find(p => p.id === b.pillar_id);
+                const cA = goalCategories.find(c => c.id === a.category_id), cB = goalCategories.find(c => c.id === b.category_id);
+                switch (wishListSortCol) {
+                  case 'title':     valA = a.title || ''; valB = b.title || ''; break;
+                  case 'status':    valA = wishStatusOrder.indexOf(a.status); valB = wishStatusOrder.indexOf(b.status); break;
+                  case 'priority':  valA = priorityOrder[a.priority] ?? 99; valB = priorityOrder[b.priority] ?? 99; break;
+                  case 'timeframe': valA = a.estimated_timeframe || 'zzzz'; valB = b.estimated_timeframe || 'zzzz'; break;
+                  case 'pillar':    valA = pA?.name || ''; valB = pB?.name || ''; break;
+                  case 'category':  valA = cA?.name || ''; valB = cB?.name || ''; break;
+                  case 'linked':    valA = a.linked_goal_id ? 0 : 1; valB = b.linked_goal_id ? 0 : 1; break;
+                  case 'days':      valA = a.stats?.days_dreaming ?? -1; valB = b.stats?.days_dreaming ?? -1; break;
+                  default: valA = a.title; valB = b.title;
+                }
+                const cmp = typeof valA === 'string' ? valA.localeCompare(valB) : valA - valB;
+                return wishListSortDir === 'asc' ? cmp : -cmp;
+              };
               const renderWishRow = (wish: WishData, idx: number, isDone: boolean) => {
                 const sc = wishStatusColors[wish.status] || { bg: '#f1f5f9', text: '#64748b' };
                 const prc = wishPriorityColors[wish.priority] || wishPriorityColors['low'];
@@ -3730,7 +3779,7 @@ export default function Goals() {
                 const pb = wishPillarBg[pillarName];
                 const catName = goalCategories.find(c => c.id === wish.category_id)?.name || '';
                 const linkedGoal = lifeGoals.find(g => g.id === wish.linked_goal_id);
-                const rowBg = isDone ? '#f9fafb' : idx % 2 === 0 ? '#fdf4ff' : 'white';
+                const rowBg = wish.status === 'achieved' ? '#f0fdf4' : wish.status === 'released' ? '#f1f5f9' : wish.priority === 'high' ? '#fff1f2' : wish.priority === 'medium' ? '#fefce8' : '#fdf4ff';
                 return (
                   <tr key={wish.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
                     onClick={() => { setSelectedWish(wish); setShowWishDetailsModal(true); }}
@@ -3777,9 +3826,15 @@ export default function Goals() {
               };
               const wishColHeaderRow = (
                 <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                  {wishColDefs.map(({ label, w }) => (
-                    <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
-                  ))}
+                  {wishColDefs.map(({ label, w, sortKey }) => {
+                    const isActive = wishListSortCol === sortKey && sortKey !== '';
+                    return (
+                      <th key={label} onClick={() => handleWishSort(sortKey)}
+                        style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: isActive ? '#4338ca' : '#64748b', textTransform: 'uppercase' as const, cursor: sortKey ? 'pointer' : 'default', userSelect: 'none' as const, background: isActive ? '#e0e7ff' : undefined }}>
+                        {label}{sortKey && <span style={{ marginLeft: '4px', opacity: isActive ? 1 : 0.3 }}>{isActive ? (wishListSortDir === 'asc' ? '↑' : '↓') : '⇅'}</span>}
+                      </th>
+                    );
+                  })}
                 </tr>
               );
               return (
@@ -3802,7 +3857,7 @@ export default function Goals() {
                       <div style={{ overflowX: 'auto' }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                           <thead>{wishColHeaderRow}</thead>
-                          <tbody>{activeWishes.map((w, i) => renderWishRow(w, i, false))}</tbody>
+                          <tbody>{[...activeWishes].sort(wishSortBy).map((w, i) => renderWishRow(w, i, false))}</tbody>
                         </table>
                       </div>
                     )}
@@ -3821,7 +3876,7 @@ export default function Goals() {
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                             <thead>{wishColHeaderRow}</thead>
-                            <tbody>{doneWishes.map((w, i) => renderWishRow(w, i, true))}</tbody>
+                            <tbody>{[...doneWishes].sort(wishSortBy).map((w, i) => renderWishRow(w, i, true))}</tbody>
                           </table>
                         </div>
                       )}
@@ -5052,7 +5107,7 @@ return (
                     ➕ Add Life Goal
                   </button>
                   <button
-                    onClick={() => setShowGoalListView(prev => !prev)}
+                    onClick={() => setShowGoalListView(prev => { const next = !prev; localStorage.setItem('listView_goals', String(next)); return next; })}
                     style={{
                       background: showGoalListView ? 'rgba(251,191,36,0.85)' : 'rgba(251,191,36,0.35)',
                       border: showGoalListView ? '2px solid rgba(255,255,255,0.9)' : '2px solid rgba(251,191,36,0.6)',
@@ -5108,23 +5163,72 @@ return (
                   not_started: { bg: '#f1f5f9', text: '#64748b' },
                   abandoned:   { bg: '#f3f4f6', text: '#9ca3af' },
                 };
+                const goalHierarchyOrder: { [key: string]: number } = {
+                  'Hard Work|Office-Tasks': 1, 'Hard Work|Learning': 2, 'Hard Work|Confidence': 3,
+                  'Calmness|Yoga': 4, 'Calmness|Sleep': 5,
+                  'Family|My Tasks': 6, 'Family|Home Tasks': 7, 'Family|Time Waste': 8,
+                };
+                const byGoalHierarchy = (goal: LifeGoalData) => {
+                  const pName = goalPillars.find(p => p.id === goal.pillar_id)?.name || '';
+                  const cName = goalCategories.find(c => c.id === goal.category_id)?.name || '';
+                  return goalHierarchyOrder[`${pName}|${cName}`] ?? 999;
+                };
                 const activeGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status !== 'completed')
-                  .sort((a, b) => (b.stats?.overdue_tasks || 0) - (a.stats?.overdue_tasks || 0) || a.name.localeCompare(b.name));
+                  .sort((a, b) => {
+                    const hA = byGoalHierarchy(a), hB = byGoalHierarchy(b);
+                    if (hA !== hB) return hA - hB;
+                    return (b.stats?.overdue_tasks || 0) - (a.stats?.overdue_tasks || 0) || a.name.localeCompare(b.name);
+                  });
                 const completedGoals = lifeGoals.filter(g => !g.parent_goal_id && g.status === 'completed')
-                  .sort((a, b) => a.name.localeCompare(b.name));
+                  .sort((a, b) => {
+                    const hA = byGoalHierarchy(a), hB = byGoalHierarchy(b);
+                    return hA !== hB ? hA - hB : a.name.localeCompare(b.name);
+                  });
                 const colHeaders = [
-                  { label: '#', w: '36px' },
-                  { label: 'Goal Name', w: '210px' },
-                  { label: 'Projects', w: '75px' },
-                  { label: 'Total', w: '60px' },
-                  { label: 'Done', w: '75px' },
-                  { label: 'Remaining', w: '82px' },
-                  { label: 'Overdue', w: '88px' },
-                  { label: 'Target Date', w: '110px' },
-                  { label: 'Pillar', w: '145px' },
-                  { label: 'Category', w: '115px' },
-                  { label: 'Status', w: '110px' },
+                  { label: '#', w: '36px', sortKey: '' },
+                  { label: 'Goal Name', w: '210px', sortKey: 'name' },
+                  { label: 'Projects', w: '75px', sortKey: 'projects' },
+                  { label: 'Total', w: '60px', sortKey: 'total' },
+                  { label: 'Done', w: '75px', sortKey: 'done' },
+                  { label: 'Remaining', w: '82px', sortKey: 'remaining' },
+                  { label: 'Overdue', w: '88px', sortKey: 'overdue' },
+                  { label: 'Target Date', w: '110px', sortKey: 'target' },
+                  { label: 'Pillar', w: '145px', sortKey: 'pillar' },
+                  { label: 'Category', w: '115px', sortKey: 'category' },
+                  { label: 'Status', w: '110px', sortKey: 'status' },
                 ];
+                const handleGoalSort = (key: string) => {
+                  if (!key) return;
+                  if (goalListSortCol === key) { setGoalListSortDir(d => d === 'asc' ? 'desc' : 'asc'); }
+                  else { setGoalListSortCol(key); setGoalListSortDir('asc'); }
+                };
+                const goalSortBy = (a: LifeGoalData, b: LifeGoalData): number => {
+                  if (!goalListSortCol) {
+                    const hA = byGoalHierarchy(a), hB = byGoalHierarchy(b);
+                    if (hA !== hB) return hA - hB;
+                    return (b.stats?.overdue_tasks || 0) - (a.stats?.overdue_tasks || 0) || a.name.localeCompare(b.name);
+                  }
+                  let valA: any, valB: any;
+                  const pA = goalPillars.find(p => p.id === a.pillar_id), pB = goalPillars.find(p => p.id === b.pillar_id);
+                  const cA = goalCategories.find(c => c.id === a.category_id), cB = goalCategories.find(c => c.id === b.category_id);
+                  switch (goalListSortCol) {
+                    case 'name':      valA = a.name || ''; valB = b.name || ''; break;
+                    case 'projects':  valA = a.stats?.goal_projects?.total || 0; valB = b.stats?.goal_projects?.total || 0; break;
+                    case 'total':     valA = a.stats?.total_tasks || 0; valB = b.stats?.total_tasks || 0; break;
+                    case 'done':      valA = a.stats?.completed_tasks || 0; valB = b.stats?.completed_tasks || 0; break;
+                    case 'remaining': valA = (a.stats?.total_tasks || 0) - (a.stats?.completed_tasks || 0); valB = (b.stats?.total_tasks || 0) - (b.stats?.completed_tasks || 0); break;
+                    case 'overdue':   valA = a.stats?.overdue_tasks || 0; valB = b.stats?.overdue_tasks || 0; break;
+                    case 'target':    valA = a.target_date || 'zzzz'; valB = b.target_date || 'zzzz'; break;
+                    case 'pillar':    valA = pA?.name || ''; valB = pB?.name || ''; break;
+                    case 'category':  valA = cA?.name || ''; valB = cB?.name || ''; break;
+                    case 'status':    valA = a.status || ''; valB = b.status || ''; break;
+                    default: valA = a.name; valB = b.name;
+                  }
+                  const cmp = typeof valA === 'string' ? valA.localeCompare(valB) : valA - valB;
+                  return goalListSortDir === 'asc' ? cmp : -cmp;
+                };
+                const sortedActiveGoals = [...activeGoals].sort(goalSortBy);
+                const sortedCompletedGoals = [...completedGoals].sort(goalSortBy);
                 const renderGoalRow = (goal: LifeGoalData, idx: number, isCompleted: boolean) => {
                   const overdue = goal.stats?.overdue_tasks || 0;
                   const total = goal.stats?.total_tasks || 0;
@@ -5136,7 +5240,15 @@ return (
                   const pillarName = pillar?.name || '';
                   const pc = pillarColors[pillarName];
                   const sc = statusColors[goal.status] || statusColors['not_started'];
-                  const rowBg = isCompleted ? '#f0fdf4' : overdue > 0 ? '#fff1f2' : idx % 2 === 0 ? '#fafafa' : 'white';
+                  const rowBg = isCompleted
+                    ? '#bbf7d0'
+                    : goal.status === 'behind' || overdue > 0
+                      ? '#fecdd3'
+                      : goal.status === 'at_risk'
+                        ? '#fef08a'
+                        : goal.status === 'on_track' || goal.status === 'in_progress'
+                          ? '#bbf7d0'
+                          : done > 0 ? '#bbf7d0' : '#fef08a';
                   const targetDateStr = goal.target_date;
                   const targetPast = (() => {
                     if (!targetDateStr || isCompleted) return false;
@@ -5212,9 +5324,15 @@ return (
                 );
                 const colHeaderRow = (
                   <tr style={{ background: '#f1f5f9', borderBottom: '2px solid #e2e8f0' }}>
-                    {colHeaders.map(({ label, w }) => (
-                      <th key={label} style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: '#64748b', textTransform: 'uppercase' as const }}>{label}</th>
-                    ))}
+                    {colHeaders.map(({ label, w, sortKey }) => {
+                      const isActive = goalListSortCol === sortKey && sortKey !== '';
+                      return (
+                        <th key={label} onClick={() => handleGoalSort(sortKey)}
+                          style={{ padding: '8px 10px', textAlign: 'left', fontWeight: '700', fontSize: '11px', letterSpacing: '0.05em', width: w, whiteSpace: 'nowrap', color: isActive ? '#4338ca' : '#64748b', textTransform: 'uppercase' as const, cursor: sortKey ? 'pointer' : 'default', userSelect: 'none' as const, background: isActive ? '#e0e7ff' : undefined }}>
+                          {label}{sortKey && <span style={{ marginLeft: '4px', opacity: isActive ? 1 : 0.3 }}>{isActive ? (goalListSortDir === 'asc' ? '↑' : '↓') : '⇅'}</span>}
+                        </th>
+                      );
+                    })}
                   </tr>
                 );
                 const activeOverdue = activeGoals.reduce((s, g) => s + (g.stats?.overdue_tasks || 0), 0);
@@ -5238,7 +5356,7 @@ return (
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                             <thead>{colHeaderRow}</thead>
-                            <tbody>{activeGoals.map((g, i) => renderGoalRow(g, i, false))}</tbody>
+                            <tbody>{sortedActiveGoals.map((g, i) => renderGoalRow(g, i, false))}</tbody>
                             <tfoot>{totalFooterRow(activeGoals, 'Active Goals')}</tfoot>
                           </table>
                         </div>
@@ -5260,7 +5378,7 @@ return (
                           <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                               <thead>{colHeaderRow}</thead>
-                              <tbody>{completedGoals.map((g, i) => renderGoalRow(g, i, true))}</tbody>
+                              <tbody>{sortedCompletedGoals.map((g, i) => renderGoalRow(g, i, true))}</tbody>
                               <tfoot>{totalFooterRow(completedGoals, '🏆 Completed Goals')}</tfoot>
                             </table>
                           </div>
