@@ -579,7 +579,8 @@ export default function Dashboard() {
         ];
 
         const RadarCard = ({ period, isNewest, accentColor }: { period: { label: string; start: string; end: string; data: any[] }; isNewest: boolean; accentColor: string }) => {
-          const avg = period.data.length ? period.data.reduce((s: number, d: any) => s + d.score, 0) / period.data.length : 0;
+          const totalSpent = period.data.reduce((s: number, d: any) => s + d.spent, 0);
+          const avg = (period.data.length && totalSpent > 0) ? period.data.reduce((s: number, d: any) => s + d.score, 0) / period.data.length : 0;
           const maxSpent = period.data.length ? Math.max(...period.data.map((d: any) => d.spent), 100) : 100;
           const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50);
           return (

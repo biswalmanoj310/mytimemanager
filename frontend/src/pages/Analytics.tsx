@@ -3913,7 +3913,10 @@ export default function Analytics() {
                         if (radarData.length === 0) return null;
                         const maxSpent = Math.max(...radarData.map(d => d.spent), 100);
                         const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50);
-                        const avgPct = radarData.reduce((s, d) => s + d.score, 0) / radarData.length; // success score for badge
+                        // Only compute avg when actual data exists; drain categories (e.g. Time Waste) score 100
+                        // when spent=0, which inflates the avg for periods with no entries yet.
+                        const totalSpent = radarData.reduce((s, d) => s + d.spent, 0);
+                        const avgPct = totalSpent === 0 ? 0 : radarData.reduce((s, d) => s + d.score, 0) / radarData.length;
                         const isNewest = idx === 0;
                         const radarColor = isNewest ? '#2563eb' : periodColor(idx, circleOfLifeData.length);
                         return (
