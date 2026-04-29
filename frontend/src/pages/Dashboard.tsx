@@ -70,6 +70,14 @@ interface HabitStats {
   active_habits: number;
 }
 
+interface DreamStats {
+  total_dreams: number;
+  active_dreams: number;
+  graduated_dreams: number;
+}
+
+type PopupType = 'goals' | 'projects' | 'tasks' | 'habits' | 'dreams' | null;
+
 const PILLAR_ICONS: Record<string, string> = {
   'Hard Work': '💼',
   'Calmness': '🧘',
@@ -130,6 +138,17 @@ export default function Dashboard() {
   const [taskStats, setTaskStats] = useState<TaskStats>({ total_tasks: 0, completed_tasks: 0, active_tasks: 0 });
   const [projectStats, setProjectStats] = useState<ProjectStats>({ total_projects: 0, completed_projects: 0, active_projects: 0 });
   const [habitStats, setHabitStats] = useState<HabitStats>({ total_habits: 0, active_habits: 0 });
+  const [dreamStats, setDreamStats] = useState<DreamStats>({ total_dreams: 0, active_dreams: 0, graduated_dreams: 0 });
+
+  // Popup state
+  const [popupType, setPopupType] = useState<PopupType>(null);
+  const [popupData, setPopupData] = useState<any[]>([]);
+  const [popupLoading, setPopupLoading] = useState(false);
+  const [allTasks, setAllTasks] = useState<any[]>([]);
+  const [allGoals, setAllGoals] = useState<any[]>([]);
+  const [allProjects, setAllProjects] = useState<any[]>([]);
+  const [allHabits, setAllHabits] = useState<any[]>([]);
+  const [allDreams, setAllDreams] = useState<any[]>([]);
   const [pillarCategories, setPillarCategories] = useState<Record<string, Category[]>>({});
   const [loading, setLoading] = useState(!TEST_MODE);
   const [error, setError] = useState<string | null>(null);
@@ -155,7 +174,26 @@ export default function Dashboard() {
   const [circlePeriod, setCirclePeriod] = useState<'week'|'month'|'year'>('week');
 
   const navigate = useNavigate();
-  
+
+  const openPopup = async (type: PopupType) => {
+    setPopupType(type);
+    setPopupLoading(true);
+    try {
+      if (type === 'goals') {
+        const goals = await api.get<any[]>('/api/life-goals/');
+        setPopupData(Array.isArray(goals) ? goals : []);
+      } else if (type === 'projects') {
+        setPopupData(allProjects);
+      } else if (type === 'tasks') {
+        setPopupData(allTasks);
+      } else if (type === 'habits') {
+        setPopupData(allHabits);
+      } else if (type === 'dreams') {
+        setPopupData(allDreams);
+      }
+    } catch { setPopupData([]); }
+    setPopupLoading(false);
+  };
   console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
 
   const loadDashboardData = async () => {
@@ -170,7 +208,7 @@ export default function Dashboard() {
       const today = new Date();
       const todayStr = formatDateForInput(today);
       
-      const [dashboardData, tasks, projects, habits, pillars, categories, dailyStatuses, completionDatesResp] = await Promise.all([
+      const [dashboardData, tasks, projects, habits, pillars, categories, dailyStatuses, completionDatesResp, wishes] = await Promise.all([
         api.get<DashboardData>('/api/dashboard/goals/overview'),
         api.get<any[]>('/api/tasks'),
         api.get<any[]>('/api/projects'),
@@ -178,7 +216,8 @@ export default function Dashboard() {
         api.get<any[]>('/api/pillars'),
         api.get<any[]>('/api/categories'),
         api.get<any[]>(`/api/daily-task-status/date/${todayStr}`),
-        api.get<any>('/api/daily-tasks-history/completion-dates').catch(() => ({}))
+        api.get<any>('/api/daily-tasks-history/completion-dates').catch(() => ({})),
+        api.get<any[]>('/api/wishes').catch(() => [])
       ]);
 
       // Build map of task_id -> completion date string (from daily_task_status history)
@@ -211,6 +250,21 @@ export default function Dashboard() {
         total_habits: habits.length,
         active_habits: habits.filter(h => h.is_active !== false).length
       });
+
+      // Calculate dream/wish stats
+      const wishList = Array.isArray(wishes) ? wishes : [];
+      setDreamStats({
+        total_dreams: wishList.length,
+        active_dreams: wishList.filter((w: any) => !w.graduated_to_goal && !w.graduated_to_project).length,
+        graduated_dreams: wishList.filter((w: any) => w.graduated_to_goal || w.graduated_to_project).length,
+      });
+
+      // Store all data for popups
+      setAllTasks(tasks);
+      setAllGoals([]); // loaded separately from dashboard summary
+      setAllProjects(projects);
+      setAllHabits(habits);
+      setAllDreams(wishList);
       
       // Create status map for quick lookup
       const statusMap = new Map(dailyStatuses.map(s => [s.task_id, s]));
@@ -702,7 +756,7 @@ export default function Dashboard() {
       {/* Stats in Grouped Panels */}
       <div className="stats-panels-grid">
         {/* Goals Panel */}
-        <div className="stats-panel" style={{ border: '4px solid #3B82F6' }}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #3B82F6' }} onClick={() => openPopup('goals')}>
           <div className="panel-title" style={{ color: '#3B82F6' }}>🎯 Goals</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#3B82F6' }}>
@@ -718,10 +772,11 @@ export default function Dashboard() {
               <div className="panel-stat-value">{summary.completed_goals || 0}</div>
             </div>
           </div>
+          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Projects Panel */}
-        <div className="stats-panel" style={{ border: '4px solid #F59E0B' }}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #F59E0B' }} onClick={() => openPopup('projects')}>
           <div className="panel-title" style={{ color: '#F59E0B' }}>📁 Projects</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#F59E0B' }}>
@@ -737,10 +792,11 @@ export default function Dashboard() {
               <div className="panel-stat-value">{projectStats.completed_projects}</div>
             </div>
           </div>
+          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Tasks Panel */}
-        <div className="stats-panel" style={{ border: '4px solid #EC4899' }}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #EC4899' }} onClick={() => openPopup('tasks')}>
           <div className="panel-title" style={{ color: '#EC4899' }}>📋 Tasks</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#EC4899' }}>
@@ -756,10 +812,11 @@ export default function Dashboard() {
               <div className="panel-stat-value">{taskStats.completed_tasks}</div>
             </div>
           </div>
+          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Habits Panel */}
-        <div className="stats-panel" style={{ border: '4px solid #A855F7' }}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #A855F7' }} onClick={() => openPopup('habits')}>
           <div className="panel-title" style={{ color: '#A855F7' }}>🎨 Habits</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#A855F7' }}>
@@ -775,6 +832,27 @@ export default function Dashboard() {
               <div className="panel-stat-value">{habitStats.total_habits - habitStats.active_habits}</div>
             </div>
           </div>
+          <div className="panel-click-hint">Click to view details →</div>
+        </div>
+
+        {/* Dreams Panel */}
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #06B6D4' }} onClick={() => openPopup('dreams')}>
+          <div className="panel-title" style={{ color: '#06B6D4' }}>💫 Dreams</div>
+          <div className="panel-stats">
+            <div className="panel-stat-item" style={{ backgroundColor: '#06B6D4' }}>
+              <div className="panel-stat-label">Total</div>
+              <div className="panel-stat-value">{dreamStats.total_dreams}</div>
+            </div>
+            <div className="panel-stat-item" style={{ backgroundColor: '#22D3EE' }}>
+              <div className="panel-stat-label">Active</div>
+              <div className="panel-stat-value">{dreamStats.active_dreams}</div>
+            </div>
+            <div className="panel-stat-item" style={{ backgroundColor: '#A5F3FC', color: '#164E63' }}>
+              <div className="panel-stat-label">Graduated</div>
+              <div className="panel-stat-value">{dreamStats.graduated_dreams}</div>
+            </div>
+          </div>
+          <div className="panel-click-hint">Click to view details →</div>
         </div>
       </div>
 
@@ -918,6 +996,142 @@ export default function Dashboard() {
             setIsChallengeFormOpen(false);
           }}
         />
+      )}
+
+      {/* Stats Detail Popup */}
+      {popupType && (
+        <div className="stats-popup-overlay" onClick={() => setPopupType(null)}>
+          <div className="stats-popup" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="stats-popup-header" style={{
+              background: popupType === 'goals' ? 'linear-gradient(135deg,#3B82F6,#6366F1)'
+                : popupType === 'projects' ? 'linear-gradient(135deg,#F59E0B,#EF4444)'
+                : popupType === 'tasks' ? 'linear-gradient(135deg,#EC4899,#F43F5E)'
+                : popupType === 'habits' ? 'linear-gradient(135deg,#A855F7,#8B5CF6)'
+                : 'linear-gradient(135deg,#06B6D4,#0EA5E9)'
+            }}>
+              <span className="stats-popup-title">
+                {popupType === 'goals' && '🎯 Goals'}
+                {popupType === 'projects' && '📁 Projects'}
+                {popupType === 'tasks' && '📋 Tasks'}
+                {popupType === 'habits' && '🎨 Habits'}
+                {popupType === 'dreams' && '💫 Dreams & Wishes'}
+              </span>
+              <div className="stats-popup-header-actions">
+                <button className="stats-popup-nav-btn" onClick={() => {
+                  const routes: Record<string, string> = {
+                    goals: '/life-goals', projects: '/projects',
+                    tasks: '/analytics?view=tasks', habits: '/habits', dreams: '/wishes'
+                  };
+                  navigate(routes[popupType!]);
+                  setPopupType(null);
+                }}>
+                  Go to full page →
+                </button>
+                <button className="stats-popup-close" onClick={() => setPopupType(null)}>✕</button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="stats-popup-body">
+              {popupLoading ? (
+                <div className="stats-popup-loading">Loading…</div>
+              ) : popupData.length === 0 ? (
+                <div className="stats-popup-empty">No items found.</div>
+              ) : (
+                <table className="stats-popup-table">
+                  <thead>
+                    <tr>
+                      {popupType === 'goals' && (<><th>#</th><th>Name</th><th>Period</th><th>Status</th><th>Progress</th></>)}
+                      {popupType === 'projects' && (<><th>#</th><th>Name</th><th>Pillar</th><th>Status</th><th>Due Date</th></>)}
+                      {popupType === 'tasks' && (<><th>#</th><th>Name</th><th>Pillar / Category</th><th>Frequency</th><th>Status</th></>)}
+                      {popupType === 'habits' && (<><th>#</th><th>Name</th><th>Pillar</th><th>Mode</th><th>Status</th></>)}
+                      {popupType === 'dreams' && (<><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Created</th></>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {popupData.map((item, i) => (
+                      <tr key={item.id || i} className={
+                        popupType === 'tasks'
+                          ? (item.is_completed ? 'popup-row-completed' : !item.is_active ? 'popup-row-inactive' : 'popup-row-active')
+                          : popupType === 'goals'
+                          ? (item.status === 'completed' ? 'popup-row-completed' : 'popup-row-active')
+                          : popupType === 'projects'
+                          ? (item.status === 'completed' ? 'popup-row-completed' : 'popup-row-active')
+                          : popupType === 'habits'
+                          ? (item.is_active === false ? 'popup-row-inactive' : 'popup-row-active')
+                          : ''
+                      }>
+                        <td style={{ color: '#aaa', fontSize: '11px' }}>{i + 1}</td>
+
+                        {popupType === 'goals' && (<>
+                          <td style={{ fontWeight: 600 }}>{item.name}</td>
+                          <td>{item.goal_time_period || '—'}</td>
+                          <td><span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : 'badge-blue'}`}>{item.status || 'active'}</span></td>
+                          <td>{item.overall_progress != null ? `${Math.round(item.overall_progress)}%` : '—'}</td>
+                        </>)}
+
+                        {popupType === 'projects' && (<>
+                          <td style={{ fontWeight: 600 }}>{item.name || item.title}</td>
+                          <td style={{ fontSize: '12px' }}>{item.pillar_name || '—'}</td>
+                          <td><span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : 'badge-orange'}`}>{item.status || 'active'}</span></td>
+                          <td style={{ fontSize: '12px' }}>{item.due_date ? new Date(item.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                        </>)}
+
+                        {popupType === 'tasks' && (<>
+                          <td style={{ fontWeight: 500 }}>{item.is_completed ? <s style={{color:'#aaa'}}>{item.name}</s> : !item.is_active ? <s style={{color:'#ccc'}}>{item.name}</s> : item.name}</td>
+                          <td style={{ fontSize: '12px' }}><div>{item.pillar_name || '—'}</div><div style={{color:'#888'}}>{item.category_name || ''}</div></td>
+                          <td style={{ fontSize: '12px', textTransform: 'capitalize' }}>{(item.follow_up_frequency || '').replace('_',' ')}</td>
+                          <td>
+                            {item.is_completed
+                              ? <span className="popup-badge badge-green">✅ Done</span>
+                              : !item.is_active
+                              ? <span className="popup-badge badge-gray">🗑️ Inactive</span>
+                              : <span className="popup-badge badge-yellow">🔄 Active</span>}
+                          </td>
+                        </>)}
+
+                        {popupType === 'habits' && (<>
+                          <td style={{ fontWeight: 500 }}>{item.name}</td>
+                          <td style={{ fontSize: '12px' }}>{item.pillar_name || '—'}</td>
+                          <td style={{ fontSize: '12px' }}>{(item.tracking_mode || '').replace(/_/g,' ')}</td>
+                          <td><span className={`popup-badge ${item.is_active === false ? 'badge-gray' : 'badge-purple'}`}>{item.is_active === false ? 'Inactive' : 'Active'}</span></td>
+                        </>)}
+
+                        {popupType === 'dreams' && (<>
+                          <td style={{ fontWeight: 500 }}>{item.title || item.name}</td>
+                          <td style={{ fontSize: '12px' }}>{item.dream_type || '—'}</td>
+                          <td>
+                            {(item.graduated_to_goal || item.graduated_to_project)
+                              ? <span className="popup-badge badge-green">🎓 Graduated</span>
+                              : <span className="popup-badge badge-cyan">💫 Dreaming</span>}
+                          </td>
+                          <td style={{ fontSize: '12px' }}>{item.created_at ? new Date(item.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+                        </>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="stats-popup-footer">
+              <span style={{ color: '#888', fontSize: '13px' }}>{popupData.length} items</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="stats-popup-nav-btn secondary" onClick={() => setPopupType(null)}>← Back to Dashboard</button>
+                <button className="stats-popup-nav-btn" onClick={() => {
+                  const routes: Record<string, string> = {
+                    goals: '/life-goals', projects: '/projects',
+                    tasks: '/analytics?view=tasks', habits: '/habits', dreams: '/wishes'
+                  };
+                  navigate(routes[popupType!]);
+                  setPopupType(null);
+                }}>Go to full page →</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

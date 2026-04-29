@@ -385,6 +385,30 @@
   transition: all 0.3s ease;
 }
 
+.stats-panel-clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.stats-panel-clickable:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.panel-click-hint {
+  text-align: center;
+  font-size: 11px;
+  color: #9ca3af;
+  padding: 6px 0 8px;
+  letter-spacing: 0.3px;
+  transition: color 0.2s;
+}
+
+.stats-panel-clickable:hover .panel-click-hint {
+  color: #6366f1;
+  font-weight: 600;
+}
+
 .stats-panel:hover {
   transform: translateY(-4px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
@@ -899,3 +923,183 @@
   font-size: 14px;
   font-weight: bold;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+
+/* ── Stats Detail Popup ─────────────────────────────────────── */
+.stats-popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.stats-popup {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  width: 100%;
+  max-width: 820px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.2s ease;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.stats-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.stats-popup-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.stats-popup-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.stats-popup-nav-btn {
+  padding: 7px 16px;
+  border: 2px solid rgba(255,255,255,0.7);
+  border-radius: 20px;
+  background: rgba(255,255,255,0.15);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+
+.stats-popup-nav-btn:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+.stats-popup-nav-btn.secondary {
+  border-color: #e2e8f0;
+  background: white;
+  color: #4a5568;
+}
+
+.stats-popup-nav-btn.secondary:hover {
+  background: #f7fafc;
+}
+
+.stats-popup-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.6);
+  background: rgba(255,255,255,0.15);
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+
+.stats-popup-close:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+.stats-popup-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 16px 20px;
+}
+
+.stats-popup-loading,
+.stats-popup-empty {
+  text-align: center;
+  padding: 48px;
+  color: #9ca3af;
+  font-size: 15px;
+}
+
+.stats-popup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.stats-popup-table th {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  padding: 10px 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.stats-popup-table th:first-child { border-radius: 8px 0 0 0; }
+.stats-popup-table th:last-child  { border-radius: 0 8px 0 0; }
+
+.stats-popup-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.popup-row-completed td { background: #f0fff4; }
+.popup-row-active    td { background: #fffff0; }
+.popup-row-inactive  td { background: #f7f7f7; opacity: 0.75; }
+
+.stats-popup-table tbody tr:hover td {
+  filter: brightness(0.97);
+}
+
+.popup-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-green  { background: #d1fae5; color: #065f46; }
+.badge-blue   { background: #dbeafe; color: #1e40af; }
+.badge-orange { background: #fed7aa; color: #92400e; }
+.badge-yellow { background: #fef9c3; color: #713f12; }
+.badge-gray   { background: #e5e7eb; color: #4b5563; }
+.badge-purple { background: #ede9fe; color: #4c1d95; }
+.badge-cyan   { background: #cffafe; color: #164e63; }
+
+.stats-popup-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-top: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  background: #fafafa;
+}
