@@ -3013,7 +3013,7 @@ export default function Analytics() {
           <div className="task-registry-section">
             <div className="registry-header">
               <div>
-                <h2 style={{ margin: 0 }}>📋 Task Registry</h2>
+                <h2 className="registry-title">📋 Task Registry</h2>
                 <p style={{ margin: '4px 0 0', color: '#666', fontSize: '13px' }}>
                   Every task you've ever created — your complete history of intentions and actions.
                 </p>
@@ -3063,6 +3063,50 @@ export default function Analytics() {
                 }}
               />
             </div>
+
+            {/* Pillar / Category breakdown */}
+            {!registryLoading && registryTasks.length > 0 && (() => {
+              const PILLAR_COLORS: Record<string, { bg: string; border: string; text: string; cat: string }> = {
+                'Hard Work': { bg: '#ebf4ff', border: '#4299e1', text: '#2b6cb0', cat: '#bee3f8' },
+                'Calmness':  { bg: '#f0fff4', border: '#48bb78', text: '#276749', cat: '#c6f6d5' },
+                'Family':    { bg: '#faf5ff', border: '#9f7aea', text: '#553c9a', cat: '#e9d8fd' },
+              };
+              const DEFAULT_COLOR = { bg: '#f7f8fa', border: '#a0aec0', text: '#4a5568', cat: '#e2e8f0' };
+
+              // Group tasks by pillar → category
+              const pillarMap: Record<string, Record<string, number>> = {};
+              registryTasks.forEach((t: any) => {
+                const p = t.pillar_name || 'Unknown';
+                const c = t.category_name || 'Unknown';
+                if (!pillarMap[p]) pillarMap[p] = {};
+                pillarMap[p][c] = (pillarMap[p][c] || 0) + 1;
+              });
+
+              return (
+                <div className="registry-breakdown">
+                  {Object.entries(pillarMap).map(([pillar, cats]) => {
+                    const col = PILLAR_COLORS[pillar] || DEFAULT_COLOR;
+                    const total = Object.values(cats).reduce((s, n) => s + n, 0);
+                    return (
+                      <div key={pillar} className="registry-breakdown-pillar" style={{ background: col.bg, borderColor: col.border }}>
+                        <div className="registry-breakdown-pillar-title" style={{ color: col.text }}>
+                          {pillar} <span className="registry-breakdown-total">{total}</span>
+                        </div>
+                        <div className="registry-breakdown-cats">
+                          {Object.entries(cats)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([cat, count]) => (
+                              <span key={cat} className="registry-breakdown-cat" style={{ background: col.cat, color: col.text }}>
+                                {cat} · {count}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {registryLoading ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>Loading task registry…</div>

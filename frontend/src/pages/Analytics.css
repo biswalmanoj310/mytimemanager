@@ -1043,7 +1043,62 @@
   margin-bottom: 32px;
 }
 
-.registry-header {
+.registry-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  background: linear-gradient(90deg, #4299e1 0%, #9f7aea 50%, #48bb78 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.3px;
+}
+
+.registry-breakdown {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.registry-breakdown-pillar {
+  flex: 1;
+  min-width: 200px;
+  border: 1.5px solid;
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.registry-breakdown-pillar-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.registry-breakdown-total {
+  background: rgba(0,0,0,0.1);
+  border-radius: 10px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.registry-breakdown-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.registry-breakdown-cat {
+  border-radius: 12px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
