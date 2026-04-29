@@ -89,7 +89,7 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const tasksData: any = await api.get('/api/tasks/');
+      const tasksData: any = await api.get('/api/tasks/?is_active=true&is_completed=false');
       console.log('✅ Tasks loaded:', tasksData);
       setTasks(Array.isArray(tasksData) ? tasksData : []);
     } catch (err: any) {
@@ -108,9 +108,6 @@ export const TaskSelector: React.FC<TaskSelectorProps> = ({
     }
 
     let filtered = [...tasks];
-
-    // Filter out inactive tasks - only show active tasks in dropdown
-    filtered = filtered.filter(t => t.is_active !== false);
 
     // Filter by frequency
     if (frequencyFilter !== 'all') {
