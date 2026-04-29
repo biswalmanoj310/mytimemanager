@@ -242,6 +242,8 @@ export default function Analytics() {
   const [registryLoading, setRegistryLoading] = useState(false);
   const [registryFilter, setRegistryFilter] = useState<'all' | 'in_progress' | 'completed' | 'inactive'>('all');
   const [registrySearch, setRegistrySearch] = useState('');
+  const [registryPillarFilter, setRegistryPillarFilter] = useState<string | null>(null);
+  const [registryCategoryFilter, setRegistryCategoryFilter] = useState<string | null>(null);
 
   
   // Detailed view - Week/Month-over-Week/Month toggles
@@ -3088,17 +3090,42 @@ export default function Analytics() {
                     const col = PILLAR_COLORS[pillar] || DEFAULT_COLOR;
                     const total = Object.values(cats).reduce((s, n) => s + n, 0);
                     return (
-                      <div key={pillar} className="registry-breakdown-pillar" style={{ background: col.bg, borderColor: col.border }}>
-                        <div className="registry-breakdown-pillar-title" style={{ color: col.text }}>
+                      <div key={pillar} className={`registry-breakdown-pillar ${registryPillarFilter === pillar && !registryCategoryFilter ? 'active' : ''}`} style={{ background: col.bg, borderColor: col.border }}>
+                        <button
+                          className="registry-breakdown-pillar-title"
+                          style={{ color: col.text, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                          onClick={() => {
+                            if (registryPillarFilter === pillar && !registryCategoryFilter) {
+                              setRegistryPillarFilter(null);
+                              setRegistryCategoryFilter(null);
+                            } else {
+                              setRegistryPillarFilter(pillar);
+                              setRegistryCategoryFilter(null);
+                            }
+                          }}
+                        >
                           {pillar} <span className="registry-breakdown-total">{total}</span>
-                        </div>
+                        </button>
                         <div className="registry-breakdown-cats">
                           {Object.entries(cats)
                             .sort((a, b) => b[1] - a[1])
                             .map(([cat, count]) => (
-                              <span key={cat} className="registry-breakdown-cat" style={{ background: col.cat, color: col.text }}>
+                              <button
+                                key={cat}
+                                className={`registry-breakdown-cat ${registryCategoryFilter === cat ? 'active' : ''}`}
+                                style={{ background: registryCategoryFilter === cat ? col.border : col.cat, color: registryCategoryFilter === cat ? '#fff' : col.text, border: 'none', cursor: 'pointer', borderRadius: '12px', padding: '2px 9px', fontSize: '11px', fontWeight: 500 }}
+                                onClick={() => {
+                                  if (registryCategoryFilter === cat) {
+                                    setRegistryCategoryFilter(null);
+                                    setRegistryPillarFilter(null);
+                                  } else {
+                                    setRegistryCategoryFilter(cat);
+                                    setRegistryPillarFilter(pillar);
+                                  }
+                                }}
+                              >
                                 {cat} · {count}
-                              </span>
+                              </button>
                             ))}
                         </div>
                       </div>
@@ -3121,7 +3148,12 @@ export default function Analytics() {
                   if (registryFilter === 'in_progress') return t.is_active && !t.is_completed;
                   if (registryFilter === 'completed') return t.is_completed;
                   if (registryFilter === 'inactive') return !t.is_active;
-                  return true; // all
+                  return true;
+                })
+                .filter(t => {
+                  if (registryCategoryFilter) return (t.category_name || '') === registryCategoryFilter;
+                  if (registryPillarFilter) return (t.pillar_name || '') === registryPillarFilter;
+                  return true;
                 })
                 .filter(t => {
                   if (!registrySearch.trim()) return true;
@@ -3216,8 +3248,22 @@ export default function Analytics() {
                       ))}
                     </tbody>
                   </table>
-                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#888', textAlign: 'right' }}>
-                    Showing {filtered.length} of {registryTasks.length} tasks
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#888', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>
+                      {(registryPillarFilter || registryCategoryFilter) && (
+                        <span>
+                          Filtered by: {registryCategoryFilter
+                            ? <strong>{registryPillarFilter} › {registryCategoryFilter}</strong>
+                            : <strong>{registryPillarFilter}</strong>}
+                          {' '}
+                          <button onClick={() => { setRegistryPillarFilter(null); setRegistryCategoryFilter(null); }}
+                            style={{ fontSize: '11px', padding: '1px 8px', border: '1px solid #ccc', borderRadius: '10px', background: '#fff', cursor: 'pointer', color: '#555' }}>
+                            ✕ Clear
+                          </button>
+                        </span>
+                      )}
+                    </span>
+                    <span>Showing {filtered.length} of {registryTasks.length} tasks</span>
                   </div>
                 </div>
               );
