@@ -141,10 +141,8 @@ export default function Dashboard() {
   const [habitStats, setHabitStats] = useState<HabitStats>({ total_habits: 0, active_habits: 0 });
   const [dreamStats, setDreamStats] = useState<DreamStats>({ total_dreams: 0, active_dreams: 0, graduated_dreams: 0 });
 
-  // Popup state
-  const [popupType, setPopupType] = useState<PopupType>(null);
-  const [popupData, setPopupData] = useState<any[]>([]);
-  const [popupLoading, setPopupLoading] = useState(false);
+  // Popup state — single object to avoid multiple re-renders
+  const [popup, setPopup] = useState<{ type: PopupType; data: any[]; loading: boolean }>({ type: null, data: [], loading: false });
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [allGoals, setAllGoals] = useState<any[]>([]);
   const [allProjects, setAllProjects] = useState<any[]>([]);
@@ -177,30 +175,24 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const openPopup = async (type: PopupType) => {
-    // Lock body scroll to prevent scrollbar shift that causes Recharts redraws
     document.body.style.overflow = 'hidden';
-    setPopupType(type);
-    setPopupLoading(true);
+    setPopup({ type, data: [], loading: true });
     try {
-      if (type === 'goals') {
-        const goals = await api.get<any[]>('/api/life-goals/');
-        setPopupData(Array.isArray(goals) ? goals : []);
-      } else if (type === 'projects') {
-        setPopupData(allProjects);
-      } else if (type === 'tasks') {
-        setPopupData(allTasks);
-      } else if (type === 'habits') {
-        setPopupData(allHabits);
-      } else if (type === 'dreams') {
-        setPopupData(allDreams);
-      }
-    } catch { setPopupData([]); }
-    setPopupLoading(false);
+      let data: any[] = [];
+      if (type === 'goals') data = await api.get<any[]>('/api/life-goals/').then(r => Array.isArray(r) ? r : []);
+      else if (type === 'projects') data = allProjects;
+      else if (type === 'tasks') data = allTasks;
+      else if (type === 'habits') data = allHabits;
+      else if (type === 'dreams') data = allDreams;
+      setPopup({ type, data, loading: false });
+    } catch {
+      setPopup({ type, data: [], loading: false });
+    }
   };
 
   const closePopup = () => {
     document.body.style.overflow = '';
-    setPopupType(null);
+    setPopup({ type: null, data: [], loading: false });
   };
   console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
 
@@ -1018,111 +1010,124 @@ export default function Dashboard() {
             boxSizing: 'border-box',
           }}
         >
-          <div className="stats-popup" onClick={e => e.stopPropagation()}>
+      {/* Stats Detail Popup — rendered via portal */}
+      {popup.type && createPortal(
+        <div
+          onClick={closePopup}
+          style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 99999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '20px', boxSizing: 'border-box',
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
+              width: '100%', maxWidth: '860px', maxHeight: '80vh',
+              display: 'flex', flexDirection: 'column',
+              overflow: 'hidden',
+            }}
+          >
             {/* Header */}
-            <div className="stats-popup-header" style={{
-              background: popupType === 'goals' ? 'linear-gradient(135deg,#3B82F6,#6366F1)'
-                : popupType === 'projects' ? 'linear-gradient(135deg,#F59E0B,#EF4444)'
-                : popupType === 'tasks' ? 'linear-gradient(135deg,#EC4899,#F43F5E)'
-                : popupType === 'habits' ? 'linear-gradient(135deg,#A855F7,#8B5CF6)'
-                : 'linear-gradient(135deg,#06B6D4,#0EA5E9)'
+            <div style={{
+              background: popup.type === 'goals' ? 'linear-gradient(135deg,#3B82F6,#6366F1)'
+                : popup.type === 'projects' ? 'linear-gradient(135deg,#F59E0B,#EF4444)'
+                : popup.type === 'tasks' ? 'linear-gradient(135deg,#EC4899,#F43F5E)'
+                : popup.type === 'habits' ? 'linear-gradient(135deg,#A855F7,#8B5CF6)'
+                : 'linear-gradient(135deg,#06B6D4,#0EA5E9)',
+              padding: '16px 20px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexShrink: 0,
             }}>
-              <span className="stats-popup-title">
-                {popupType === 'goals' && '🎯 Goals'}
-                {popupType === 'projects' && '📁 Projects'}
-                {popupType === 'tasks' && '📋 Tasks'}
-                {popupType === 'habits' && '🎨 Habits'}
-                {popupType === 'dreams' && '💫 Dreams & Wishes'}
+              <span style={{ fontSize: '20px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px' }}>
+                {popup.type === 'goals' && '🎯 Goals'}
+                {popup.type === 'projects' && '📁 Projects'}
+                {popup.type === 'tasks' && '📋 Tasks'}
+                {popup.type === 'habits' && '🎨 Habits'}
+                {popup.type === 'dreams' && '💫 Dreams & Wishes'}
               </span>
-              <div className="stats-popup-header-actions">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <button className="stats-popup-nav-btn" onClick={() => {
                   const routes: Record<string, string> = {
                     goals: '/life-goals', projects: '/projects',
                     tasks: '/analytics?view=tasks', habits: '/habits', dreams: '/wishes'
                   };
-                  navigate(routes[popupType!]);
+                  navigate(routes[popup.type!]);
                   closePopup();
-                }}>
-                  Go to full page →
-                </button>
-                <button className="stats-popup-close" onClick={closePopup}>✕</button>
+                }}>Go to full page →</button>
+                <button onClick={closePopup} style={{
+                  width: '32px', height: '32px', borderRadius: '50%',
+                  border: '2px solid rgba(255,255,255,0.6)',
+                  background: 'rgba(255,255,255,0.15)', color: '#fff',
+                  fontSize: '14px', cursor: 'pointer', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center',
+                }}>✕</button>
               </div>
             </div>
 
             {/* Body */}
-            <div className="stats-popup-body">
-              {popupLoading ? (
-                <div className="stats-popup-loading">Loading…</div>
-              ) : popupData.length === 0 ? (
-                <div className="stats-popup-empty">No items found.</div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px' }}>
+              {popup.loading ? (
+                <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', fontSize: '15px' }}>Loading…</div>
+              ) : popup.data.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', fontSize: '15px' }}>No items found.</div>
               ) : (
                 <table className="stats-popup-table">
                   <thead>
                     <tr>
-                      {popupType === 'goals' && (<><th>#</th><th>Name</th><th>Period</th><th>Status</th><th>Progress</th></>)}
-                      {popupType === 'projects' && (<><th>#</th><th>Name</th><th>Pillar</th><th>Status</th><th>Due Date</th></>)}
-                      {popupType === 'tasks' && (<><th>#</th><th>Name</th><th>Pillar / Category</th><th>Frequency</th><th>Status</th></>)}
-                      {popupType === 'habits' && (<><th>#</th><th>Name</th><th>Pillar</th><th>Mode</th><th>Status</th></>)}
-                      {popupType === 'dreams' && (<><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Created</th></>)}
+                      {popup.type === 'goals'    && (<><th>#</th><th>Name</th><th>Period</th><th>Status</th><th>Progress</th></>)}
+                      {popup.type === 'projects' && (<><th>#</th><th>Name</th><th>Pillar</th><th>Status</th><th>Due Date</th></>)}
+                      {popup.type === 'tasks'    && (<><th>#</th><th>Name</th><th>Pillar / Category</th><th>Frequency</th><th>Status</th></>)}
+                      {popup.type === 'habits'   && (<><th>#</th><th>Name</th><th>Pillar</th><th>Mode</th><th>Status</th></>)}
+                      {popup.type === 'dreams'   && (<><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Created</th></>)}
                     </tr>
                   </thead>
                   <tbody>
-                    {popupData.map((item, i) => (
+                    {popup.data.map((item, i) => (
                       <tr key={item.id || i} className={
-                        popupType === 'tasks'
+                        popup.type === 'tasks'
                           ? (item.is_completed ? 'popup-row-completed' : !item.is_active ? 'popup-row-inactive' : 'popup-row-active')
-                          : popupType === 'goals'
+                          : (popup.type === 'goals' || popup.type === 'projects')
                           ? (item.status === 'completed' ? 'popup-row-completed' : 'popup-row-active')
-                          : popupType === 'projects'
-                          ? (item.status === 'completed' ? 'popup-row-completed' : 'popup-row-active')
-                          : popupType === 'habits'
+                          : popup.type === 'habits'
                           ? (item.is_active === false ? 'popup-row-inactive' : 'popup-row-active')
                           : ''
                       }>
                         <td style={{ color: '#aaa', fontSize: '11px' }}>{i + 1}</td>
-
-                        {popupType === 'goals' && (<>
+                        {popup.type === 'goals' && (<>
                           <td style={{ fontWeight: 600 }}>{item.name}</td>
                           <td>{item.goal_time_period || '—'}</td>
                           <td><span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : 'badge-blue'}`}>{item.status || 'active'}</span></td>
                           <td>{item.overall_progress != null ? `${Math.round(item.overall_progress)}%` : '—'}</td>
                         </>)}
-
-                        {popupType === 'projects' && (<>
+                        {popup.type === 'projects' && (<>
                           <td style={{ fontWeight: 600 }}>{item.name || item.title}</td>
                           <td style={{ fontSize: '12px' }}>{item.pillar_name || '—'}</td>
                           <td><span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : 'badge-orange'}`}>{item.status || 'active'}</span></td>
                           <td style={{ fontSize: '12px' }}>{item.due_date ? new Date(item.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
                         </>)}
-
-                        {popupType === 'tasks' && (<>
+                        {popup.type === 'tasks' && (<>
                           <td style={{ fontWeight: 500 }}>{item.is_completed ? <s style={{color:'#aaa'}}>{item.name}</s> : !item.is_active ? <s style={{color:'#ccc'}}>{item.name}</s> : item.name}</td>
-                          <td style={{ fontSize: '12px' }}><div>{item.pillar_name || '—'}</div><div style={{color:'#888'}}>{item.category_name || ''}</div></td>
-                          <td style={{ fontSize: '12px', textTransform: 'capitalize' }}>{(item.follow_up_frequency || '').replace('_',' ')}</td>
-                          <td>
-                            {item.is_completed
-                              ? <span className="popup-badge badge-green">✅ Done</span>
-                              : !item.is_active
-                              ? <span className="popup-badge badge-gray">🗑️ Inactive</span>
-                              : <span className="popup-badge badge-yellow">🔄 Active</span>}
-                          </td>
+                          <td style={{ fontSize: '12px' }}><div>{item.pillar_name || '—'}</div><div style={{color:'#888'}}>{item.category_name||''}</div></td>
+                          <td style={{ fontSize: '12px', textTransform: 'capitalize' }}>{(item.follow_up_frequency||'').replace('_',' ')}</td>
+                          <td>{item.is_completed ? <span className="popup-badge badge-green">✅ Done</span> : !item.is_active ? <span className="popup-badge badge-gray">🗑️ Inactive</span> : <span className="popup-badge badge-yellow">🔄 Active</span>}</td>
                         </>)}
-
-                        {popupType === 'habits' && (<>
+                        {popup.type === 'habits' && (<>
                           <td style={{ fontWeight: 500 }}>{item.name}</td>
                           <td style={{ fontSize: '12px' }}>{item.pillar_name || '—'}</td>
-                          <td style={{ fontSize: '12px' }}>{(item.tracking_mode || '').replace(/_/g,' ')}</td>
-                          <td><span className={`popup-badge ${item.is_active === false ? 'badge-gray' : 'badge-purple'}`}>{item.is_active === false ? 'Inactive' : 'Active'}</span></td>
+                          <td style={{ fontSize: '12px' }}>{(item.tracking_mode||'').replace(/_/g,' ')}</td>
+                          <td><span className={`popup-badge ${item.is_active===false ? 'badge-gray' : 'badge-purple'}`}>{item.is_active===false ? 'Inactive' : 'Active'}</span></td>
                         </>)}
-
-                        {popupType === 'dreams' && (<>
+                        {popup.type === 'dreams' && (<>
                           <td style={{ fontWeight: 500 }}>{item.title || item.name}</td>
                           <td style={{ fontSize: '12px' }}>{item.dream_type || '—'}</td>
-                          <td>
-                            {(item.graduated_to_goal || item.graduated_to_project)
-                              ? <span className="popup-badge badge-green">🎓 Graduated</span>
-                              : <span className="popup-badge badge-cyan">💫 Dreaming</span>}
-                          </td>
+                          <td>{(item.graduated_to_goal||item.graduated_to_project) ? <span className="popup-badge badge-green">🎓 Graduated</span> : <span className="popup-badge badge-cyan">💫 Dreaming</span>}</td>
                           <td style={{ fontSize: '12px' }}>{item.created_at ? new Date(item.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
                         </>)}
                       </tr>
@@ -1133,16 +1138,13 @@ export default function Dashboard() {
             </div>
 
             {/* Footer */}
-            <div className="stats-popup-footer">
-              <span style={{ color: '#888', fontSize: '13px' }}>{popupData.length} items</span>
-              <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', borderTop:'1px solid #e5e7eb', flexShrink:0, background:'#fafafa' }}>
+              <span style={{ color:'#888', fontSize:'13px' }}>{popup.data.length} items</span>
+              <div style={{ display:'flex', gap:'8px' }}>
                 <button className="stats-popup-nav-btn secondary" onClick={closePopup}>← Back to Dashboard</button>
                 <button className="stats-popup-nav-btn" onClick={() => {
-                  const routes: Record<string, string> = {
-                    goals: '/life-goals', projects: '/projects',
-                    tasks: '/analytics?view=tasks', habits: '/habits', dreams: '/wishes'
-                  };
-                  navigate(routes[popupType!]);
+                  const routes: Record<string, string> = { goals:'/life-goals', projects:'/projects', tasks:'/analytics?view=tasks', habits:'/habits', dreams:'/wishes' };
+                  navigate(routes[popup.type!]);
                   closePopup();
                 }}>Go to full page →</button>
               </div>
