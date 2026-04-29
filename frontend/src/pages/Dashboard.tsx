@@ -1174,7 +1174,7 @@ export default function Dashboard() {
                               <td style={{ color: '#aaa', fontSize: '11px', padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{i + 1}</td>
 
                               {popup.type === 'habits' && (<>
-                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</td>
+                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.name}</td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.habit_type || '—'}</td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.target_frequency || '—'}</td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
@@ -1211,7 +1211,7 @@ export default function Dashboard() {
                                 const statusBg: Record<string,{bg:string;text:string}> = { completed:{bg:'#dcfce7',text:'#166534'}, on_track:{bg:'#d1fae5',text:'#065f46'}, in_progress:{bg:'#dbeafe',text:'#1d4ed8'}, at_risk:{bg:'#fef9c3',text:'#b45309'}, behind:{bg:'#fee2e2',text:'#dc2626'}, not_started:{bg:'#f1f5f9',text:'#64748b'} };
                                 const sc = statusBg[item.status] || statusBg['not_started'];
                                 return (<>
-                                  <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.status === 'completed' && '🏆 '}{item.name || item.goal_name}</td>
+                                  <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.status === 'completed' && '🏆 '}{item.name || item.goal_name}</td>
                                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '600', color: numProjects > 0 ? '#374151' : '#cbd5e1' }}>{numProjects > 0 ? numProjects : '—'}</td>
                                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '600', color: '#374151' }}>{total > 0 ? total : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center' }}>
@@ -1237,7 +1237,7 @@ export default function Dashboard() {
                               })()}
 
                               {popup.type === 'projects' && (<>
-                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name || item.project_name}</td>
+                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.name || item.project_name}</td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '600', color: '#374151' }}>{item.progress?.total_tasks ?? '—'}</td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '600', color: '#059669' }}>
                                   {item.progress?.completed_tasks != null
@@ -1273,7 +1273,7 @@ export default function Dashboard() {
                               </>)}
 
                               {popup.type === 'tasks' && (<>
-                                <td style={{ fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                <td style={{ fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
                                   {item.is_completed ? <s style={{color:'#9ca3af'}}>{item.name}</s> : !item.is_active ? <s style={{color:'#d1d5db'}}>{item.name}</s> : item.name}
                                 </td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
@@ -1300,7 +1300,7 @@ export default function Dashboard() {
                                 const sc = wishStatusColors[item.status] || { bg:'#f1f5f9', text:'#64748b' };
                                 const prc = prioColors[item.priority] || prioColors['low'];
                                 return (<>
-                                  <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.status === 'achieved' && '🌟 '}{item.title || item.name}</td>
+                                  <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.status === 'achieved' && '🌟 '}{item.title || item.name}</td>
                                   <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
                                     <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{wishStatusLabels[item.status] || item.status}</span>
                                   </td>

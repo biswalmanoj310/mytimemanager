@@ -1049,6 +1049,7 @@
 
 .stats-popup-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -1063,6 +1064,20 @@
   padding: 10px 12px;
   text-align: left;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Name column (2nd th) stretches to fill space */
+.stats-popup-table th:nth-child(2) {
+  width: auto;
+  min-width: 160px;
+}
+
+/* All other columns stay compact */
+.stats-popup-table th:not(:nth-child(2)) {
+  width: 1%;
+  white-space: nowrap;
 }
 
 .stats-popup-table th:first-child { border-radius: 8px 0 0 0; }
@@ -1072,6 +1087,17 @@
   padding: 9px 12px;
   border-bottom: 1px solid #f0f0f0;
   vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Name cell (2nd td) stretches */
+.stats-popup-table td:nth-child(2) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0; /* forces ellipsis inside fixed table-layout */
 }
 
 .popup-row-completed td { background: #f0fff4; }
