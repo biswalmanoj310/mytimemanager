@@ -1031,7 +1031,7 @@ export default function Dashboard() {
               background: '#ffffff',
               borderRadius: '16px',
               boxShadow: '0 24px 64px rgba(0,0,0,0.3)',
-              width: '100%', maxWidth: '860px', maxHeight: '80vh',
+              width: '100%', maxWidth: '1200px', maxHeight: '85vh',
               display: 'flex', flexDirection: 'column',
               overflow: 'hidden',
             }}
@@ -1079,9 +1079,9 @@ export default function Dashboard() {
                 let chipField: string | null = null;
                 if (popup.type === 'habits') chipField = 'category_name';
                 else if (popup.type === 'tasks') chipField = 'pillar_name';
-                else if (popup.type === 'goals') chipField = 'goal_time_period';
+                else if (popup.type === 'goals') chipField = 'pillar_name';
                 else if (popup.type === 'projects') chipField = 'pillar_name';
-                else if (popup.type === 'dreams') chipField = 'dream_type';
+                else if (popup.type === 'dreams') chipField = 'status';
 
                 const chipCounts: Record<string, number> = {};
                 if (chipField) {
@@ -1132,12 +1132,15 @@ export default function Dashboard() {
                         {chips.map(([label, count]) => {
                           const active = popupCategoryFilter === label;
                           const c = chipColor(label, active);
+                          const displayLabel = popup.type === 'dreams'
+                            ? ({ exploring:'🔍 Exploring', dreaming:'💭 Dreaming', planning:'📋 Planning', achieved:'🏆 Achieved', released:'🕊️ Released', moved_to_goal:'🎯 Moved to Goal' } as Record<string,string>)[label] || label
+                            : label;
                           return (
                             <button key={label}
                               onClick={() => setPopupCategoryFilter(active ? null : label)}
                               style={{ padding: '4px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
                                 background: c.bg, color: c.text }}>
-                              {label} <span style={{ opacity: 0.75 }}>({count})</span>
+                              {displayLabel} <span style={{ opacity: 0.75 }}>({count})</span>
                             </button>
                           );
                         })}
@@ -1150,16 +1153,20 @@ export default function Dashboard() {
                         <thead>
                           <tr>
                             {popup.type === 'habits' && (<><th>#</th><th>Habit Name</th><th>Type</th><th>Frequency</th><th>Pillar</th><th>Category</th><th>Streak</th><th>Week %</th><th>Month %</th><th>Overall %</th></>)}
-                            {popup.type === 'goals'   && (<><th>#</th><th>Name</th><th>Period</th><th>Pillar</th><th>Status</th><th>Milestones</th><th>Progress</th></>)}
+                            {popup.type === 'goals'   && (<><th>#</th><th>Goal Name</th><th>Projects</th><th>Total Tasks</th><th>Done</th><th>Remaining</th><th>Overdue</th><th>Target Date</th><th>Pillar</th><th>Category</th><th>Status</th></>)}
                             {popup.type === 'projects'&& (<><th>#</th><th>Project Name</th><th>Total</th><th>Done</th><th>Remaining</th><th>Overdue</th><th>Target Date</th><th>Pillar</th><th>Category</th><th>Status</th></>)}
                             {popup.type === 'tasks'   && (<><th>#</th><th>Task Name</th><th>Pillar</th><th>Category</th><th>Frequency</th><th>Status</th></>)}
-                            {popup.type === 'dreams'  && (<><th>#</th><th>Title</th><th>Type</th><th>Pillar</th><th>Status</th><th>Created</th></>)}
+                            {popup.type === 'dreams'  && (<><th>#</th><th>Title</th><th>Status</th><th>Priority</th><th>Timeframe</th><th>Pillar</th><th>Category</th><th>Linked Goal</th><th>Days Dreaming</th></>)}
                           </tr>
                         </thead>
                         <tbody>
                           {filtered.map((item, i) => (
                             <tr key={item.id || i} style={{
                               background: popup.type === 'habits' ? habitRowBg(item)
+                                : popup.type === 'goals'
+                                  ? (item.status === 'completed' ? '#bbf7d0' : item.status === 'behind' || (item.stats?.overdue_tasks || 0) > 0 ? '#fecdd3' : item.status === 'at_risk' ? '#fef08a' : item.status === 'on_track' || item.status === 'in_progress' ? '#bbf7d0' : (item.stats?.completed_tasks || 0) > 0 ? '#bbf7d0' : '#fef08a')
+                                : popup.type === 'dreams'
+                                  ? (item.status === 'achieved' ? '#f0fdf4' : item.status === 'released' ? '#f1f5f9' : item.priority === 'high' ? '#fff1f2' : item.priority === 'medium' ? '#fefce8' : '#fdf4ff')
                                 : item.is_completed || item.status === 'completed' ? '#dcfce7'
                                 : !item.is_active ? '#f3f4f6'
                                 : '#fff'
@@ -1194,30 +1201,40 @@ export default function Dashboard() {
                                 </td>
                               </>)}
 
-                              {popup.type === 'goals' && (<>
-                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.name || item.goal_name}</td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>{item.goal_time_period || '—'}</td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                  {item.pillar_name
-                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
-                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
-                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
-                                        {item.pillar_name}
-                                      </span>
-                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
-                                </td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
-                                  <span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : item.status === 'at_risk' ? 'badge-orange' : 'badge-blue'}`}>
-                                    {(item.status || 'active').replace(/_/g,' ')}
-                                  </span>
-                                </td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', textAlign: 'center' }}>
-                                  {item.stats?.total_milestones > 0 ? `${item.stats.completed_milestones ?? 0}/${item.stats.total_milestones}` : '—'}
-                                </td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: pctColor(item.overall_progress ?? null) }}>
-                                  {item.overall_progress != null ? `${Math.round(item.overall_progress)}%` : '—'}
-                                </td>
-                              </>)}
+                              {popup.type === 'goals' && (() => {
+                                const total = item.stats?.total_tasks || 0;
+                                const done = item.stats?.completed_tasks || 0;
+                                const remaining = total - done;
+                                const overdue = item.stats?.overdue_tasks || 0;
+                                const numProjects = item.stats?.goal_projects?.total || 0;
+                                const targetPast = (() => { if (!item.target_date || item.status === 'completed') return false; const d = new Date(item.target_date); d.setHours(0,0,0,0); const t = new Date(); t.setHours(0,0,0,0); return d < t; })();
+                                const statusBg: Record<string,{bg:string;text:string}> = { completed:{bg:'#dcfce7',text:'#166534'}, on_track:{bg:'#d1fae5',text:'#065f46'}, in_progress:{bg:'#dbeafe',text:'#1d4ed8'}, at_risk:{bg:'#fef9c3',text:'#b45309'}, behind:{bg:'#fee2e2',text:'#dc2626'}, not_started:{bg:'#f1f5f9',text:'#64748b'} };
+                                const sc = statusBg[item.status] || statusBg['not_started'];
+                                return (<>
+                                  <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.status === 'completed' && '🏆 '}{item.name || item.goal_name}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '600', color: numProjects > 0 ? '#374151' : '#cbd5e1' }}>{numProjects > 0 ? numProjects : '—'}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '600', color: '#374151' }}>{total > 0 ? total : <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center' }}>
+                                    {total > 0 ? <><span style={{ fontWeight: '600', color: done === total ? '#059669' : '#374151' }}>{done}</span><span style={{ color: '#94a3b8', fontSize: '11px', marginLeft: '3px' }}>({Math.round((done/total)*100)}%)</span></> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center' }}>
+                                    {remaining > 0 ? <span style={{ fontWeight: '700', color: '#0284c7' }}>{remaining}</span> : <span style={{ color: '#86efac', fontWeight: '600' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center' }}>
+                                    {overdue > 0 ? <span style={{ background: '#fee2e2', color: '#dc2626', fontWeight: '700', fontSize: '12px', padding: '2px 7px', borderRadius: '10px', border: '1px solid #fca5a5' }}>🚨 {overdue}</span> : <span style={{ color: '#86efac', fontWeight: '600' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                    {item.target_date ? <span style={{ color: targetPast ? '#dc2626' : '#374151', fontWeight: targetPast ? '700' : '400' }}>{targetPast && '⚠ '}{item.target_date}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                    {item.pillar_name ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe', color: item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>{item.pillar_name === 'Hard Work' ? '💼' : item.pillar_name === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {item.pillar_name}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                    <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{(item.status || 'not started').replace(/_/g,' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}</span>
+                                  </td>
+                                </>);
+                              })()}
 
                               {popup.type === 'projects' && (<>
                                 <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name || item.project_name}</td>
@@ -1275,27 +1292,34 @@ export default function Dashboard() {
                                 </td>
                               </>)}
 
-                              {popup.type === 'dreams' && (<>
-                                <td style={{ fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.title || item.name}</td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>{item.dream_type || '—'}</td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                  {item.pillar_name
-                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
-                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
-                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
-                                        {item.pillar_name}
-                                      </span>
-                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
-                                </td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
-                                  {(item.graduated_to_goal || item.graduated_to_project)
-                                    ? <span className="popup-badge badge-green">🎓 Graduated</span>
-                                    : <span className="popup-badge badge-cyan">💫 Dreaming</span>}
-                                </td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>
-                                  {item.created_at ? new Date(item.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
-                                </td>
-                              </>)}
+                              {popup.type === 'dreams' && (() => {
+                                const wishStatusColors: Record<string,{bg:string;text:string}> = { exploring:{bg:'#ccfbf1',text:'#0f766e'}, dreaming:{bg:'#ede9fe',text:'#7c3aed'}, planning:{bg:'#dbeafe',text:'#1d4ed8'}, achieved:{bg:'#dcfce7',text:'#166534'}, released:{bg:'#f1f5f9',text:'#64748b'}, moved_to_goal:{bg:'#dcfce7',text:'#166534'} };
+                                const wishStatusLabels: Record<string,string> = { exploring:'🔍 Exploring', dreaming:'💭 Dreaming', planning:'📋 Planning', achieved:'🏆 Achieved', released:'🕊️ Released', moved_to_goal:'🎯 Moved to Goal' };
+                                const prioColors: Record<string,{bg:string;text:string}> = { high:{bg:'#fee2e2',text:'#dc2626'}, medium:{bg:'#fef9c3',text:'#b45309'}, low:{bg:'#f1f5f9',text:'#64748b'} };
+                                const prioLabels: Record<string,string> = { high:'🔴 High', medium:'🟡 Med', low:'🟢 Low' };
+                                const sc = wishStatusColors[item.status] || { bg:'#f1f5f9', text:'#64748b' };
+                                const prc = prioColors[item.priority] || prioColors['low'];
+                                return (<>
+                                  <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.status === 'achieved' && '🌟 '}{item.title || item.name}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                    <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>{wishStatusLabels[item.status] || item.status}</span>
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                    <span style={{ padding: '2px 7px', borderRadius: '7px', fontSize: '11px', fontWeight: '700', background: prc.bg, color: prc.text }}>{prioLabels[item.priority] || '🟢 Low'}</span>
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151', whiteSpace: 'nowrap' }}>{item.estimated_timeframe || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                    {item.pillar_name ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600', background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe', color: item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>{item.pillar_name === 'Hard Work' ? '💼' : item.pillar_name === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {item.pillar_name}</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151', whiteSpace: 'nowrap' }}>{item.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center' }}>
+                                    {item.linked_goal_id || item.related_goal_id ? <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '2px 7px', borderRadius: '7px', fontSize: '11px', fontWeight: '600' }}>🎯 Linked</span> : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', color: '#6b7280', fontSize: '12px' }}>
+                                    {item.stats?.days_dreaming != null ? `${item.stats.days_dreaming}d` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </td>
+                                </>);
+                              })()}
                             </tr>
                           ))}
                         </tbody>
@@ -1308,7 +1332,7 @@ export default function Dashboard() {
 
             {/* Footer */}
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', borderTop:'1px solid #e5e7eb', flexShrink:0, background:'#fafafa' }}>
-              <span style={{ color:'#888', fontSize:'13px' }}>{popupCategoryFilter ? `${popup.data.filter(item => (item[popup.type === 'habits' ? 'category_name' : popup.type === 'goals' ? 'goal_time_period' : 'pillar_name'] || 'Other') === popupCategoryFilter).length} of ${popup.data.length}` : popup.data.length} items</span>
+              <span style={{ color:'#888', fontSize:'13px' }}>{popupCategoryFilter ? `${popup.data.filter(item => (item[popup.type === 'habits' ? 'category_name' : popup.type === 'dreams' ? 'status' : 'pillar_name'] || 'Other') === popupCategoryFilter).length} of ${popup.data.length}` : popup.data.length} items</span>
               <div style={{ display:'flex', gap:'10px' }}>
                 <button onClick={closePopup} style={{
                   padding: '8px 18px', borderRadius: '8px', border: 'none', cursor: 'pointer',
