@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { formatDateForInput, getWeekStart } from '../utils/dateHelpers';
@@ -756,7 +757,7 @@ export default function Dashboard() {
       {/* Stats in Grouped Panels */}
       <div className="stats-panels-grid">
         {/* Goals Panel */}
-        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #3B82F6' }} onClick={() => openPopup('goals')}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #3B82F6' }} onClick={e => { e.stopPropagation(); openPopup('goals'); }}>
           <div className="panel-title" style={{ color: '#3B82F6' }}>🎯 Goals</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#3B82F6' }}>
@@ -772,11 +773,10 @@ export default function Dashboard() {
               <div className="panel-stat-value">{summary.completed_goals || 0}</div>
             </div>
           </div>
-          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Projects Panel */}
-        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #F59E0B' }} onClick={() => openPopup('projects')}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #F59E0B' }} onClick={e => { e.stopPropagation(); openPopup('projects'); }}>
           <div className="panel-title" style={{ color: '#F59E0B' }}>📁 Projects</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#F59E0B' }}>
@@ -792,11 +792,10 @@ export default function Dashboard() {
               <div className="panel-stat-value">{projectStats.completed_projects}</div>
             </div>
           </div>
-          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Tasks Panel */}
-        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #EC4899' }} onClick={() => openPopup('tasks')}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #EC4899' }} onClick={e => { e.stopPropagation(); openPopup('tasks'); }}>
           <div className="panel-title" style={{ color: '#EC4899' }}>📋 Tasks</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#EC4899' }}>
@@ -812,11 +811,10 @@ export default function Dashboard() {
               <div className="panel-stat-value">{taskStats.completed_tasks}</div>
             </div>
           </div>
-          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Habits Panel */}
-        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #A855F7' }} onClick={() => openPopup('habits')}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #A855F7' }} onClick={e => { e.stopPropagation(); openPopup('habits'); }}>
           <div className="panel-title" style={{ color: '#A855F7' }}>🎨 Habits</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#A855F7' }}>
@@ -832,11 +830,10 @@ export default function Dashboard() {
               <div className="panel-stat-value">{habitStats.total_habits - habitStats.active_habits}</div>
             </div>
           </div>
-          <div className="panel-click-hint">Click to view details →</div>
         </div>
 
         {/* Dreams Panel */}
-        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #06B6D4' }} onClick={() => openPopup('dreams')}>
+        <div className="stats-panel stats-panel-clickable" style={{ border: '4px solid #06B6D4' }} onClick={e => { e.stopPropagation(); openPopup('dreams'); }}>
           <div className="panel-title" style={{ color: '#06B6D4' }}>💫 Dreams</div>
           <div className="panel-stats">
             <div className="panel-stat-item" style={{ backgroundColor: '#06B6D4' }}>
@@ -852,7 +849,6 @@ export default function Dashboard() {
               <div className="panel-stat-value">{dreamStats.graduated_dreams}</div>
             </div>
           </div>
-          <div className="panel-click-hint">Click to view details →</div>
         </div>
       </div>
 
@@ -998,8 +994,8 @@ export default function Dashboard() {
         />
       )}
 
-      {/* Stats Detail Popup */}
-      {popupType && (
+      {/* Stats Detail Popup — rendered via portal to escape stacking context */}
+      {popupType && createPortal(
         <div className="stats-popup-overlay" onClick={() => setPopupType(null)}>
           <div className="stats-popup" onClick={e => e.stopPropagation()}>
             {/* Header */}
@@ -1132,7 +1128,7 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   );
 }
