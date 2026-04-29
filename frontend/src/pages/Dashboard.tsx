@@ -1003,7 +1003,21 @@ export default function Dashboard() {
 
       {/* Stats Detail Popup — rendered via portal to escape stacking context */}
       {popupType && createPortal(
-        <div className="stats-popup-overlay" onClick={closePopup}>
+        <div
+          onClick={closePopup}
+          style={{
+            position: 'fixed',
+            top: 0, left: 0, right: 0, bottom: 0,
+            width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.55)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            boxSizing: 'border-box',
+          }}
+        >
           <div className="stats-popup" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="stats-popup-header" style={{
