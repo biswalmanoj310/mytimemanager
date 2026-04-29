@@ -143,6 +143,7 @@ export default function Dashboard() {
 
   // Popup state — single object to avoid multiple re-renders
   const [popup, setPopup] = useState<{ type: PopupType; data: any[]; loading: boolean }>({ type: null, data: [], loading: false });
+  const [popupCategoryFilter, setPopupCategoryFilter] = useState<string | null>(null);
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [allGoals, setAllGoals] = useState<any[]>([]);
   const [allProjects, setAllProjects] = useState<any[]>([]);
@@ -176,6 +177,7 @@ export default function Dashboard() {
 
   const openPopup = async (type: PopupType) => {
     document.body.style.overflow = 'hidden';
+    setPopupCategoryFilter(null);
     setPopup({ type, data: [], loading: true });
     try {
       let data: any[] = [];
@@ -192,6 +194,7 @@ export default function Dashboard() {
 
   const closePopup = () => {
     document.body.style.overflow = '';
+    setPopupCategoryFilter(null);
     setPopup({ type: null, data: [], loading: false });
   };
   console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
@@ -1055,74 +1058,235 @@ export default function Dashboard() {
             </div>
 
             {/* Body */}
-            <div style={{ overflowY: 'auto', flex: 1, padding: '16px 20px' }}>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '0' }}>
               {popup.loading ? (
                 <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', fontSize: '15px' }}>Loading…</div>
               ) : popup.data.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px', color: '#9ca3af', fontSize: '15px' }}>No items found.</div>
-              ) : (
-                <table className="stats-popup-table">
-                  <thead>
-                    <tr>
-                      {popup.type === 'goals'    && (<><th>#</th><th>Name</th><th>Period</th><th>Status</th><th>Progress</th></>)}
-                      {popup.type === 'projects' && (<><th>#</th><th>Name</th><th>Pillar</th><th>Status</th><th>Due Date</th></>)}
-                      {popup.type === 'tasks'    && (<><th>#</th><th>Name</th><th>Pillar / Category</th><th>Frequency</th><th>Status</th></>)}
-                      {popup.type === 'habits'   && (<><th>#</th><th>Name</th><th>Pillar</th><th>Mode</th><th>Status</th></>)}
-                      {popup.type === 'dreams'   && (<><th>#</th><th>Title</th><th>Type</th><th>Status</th><th>Created</th></>)}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {popup.data.map((item, i) => (
-                      <tr key={item.id || i} className={
-                        popup.type === 'tasks'
-                          ? (item.is_completed ? 'popup-row-completed' : !item.is_active ? 'popup-row-inactive' : 'popup-row-active')
-                          : (popup.type === 'goals' || popup.type === 'projects')
-                          ? (item.status === 'completed' ? 'popup-row-completed' : 'popup-row-active')
-                          : popup.type === 'habits'
-                          ? (item.is_active === false ? 'popup-row-inactive' : 'popup-row-active')
-                          : ''
-                      }>
-                        <td style={{ color: '#aaa', fontSize: '11px' }}>{i + 1}</td>
-                        {popup.type === 'goals' && (<>
-                          <td style={{ fontWeight: 600 }}>{item.name}</td>
-                          <td>{item.goal_time_period || '—'}</td>
-                          <td><span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : 'badge-blue'}`}>{item.status || 'active'}</span></td>
-                          <td>{item.overall_progress != null ? `${Math.round(item.overall_progress)}%` : '—'}</td>
-                        </>)}
-                        {popup.type === 'projects' && (<>
-                          <td style={{ fontWeight: 600 }}>{item.name || item.title}</td>
-                          <td style={{ fontSize: '12px' }}>{item.pillar_name || '—'}</td>
-                          <td><span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : 'badge-orange'}`}>{item.status || 'active'}</span></td>
-                          <td style={{ fontSize: '12px' }}>{item.due_date ? new Date(item.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
-                        </>)}
-                        {popup.type === 'tasks' && (<>
-                          <td style={{ fontWeight: 500 }}>{item.is_completed ? <s style={{color:'#aaa'}}>{item.name}</s> : !item.is_active ? <s style={{color:'#ccc'}}>{item.name}</s> : item.name}</td>
-                          <td style={{ fontSize: '12px' }}><div>{item.pillar_name || '—'}</div><div style={{color:'#888'}}>{item.category_name||''}</div></td>
-                          <td style={{ fontSize: '12px', textTransform: 'capitalize' }}>{(item.follow_up_frequency||'').replace('_',' ')}</td>
-                          <td>{item.is_completed ? <span className="popup-badge badge-green">✅ Done</span> : !item.is_active ? <span className="popup-badge badge-gray">🗑️ Inactive</span> : <span className="popup-badge badge-yellow">🔄 Active</span>}</td>
-                        </>)}
-                        {popup.type === 'habits' && (<>
-                          <td style={{ fontWeight: 500 }}>{item.name}</td>
-                          <td style={{ fontSize: '12px' }}>{item.pillar_name || '—'}</td>
-                          <td style={{ fontSize: '12px' }}>{(item.tracking_mode||'').replace(/_/g,' ')}</td>
-                          <td><span className={`popup-badge ${item.is_active===false ? 'badge-gray' : 'badge-purple'}`}>{item.is_active===false ? 'Inactive' : 'Active'}</span></td>
-                        </>)}
-                        {popup.type === 'dreams' && (<>
-                          <td style={{ fontWeight: 500 }}>{item.title || item.name}</td>
-                          <td style={{ fontSize: '12px' }}>{item.dream_type || '—'}</td>
-                          <td>{(item.graduated_to_goal||item.graduated_to_project) ? <span className="popup-badge badge-green">🎓 Graduated</span> : <span className="popup-badge badge-cyan">💫 Dreaming</span>}</td>
-                          <td style={{ fontSize: '12px' }}>{item.created_at ? new Date(item.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
-                        </>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
+              ) : (() => {
+                // Build category/filter chips based on popup type
+                const pctColor = (v: number | null) => v == null ? '#9ca3af' : v >= 70 ? '#059669' : v >= 40 ? '#b45309' : '#dc2626';
+
+                // ── derive chip groups ──────────────────────────────────
+                let chipField: string | null = null;
+                if (popup.type === 'habits') chipField = 'category_name';
+                else if (popup.type === 'tasks') chipField = 'pillar_name';
+                else if (popup.type === 'goals') chipField = 'goal_time_period';
+                else if (popup.type === 'projects') chipField = 'pillar_name';
+                else if (popup.type === 'dreams') chipField = 'dream_type';
+
+                const chipCounts: Record<string, number> = {};
+                if (chipField) {
+                  popup.data.forEach(item => {
+                    const v = item[chipField!] || 'Other';
+                    chipCounts[v] = (chipCounts[v] || 0) + 1;
+                  });
+                }
+                const chips = Object.entries(chipCounts);
+
+                // ── filter data ─────────────────────────────────────────
+                const filtered = popupCategoryFilter
+                  ? popup.data.filter(item => (item[chipField!] || 'Other') === popupCategoryFilter)
+                  : popup.data;
+
+                // ── chip colours ────────────────────────────────────────
+                const chipColor = (label: string, active: boolean) => {
+                  if (popup.type === 'habits' || popup.type === 'tasks' || popup.type === 'projects') {
+                    if (label === 'Hard Work') return active ? { bg: '#1d4ed8', text: '#fff' } : { bg: '#dbeafe', text: '#1d4ed8' };
+                    if (label === 'Calmness')  return active ? { bg: '#059669', text: '#fff' } : { bg: '#d1fae5', text: '#065f46' };
+                    if (label === 'Family')    return active ? { bg: '#7c3aed', text: '#fff' } : { bg: '#ede9fe', text: '#5b21b6' };
+                  }
+                  return active ? { bg: '#6366f1', text: '#fff' } : { bg: '#e0e7ff', text: '#4338ca' };
+                };
+
+                // ── habit row background ────────────────────────────────
+                const habitRowBg = (item: any) => {
+                  const week = item.stats?.week_success_rate ?? null;
+                  const month = item.stats?.month_success_rate ?? null;
+                  if (week == null && month == null) return '#fff';
+                  if ((week ?? 0) > 60 && (month ?? 0) > 60) return '#dcfce7';
+                  if ((week ?? 0) > 60 || (month ?? 0) > 60) return '#fef9c3';
+                  return '#fee2e2';
+                };
+
+                return (
+                  <>
+                    {/* Category filter chips */}
+                    {chips.length > 1 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '14px 20px 10px', borderBottom: '1px solid #f3f4f6', background: '#fafafa' }}>
+                        <button
+                          onClick={() => setPopupCategoryFilter(null)}
+                          style={{ padding: '4px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+                            background: popupCategoryFilter === null ? '#374151' : '#e5e7eb',
+                            color:  popupCategoryFilter === null ? '#fff' : '#374151' }}>
+                          All ({popup.data.length})
+                        </button>
+                        {chips.map(([label, count]) => {
+                          const active = popupCategoryFilter === label;
+                          const c = chipColor(label, active);
+                          return (
+                            <button key={label}
+                              onClick={() => setPopupCategoryFilter(active ? null : label)}
+                              style={{ padding: '4px 14px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: '600',
+                                background: c.bg, color: c.text }}>
+                              {label} <span style={{ opacity: 0.75 }}>({count})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Table */}
+                    <div style={{ overflowX: 'auto', padding: '0 4px' }}>
+                      <table className="stats-popup-table">
+                        <thead>
+                          <tr>
+                            {popup.type === 'habits' && (<><th>#</th><th>Habit Name</th><th>Type</th><th>Frequency</th><th>Pillar</th><th>Category</th><th>Streak</th><th>Week %</th><th>Month %</th><th>Overall %</th></>)}
+                            {popup.type === 'goals'   && (<><th>#</th><th>Name</th><th>Period</th><th>Pillar</th><th>Status</th><th>Milestones</th><th>Progress</th></>)}
+                            {popup.type === 'projects'&& (<><th>#</th><th>Name</th><th>Pillar</th><th>Category</th><th>Status</th><th>Due Date</th></>)}
+                            {popup.type === 'tasks'   && (<><th>#</th><th>Task Name</th><th>Pillar</th><th>Category</th><th>Frequency</th><th>Status</th></>)}
+                            {popup.type === 'dreams'  && (<><th>#</th><th>Title</th><th>Type</th><th>Pillar</th><th>Status</th><th>Created</th></>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filtered.map((item, i) => (
+                            <tr key={item.id || i} style={{
+                              background: popup.type === 'habits' ? habitRowBg(item)
+                                : item.is_completed || item.status === 'completed' ? '#dcfce7'
+                                : !item.is_active ? '#f3f4f6'
+                                : '#fff'
+                            }}>
+                              <td style={{ color: '#aaa', fontSize: '11px', padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{i + 1}</td>
+
+                              {popup.type === 'habits' && (<>
+                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.habit_type || '—'}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.target_frequency || '—'}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                  {item.pillar_name
+                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
+                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
+                                        {item.pillar_name === 'Hard Work' ? '💼' : item.pillar_name === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {item.pillar_name}
+                                      </span>
+                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: (item.stats?.current_streak ?? 0) >= 7 ? '#f59e0b' : '#374151' }}>
+                                  {(item.stats?.current_streak ?? 0) > 0 ? `${item.stats.current_streak}🔥` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: pctColor(item.stats?.week_success_rate ?? null) }}>
+                                  {item.stats?.week_success_rate != null ? `${item.stats.week_success_rate}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: pctColor(item.stats?.month_success_rate ?? null) }}>
+                                  {item.stats?.month_success_rate != null ? `${item.stats.month_success_rate}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: pctColor(item.stats?.success_rate ?? null) }}>
+                                  {item.stats?.success_rate != null ? `${item.stats.success_rate}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                              </>)}
+
+                              {popup.type === 'goals' && (<>
+                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.name || item.goal_name}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>{item.goal_time_period || '—'}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                  {item.pillar_name
+                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
+                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
+                                        {item.pillar_name}
+                                      </span>
+                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                  <span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : item.status === 'at_risk' ? 'badge-orange' : 'badge-blue'}`}>
+                                    {(item.status || 'active').replace(/_/g,' ')}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', textAlign: 'center' }}>
+                                  {item.stats?.total_milestones > 0 ? `${item.stats.completed_milestones ?? 0}/${item.stats.total_milestones}` : '—'}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', textAlign: 'center', fontWeight: '700', color: pctColor(item.overall_progress ?? null) }}>
+                                  {item.overall_progress != null ? `${Math.round(item.overall_progress)}%` : '—'}
+                                </td>
+                              </>)}
+
+                              {popup.type === 'projects' && (<>
+                                <td style={{ fontWeight: 600, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.name || item.project_name}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                  {item.pillar_name
+                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
+                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
+                                        {item.pillar_name}
+                                      </span>
+                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>{item.category_name || '—'}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                  <span className={`popup-badge ${item.status === 'completed' ? 'badge-green' : item.status === 'at_risk' ? 'badge-orange' : 'badge-blue'}`}>
+                                    {(item.status || 'active').replace(/_/g,' ')}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>
+                                  {item.due_date ? new Date(item.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
+                                </td>
+                              </>)}
+
+                              {popup.type === 'tasks' && (<>
+                                <td style={{ fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid #f3f4f6', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {item.is_completed ? <s style={{color:'#9ca3af'}}>{item.name}</s> : !item.is_active ? <s style={{color:'#d1d5db'}}>{item.name}</s> : item.name}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                  {item.pillar_name
+                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
+                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
+                                        {item.pillar_name}
+                                      </span>
+                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.category_name || '—'}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', textTransform: 'capitalize' }}>{(item.follow_up_frequency || '').replace(/_/g,' ')}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                  {item.is_completed ? <span className="popup-badge badge-green">✅ Done</span> : !item.is_active ? <span className="popup-badge badge-gray">Inactive</span> : <span className="popup-badge badge-yellow">Active</span>}
+                                </td>
+                              </>)}
+
+                              {popup.type === 'dreams' && (<>
+                                <td style={{ fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>{item.title || item.name}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>{item.dream_type || '—'}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                  {item.pillar_name
+                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
+                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
+                                        {item.pillar_name}
+                                      </span>
+                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
+                                  {(item.graduated_to_goal || item.graduated_to_project)
+                                    ? <span className="popup-badge badge-green">🎓 Graduated</span>
+                                    : <span className="popup-badge badge-cyan">💫 Dreaming</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px' }}>
+                                  {item.created_at ? new Date(item.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
+                                </td>
+                              </>)}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Footer */}
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', borderTop:'1px solid #e5e7eb', flexShrink:0, background:'#fafafa' }}>
-              <span style={{ color:'#888', fontSize:'13px' }}>{popup.data.length} items</span>
+              <span style={{ color:'#888', fontSize:'13px' }}>{popupCategoryFilter ? `${popup.data.filter(item => (item[popup.type === 'habits' ? 'category_name' : popup.type === 'goals' ? 'goal_time_period' : 'pillar_name'] || 'Other') === popupCategoryFilter).length} of ${popup.data.length}` : popup.data.length} items</span>
               <div style={{ display:'flex', gap:'8px' }}>
                 <button className="stats-popup-nav-btn secondary" onClick={closePopup}>← Back to Dashboard</button>
                 <button className="stats-popup-nav-btn" onClick={() => {
