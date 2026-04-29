@@ -1068,17 +1068,12 @@
   text-overflow: ellipsis;
 }
 
-/* Name column (2nd th) stretches to fill space */
-.stats-popup-table th:nth-child(2) {
-  width: auto;
-  min-width: 160px;
+/* # column always narrow */
+.stats-popup-table th:first-child {
+  width: 32px;
 }
 
-/* All other columns stay compact */
-.stats-popup-table th:not(:nth-child(2)) {
-  width: 1%;
-  white-space: nowrap;
-}
+/* All th use min content width by default; override per-type via inline style is fine */
 
 .stats-popup-table th:first-child { border-radius: 8px 0 0 0; }
 .stats-popup-table th:last-child  { border-radius: 0 8px 0 0; }
@@ -1090,14 +1085,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* Name cell (2nd td) stretches */
-.stats-popup-table td:nth-child(2) {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 0; /* forces ellipsis inside fixed table-layout */
 }
 
 .popup-row-completed td { background: #f0fff4; }

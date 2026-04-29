@@ -1152,11 +1152,11 @@ export default function Dashboard() {
                       <table className="stats-popup-table">
                         <thead>
                           <tr>
-                            {popup.type === 'habits' && (<><th>#</th><th>Habit Name</th><th>Type</th><th>Frequency</th><th>Pillar</th><th>Category</th><th>Streak</th><th>Week %</th><th>Month %</th><th>Overall %</th></>)}
-                            {popup.type === 'goals'   && (<><th>#</th><th>Goal Name</th><th>Projects</th><th>Total Tasks</th><th>Done</th><th>Remaining</th><th>Overdue</th><th>Target Date</th><th>Pillar</th><th>Category</th><th>Status</th></>)}
-                            {popup.type === 'projects'&& (<><th>#</th><th>Project Name</th><th>Total</th><th>Done</th><th>Remaining</th><th>Overdue</th><th>Target Date</th><th>Pillar</th><th>Category</th><th>Status</th></>)}
-                            {popup.type === 'tasks'   && (<><th>#</th><th>Task Name</th><th>Pillar</th><th>Category</th><th>Frequency</th><th>Status</th></>)}
-                            {popup.type === 'dreams'  && (<><th>#</th><th>Title</th><th>Status</th><th>Priority</th><th>Timeframe</th><th>Pillar</th><th>Category</th><th>Linked Goal</th><th>Days Dreaming</th></>)}
+                            {popup.type === 'habits' && (<><th style={{width:32}}>#</th><th>Habit Name</th><th style={{width:90}}>Type</th><th style={{width:90}}>Frequency</th><th style={{width:110}}>Pillar</th><th style={{width:100}}>Category</th><th style={{width:64}}>Streak</th><th style={{width:72}}>Week %</th><th style={{width:80}}>Month %</th><th style={{width:84}}>Overall %</th></>)}
+                            {popup.type === 'goals'   && (<><th style={{width:32}}>#</th><th>Goal Name</th><th style={{width:68}}>Projects</th><th style={{width:90}}>Total Tasks</th><th style={{width:90}}>Done</th><th style={{width:88}}>Remaining</th><th style={{width:76}}>Overdue</th><th style={{width:106}}>Target Date</th><th style={{width:110}}>Pillar</th><th style={{width:100}}>Category</th><th style={{width:96}}>Status</th></>)}
+                            {popup.type === 'projects'&& (<><th style={{width:32}}>#</th><th>Project Name</th><th style={{width:54}}>Total</th><th style={{width:100}}>Done</th><th style={{width:88}}>Remaining</th><th style={{width:72}}>Overdue</th><th style={{width:100}}>Target Date</th><th style={{width:110}}>Pillar</th><th style={{width:96}}>Category</th><th style={{width:96}}>Status</th></>)}
+                            {popup.type === 'tasks'   && (<><th style={{width:32}}>#</th><th style={{width:98}}>Created</th><th>Task Name</th><th style={{width:140}}>Pillar / Category</th><th style={{width:98}}>Due Date</th><th style={{width:72}}>Frequency</th><th style={{width:80}}>Status</th></>)}
+                            {popup.type === 'dreams'  && (<><th style={{width:32}}>#</th><th>Title</th><th style={{width:120}}>Status</th><th style={{width:72}}>Priority</th><th style={{width:90}}>Timeframe</th><th style={{width:110}}>Pillar</th><th style={{width:96}}>Category</th><th style={{width:88}}>Linked Goal</th><th style={{width:106}}>Days Dreaming</th></>)}
                           </tr>
                         </thead>
                         <tbody>
@@ -1273,22 +1273,30 @@ export default function Dashboard() {
                               </>)}
 
                               {popup.type === 'tasks' && (<>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '11px', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                                  {item.created_at ? new Date(item.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}
+                                </td>
                                 <td style={{ fontWeight: 500, padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
                                   {item.is_completed ? <s style={{color:'#9ca3af'}}>{item.name}</s> : !item.is_active ? <s style={{color:'#d1d5db'}}>{item.name}</s> : item.name}
                                 </td>
                                 <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
-                                  {item.pillar_name
-                                    ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
-                                        background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
-                                        color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
-                                        {item.pillar_name}
-                                      </span>
-                                    : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  <div>
+                                    {item.pillar_name
+                                      ? <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                                          background: item.pillar_name === 'Hard Work' ? '#dbeafe' : item.pillar_name === 'Calmness' ? '#d1fae5' : '#ede9fe',
+                                          color:      item.pillar_name === 'Hard Work' ? '#1d4ed8' : item.pillar_name === 'Calmness' ? '#065f46' : '#5b21b6' }}>
+                                          {item.pillar_name === 'Hard Work' ? '💼' : item.pillar_name === 'Calmness' ? '🧘' : '👨‍👩‍👦'} {item.pillar_name}
+                                        </span>
+                                      : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                  </div>
+                                  {item.category_name && <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '2px' }}>{item.category_name}</div>}
                                 </td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151' }}>{item.category_name || '—'}</td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', textTransform: 'capitalize' }}>{(item.follow_up_frequency || '').replace(/_/g,' ')}</td>
-                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6' }}>
-                                  {item.is_completed ? <span className="popup-badge badge-green">✅ Done</span> : !item.is_active ? <span className="popup-badge badge-gray">Inactive</span> : <span className="popup-badge badge-yellow">Active</span>}
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', color: '#374151', whiteSpace: 'nowrap' }}>
+                                  {item.due_date ? new Date(item.due_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', fontSize: '12px', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{(item.follow_up_frequency || '').replace(/_/g,' ')}</td>
+                                <td style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                  {item.is_completed ? <span className="popup-badge badge-green">✅ Done</span> : !item.is_active ? <span className="popup-badge badge-gray">Inactive</span> : <span className="popup-badge badge-yellow">🔄 Active</span>}
                                 </td>
                               </>)}
 
@@ -1340,7 +1348,7 @@ export default function Dashboard() {
                   display: 'flex', alignItems: 'center', gap: '6px',
                 }}>← Dashboard</button>
                 <button onClick={() => {
-                  const routes: Record<string, string> = { goals:'/goals', projects:'/tasks?tab=projects', tasks:'/tasks', habits:'/tasks?tab=habits', dreams:'/goals?tab=wishes' };
+                  const routes: Record<string, string> = { goals:'/goals', projects:'/tasks?tab=projects', tasks:'/analytics?view=tasks', habits:'/tasks?tab=habits', dreams:'/goals?tab=wishes' };
                   navigate(routes[popup.type!]);
                   closePopup();
                 }} style={{
