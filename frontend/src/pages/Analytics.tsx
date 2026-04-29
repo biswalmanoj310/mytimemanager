@@ -234,6 +234,15 @@ export default function Analytics() {
   // Balance viz period: 'today' | 'week' | 'month'
   const [balancePeriod, setBalancePeriod] = useState<'today' | 'week' | 'month'>('today');
 
+  // Task Registry state
+  const [registryTasks, setRegistryTasks] = useState<any[]>([]);
+  const [registryGoals, setRegistryGoals] = useState<any[]>([]);
+  const [registryProjects, setRegistryProjects] = useState<any[]>([]);
+  const [registryWishes, setRegistryWishes] = useState<any[]>([]);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryFilter, setRegistryFilter] = useState<'all' | 'in_progress' | 'completed' | 'inactive'>('all');
+  const [registrySearch, setRegistrySearch] = useState('');
+
   
   // Detailed view - Week/Month-over-Week/Month toggles
   const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
@@ -390,6 +399,13 @@ export default function Analytics() {
     }
   }, [viewMode, detailedViewType, circleOfLifePeriod, circleOfLifeType]);
 
+  // Load task registry when tasks tab becomes active
+  useEffect(() => {
+    if (viewMode === 'tasks') {
+      loadTaskRegistry();
+    }
+  }, [viewMode]);
+
   // Load pillars, categories, and tasks configuration from API
   const loadConfiguration = async () => {
     try {
@@ -431,8 +447,27 @@ export default function Analytics() {
       console.error('Error loading configuration:', error);
     }
   };
+
+  const loadTaskRegistry = async () => {
+    setRegistryLoading(true);
+    try {
+      const [tasksRes, goalsRes, projectsRes, wishesRes] = await Promise.all([
+        apiClient.get('/api/tasks/?limit=100000'),
+        apiClient.get('/api/life-goals/'),
+        apiClient.get('/api/projects/'),
+        apiClient.get('/api/wishes/'),
+      ]);
+      setRegistryTasks(Array.isArray(tasksRes.data) ? tasksRes.data : []);
+      setRegistryGoals(Array.isArray(goalsRes.data) ? goalsRes.data : []);
+      setRegistryProjects(Array.isArray(projectsRes.data) ? projectsRes.data : []);
+      setRegistryWishes(Array.isArray(wishesRes.data) ? wishesRes.data : []);
+    } catch (err) {
+      console.error('Failed to load task registry:', err);
+    } finally {
+      setRegistryLoading(false);
+    }
+  };
   
-  // Helper functions for sorting based on configuration
   const getPillarOrder = (pillarName: string): number => {
     const pillar = pillarsConfig.find(p => p.name === pillarName);
     return pillar ? pillar.order : 999;
@@ -2973,6 +3008,179 @@ export default function Analytics() {
       {/* TASKS MODE: Timeline & Completion View */}
       {viewMode === 'tasks' && (
         <div className="tasks-view-section">
+
+          {/* ── TASK REGISTRY ─────────────────────────────────────────── */}
+          <div className="task-registry-section">
+            <div className="registry-header">
+              <div>
+                <h2 style={{ margin: 0 }}>📋 Task Registry</h2>
+                <p style={{ margin: '4px 0 0', color: '#666', fontSize: '13px' }}>
+                  Every task you've ever created — your complete history of intentions and actions.
+                </p>
+              </div>
+              <button
+                onClick={loadTaskRegistry}
+                style={{ padding: '6px 14px', background: '#4299e1', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                🔄 Refresh
+              </button>
+            </div>
+
+            {/* Filter buttons */}
+            <div className="registry-filters">
+              {([
+                { key: 'all', label: '📂 All Tasks' },
+                { key: 'in_progress', label: '🟡 In Progress' },
+                { key: 'completed', label: '✅ Completed' },
+                { key: 'inactive', label: '🗑️ Inactive / Deleted' },
+              ] as { key: typeof registryFilter; label: string }[]).map(f => (
+                <button
+                  key={f.key}
+                  className={`registry-filter-btn ${registryFilter === f.key ? 'active' : ''}`}
+                  onClick={() => setRegistryFilter(f.key)}
+                >
+                  {f.label}
+                  <span className="registry-filter-count">
+                    {f.key === 'all' ? registryTasks.length
+                      : f.key === 'in_progress' ? registryTasks.filter(t => t.is_active && !t.is_completed).length
+                      : f.key === 'completed' ? registryTasks.filter(t => t.is_completed).length
+                      : registryTasks.filter(t => !t.is_active).length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div style={{ marginBottom: '12px' }}>
+              <input
+                type="text"
+                placeholder="🔍 Search tasks by name, category, pillar…"
+                value={registrySearch}
+                onChange={e => setRegistrySearch(e.target.value)}
+                style={{
+                  width: '100%', padding: '8px 12px', borderRadius: '6px',
+                  border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box'
+                }}
+              />
+            </div>
+
+            {registryLoading ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>Loading task registry…</div>
+            ) : (() => {
+              const today = new Date();
+              const goalMap = Object.fromEntries(registryGoals.map((g: any) => [g.id, g.name || g.title]));
+              const projectMap = Object.fromEntries(registryProjects.map((p: any) => [p.id, p.name || p.title]));
+              const wishMap = Object.fromEntries(registryWishes.map((w: any) => [w.id, w.title || w.name]));
+
+              const filtered = registryTasks
+                .filter(t => {
+                  if (registryFilter === 'in_progress') return t.is_active && !t.is_completed;
+                  if (registryFilter === 'completed') return t.is_completed;
+                  if (registryFilter === 'inactive') return !t.is_active;
+                  return true; // all
+                })
+                .filter(t => {
+                  if (!registrySearch.trim()) return true;
+                  const q = registrySearch.toLowerCase();
+                  return (
+                    (t.name || '').toLowerCase().includes(q) ||
+                    (t.category_name || '').toLowerCase().includes(q) ||
+                    (t.pillar_name || '').toLowerCase().includes(q) ||
+                    (t.follow_up_frequency || '').toLowerCase().includes(q)
+                  );
+                })
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+              const getRowClass = (t: any) => {
+                if (t.is_completed) return 'registry-row-completed';
+                if (!t.is_active) return 'registry-row-inactive';
+                return 'registry-row-inprogress';
+              };
+
+              const getStatusBadge = (t: any) => {
+                if (t.is_completed) return <span className="registry-badge badge-completed">✅ Completed</span>;
+                if (!t.is_active) return <span className="registry-badge badge-inactive">🗑️ Inactive</span>;
+                return <span className="registry-badge badge-inprogress">🔄 In Progress</span>;
+              };
+
+              const getDayCount = (t: any) => {
+                const created = new Date(t.created_at);
+                const end = t.is_completed && t.completed_at ? new Date(t.completed_at) : today;
+                return Math.max(0, Math.floor((end.getTime() - created.getTime()) / 86400000));
+              };
+
+              const getDayLabel = (t: any) => {
+                const days = getDayCount(t);
+                if (t.is_completed) return `${days}d to complete`;
+                if (!t.is_active) return `${days}d active`;
+                return `${days}d running`;
+              };
+
+              const getLinkedItem = (t: any) => {
+                if (t.goal_id && goalMap[t.goal_id]) return `🎯 ${goalMap[t.goal_id]}`;
+                if (t.project_id && projectMap[t.project_id]) return `📁 ${projectMap[t.project_id]}`;
+                if (t.related_wish_id && wishMap[t.related_wish_id]) return `💫 ${wishMap[t.related_wish_id]}`;
+                return <span style={{ color: '#aaa' }}>—</span>;
+              };
+
+              if (filtered.length === 0) {
+                return <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>No tasks found for this filter.</div>;
+              }
+
+              return (
+                <div style={{ overflowX: 'auto' }}>
+                  <table className="registry-table">
+                    <thead>
+                      <tr>
+                        <th>Created</th>
+                        <th>Task Name</th>
+                        <th>Pillar / Category</th>
+                        <th>Goal / Project / Dream</th>
+                        <th>Due Date</th>
+                        <th>Days</th>
+                        <th>Frequency</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(t => (
+                        <tr key={t.id} className={getRowClass(t)}>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
+                            {new Date(t.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </td>
+                          <td style={{ fontWeight: 500, minWidth: '160px' }}>
+                            {!t.is_active ? <span style={{ textDecoration: 'line-through', color: '#999' }}>{t.name}</span> : t.name}
+                          </td>
+                          <td style={{ fontSize: '12px' }}>
+                            <div style={{ fontWeight: 600 }}>{t.pillar_name || '—'}</div>
+                            <div style={{ color: '#666' }}>{t.category_name || ''}</div>
+                          </td>
+                          <td style={{ fontSize: '12px' }}>{getLinkedItem(t)}</td>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: '12px' }}>
+                            {t.due_date
+                              ? new Date(t.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                              : <span style={{ color: '#aaa' }}>—</span>}
+                          </td>
+                          <td style={{ fontSize: '12px', textAlign: 'center' }}>
+                            <span title={getDayLabel(t)}>{getDayCount(t)}d</span>
+                          </td>
+                          <td style={{ fontSize: '12px', textTransform: 'capitalize' }}>
+                            {(t.follow_up_frequency || '').replace('_', ' ')}
+                          </td>
+                          <td>{getStatusBadge(t)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ marginTop: '8px', fontSize: '12px', color: '#888', textAlign: 'right' }}>
+                    Showing {filtered.length} of {registryTasks.length} tasks
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* ── DAILY BREAKDOWN (existing) ─────────────────────────────── */}
           <h2>📅 Time Spent by Pillar - Daily Breakdown</h2>
           <p className="chart-description">See how you spend time each day across your life pillars</p>
           

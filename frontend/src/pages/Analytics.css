@@ -1034,6 +1034,136 @@
   margin-top: 2rem;
 }
 
+/* ── Task Registry ──────────────────────────────────────────── */
+.task-registry-section {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  padding: 20px;
+  margin-bottom: 32px;
+}
+
+.registry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.registry-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.registry-filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: #f9f9f9;
+  color: #555;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.15s;
+}
+
+.registry-filter-btn:hover {
+  background: #eef2ff;
+  border-color: #4299e1;
+  color: #2b6cb0;
+}
+
+.registry-filter-btn.active {
+  background: #4299e1;
+  border-color: #4299e1;
+  color: white;
+  font-weight: 600;
+}
+
+.registry-filter-count {
+  background: rgba(0,0,0,0.12);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.registry-filter-btn.active .registry-filter-count {
+  background: rgba(255,255,255,0.25);
+}
+
+.registry-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.registry-table th {
+  background: #f7f8fa;
+  color: #555;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 10px 12px;
+  border-bottom: 2px solid #e2e8f0;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.registry-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.registry-row-completed td {
+  background: #f0fff4;
+}
+
+.registry-row-inprogress td {
+  background: #fffff0;
+}
+
+.registry-row-inactive td {
+  background: #f7f7f7;
+  opacity: 0.8;
+}
+
+.registry-table tbody tr:hover td {
+  filter: brightness(0.97);
+}
+
+.registry-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-completed {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.badge-inprogress {
+  background: #fefcbf;
+  color: #744210;
+}
+
+.badge-inactive {
+  background: #e2e8f0;
+  color: #718096;
+}
+
+
+
 .timeline-chart {
   background: white;
   padding: 1.5rem;
