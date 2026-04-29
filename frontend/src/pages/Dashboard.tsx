@@ -144,12 +144,15 @@ export default function Dashboard() {
   interface CirclePeriod { label: string; start: string; end: string; data: any[]; }
   const [weekCategoryCircle, setWeekCategoryCircle] = useState<CirclePeriod[]>([]);
   const [monthCategoryCircle, setMonthCategoryCircle] = useState<CirclePeriod[]>([]);
+  const [yearCategoryCircle, setYearCategoryCircle] = useState<CirclePeriod[]>([]);
   const [weekTasksCircle, setWeekTasksCircle] = useState<CirclePeriod[]>([]);
   const [monthTasksCircle, setMonthTasksCircle] = useState<CirclePeriod[]>([]);
+  const [yearTasksCircle, setYearTasksCircle] = useState<CirclePeriod[]>([]);
   const [weekOneTimeCircle, setWeekOneTimeCircle] = useState<CirclePeriod[]>([]);
   const [monthOneTimeCircle, setMonthOneTimeCircle] = useState<CirclePeriod[]>([]);
+  const [yearOneTimeCircle, setYearOneTimeCircle] = useState<CirclePeriod[]>([]);
   const [circleLoading, setCircleLoading] = useState(true);
-  const [circlePeriod, setCirclePeriod] = useState<'week'|'month'>('week');
+  const [circlePeriod, setCirclePeriod] = useState<'week'|'month'|'year'>('week');
 
   const navigate = useNavigate();
   
@@ -369,7 +372,7 @@ export default function Dashboard() {
         isStillActive(t)
       );
 
-      const DRAIN = ['Time Waste'];
+      const DRAIN_NAMES = ['Time Waste', 'Screen Relaxing', 'Life Loss Screen time'];
       const CATEGORY_ORDER = ['Office-Tasks','Learning','Confidence','Yoga','Sleep','My Tasks','Home Tasks','Time Waste'];
       const PILLAR_ORDER = ['Hard Work', 'Calmness', 'Family'];
 
@@ -379,15 +382,15 @@ export default function Dashboard() {
         if (cType === 'category') {
           return (data as any[]).map((c: any) => {
             const raw = c.allocated_hours > 0 ? Math.round((c.spent_hours/days/c.allocated_hours)*100) : 0;
-            const isDrain = DRAIN.includes(c.category_name);
-            const score = isDrain ? Math.min(100,Math.max(0,200-raw)) : Math.min(100,raw);
+            const score = Math.min(100, raw);
             return { name: c.category_name||'Unknown', spent: raw, score, allocated: 100 };
           });
         } else {
           return (data as any[]).map((t: any) => {
             const raw = t.allocated_hours > 0 ? Math.round((t.spent_hours/days/t.allocated_hours)*100) : 0;
+            const isDrain = DRAIN_NAMES.includes(t.category_name || '') || DRAIN_NAMES.includes(t.name || '');
             const score = Math.min(100, raw);
-            return { name: t.name||'Unknown', spent: raw, score, allocated: 100 };
+            return { name: t.name||'Unknown', spent: raw, score, allocated: 100, isDrain };
           });
         }
       };
@@ -412,9 +415,9 @@ export default function Dashboard() {
             const ca = CATEGORY_ORDER.indexOf(a.category_name || '');
             const cb = CATEGORY_ORDER.indexOf(b.category_name || '');
             if (ca !== cb) return (ca === -1 ? 999 : ca) - (cb === -1 ? 999 : cb);
-            return (a.name || '').localeCompare(b.name || '');
+            return (a.id || 0) - (b.id || 0); // task ID = Daily tab insertion order
           })
-          .map(t => ({ name: t.name, allocated_hours: t.allocated_minutes/60, spent_hours: (spentMap.get(t.id)||0)/60 }));
+          .map(t => ({ name: t.name, category_name: t.category_name || '', allocated_hours: t.allocated_minutes/60, spent_hours: (spentMap.get(t.id)||0)/60 }));
         return { cats, timeTasks: toTaskRows(baseTimeTasks), oneTimeTasks: toTaskRows(baseOneTimeTasks), startStr, endStr };
       };
 
@@ -465,6 +468,30 @@ export default function Dashboard() {
       setMonthCategoryCircle(monthPeriods[0]);
       setMonthTasksCircle(monthPeriods[1]);
       setMonthOneTimeCircle(monthPeriods[2]);
+
+      // Build 4 years
+      const yearPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[]];
+      for (let i = 3; i >= 0; i--) {
+        const yr = today.getFullYear() - i;
+        const yStart = new Date(yr, 0, 1);
+        const yEnd = new Date(yr, 11, 31);
+        const actualEnd = yEnd > today ? today : yEnd;
+        const startStr = fmt(yStart); const endStr = fmt(actualEnd);
+        const label = yr.toString();
+        try {
+          const { cats, timeTasks, oneTimeTasks } = await fetchForPeriod(startStr, endStr);
+          yearPeriods[0].push({ label, start: startStr, end: endStr, data: buildRadar(cats, startStr, endStr, 'category') });
+          yearPeriods[1].push({ label, start: startStr, end: endStr, data: buildRadar(timeTasks, startStr, endStr, 'tasks') });
+          yearPeriods[2].push({ label, start: startStr, end: endStr, data: buildRadar(oneTimeTasks, startStr, endStr, 'one_time') });
+        } catch {
+          yearPeriods[0].push({ label, start: startStr, end: endStr, data: [] });
+          yearPeriods[1].push({ label, start: startStr, end: endStr, data: [] });
+          yearPeriods[2].push({ label, start: startStr, end: endStr, data: [] });
+        }
+      }
+      setYearCategoryCircle(yearPeriods[0]);
+      setYearTasksCircle(yearPeriods[1]);
+      setYearOneTimeCircle(yearPeriods[2]);
     } catch (err) {
       console.error('[Dashboard] Error loading circle charts:', err);
     } finally {
@@ -573,9 +600,9 @@ export default function Dashboard() {
       {/* ─── Circle of Life Charts ─────────────────────────────────────────── */}
       {(() => {
         const CHART_TYPES = [
-          { label: '📁 Category Distribution', desc: 'Categories across pillars', weekData: weekCategoryCircle, monthData: monthCategoryCircle, color: '#4299e1' },
-          { label: '⏱️ Time-Based Tasks',       desc: 'Recurring task time',      weekData: weekTasksCircle,    monthData: monthTasksCircle,   color: '#10b981' },
-          { label: '🗂️ One-Time Tasks',         desc: 'Projects & one-offs',      weekData: weekOneTimeCircle,  monthData: monthOneTimeCircle, color: '#a855f7' },
+          { label: '📁 Category Distribution', desc: 'Categories across pillars',      weekData: weekCategoryCircle, monthData: monthCategoryCircle, yearData: yearCategoryCircle, color: '#4299e1' },
+          { label: '⏱️ Time-Based Tasks',       desc: 'Recurring task time',      weekData: weekTasksCircle,    monthData: monthTasksCircle,   yearData: yearTasksCircle,   color: '#10b981' },
+          { label: '🗂️ One-Time Tasks',         desc: 'Projects & one-offs',      weekData: weekOneTimeCircle,  monthData: monthOneTimeCircle, yearData: yearOneTimeCircle,  color: '#a855f7' },
         ];
 
         const RadarCard = ({ period, isNewest, accentColor }: { period: { label: string; start: string; end: string; data: any[] }; isNewest: boolean; accentColor: string }) => {
@@ -638,6 +665,10 @@ export default function Dashboard() {
                   onClick={() => setCirclePeriod('month')}
                   style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='month' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='month' ? '#3B82F6' : 'white', color: circlePeriod==='month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
                 >📅 Last 4 Months</button>
+                <button
+                  onClick={() => setCirclePeriod('year')}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='year' ? '2px solid #9333ea' : '2px solid #e2e8f0', background: circlePeriod==='year' ? '#9333ea' : 'white', color: circlePeriod==='year' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                >📊 Last 4 Years</button>
               </div>
             </div>
             {circleLoading ? (
@@ -645,7 +676,7 @@ export default function Dashboard() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
                 {CHART_TYPES.map((ct) => {
-                  const activeData = circlePeriod === 'week' ? ct.weekData : ct.monthData;
+                  const activeData = circlePeriod === 'week' ? ct.weekData : circlePeriod === 'month' ? ct.monthData : ct.yearData;
                   const reversedData = [...activeData].reverse();
                   return (
                     <div key={ct.label} style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px', border: `2px solid ${ct.color}22` }}>

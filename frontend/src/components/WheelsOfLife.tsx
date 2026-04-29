@@ -388,41 +388,38 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       title.includes('Today') ? 'today' : 
       title.includes('Week') ? 'week' : 'month';
     
-    // Sort by hierarchy: pillar → category → task name (same as Daily tab)
+    // Sort by hierarchy: pillar → category → task ID (same order as Daily tab)
     const sortedData = [...filteredData]
       .sort((a, b) => {
-        // Sort by pillar order first
         const pillarIndexA = PILLAR_ORDER.indexOf(a.pillar_name || '');
         const pillarIndexB = PILLAR_ORDER.indexOf(b.pillar_name || '');
         if (pillarIndexA !== pillarIndexB) {
           return (pillarIndexA === -1 ? 999 : pillarIndexA) - (pillarIndexB === -1 ? 999 : pillarIndexB);
         }
-        
-        // Then by category order
         const categoryIndexA = CATEGORY_ORDER.indexOf(a.category_name || '');
         const categoryIndexB = CATEGORY_ORDER.indexOf(b.category_name || '');
         if (categoryIndexA !== categoryIndexB) {
           return (categoryIndexA === -1 ? 999 : categoryIndexA) - (categoryIndexB === -1 ? 999 : categoryIndexB);
         }
-        
-        // Finally by task name
-        return a.task_name.localeCompare(b.task_name);
-      })
-      .slice(0, 8); // Show top 8 tasks
+        return (a.task_id || 0) - (b.task_id || 0); // task ID = Daily tab insertion order
+      });
 
+    const DRAIN_TASK_NAMES = ['Time Waste', 'Screen Relaxing', 'Life Loss Screen time'];
     const radarData = sortedData.map(t => {
       const allocatedHours = t.allocated_minutes / 60;
       const actualSpentHours = t.spent_minutes / 60;
       const dailyAvgSpent = normalizeToDailyAverage(actualSpentHours, periodType);
-      const percentage = allocatedHours > 0 ? (dailyAvgSpent / allocatedHours) * 100 : 0;
-      const isDrain = ['Time Waste', 'Screen Relaxing'].includes(t.category_name || '');
-      void isDrain;
+      const rawPct = allocatedHours > 0 ? (dailyAvgSpent / allocatedHours) * 100 : 0;
+      const isDrain = ['Time Waste', 'Screen Relaxing'].includes(t.category_name || '') ||
+        DRAIN_TASK_NAMES.includes(t.task_name);
+      // score = min(100, raw): 100% = hit plan exactly = full circle spoke
+      const score = Math.min(100, rawPct);
       return {
-        task: t.task_name.length > 20 
-          ? t.task_name.substring(0, 17) + '...' 
-          : t.task_name,
+        task: t.task_name,
         fullName: t.task_name,
-        spent: percentage,
+        isDrain,
+        spent: rawPct,
+        score,
         actualAllocated: allocatedHours,
         actualSpent: dailyAvgSpent
       };
@@ -431,55 +428,28 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
     const maxPercent = Math.max(...radarData.map(d => d.spent), 100);
     const dynamicMax = Math.max(100, Math.ceil(maxPercent / 50) * 50);
 
-    // Custom tick renderer for multi-line text
+    // Custom tick renderer: task name only, word-wrapped at ~12 chars
     const CustomTick = (props: any) => {
-      const { x, y, payload } = props;
-      const words = payload.value.split(' ');
-      
-      // If task name is short, show as single line
-      if (payload.value.length <= 15) {
-        return (
-          <text 
-            x={x} 
-            y={y} 
-            textAnchor="middle" 
-            fontSize={10} 
-            fontWeight={500} 
-            fill="#2b6cb0"
-          >
-            {payload.value}
-          </text>
-        );
-      }
-      
-      // For longer names, split into lines
-      const lines = [];
-      let currentLine = '';
-      words.forEach((word: string) => {
-        if ((currentLine + word).length <= 12) {
-          currentLine += (currentLine ? ' ' : '') + word;
+      const { x, y, payload, textAnchor } = props;
+      const taskName: string = payload.value;
+
+      const words = taskName.split(' ');
+      const lines: string[] = [];
+      let cur = '';
+      words.forEach((w: string) => {
+        if ((cur ? cur + ' ' + w : w).length <= 12) {
+          cur = cur ? cur + ' ' + w : w;
         } else {
-          if (currentLine) lines.push(currentLine);
-          currentLine = word;
+          if (cur) lines.push(cur);
+          cur = w;
         }
       });
-      if (currentLine) lines.push(currentLine);
-      
+      if (cur) lines.push(cur);
+
       return (
-        <text 
-          x={x} 
-          y={y} 
-          textAnchor="middle" 
-          fontSize={9} 
-          fontWeight={500} 
-          fill="#2b6cb0"
-        >
-          {lines.slice(0, 2).map((line: string, index: number) => (
-            <tspan 
-              key={index} 
-              x={x} 
-              dy={index === 0 ? 0 : 10}
-            >
+        <text x={x} y={y} textAnchor={textAnchor || 'middle'} dominantBaseline="central">
+          {lines.slice(0, 2).map((line: string, i: number) => (
+            <tspan key={i} x={x} dy={i === 0 ? 0 : 10} fontSize={9} fontWeight={500} fill="#2b6cb0">
               {line}
             </tspan>
           ))}
@@ -491,8 +461,8 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
       <div className="wheel-card">
         <h3>{emoji} {title}</h3>
 
-        <ResponsiveContainer width="100%" height={400}>
-          <RadarChart data={radarData} margin={{ top: 18, right: 30, bottom: 18, left: 30 }}>
+        <ResponsiveContainer width="100%" height={Math.max(400, radarData.length * 30 + 100)}>
+          <RadarChart data={radarData} margin={{ top: 30, right: 50, bottom: 30, left: 50 }}>
             <PolarGrid gridType="circle" strokeDasharray="3 3" />
             <PolarAngleAxis 
               dataKey="task" 
@@ -516,8 +486,7 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
             <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynamicMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
             <Tooltip 
               formatter={(value: any, name: string) => [
-                `${Number(value).toFixed(0)}%`,
-                name
+                `${Number(value).toFixed(0)}%`, name
               ]}
             />
             <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
@@ -531,35 +500,26 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
               <th>Task</th>
               <th>Allocated</th>
               <th>Spent<br/>(day)</th>
-              <th>Percentage</th>
+              <th>Spent%</th>
+              <th>✓ Score</th>
             </tr>
           </thead>
           <tbody>
-            {radarData.map((item, index) => {
-              const percentage = item.actualAllocated > 0 
-                ? (item.actualSpent / item.actualAllocated) * 100 
-                : 0;
-              return (
-                <tr key={index}>
-                  <td style={{ fontWeight: 500 }}>{item.fullName}</td>
-                  <td>{item.actualAllocated.toFixed(1)}h</td>
-                  <td>{item.actualSpent.toFixed(1)}h</td>
-                  <td>{percentage.toFixed(0)}%</td>
-                </tr>
-              );
-            })}
-            {/* Total Row */}
-            <tr style={{ backgroundColor: '#f7fafc', fontWeight: 700, borderTop: '2px solid #cbd5e0' }}>
-              <td>Total</td>
-              <td>{radarData.reduce((sum, item) => sum + item.actualAllocated, 0).toFixed(1)}h</td>
-              <td>{radarData.reduce((sum, item) => sum + item.actualSpent, 0).toFixed(1)}h</td>
-              <td>
-                {radarData.reduce((sum, item) => sum + item.actualAllocated, 0) > 0
-                  ? ((radarData.reduce((sum, item) => sum + item.actualSpent, 0) / 
-                     radarData.reduce((sum, item) => sum + item.actualAllocated, 0)) * 100).toFixed(0)
-                  : 0}%
-              </td>
-            </tr>
+            {radarData.map((item, index) => (
+              <tr key={index}>
+                <td style={{ fontWeight: 500 }}>
+                  {item.isDrain ? '⚠️' : '📌'} {item.fullName}
+                </td>
+                <td>{item.actualAllocated.toFixed(1)}h</td>
+                <td>{item.actualSpent.toFixed(1)}h</td>
+                <td style={{ color: item.spent > 100 ? '#b45309' : item.spent >= 80 ? '#16a34a' : item.spent >= 60 ? '#b45309' : '#dc2626' }}>
+                  {item.spent.toFixed(0)}%
+                </td>
+                <td style={{ fontWeight: 700, color: item.score >= 80 ? '#16a34a' : item.score >= 60 ? '#b45309' : '#dc2626' }}>
+                  {item.score.toFixed(0)}%
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

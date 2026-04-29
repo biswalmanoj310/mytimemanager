@@ -472,7 +472,7 @@ export default function Analytics() {
     return task ? task.order : 999;
   };
 
-  const loadCircleOfLifeData = async (period: 'week' | 'month', cType: 'pillar' | 'category' | 'tasks' | 'one_time') => {
+  const loadCircleOfLifeData = async (period: 'week' | 'month' | 'year', cType: 'pillar' | 'category' | 'tasks' | 'one_time') => {
     setCircleOfLifeLoading(true);
     const PILLAR_ORDER_LOCAL = ['Hard Work', 'Calmness', 'Family'];
     const CATEGORY_ORDER_LOCAL = ['Office-Tasks', 'Learning', 'Confidence', 'Yoga', 'Sleep', 'My Tasks', 'Home Tasks', 'Time Waste'];
@@ -494,7 +494,7 @@ export default function Analytics() {
         const entries: any[] = entriesResp.data || [];
         const spentMap = new Map<number, number>();
         entries.forEach((e: any) => { spentMap.set(e.task_id, (spentMap.get(e.task_id) || 0) + e.minutes); });
-        // Sort by pillar → category → task name, same order as Wheel of Life tab
+        // Sort by pillar → category → task ID (same order as Daily tab)
         const sorted = [...baseTaskList]
           .filter(t => t.allocated_minutes > 0)
           .sort((a, b) => {
@@ -504,7 +504,7 @@ export default function Analytics() {
             const ca = CATEGORY_ORDER_LOCAL.indexOf(a.category_name || '');
             const cb = CATEGORY_ORDER_LOCAL.indexOf(b.category_name || '');
             if (ca !== cb) return (ca === -1 ? 999 : ca) - (cb === -1 ? 999 : cb);
-            return (a.task_name || '').localeCompare(b.task_name || '');
+            return (a.task_id || 0) - (b.task_id || 0);
           });
         return sorted.map(task => ({
           name: task.task_name,
@@ -535,7 +535,7 @@ export default function Analytics() {
             periods.push({ label, start: startStr, end: endStr, data });
           } catch { periods.push({ label, start: startStr, end: endStr, data: [] }); }
         }
-      } else {
+      } else if (period === 'month') {
         for (let i = 7; i >= 0; i--) {
           const monthStart = new Date(today.getFullYear(), today.getMonth() - i, 1);
           const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
@@ -543,6 +543,20 @@ export default function Analytics() {
           const startStr = formatDateForInput(monthStart);
           const endStr = formatDateForInput(actualEnd);
           const label = monthStart.toLocaleString('en-US', { month: 'short', year: 'numeric' });
+          try {
+            const data = await fetchData(startStr, endStr);
+            periods.push({ label, start: startStr, end: endStr, data });
+          } catch { periods.push({ label, start: startStr, end: endStr, data: [] }); }
+        }
+      } else { // year — last 8 full years
+        for (let i = 7; i >= 0; i--) {
+          const yr = today.getFullYear() - i;
+          const yearStart = new Date(yr, 0, 1);
+          const yearEnd = new Date(yr, 11, 31);
+          const actualEnd = yearEnd > today ? today : yearEnd;
+          const startStr = formatDateForInput(yearStart);
+          const endStr = formatDateForInput(actualEnd);
+          const label = yr.toString();
           try {
             const data = await fetchData(startStr, endStr);
             periods.push({ label, start: startStr, end: endStr, data });
@@ -3811,10 +3825,12 @@ export default function Analytics() {
               return Math.max(1, Math.round((e.getTime() - s.getTime()) / 86400000) + 1);
             };
 
-            // Negative categories: spending MORE than allocated is bad, so invert their score.
-            // Score (used for radar shape + avg) is capped 0-100.
-            // spent (raw %) is stored separately for the tooltip table.
-            const DRAIN_CATEGORIES = ['Time Waste'];
+            // Score = min(spent%, 100) for ALL categories/tasks.
+            // 100% = you spent exactly what you planned = full circle spoke = perfect.
+            // Overspending (>100%) shows as a spike beyond the green ring in the radar,
+            // but the score is capped at 100 so it doesn't inflate the avg badge.
+            // isDrain flag kept only for the ⚠️ icon — no score inversion.
+            const DRAIN_NAMES = ['Time Waste', 'Screen Relaxing', 'Life Loss Screen time'];
             const buildRadarData = (data: any[], start: string, end: string) => {
               const days = getDaysInPeriod(start, end);
               if (circleOfLifeType === 'pillar') {
@@ -3828,16 +3844,16 @@ export default function Analytics() {
                 const items = data.filter((c: any) => c.category_name !== 'My Tasks').slice(0, 10);
                 return items.map((c: any) => {
                   const raw = c.allocated_hours > 0 ? Math.round((c.spent_hours / days / c.allocated_hours) * 100) : 0;
-                  const isDrain = DRAIN_CATEGORIES.includes(c.category_name);
-                  const score = isDrain ? Math.min(100, Math.max(0, 200 - raw)) : Math.min(100, raw);
+                  const isDrain = DRAIN_NAMES.includes(c.category_name);
+                  const score = Math.min(100, raw);
                   return { name: c.category_name || c.name || 'Unknown', spent: raw, score, allocated: 100, isDrain };
                 });
               } else {
                 // tasks / one_time — data is [{name, category_name, allocated_hours, spent_hours}]
-                return data.slice(0, 10).map((t: any) => {
+                return data.map((t: any) => {
                   const raw = t.allocated_hours > 0 ? Math.round((t.spent_hours / days / t.allocated_hours) * 100) : 0;
-                  const isDrain = DRAIN_CATEGORIES.includes(t.category_name || '');
-                  const score = isDrain ? Math.min(100, Math.max(0, 200 - raw)) : Math.min(100, raw);
+                  const isDrain = DRAIN_NAMES.includes(t.category_name || '') || DRAIN_NAMES.includes(t.name || '');
+                  const score = Math.min(100, raw);
                   return { name: t.name || 'Unknown', spent: raw, score, allocated: 100, isDrain };
                 });
               }
@@ -3895,6 +3911,15 @@ export default function Analytics() {
                     }}
                     style={{ padding: '8px 20px', borderRadius: '8px', border: circleOfLifePeriod === 'month' ? '2px solid #ed8936' : '2px solid #e2e8f0', background: circleOfLifePeriod === 'month' ? '#ed8936' : 'white', color: circleOfLifePeriod === 'month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
                   >📅 Months</button>
+                  <button
+                    onClick={() => {
+                      setCircleOfLifePeriod('year');
+                      const params = new URLSearchParams(window.location.search);
+                      params.set('circlePeriod', 'year');
+                      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+                    }}
+                    style={{ padding: '8px 20px', borderRadius: '8px', border: circleOfLifePeriod === 'year' ? '2px solid #9333ea' : '2px solid #e2e8f0', background: circleOfLifePeriod === 'year' ? '#9333ea' : 'white', color: circleOfLifePeriod === 'year' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                  >📊 Years</button>
                 </div>
 
                 {circleOfLifeLoading ? (
@@ -3904,7 +3929,7 @@ export default function Analytics() {
                 ) : (
                   <>
                     <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
-                      Each circle shows daily-average % of allocated time for <strong>{selectedType.desc}</strong> per {circleOfLifePeriod}. Dark green ring = 100% goal. Labels show highest (green) &amp; lowest (red) only.
+                      Each circle shows daily-average % of allocated time for <strong>{selectedType.desc}</strong> per {circleOfLifePeriod}. Dark green ring = 100% goal (full circle = perfect {circleOfLifePeriod}). Labels show highest (green) &amp; lowest (red) only.
                     </p>
                     {/* 8 radar charts in a responsive grid */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
@@ -3979,7 +4004,7 @@ export default function Analytics() {
                                 <tr style={{ borderBottom: '1px solid #e5e7eb', color: '#94a3b8' }}>
                                   <th style={{ padding: '2px 4px', textAlign: 'left', fontWeight: 500 }}>Category</th>
                                   <th style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 500 }} title="Actual time spent vs allocated (matches the picture)">Spent%</th>
-                                  <th style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 500 }} title="Goal adherence: productive=min(spent,100), drain=max(0,200-spent)">✓ Goal</th>
+                                  <th style={{ padding: '2px 4px', textAlign: 'right', fontWeight: 500 }} title="Goal adherence: min(spent%,100). 100% = you hit your plan exactly.">✓ Goal</th>
                                 </tr>
                               </thead>
                               <tbody>
