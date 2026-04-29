@@ -3,12 +3,12 @@
  */
 
 .dashboard {
-  animation: fadeIn 0.3s ease-in;
+  animation: dashboardFadeIn 0.3s ease-in;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes dashboardFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .dashboard-header {
@@ -926,19 +926,24 @@
 
 /* ── Stats Detail Popup ─────────────────────────────────────── */
 .stats-popup-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(3px);
-  z-index: 1000;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 99999 !important;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  animation: fadeIn 0.15s ease;
+  box-sizing: border-box;
+  animation: popupFadeIn 0.15s ease;
 }
 
-@keyframes fadeIn {
+@keyframes popupFadeIn {
   from { opacity: 0; }
   to   { opacity: 1; }
 }

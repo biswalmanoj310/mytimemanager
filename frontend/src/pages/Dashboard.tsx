@@ -177,6 +177,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const openPopup = async (type: PopupType) => {
+    // Lock body scroll to prevent scrollbar shift that causes Recharts redraws
+    document.body.style.overflow = 'hidden';
     setPopupType(type);
     setPopupLoading(true);
     try {
@@ -194,6 +196,11 @@ export default function Dashboard() {
       }
     } catch { setPopupData([]); }
     setPopupLoading(false);
+  };
+
+  const closePopup = () => {
+    document.body.style.overflow = '';
+    setPopupType(null);
   };
   console.log('[Dashboard] Component initialized, TEST_MODE:', TEST_MODE);
 
@@ -996,7 +1003,7 @@ export default function Dashboard() {
 
       {/* Stats Detail Popup — rendered via portal to escape stacking context */}
       {popupType && createPortal(
-        <div className="stats-popup-overlay" onClick={() => setPopupType(null)}>
+        <div className="stats-popup-overlay" onClick={closePopup}>
           <div className="stats-popup" onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="stats-popup-header" style={{
@@ -1020,11 +1027,11 @@ export default function Dashboard() {
                     tasks: '/analytics?view=tasks', habits: '/habits', dreams: '/wishes'
                   };
                   navigate(routes[popupType!]);
-                  setPopupType(null);
+                  closePopup();
                 }}>
                   Go to full page →
                 </button>
-                <button className="stats-popup-close" onClick={() => setPopupType(null)}>✕</button>
+                <button className="stats-popup-close" onClick={closePopup}>✕</button>
               </div>
             </div>
 
@@ -1115,14 +1122,14 @@ export default function Dashboard() {
             <div className="stats-popup-footer">
               <span style={{ color: '#888', fontSize: '13px' }}>{popupData.length} items</span>
               <div style={{ display: 'flex', gap: '8px' }}>
-                <button className="stats-popup-nav-btn secondary" onClick={() => setPopupType(null)}>← Back to Dashboard</button>
+                <button className="stats-popup-nav-btn secondary" onClick={closePopup}>← Back to Dashboard</button>
                 <button className="stats-popup-nav-btn" onClick={() => {
                   const routes: Record<string, string> = {
                     goals: '/life-goals', projects: '/projects',
                     tasks: '/analytics?view=tasks', habits: '/habits', dreams: '/wishes'
                   };
                   navigate(routes[popupType!]);
-                  setPopupType(null);
+                  closePopup();
                 }}>Go to full page →</button>
               </div>
             </div>
