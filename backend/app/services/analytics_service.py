@@ -72,7 +72,30 @@ class AnalyticsService:
         daily_tasks = tasks_query.all()
         task_pillar_map = {task.id: task.pillar_id for task in daily_tasks}
         task_allocated_map = {task.id: task.allocated_minutes for task in daily_tasks}
-        
+
+        # --- ALLOCATED: always use CURRENTLY ACTIVE tasks (matches Daily tab today) ---
+        # Exclude tasks previously completed via daily_task_status on a past day
+        # (same logic as get_category_breakdown and Dashboard Three Pillars Overview)
+        today = date.today()
+        prev_completed_task_ids = (
+            self.db.query(DailyTaskStatus.task_id)
+            .filter(
+                DailyTaskStatus.is_completed == True,
+                DailyTaskStatus.date < today
+            )
+            .distinct()
+            .subquery()
+        )
+        active_tasks_for_allocation = self.db.query(Task).filter(
+            Task.follow_up_frequency == 'daily',
+            Task.task_type == 'time',
+            Task.is_active == True,
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None)),
+            Task.is_completed == False,
+            Task.na_marked_at.is_(None),
+            ~Task.id.in_(prev_completed_task_ids)
+        ).all()
+
         # Build time entry query from DailyTimeEntry table for SPENT time
         # JOIN with Task to filter ONLY Time-Based Task Table entries (task_type=time, is_daily_one_time=False/NULL)
         # Then use snapshot columns for pillar aggregation (handles renamed/deleted tasks)
@@ -101,9 +124,15 @@ class AnalyticsService:
             spent_minutes = time_by_pillar_map.get(pillar.id, 0)
             spent_hours = spent_minutes / 60 if spent_minutes else 0
             
-            # Use the pillar's allocated_hours (e.g., 8h per day)
-            # This is the ideal daily allocation target, not sum of all tasks
-            allocated_hours = pillar.allocated_hours
+            # Calculate allocated hours by summing allocated_minutes from currently active daily tasks
+            # Uses active_tasks_for_allocation which excludes prev-day daily_task_status completions
+            # This matches the Dashboard Three Pillars Overview calculation exactly
+            pillar_allocated_minutes = sum(
+                task.allocated_minutes or 0
+                for task in active_tasks_for_allocation
+                if task.pillar_id == pillar.id
+            )
+            allocated_hours = pillar_allocated_minutes / 60 if pillar_allocated_minutes else pillar.allocated_hours
             
             total_allocated += allocated_hours
             total_spent += spent_hours
