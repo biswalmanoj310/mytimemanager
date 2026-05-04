@@ -509,6 +509,14 @@ export default function Analytics() {
     return task ? task.order : 999;
   };
 
+  // Show minutes instead of hours when ALL selected tasks have allocated_minutes <= 60
+  const useMinutesForTasks = showAsHours && detailedViewType === 'tasks' &&
+    selectedTasks.length > 0 &&
+    selectedTasks.every(id => {
+      const t = allTasksData.find(t => t.task_id === id) || allOneTimeTasksData.find(t => t.task_id === id);
+      return (t?.allocated_minutes || 999) <= 60;
+    });
+
   const loadCircleOfLifeData = async (period: 'week' | 'month' | 'year', cType: 'pillar' | 'category' | 'tasks' | 'one_time') => {
     setCircleOfLifeLoading(true);
     const PILLAR_ORDER_LOCAL = ['Hard Work', 'Calmness', 'Family'];
@@ -977,7 +985,7 @@ export default function Analytics() {
       // Load category trends if categories are selected
       if (detailedViewType === 'categories' && selectedCategories.length > 0) {
         const dailyData: any[] = [];
-        for (let i = 29; i >= 0; i--) {
+        for (let i = 55; i >= 0; i--) {
           const date = new Date(today);
           date.setDate(date.getDate() - i);
           const dateStr = formatDateForInput(date);
@@ -1004,7 +1012,7 @@ export default function Analytics() {
       // Load pillar trends if pillars are selected
       if (detailedViewType === 'pillars' && selectedPillars.length > 0) {
         const dailyData: any[] = [];
-        for (let i = 29; i >= 0; i--) {
+        for (let i = 55; i >= 0; i--) {
           const date = new Date(today);
           date.setDate(date.getDate() - i);
           const dateStr = formatDateForInput(date);
@@ -1044,9 +1052,7 @@ export default function Analytics() {
       start = formatDateForInput(today);
       end = formatDateForInput(today);
     } else if (dateRange === 'week') {
-      const weekAgo = new Date(today);
-      weekAgo.setDate(today.getDate() - 7);
-      start = formatDateForInput(weekAgo);
+      start = formatDateForInput(getWeekStart(today));
       end = formatDateForInput(today);
     } else if (dateRange === 'month') {
       const monthAgo = new Date(today);
@@ -3652,7 +3658,7 @@ export default function Analytics() {
               {/* Daily Utilization Chart */}
               <div className="comparative-charts-section" style={{ marginTop: '20px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                    <h3 style={{ margin: 0 }}>📅 Daily {showAsHours ? 'Hours Spent' : 'Utilization'} (Last 56 Days / 8 Weeks)</h3>
+                    <h3 style={{ margin: 0 }}>📅 Daily {showAsHours ? (useMinutesForTasks ? 'Minutes Spent' : 'Hours Spent') : 'Utilization'} ({(detailedViewType === 'tasks' ? taskTrendData : detailedViewType === 'categories' ? categoryTrendData : pillarTrendData).length} Days)</h3>
                     <button
                       onClick={() => setShowAsHours(!showAsHours)}
                       style={{ fontSize: '11px', padding: '4px 10px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
@@ -3674,17 +3680,17 @@ export default function Analytics() {
                         height={60}
                         style={{ fontSize: '10px' }}
                       />
-                      <YAxis label={{ value: showAsHours ? 'Hours' : 'Utilization %', angle: -90, position: 'insideLeft' }} />
-                      <Tooltip formatter={(value: number) => showAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(1)}%`} />
+                      <YAxis label={{ value: showAsHours ? (useMinutesForTasks ? 'Minutes' : 'Hours') : 'Utilization %', angle: -90, position: 'insideLeft' }} tickFormatter={useMinutesForTasks ? (v: number) => `${(v * 60).toFixed(0)}` : undefined} />
+                      <Tooltip formatter={(value: number) => showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(2)}h`) : `${value.toFixed(1)}%`} />
                       <Legend />
                       {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                       
                       {/* Render lines for selected items */}
                       {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
-                        const task = allTasksData.find(t => t.task_id === taskId);
+                        const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                         const colors = ['#4299e1', '#48bb78', '#ed8936'];
-                        const idealHours = task?.allocated_minutes ? (task.allocated_minutes / 60).toFixed(1) : '0.0';
-                        const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealHours}h/day)`;
+                        const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
+                        const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
                         return (
                           <Line 
                             key={taskId}
@@ -3736,9 +3742,15 @@ export default function Analytics() {
                 <div className="comparative-charts-section" style={{ marginTop: '30px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                     {(() => {
-                      const trendLen = (detailedViewType === 'tasks' ? taskTrendData : detailedViewType === 'categories' ? categoryTrendData : pillarTrendData).length;
-                      const actualWeeks = Math.ceil(trendLen / 7);
-                      return <h3 style={{ margin: 0 }}>📊 Weekly Average (Last {actualWeeks} Week{actualWeeks !== 1 ? 's' : ''}) - {showAsHours ? 'Hours' : 'Utilization %'}</h3>;
+                      const trendData = detailedViewType === 'tasks' ? taskTrendData : detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
+                      if (trendData.length === 0) return <h3 style={{ margin: 0 }}>📊 Weekly Average - {showAsHours ? 'Hours' : 'Utilization %'}</h3>;
+                      const firstDate = new Date(trendData[0].date);
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const firstMonday = getWeekStart(firstDate);
+                      const currentMonday = getWeekStart(today);
+                      const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                      const actualWeeks = Math.round((currentMonday.getTime() - firstMonday.getTime()) / msPerWeek) + 1;
+                      return <h3 style={{ margin: 0 }}>📊 Weekly Average (Last {actualWeeks} Week{actualWeeks !== 1 ? 's' : ''}) - {showAsHours ? (useMinutesForTasks ? 'Minutes' : 'Hours') : 'Utilization %'}</h3>;
                     })()}
                     <button
                       onClick={() => setShowAsHours(!showAsHours)}
@@ -3753,58 +3765,73 @@ export default function Analytics() {
                           const trendData = detailedViewType === 'tasks' ? taskTrendData : 
                                           detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
                           
-                          // Calculate weekly averages from daily data — trendData is oldest→newest
-                          const totalDays = trendData.length;
-                          const numWeeks = Math.ceil(totalDays / 7);
+                          if (trendData.length === 0) return [];
+
+                          // Group daily trend data into CALENDAR weeks (Mon–Sun)
+                          // so these align with the Weekly Tasks tab date ranges
+                          const today = new Date();
+                          today.setHours(0, 0, 0, 0);
+                          const currentMonday = getWeekStart(today); // Monday of current week
+
+                          // Build a map from dateStr → day data for fast lookup
+                          const dataByDate = new Map<string, any>();
+                          trendData.forEach(d => dataByDate.set(d.date, d));
+
+                          // Find the Monday of the earliest date in trend data
+                          const firstDate = new Date(trendData[0].date);
+                          firstDate.setHours(0, 0, 0, 0);
+                          const firstMonday = getWeekStart(firstDate);
+
                           const weeklyData: any[] = [];
-                          for (let weekIdx = 0; weekIdx < numWeeks; weekIdx++) {
-                            const weekStart = weekIdx * 7;
-                            const weekEnd = Math.min(weekStart + 7, totalDays);
-                            const weekData = trendData.slice(weekStart, weekEnd);
-                            
-                            if (weekData.length === 0) continue;
-                            
-                            // Calculate actual date range for this week
-                            const today = new Date();
-                            const daysFromToday = totalDays - 1 - weekStart; // how many days ago this week started
-                            const weekStartDate = new Date(today);
-                            weekStartDate.setDate(today.getDate() - daysFromToday);
-                            const weekEndDate = new Date(weekStartDate);
-                            weekEndDate.setDate(weekStartDate.getDate() + weekData.length - 1);
-                            const isCurrentWeek = weekIdx === numWeeks - 1;
+                          let weekMonday = new Date(firstMonday);
+
+                          while (weekMonday <= currentMonday) {
+                            const weekSunday = new Date(weekMonday);
+                            weekSunday.setDate(weekMonday.getDate() + 6);
+
+                            const isCurrentWeek = weekMonday.getTime() === currentMonday.getTime();
                             const weekLabel = isCurrentWeek
                               ? 'This Week'
-                              : `${weekStartDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${weekEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-                            
+                              : `${weekMonday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}–${weekSunday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+
+                            // Collect all 7 days of this Mon–Sun calendar week
+                            // Always divide by 7 (full week) so zero-days aren't excluded from average
+                            const weekDayData: any[] = [];
+                            for (let d = new Date(weekMonday); d <= weekSunday; d.setDate(d.getDate() + 1)) {
+                              const ds = formatDateForInput(d);
+                              // Push the data point if we have it, otherwise push a zero-day placeholder
+                              weekDayData.push(dataByDate.has(ds) ? dataByDate.get(ds) : { date: ds });
+                            }
+
                             const weekEntry: any = { week: weekLabel };
-                            
-                            // Calculate average for each selected item
+
                             if (detailedViewType === 'tasks') {
                               selectedTasks.forEach((taskId) => {
                                 const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                                 const dataKey = showAsHours ? `task_${taskId}_hours` : `task_${taskId}`;
-                                const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
-                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                weekEntry[`task_${taskId}`] = avg;
+                                // Divide by weekDayData.length (always 7) to include zero-days
+                                const total = weekDayData.reduce((sum, d) => sum + (d[dataKey] || 0), 0);
+                                weekEntry[`task_${taskId}`] = total / weekDayData.length;
                                 weekEntry[`task_${taskId}_name`] = task?.task_name || `Task ${taskId}`;
                               });
                             } else if (detailedViewType === 'categories') {
                               selectedCategories.forEach((categoryName) => {
                                 const dataKey = showAsHours ? `category_${categoryName}_hours` : `category_${categoryName}`;
-                                const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
-                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                weekEntry[`category_${categoryName}`] = avg;
+                                const total = weekDayData.reduce((sum, d) => sum + (d[dataKey] || 0), 0);
+                                weekEntry[`category_${categoryName}`] = total / weekDayData.length;
                               });
                             } else if (detailedViewType === 'pillars') {
                               selectedPillars.forEach((pillarName) => {
                                 const dataKey = showAsHours ? `pillar_${pillarName}_hours` : `pillar_${pillarName}`;
-                                const values = weekData.map(d => d[dataKey] || 0).filter(v => v > 0);
-                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                weekEntry[`pillar_${pillarName}`] = avg;
+                                const total = weekDayData.reduce((sum, d) => sum + (d[dataKey] || 0), 0);
+                                weekEntry[`pillar_${pillarName}`] = total / weekDayData.length;
                               });
                             }
-                            
-                            weeklyData.push(weekEntry);
+
+                            // Only include weeks that have at least one day of trend data
+                            const hasData = weekDayData.some(d => dataByDate.has(d.date));
+                            if (hasData) weeklyData.push(weekEntry);
+                            weekMonday.setDate(weekMonday.getDate() + 7);
                           }
                           
                           return weeklyData;
@@ -3813,8 +3840,8 @@ export default function Analytics() {
                       >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="week" />
-                        <YAxis label={{ value: showAsHours ? 'Avg Hours' : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip formatter={(value: number) => showAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(1)}%`} />
+                        <YAxis label={{ value: showAsHours ? (useMinutesForTasks ? 'Avg Minutes' : 'Avg Hours') : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} tickFormatter={useMinutesForTasks ? (v: number) => `${(v * 60).toFixed(0)}` : undefined} />
+                        <Tooltip formatter={(value: number) => showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(2)}h`) : `${value.toFixed(1)}%`} />
                         <Legend />
                         {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                         
@@ -3822,8 +3849,8 @@ export default function Analytics() {
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                           const colors = ['#48bb78', '#4299e1', '#ed8936'];
-                          const idealHours = task?.allocated_minutes ? (task.allocated_minutes / 60).toFixed(1) : '0.0';
-                          const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealHours}h/day)`;
+                          const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
+                          const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
                           return (
                             <Bar 
                               key={taskId}
@@ -3831,7 +3858,7 @@ export default function Analytics() {
                               name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
@@ -3878,53 +3905,63 @@ export default function Analytics() {
                           const trendData = detailedViewType === 'tasks' ? taskTrendData : 
                                           detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
                           
-                          // Calculate monthly averages from daily data (last 3 months ~ 90 days, but we have 56 days)
-                          // We'll use last 56 days and split into roughly 2 months
+                          if (trendData.length === 0) return [];
+
+                          // Group daily trend data into CALENDAR months (1st–last day)
+                          // so these align with the Monthly Tasks tab and match the overview charts
+                          const dataByDate = new Map<string, any>();
+                          trendData.forEach(d => dataByDate.set(d.date, d));
+
+                          // Find all unique year-month combos present in trendData
+                          const monthKeys = new Set<string>();
+                          trendData.forEach(d => {
+                            const dt = new Date(d.date);
+                            monthKeys.add(`${dt.getFullYear()}-${dt.getMonth()}`);
+                          });
+
                           const monthlyData: any[] = [];
-                          const daysPerMonth = Math.floor(trendData.length / 3); // Divide available data into 3 periods
-                          
-                          for (let monthIdx = 0; monthIdx < 3; monthIdx++) {
-                            const monthStart = monthIdx * daysPerMonth;
-                            const monthEnd = monthIdx === 2 ? trendData.length : (monthIdx + 1) * daysPerMonth;
-                            const monthData = trendData.slice(monthStart, monthEnd);
-                            
-                            if (monthData.length === 0) continue;
-                            
-                            const today = new Date();
-                            const monthDate = new Date(today);
-                            monthDate.setMonth(today.getMonth() - (2 - monthIdx));
-                            const monthName = monthDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-                            
+
+                          Array.from(monthKeys).sort().forEach(key => {
+                            const [yr, mo] = key.split('-').map(Number);
+                            const calMonthStart = new Date(yr, mo, 1);
+                            const calMonthEnd = new Date(yr, mo + 1, 0); // last day of month
+                            const today = new Date(); today.setHours(0, 0, 0, 0);
+                            const effectiveEnd = calMonthEnd > today ? today : calMonthEnd;
+
+                            // All calendar days in this month (up to today)
+                            const calDays: string[] = [];
+                            for (let d = new Date(calMonthStart); d <= effectiveEnd; d.setDate(d.getDate() + 1)) {
+                              calDays.push(formatDateForInput(new Date(d)));
+                            }
+
+                            const monthName = calMonthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                             const monthEntry: any = { month: monthName };
-                            
-                            // Calculate average for each selected item
+
+                            // Average over all calendar days (including zero-days) for accuracy
                             if (detailedViewType === 'tasks') {
-                              selectedTasks.forEach((taskId, index) => {
+                              selectedTasks.forEach((taskId) => {
                                 const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                                 const dataKey = showAsHours ? `task_${taskId}_hours` : `task_${taskId}`;
-                                const values = monthData.map(d => d[dataKey] || 0).filter(v => v > 0);
-                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                monthEntry[`task_${taskId}`] = avg;
+                                const total = calDays.reduce((sum, ds) => sum + ((dataByDate.get(ds)?.[dataKey]) || 0), 0);
+                                monthEntry[`task_${taskId}`] = total / calDays.length;
                                 monthEntry[`task_${taskId}_name`] = task?.task_name || `Task ${taskId}`;
                               });
                             } else if (detailedViewType === 'categories') {
                               selectedCategories.forEach((categoryName) => {
                                 const dataKey = showAsHours ? `category_${categoryName}_hours` : `category_${categoryName}`;
-                                const values = monthData.map(d => d[dataKey] || 0).filter(v => v > 0);
-                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                monthEntry[`category_${categoryName}`] = avg;
+                                const total = calDays.reduce((sum, ds) => sum + ((dataByDate.get(ds)?.[dataKey]) || 0), 0);
+                                monthEntry[`category_${categoryName}`] = total / calDays.length;
                               });
                             } else if (detailedViewType === 'pillars') {
                               selectedPillars.forEach((pillarName) => {
                                 const dataKey = showAsHours ? `pillar_${pillarName}_hours` : `pillar_${pillarName}`;
-                                const values = monthData.map(d => d[dataKey] || 0).filter(v => v > 0);
-                                const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                monthEntry[`pillar_${pillarName}`] = avg;
+                                const total = calDays.reduce((sum, ds) => sum + ((dataByDate.get(ds)?.[dataKey]) || 0), 0);
+                                monthEntry[`pillar_${pillarName}`] = total / calDays.length;
                               });
                             }
-                            
+
                             monthlyData.push(monthEntry);
-                          }
+                          });
                           
                           return monthlyData;
                         })()}
@@ -3932,8 +3969,8 @@ export default function Analytics() {
                       >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="month" />
-                        <YAxis label={{ value: showAsHours ? 'Avg Hours' : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} />
-                        <Tooltip formatter={(value: number) => showAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(1)}%`} />
+                        <YAxis label={{ value: showAsHours ? (useMinutesForTasks ? 'Avg Minutes' : 'Avg Hours') : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} tickFormatter={useMinutesForTasks ? (v: number) => `${(v * 60).toFixed(0)}` : undefined} />
+                        <Tooltip formatter={(value: number) => showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(2)}h`) : `${value.toFixed(1)}%`} />
                         <Legend />
                         {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                         
@@ -3941,8 +3978,8 @@ export default function Analytics() {
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                           const colors = ['#ed8936', '#4299e1', '#9f7aea'];
-                          const idealHours = task?.allocated_minutes ? (task.allocated_minutes / 60).toFixed(1) : '0.0';
-                          const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealHours}h/day)`;
+                          const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
+                          const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
                           return (
                             <Bar 
                               key={taskId}
@@ -3950,7 +3987,7 @@ export default function Analytics() {
                               name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
                             />
                           );
                         })}
