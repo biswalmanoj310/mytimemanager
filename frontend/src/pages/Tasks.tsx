@@ -1704,12 +1704,6 @@ export default function Tasks() {
           return false;
         }
         
-        // NEW: Prevent tasks that have EVER been manually completed/NA from reappearing
-        // This applies to both native weekly tasks (frequency='weekly') AND monitoring tasks
-        if (everCompletedTaskIds.has(task.id)) {
-          return false;
-        }
-        
       } else if (activeTab === 'monthly') {
         const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
         
@@ -2654,50 +2648,28 @@ export default function Tasks() {
           // This week has no tasks yet - check if we should copy from previous week
           const prevWeekStart = new Date(weekStart);
           prevWeekStart.setDate(prevWeekStart.getDate() - 7);
-          const prevWeekDateStr = formatDateForInput(prevWeekStart);
           
           try {
-            const prevWeekStatusResponse: any = await api.get(`/api/weekly-time/status/${prevWeekDateStr}`);
-            const prevWeekStatusData = Array.isArray(prevWeekStatusResponse) ? prevWeekStatusResponse : (prevWeekStatusResponse.data || []);
-            
-            if (Array.isArray(prevWeekStatusData) && prevWeekStatusData.length > 0) {
-              // Copy tasks that were NOT completed and NOT NA in previous week
-              const tasksToCopy = prevWeekStatusData.filter((status: any) => 
-                !status.is_completed && !status.is_na
-              );
-              
-              if (tasksToCopy.length > 0) {
-                // Create status entries for this week for all incomplete tasks
-                for (const prevStatus of tasksToCopy) {
-                  try {
-                    await api.post(`/api/weekly-time/status/${prevStatus.task_id}/${dateStr}`, {
-                      is_completed: false,
-                      is_na: false
-                    });
-                  } catch (err) {
-                    console.error(`Error copying task ${prevStatus.task_id} to new week:`, err);
+            const copyResponse: any = await api.post(
+              `/api/weekly-time/status/copy-from-previous-week?week_start_date=${dateStr}`
+            );
+            const copied = copyResponse?.copied ?? copyResponse?.data?.copied ?? 0;
+            if (copied > 0) {
+              const newStatusResponse: any = await api.get(`/api/weekly-time/status/${dateStr}`);
+              const newStatusData = Array.isArray(newStatusResponse) ? newStatusResponse : (newStatusResponse.data || []);
+              const newStatusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {}
+              if (Array.isArray(newStatusData)) {
+                newStatusData.forEach((status: any) => {
+                  newStatusMap[status.task_id] = {
+                    is_completed: status.is_completed,
+                    is_na: status.is_na
                   }
-                }
-                
-                // Reload statuses after copying
-                const newStatusResponse: any = await api.get(`/api/weekly-time/status/${dateStr}`);
-                const newStatusData = Array.isArray(newStatusResponse) ? newStatusResponse : (newStatusResponse.data || []);
-                const newStatusMap: Record<number, {is_completed: boolean, is_na: boolean}> = {}
-                
-                if (Array.isArray(newStatusData)) {
-                  newStatusData.forEach((status: any) => {
-                    newStatusMap[status.task_id] = {
-                      is_completed: status.is_completed,
-                      is_na: status.is_na
-                    }
-                  });
-                }
-                
-                setWeeklyTaskStatuses(newStatusMap);
+                });
               }
+              setWeeklyTaskStatuses(newStatusMap);
             }
           } catch (err) {
-            console.error('Error checking/copying tasks from previous week:', err);
+            console.error('Error copying tasks from previous week:', err);
           }
         }
       }

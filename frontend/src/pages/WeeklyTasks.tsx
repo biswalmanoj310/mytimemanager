@@ -143,6 +143,38 @@ const WeeklyTasks: React.FC = () => {
           loadWeeklyTaskStatuses(weekStartString),
           loadDailyAggregatesForWeek(weekStartString),
         ]);
+
+        // Auto-copy incomplete tasks from previous week if this week has no tasks yet
+        // (only for the current real week, not future weeks)
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const weekStartDate = new Date(weekStartString);
+        weekStartDate.setHours(0, 0, 0, 0);
+        const weekEndDate = new Date(weekStartDate);
+        weekEndDate.setDate(weekEndDate.getDate() + 6);
+        weekEndDate.setHours(23, 59, 59, 999);
+        const isCurrentRealWeek = today >= weekStartDate && today <= weekEndDate;
+
+        if (isCurrentRealWeek) {
+          const checkResp = await fetch(`/api/weekly-time/status/${weekStartString}`);
+          const currentStatuses: any[] = checkResp.ok ? await checkResp.json() : [];
+          if (currentStatuses.length === 0) {
+            try {
+              const copyResp = await fetch(
+                `/api/weekly-time/status/copy-from-previous-week?week_start_date=${weekStartString}`,
+                { method: 'POST' }
+              );
+              if (copyResp.ok) {
+                const result = await copyResp.json();
+                if (result.copied > 0) {
+                  await loadWeeklyTaskStatuses(weekStartString);
+                }
+              }
+            } catch (err) {
+              console.error('Error auto-copying tasks from previous week:', err);
+            }
+          }
+        }
         
         // Load daily entries for all 7 days of the week and accumulate them
         const allEntries: DailyEntry[] = [];

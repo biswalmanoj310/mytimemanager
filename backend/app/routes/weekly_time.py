@@ -101,6 +101,50 @@ def get_completed_task_ids(db: Session = Depends(get_db)):
     return [status.task_id for status in completed_statuses]
 
 
+@router.post("/status/copy-from-previous-week")
+def copy_tasks_from_previous_week(
+    week_start_date: date = Query(...),
+    db: Session = Depends(get_db)
+):
+    """Copy all incomplete (not completed, not NA) tasks from the previous week to the given week.
+    Skips tasks already present in the target week. Returns count of tasks copied."""
+    from app.models.models import WeeklyTaskStatus
+    from app.utils.timezone_utils import get_local_now
+    from datetime import timedelta
+
+    prev_week_date = week_start_date - timedelta(days=7)
+
+    # Get previous week statuses
+    prev_statuses = db.query(WeeklyTaskStatus).filter(
+        func.date(WeeklyTaskStatus.week_start_date) == prev_week_date
+    ).all()
+
+    # Get already-existing task IDs for this week
+    existing_ids = set(
+        row.task_id for row in db.query(WeeklyTaskStatus.task_id).filter(
+            func.date(WeeklyTaskStatus.week_start_date) == week_start_date
+        ).all()
+    )
+
+    copied = 0
+    for status in prev_statuses:
+        if status.is_completed or status.is_na:
+            continue  # Don't copy completed/NA tasks
+        if status.task_id in existing_ids:
+            continue  # Already exists this week
+        new_status = WeeklyTaskStatus(
+            task_id=status.task_id,
+            week_start_date=week_start_date,
+            is_completed=False,
+            is_na=False
+        )
+        db.add(new_status)
+        copied += 1
+
+    db.commit()
+    return {"copied": copied, "week_start_date": str(week_start_date)}
+
+
 @router.get("/status/{week_start_date}")
 def get_week_task_statuses(
     week_start_date: date,
