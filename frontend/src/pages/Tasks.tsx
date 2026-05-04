@@ -10693,7 +10693,7 @@ export default function Tasks() {
                 color: projectTaskFilter === 'overdue' ? 'white' : '#2d3748'
               }}
             >
-              ⏰ Overdue ({miscTasks.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date.split('T')[0]) < new Date()).length})
+              ⏰ Overdue ({(() => { const t0 = new Date(); t0.setHours(0,0,0,0); return miscTasks.filter(t => !t.is_completed && t.due_date && parseDateString(t.due_date.split('T')[0]) < t0).length; })()})
             </button>
           </div>
 
@@ -10856,7 +10856,12 @@ export default function Tasks() {
                       if (projectTaskFilter === 'all') return true;
                       if (projectTaskFilter === 'in-progress') return !task.is_completed;
                       if (projectTaskFilter === 'overdue') {
-                        return !task.is_completed && task.due_date && parseDateString(task.due_date.split('T')[0]) < new Date();
+                        const t0 = new Date(); t0.setHours(0,0,0,0);
+                        const hasOverdue = (t: ProjectTaskData): boolean => {
+                          if (!t.is_completed && t.due_date && parseDateString(t.due_date.split('T')[0]) < t0) return true;
+                          return miscTasks.filter(c => c.parent_task_id === t.id).some(hasOverdue);
+                        };
+                        return hasOverdue(task);
                       }
                       return true;
                     })
@@ -10988,13 +10993,11 @@ export default function Tasks() {
                       localStorage.setItem('expandedMiscTasks', JSON.stringify(Array.from(newExpanded)));
                     }}
                     onToggleComplete={async (taskId: number, currentStatus: boolean) => {
-                      // If trying to mark as complete, check for incomplete subtasks
+                      // If trying to mark as complete, check for incomplete subtasks (recursive)
                       if (!currentStatus) {
-                        const hasIncompleteSubtasks = miscTasks.some(t => 
-                          t.parent_task_id === taskId && !t.is_completed
-                        );
-                        
-                        if (hasIncompleteSubtasks) {
+                        const hasAnyIncomplete = (id: number): boolean =>
+                          miscTasks.filter(t => t.parent_task_id === id).some(t => !t.is_completed || hasAnyIncomplete(t.id));
+                        if (hasAnyIncomplete(taskId)) {
                           alert('Cannot mark this task as done because it has incomplete subtasks. Please complete all subtasks first.');
                           return;
                         }
@@ -11014,12 +11017,10 @@ export default function Tasks() {
                       setIsTaskFormOpen(true);
                     }}
                     onDelete={async (taskId: number) => {
-                      // Check if task has incomplete subtasks
-                      const hasIncompleteSubtasks = miscTasks.some(t => 
-                        t.parent_task_id === taskId && !t.is_completed
-                      );
-                      
-                      if (hasIncompleteSubtasks) {
+                      // Check if task has incomplete subtasks (recursive)
+                      const hasAnyIncomplete = (id: number): boolean =>
+                        miscTasks.filter(t => t.parent_task_id === id).some(t => !t.is_completed || hasAnyIncomplete(t.id));
+                      if (hasAnyIncomplete(taskId)) {
                         alert('Cannot delete this task because it has incomplete subtasks. Please complete or delete all subtasks first.');
                         return;
                       }
@@ -22167,6 +22168,10 @@ export default function Tasks() {
 
                 console.log('Creating misc task with payload:', taskPayload);
                 await api.post('/api/tasks/', taskPayload);
+                // If subtask was added to a completed parent, auto-mark parent as incomplete
+                if (editingMiscTask?.id && editingMiscTask.is_completed) {
+                  await api.put(`/api/tasks/${editingMiscTask.id}`, { is_completed: false });
+                }
                 setShowAddMiscTaskModal(false);
                 setEditingMiscTask(null);
                 await loadMiscTaskGroups();
