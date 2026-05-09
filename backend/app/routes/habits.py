@@ -223,6 +223,8 @@ def get_all_habits(active_only: bool = True, db: Session = Depends(get_db)):
             "start_date": habit.start_date.date() if habit.start_date else None,
             "end_date": habit.end_date.date() if habit.end_date else None,
             "is_active": habit.is_active,
+            "is_completed": habit.is_completed,
+            "completed_at": habit.completed_at.isoformat() if habit.completed_at else None,
             "created_at": habit.created_at,
             "stats": stats,
             "monthly_completion": monthly_completion
@@ -416,22 +418,24 @@ def get_habit_month_data(
     month_days = []
     current_date = first_day
     today = date.today()
+    habit_end = habit.end_date.date() if habit.end_date else None
     
     while current_date <= last_day:
         before_start = current_date < habit.start_date.date() if habit.start_date else False
         in_future = current_date > today
+        after_end = habit_end is not None and current_date > habit_end
         
-        # Only check completion status for dates between habit start and today
+        # Only check completion status for dates between habit start and end (or today)
         if before_start:
             # Before habit started - show as null
             is_successful = None
             exists = False
-        elif in_future:
-            # Future date - don't show anything
+        elif in_future or after_end:
+            # Future date or after habit was completed/ended - don't show anything
             is_successful = None
             exists = False
         else:
-            # Between start date and today - check if completed
+            # Between start date and end/today - check if completed
             is_successful = current_date in completed_dates
             # If not completed and date is in the past, mark as failed
             exists = True
@@ -442,7 +446,8 @@ def get_habit_month_data(
             "dayName": current_date.strftime('%a'),
             "isSuccessful": is_successful,
             "exists": exists,
-            "beforeStart": before_start
+            "beforeStart": before_start,
+            "afterEnd": after_end
         })
         current_date += timedelta(days=1)
     
@@ -805,6 +810,16 @@ def mark_habit_complete(
     
     habit.is_completed = is_completed
     habit.completed_at = datetime.now() if is_completed else None
+    # When completing: set end_date to today (freezes the calendar) and deactivate.
+    # When reverting: clear end_date and reactivate.
+    if is_completed:
+        if not habit.end_date:
+            from datetime import date as date_type
+            habit.end_date = datetime.combine(date_type.today(), datetime.min.time())
+        habit.is_active = False
+    else:
+        habit.end_date = None
+        habit.is_active = True
     
     db.commit()
     db.refresh(habit)

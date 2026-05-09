@@ -439,6 +439,23 @@ export default function Tasks() {
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
   const [showCompletedMiscTasks, setShowCompletedMiscTasks] = useState(false);
   const [showCompletedDailyTasks, setShowCompletedDailyTasks] = useState(true); // Default to expanded
+
+  // Task reference warning modal
+  interface TaskReference {
+    task_id: number;
+    task_name: string;
+    habits: Array<{ id: number; name: string; habit_type: string; target_frequency: string; pillar_name: string | null; category_name: string | null }>;
+    challenges: Array<{ id: number; name: string; status: string; pillar_name: string | null }>;
+    monitoring_tabs: string[];
+    has_references: boolean;
+  }
+  const [taskReferenceWarning, setTaskReferenceWarning] = useState<{
+    visible: boolean;
+    action: 'complete' | 'na' | 'delete' | 'remove-tracking' | null;
+    taskId: number | null;
+    taskName: string;
+    references: TaskReference | null;
+  }>({ visible: false, action: null, taskId: null, taskName: '', references: null });
   const [expandedHabitCategories, setExpandedHabitCategories] = useState<Set<string>>(() => {
     const saved = localStorage.getItem('expandedHabitCategories');
     return saved ? new Set(JSON.parse(saved)) : new Set();
@@ -467,6 +484,7 @@ export default function Tasks() {
   const [goalTasksDueToday, setGoalTasksDueToday] = useState<Array<any>>([]);
   const [pendingProjectId, setPendingProjectId] = useState<number | null>(null); // Track project ID from URL (kept for URL effect compat)
   const pendingProjectIdRef = useRef<number | null>(null); // Ref version — reliable across async boundaries
+  const pendingTaskActionRef = useRef<(() => Promise<void>) | null>(null); // Pending action for task reference warning modal
   
   // Collapsible project sections state
   const [collapsedProjectSections, setCollapsedProjectSections] = useState<{[key: string]: boolean}>(() => {
@@ -562,6 +580,8 @@ export default function Tasks() {
     start_date: string;
     end_date?: string;
     is_active: boolean;
+    is_completed?: boolean;
+    completed_at?: string | null;
     created_at: string;
     // New fields for enhanced tracking
     tracking_mode?: 'daily_streak' | 'occurrence' | 'occurrence_with_value' | 'aggregate';
@@ -1158,7 +1178,8 @@ export default function Tasks() {
       const completedResponse: any = await api.get('/api/habits/?active_only=false');
       const completedData = completedResponse.data || completedResponse;
       console.log('✅ All habits API response:', completedData);
-      const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => !h.is_active || h.is_completed) : [];
+      // Only habits explicitly marked complete (is_completed=true) belong in the completed section
+      const completedList = Array.isArray(completedData) ? completedData.filter((h: any) => h.is_completed === true) : [];
       console.log('✅ Setting completed habits count:', completedList.length, completedList.map((h: any) => ({ id: h.id, name: h.name, is_active: h.is_active })));
       setCompletedHabits(completedList);
       
@@ -2104,45 +2125,79 @@ export default function Tasks() {
   }
 
   // Daily-specific completion handlers - mark only the daily entry for current date
-  const handleDailyTaskComplete = async (taskId: number) => {
+  // Fetch task references, show warning if any found, then execute action
+  const checkReferencesAndConfirm = async (
+    taskId: number,
+    action: 'complete' | 'na' | 'delete' | 'remove-tracking',
+    onConfirm: () => Promise<void>
+  ) => {
     try {
-      const dateStr = formatDateForInput(selectedDate);
-      // Mark daily-specific status first
-      await api.post(`/api/daily-task-status/${taskId}/complete`, null, {
-        params: { status_date: dateStr }
-      });
-      // Also call global completion so weekly, monthly, yearly, and habit tabs sync
-      await api.post(`/api/tasks/${taskId}/complete`, {});
-      // Reload daily statuses, entries, and completion dates
-      await loadDailyStatuses(selectedDate);
-      await loadDailyEntries(selectedDate);
-      await loadDailyTaskCompletionDates();
-      // Reload tasks (updates task.is_completed for cross-tab filtering)
-      await loadTasks();
-      // Reload weekly and monthly statuses so in-page tabs also reflect completion
-      await loadWeeklyEntries(selectedWeekStart);
-      await loadMonthlyEntries(selectedMonthStart);
-      // Reload habits so any linked habit moves to completed section
-      await loadHabits();
-    } catch (err: any) {
-      console.error('Error marking daily task complete:', err);
-      alert('Failed to mark task as completed: ' + (err.response?.data?.detail || err.message));
+      const refs = await api.get<any>(`/api/tasks/${taskId}/references`);
+      if (refs.has_references) {
+        setTaskReferenceWarning({
+          visible: true,
+          action,
+          taskId,
+          taskName: refs.task_name,
+          references: refs,
+          // Store callback for when user confirms
+        });
+        // Store the confirm callback in a ref so the modal can call it
+        pendingTaskActionRef.current = onConfirm;
+      } else {
+        await onConfirm();
+      }
+    } catch {
+      // If references check fails, proceed without warning
+      await onConfirm();
     }
   };
 
+  const handleDailyTaskComplete = async (taskId: number) => {
+    const doComplete = async () => {
+      try {
+        const dateStr = formatDateForInput(selectedDate);
+        // Mark daily-specific status first
+        await api.post(`/api/daily-task-status/${taskId}/complete`, null, {
+          params: { status_date: dateStr }
+        });
+        // Also call global completion so weekly, monthly, yearly, and habit tabs sync
+        await api.post(`/api/tasks/${taskId}/complete`, {});
+        // Reload daily statuses, entries, and completion dates
+        await loadDailyStatuses(selectedDate);
+        await loadDailyEntries(selectedDate);
+        await loadDailyTaskCompletionDates();
+        // Reload tasks (updates task.is_completed for cross-tab filtering)
+        await loadTasks();
+        // Reload weekly and monthly statuses so in-page tabs also reflect completion
+        await loadWeeklyEntries(selectedWeekStart);
+        await loadMonthlyEntries(selectedMonthStart);
+        // Reload habits so any linked habit moves to completed section
+        await loadHabits();
+      } catch (err: any) {
+        console.error('Error marking daily task complete:', err);
+        alert('Failed to mark task as completed: ' + (err.response?.data?.detail || err.message));
+      }
+    };
+    await checkReferencesAndConfirm(taskId, 'complete', doComplete);
+  };
+
   const handleDailyTaskNA = async (taskId: number) => {
-    try {
-      const dateStr = formatDateForInput(selectedDate);
-      await api.post(`/api/daily-task-status/${taskId}/na`, null, {
-        params: { status_date: dateStr }
-      });
-      // Reload daily statuses and entries
-      await loadDailyStatuses(selectedDate);
-      await loadDailyEntries(selectedDate);
-    } catch (err: any) {
-      console.error('Error marking daily task NA:', err);
-      alert('Failed to mark task as NA: ' + (err.response?.data?.detail || err.message));
-    }
+    const doNA = async () => {
+      try {
+        const dateStr = formatDateForInput(selectedDate);
+        await api.post(`/api/daily-task-status/${taskId}/na`, null, {
+          params: { status_date: dateStr }
+        });
+        // Reload daily statuses and entries
+        await loadDailyStatuses(selectedDate);
+        await loadDailyEntries(selectedDate);
+      } catch (err: any) {
+        console.error('Error marking daily task NA:', err);
+        alert('Failed to mark task as NA: ' + (err.response?.data?.detail || err.message));
+      }
+    };
+    await checkReferencesAndConfirm(taskId, 'na', doNA);
   };
 
   const handleUndoComplete = async (taskId: number) => {
@@ -2162,18 +2217,21 @@ export default function Tasks() {
 
   // Tracking management functions
   const handleRemoveFromTracking = async (taskId: number) => {
-    try {
-      const dateStr = formatDateForInput(selectedDate);
-      await api.post(`/api/daily-task-status/${taskId}/remove-from-tracking`, null, {
-        params: { status_date: dateStr }
-      });
-      // Reload daily statuses and entries
-      await loadDailyStatuses(selectedDate);
-      await loadDailyEntries(selectedDate);
-    } catch (err: any) {
-      console.error('Error removing task from tracking:', err);
-      alert('Failed to remove task from tracking: ' + (err.response?.data?.detail || err.message));
-    }
+    const doRemove = async () => {
+      try {
+        const dateStr = formatDateForInput(selectedDate);
+        await api.post(`/api/daily-task-status/${taskId}/remove-from-tracking`, null, {
+          params: { status_date: dateStr }
+        });
+        // Reload daily statuses and entries
+        await loadDailyStatuses(selectedDate);
+        await loadDailyEntries(selectedDate);
+      } catch (err: any) {
+        console.error('Error removing task from tracking:', err);
+        alert('Failed to remove task from tracking: ' + (err.response?.data?.detail || err.message));
+      }
+    };
+    await checkReferencesAndConfirm(taskId, 'remove-tracking', doRemove);
   };
 
   const handleAddToTracking = async (taskId: number) => {
@@ -11509,8 +11567,20 @@ export default function Tasks() {
                   const pctColor = (v: number | null) => v == null ? '#cbd5e1' : v >= 70 ? '#059669' : v >= 40 ? '#b45309' : '#dc2626';
                   const weekOk = weekPct !== null && weekPct > 60;
                   const monthOk = monthPct !== null && monthPct > 60;
-                  const rowBg = isDone ? '#bbf7d0' : (weekOk && monthOk) ? '#bbf7d0' : (weekOk || monthOk) ? '#fef08a' : '#fecdd3';
+                  const rowBg = isDone
+                    ? ((overallPct ?? 0) >= 60 ? '#bbf7d0' : '#fecdd3')
+                    : (weekOk && monthOk) ? '#bbf7d0' : (weekOk || monthOk) ? '#fef08a' : '#fecdd3';
                   const isExpanded = expandedHabitId === habit.id;
+
+                  // Completion date for display
+                  const completionDateDisplay = (() => {
+                    if (!isDone) return null;
+                    // Prefer completed_at, fall back to end_date
+                    const raw = habit.completed_at || habit.end_date;
+                    if (!raw) return null;
+                    const d = new Date(raw);
+                    return isNaN(d.getTime()) ? raw : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  })();
                   const statBar = (label: string, pct: number | null, threshold: number) => {
                     const v = pct ?? 0;
                     const color = v >= threshold ? '#059669' : v >= threshold * 0.7 ? '#f59e0b' : '#ef4444';
@@ -11558,14 +11628,25 @@ export default function Tasks() {
                         </td>
                         <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', color: '#374151', fontSize: '12px', whiteSpace: 'nowrap' }}>{habit.category_name || <span style={{ color: '#cbd5e1' }}>—</span>}</td>
                         <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: streak >= 7 ? '#f59e0b' : '#374151' }}>
-                          {streak > 0 ? `${streak}🔥` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                          {isDone ? <span style={{ color: '#94a3b8', fontSize: '11px' }}>—</span> : streak > 0 ? `${streak}🔥` : <span style={{ color: '#cbd5e1' }}>—</span>}
                         </td>
-                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(weekPct) }}>
-                          {weekPct != null ? `${weekPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
-                        </td>
-                        <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(monthPct) }}>
-                          {monthPct != null ? `${monthPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
-                        </td>
+                        {/* Week % — for completed habits, show "Completed" badge spanning week+month columns */}
+                        {isDone ? (
+                          <td colSpan={2} style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#d1fae5', color: '#065f46', borderRadius: '10px', padding: '3px 10px', fontSize: '11px', fontWeight: '700', border: '1px solid #6ee7b7', whiteSpace: 'nowrap' }}>
+                              🏁 {completionDateDisplay ? `Completed ${completionDateDisplay}` : 'Completed'}
+                            </span>
+                          </td>
+                        ) : (
+                          <>
+                            <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(weekPct) }}>
+                              {weekPct != null ? `${weekPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                            </td>
+                            <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(monthPct) }}>
+                              {monthPct != null ? `${monthPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
+                            </td>
+                          </>
+                        )}
                         <td style={{ padding: '8px 10px', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', textAlign: 'center', fontWeight: '600', color: pctColor(overallPct) }}>
                           {overallPct != null ? `${overallPct}%` : <span style={{ color: '#cbd5e1' }}>—</span>}
                         </td>
@@ -11618,23 +11699,27 @@ export default function Tasks() {
                                   const daysInMonth = new Date(year, month + 1, 0).getDate();
                                   const monthDays = habitMonthDays[habit.id] || [];
                                   const habitStartDate = habit.start_date ? parseDateString(habit.start_date) : null;
+                                  const habitEndDate = habit.end_date ? parseDateString(habit.end_date) : null;
                                   const cells = [];
                                   for (let dn = 1; dn <= daysInMonth; dn++) {
                                     const dayData = monthDays.find((d: any) => d.dayNum === dn);
                                     const isStartDt = habitStartDate && habitStartDate.getDate() === dn && habitStartDate.getMonth() === month && habitStartDate.getFullYear() === year;
+                                    const isEndDt = habitEndDate && habitEndDate.getDate() === dn && habitEndDate.getMonth() === month && habitEndDate.getFullYear() === year;
                                     let bgColor = '#e2e8f0', symbol = '', textColor = '#718096';
-                                    if (dayData?.beforeStart) { bgColor = '#e2e8f0'; }
+                                    if (dayData?.beforeStart || dayData?.afterEnd) { bgColor = '#e2e8f0'; }
                                     else if (dayData?.exists) { bgColor = dayData.isSuccessful ? '#48bb78' : '#fc8181'; symbol = dayData.isSuccessful ? '✓' : '✗'; textColor = 'white'; }
+                                    // Mark the end date cell with a gold border
+                                    if (isEndDt) { bgColor = '#fef3c7'; textColor = '#92400e'; }
                                     const cellDate = new Date(year, month, dn); cellDate.setHours(0, 0, 0, 0);
                                     const isToday = cellDate.getTime() === todayD.getTime();
-                                    const clickable = !dayData?.beforeStart && cellDate <= todayD && !habit.linked_task_id;
+                                    const clickable = !isDone && !dayData?.beforeStart && cellDate <= todayD && !habit.linked_task_id;
                                     const dateStr = `${year}-${String(month + 1).padStart(2,'0')}-${String(dn).padStart(2,'0')}`;
                                     cells.push(
                                       <div key={dn} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', minWidth: '32px' }}
-                                        title={`${habitMonth.toLocaleString('en-US', { month: 'short' })} ${dn}${dayData?.exists ? (dayData.isSuccessful ? ': Done ✓' : ': Missed ✗') : (dayData?.beforeStart ? ': Before start' : '')}`}
+                                        title={`${habitMonth.toLocaleString('en-US', { month: 'short' })} ${dn}${isEndDt ? ': Habit completed 🏁' : dayData?.exists ? (dayData.isSuccessful ? ': Done ✓' : ': Missed ✗') : (dayData?.beforeStart ? ': Before start' : dayData?.afterEnd ? ': After completion' : '')}`}
                                       >
-                                        <div style={{ fontSize: isStartDt ? '8px' : '9px', color: isStartDt ? '#2b6cb0' : '#718096', fontWeight: isToday || isStartDt ? '700' : '500', height: '12px' }}>
-                                          {isStartDt ? 'Start' : dn}
+                                        <div style={{ fontSize: isStartDt || isEndDt ? '8px' : '9px', color: isStartDt ? '#2b6cb0' : isEndDt ? '#92400e' : '#718096', fontWeight: isToday || isStartDt || isEndDt ? '700' : '500', height: '12px' }}>
+                                          {isEndDt ? '🏁' : isStartDt ? 'Start' : dn}
                                         </div>
                                         <div
                                           onClick={clickable ? async (e) => {
@@ -11663,12 +11748,20 @@ export default function Tasks() {
                               ) : null}
                               {/* Streak info box */}
                               <div style={{ padding: '10px 14px', backgroundColor: '#fef5e7', border: '2px solid #f9e79f', borderRadius: '8px', fontSize: '15px', color: '#7d6608', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', whiteSpace: 'nowrap' }}>
-                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Current:</span> {habit.stats?.current_streak || 0}</div>
+                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Current:</span> {isDone ? '—' : (habit.stats?.current_streak || 0)}</div>
                                 <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Best:</span> {habit.stats?.longest_streak || 0}</div>
                                 <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Overall:</span> {habit.stats?.success_rate || 0}%</div>
                               </div>
-                              {/* Success rates - threshold-aware colors */}
-                              {(() => {
+                              {/* For completed habits: show completion date; for active: show Week/Month rates */}
+                              {isDone ? (
+                                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', border: '2px solid #6ee7b7', borderRadius: '8px', fontSize: '15px', color: '#065f46', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '10px', whiteSpace: 'nowrap' }}>
+                                  <span style={{ fontSize: '20px' }}>🏁</span>
+                                  <div>
+                                    <div style={{ fontSize: '11px', opacity: 0.75, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Habit Completed</div>
+                                    <div style={{ fontSize: '14px' }}>{completionDateDisplay || '—'}</div>
+                                  </div>
+                                </div>
+                              ) : (() => {
                                 const wk = habit.stats?.week_success_rate ?? 0;
                                 const mo = habit.stats?.month_success_rate ?? 0;
                                 const ok = wk > 60 || mo > 60;
@@ -11682,10 +11775,13 @@ export default function Tasks() {
                               {/* Start date and Days info */}
                               <div style={{ padding: '10px 14px', backgroundColor: '#f0f4ff', border: '2px solid #c3dafe', borderRadius: '8px', fontSize: '15px', color: '#2c5282', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', whiteSpace: 'nowrap' }}>
                                 <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Start:</span> {parseDateString(habit.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
-                                <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> {Math.floor((new Date().getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1}</div>
+                                {isDone
+                                  ? <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days Active:</span> {habit.end_date ? Math.floor((parseDateString(habit.end_date).getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1 : '—'}</div>
+                                  : <div><span style={{ fontSize: '13px', opacity: 0.8 }}>Days:</span> {Math.floor((new Date().getTime() - parseDateString(habit.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1}</div>
+                                }
                               </div>
-                              {/* Date + Done/Missed buttons (manual habits only) */}
-                              {!habit.linked_task_id && (
+                              {/* Date + Done/Missed buttons — hidden for completed habits */}
+                              {!habit.linked_task_id && !isDone && (
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 8px', backgroundColor: '#f7fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
                                   <input
                                     type="date"
@@ -11711,14 +11807,46 @@ export default function Tasks() {
                                   onClick={(e) => { e.stopPropagation(); setEditingHabit(habit); setShowAddHabitModal(true); }}
                                   style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: '#667eea', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                                 >✏️ Edit</button>
-                                {!habit.end_date && (
+                                {isDone && (
                                   <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
-                                      if (confirm(`Mark habit "${habit.name}" as completed? This will set an end date to today.`)) {
+                                      if (confirm(`Reactivate "${habit.name}"? This will clear the end date and move it back to active habits.`)) {
                                         try {
-                                          const today = new Date().toISOString().split('T')[0];
-                                          await api.put(`/api/habits/${habit.id}`, { name: habit.name, description: habit.description, pillar_id: habit.pillar_id, category_id: habit.category_id, subcategory_id: habit.subcategory_id, start_date: habit.start_date, end_date: today, is_active: false, tracking_mode: habit.tracking_mode, period_type: habit.period_type, target_count: habit.target_count, target_comparison: habit.target_comparison, linked_task_id: habit.linked_task_id, session_target_value: habit.session_target_value, session_target_unit: habit.session_target_unit });
+                                          await api.put(`/api/habits/${habit.id}`, {
+                                            name: habit.name,
+                                            description: habit.description,
+                                            pillar_id: habit.pillar_id,
+                                            category_id: habit.category_id,
+                                            start_date: habit.start_date,
+                                            end_date: null,
+                                            is_active: true,
+                                            is_completed: false,
+                                            tracking_mode: habit.tracking_mode,
+                                            period_type: habit.period_type,
+                                            target_count_per_period: habit.target_count_per_period,
+                                            target_comparison: habit.target_comparison,
+                                            linked_task_id: habit.linked_task_id,
+                                            session_target_value: habit.session_target_value,
+                                            session_target_unit: habit.session_target_unit
+                                          });
+                                          await loadHabits();
+                                        } catch (err: any) {
+                                          alert('Failed to reactivate: ' + (err.response?.data?.detail || err.message));
+                                        }
+                                      }
+                                    }}
+                                    style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                  >↩ Reactivate</button>
+                                )}
+                                {!isDone && (
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (confirm(`Mark habit "${habit.name}" as completed?`)) {
+                                        try {
+                                          // Use the dedicated mark-complete endpoint so is_completed=true is set
+                                          await api.post(`/api/habits/${habit.id}/mark-complete?is_completed=true`);
                                           await loadHabits();
                                           alert('🎉 Congratulations! Habit marked as complete!');
                                         } catch (err: any) {
@@ -11832,26 +11960,53 @@ export default function Tasks() {
                         </div>
                       )}
                     </div>
-                    {/* Completed Habits */}
-                    {completedHabits.length > 0 && (
-                      <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                        <div onClick={() => setHabitListCompletedCollapsed(prev => !prev)}
-                          style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}>
-                          <span style={{ fontSize: '12px', display: 'inline-block', transform: habitListCompletedCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
-                          <span style={{ fontWeight: '700', fontSize: '14px' }}>Habits (Completed)</span>
-                          <span style={{ opacity: 0.8, fontSize: '13px' }}>• {completedHabits.length} habits</span>
-                          <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{habitListCompletedCollapsed ? 'click to expand' : 'click to collapse'}</span>
-                        </div>
-                        {!habitListCompletedCollapsed && (
-                          <div style={{ overflowX: 'auto' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
-                              <thead>{colHeaderRow}</thead>
-                              <tbody>{[...completedHabits].sort(habitSortBy).map((h, i) => renderHabitRow(h, i, true))}</tbody>
-                            </table>
+                    {/* Completed Habits — grouped by category, sorted most-recently-completed first */}
+                    {completedHabits.length > 0 && (() => {
+                      // Sort by completion date descending (most recent first)
+                      const sortedCompleted = [...completedHabits].sort((a, b) => {
+                        const da = a.completed_at || a.end_date || a.created_at || '';
+                        const db2 = b.completed_at || b.end_date || b.created_at || '';
+                        return db2.localeCompare(da);
+                      });
+                      // Group by category
+                      const byCategory: Record<string, HabitData[]> = {};
+                      sortedCompleted.forEach(h => {
+                        const cat = h.category_name || 'Uncategorized';
+                        if (!byCategory[cat]) byCategory[cat] = [];
+                        byCategory[cat].push(h);
+                      });
+                      return (
+                        <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+                          {/* Section header */}
+                          <div onClick={() => setHabitListCompletedCollapsed(prev => !prev)}
+                            style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', userSelect: 'none' }}>
+                            <span style={{ fontSize: '12px', display: 'inline-block', transform: habitListCompletedCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.2s' }}>▼</span>
+                            <span style={{ fontWeight: '700', fontSize: '14px' }}>Habits (Completed)</span>
+                            <span style={{ opacity: 0.8, fontSize: '13px' }}>• {completedHabits.length} habits</span>
+                            <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.65 }}>{habitListCompletedCollapsed ? 'click to expand' : 'click to collapse'}</span>
                           </div>
-                        )}
-                      </div>
-                    )}
+                          {!habitListCompletedCollapsed && (
+                            <div style={{ backgroundColor: 'white' }}>
+                              {Object.entries(byCategory).map(([cat, catHabits]) => (
+                                <div key={cat}>
+                                  {/* Category sub-header */}
+                                  <div style={{ padding: '6px 16px', backgroundColor: '#f0fdf4', borderBottom: '1px solid #bbf7d0', borderTop: '1px solid #d1fae5', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#065f46' }}>📂 {cat}</span>
+                                    <span style={{ fontSize: '11px', color: '#6ee7b7', fontWeight: '600' }}>• {catHabits.length}</span>
+                                  </div>
+                                  <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                      <thead>{colHeaderRow}</thead>
+                                      <tbody>{catHabits.map((h, i) => renderHabitRow(h, i, true))}</tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -22344,6 +22499,147 @@ export default function Tasks() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* Task Reference Warning Modal */}
+      {taskReferenceWarning.visible && taskReferenceWarning.references && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: '12px', padding: '28px',
+            maxWidth: '520px', width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+            maxHeight: '80vh', overflowY: 'auto'
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '24px' }}>⚠️</span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1a202c' }}>
+                  Task is Referenced Elsewhere
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: '13px', color: '#718096' }}>
+                  "{taskReferenceWarning.taskName}"
+                </p>
+              </div>
+            </div>
+
+            {/* Action label */}
+            <p style={{ fontSize: '13px', color: '#4a5568', marginBottom: '16px', lineHeight: 1.5 }}>
+              You are about to mark this task as{' '}
+              <strong style={{ color: taskReferenceWarning.action === 'complete' ? '#38a169' : taskReferenceWarning.action === 'na' ? '#718096' : '#e53e3e' }}>
+                {taskReferenceWarning.action === 'complete' ? 'Completed ✅' :
+                 taskReferenceWarning.action === 'na' ? 'Not Applicable (NA)' :
+                 taskReferenceWarning.action === 'remove-tracking' ? 'Remove from Tracking' : 'Deleted 🗑'}
+              </strong>.
+              {' '}The following items are linked to this task and may be affected:
+            </p>
+
+            {/* Habits section */}
+            {taskReferenceWarning.references.habits.length > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>🔁</span>
+                  <strong style={{ fontSize: '13px', color: '#2d3748' }}>
+                    Linked Habits ({taskReferenceWarning.references.habits.length})
+                  </strong>
+                </div>
+                {taskReferenceWarning.references.habits.map(h => (
+                  <div key={h.id} style={{
+                    padding: '8px 12px', backgroundColor: '#fff3cd', borderRadius: '6px',
+                    marginBottom: '6px', fontSize: '13px', borderLeft: '3px solid #f6ad55'
+                  }}>
+                    <strong>{h.name}</strong>
+                    <span style={{ color: '#718096', marginLeft: '8px' }}>
+                      {h.habit_type} · {h.target_frequency}
+                      {h.pillar_name ? ` · ${h.pillar_name}` : ''}
+                      {h.category_name ? ` / ${h.category_name}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Challenges section */}
+            {taskReferenceWarning.references.challenges.length > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>🎯</span>
+                  <strong style={{ fontSize: '13px', color: '#2d3748' }}>
+                    Linked Challenges ({taskReferenceWarning.references.challenges.length})
+                  </strong>
+                </div>
+                {taskReferenceWarning.references.challenges.map(c => (
+                  <div key={c.id} style={{
+                    padding: '8px 12px', backgroundColor: '#fef3f2', borderRadius: '6px',
+                    marginBottom: '6px', fontSize: '13px', borderLeft: '3px solid #fc8181'
+                  }}>
+                    <strong>{c.name}</strong>
+                    <span style={{ color: '#718096', marginLeft: '8px' }}>
+                      {c.status}{c.pillar_name ? ` · ${c.pillar_name}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Monitoring tabs section */}
+            {taskReferenceWarning.references.monitoring_tabs.length > 0 && (
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '16px' }}>📊</span>
+                  <strong style={{ fontSize: '13px', color: '#2d3748' }}>
+                    Monitored in Other Tabs
+                  </strong>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {taskReferenceWarning.references.monitoring_tabs.map(tab => (
+                    <span key={tab} style={{
+                      padding: '4px 10px', backgroundColor: '#ebf8ff', borderRadius: '12px',
+                      fontSize: '12px', fontWeight: '600', color: '#2b6cb0', border: '1px solid #bee3f8'
+                    }}>
+                      {tab} Tab
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+              <button
+                onClick={() => {
+                  setTaskReferenceWarning({ visible: false, action: null, taskId: null, taskName: '', references: null });
+                  pendingTaskActionRef.current = null;
+                }}
+                style={{
+                  padding: '10px 20px', fontSize: '14px', backgroundColor: '#edf2f7',
+                  color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  const action = pendingTaskActionRef.current;
+                  setTaskReferenceWarning({ visible: false, action: null, taskId: null, taskName: '', references: null });
+                  pendingTaskActionRef.current = null;
+                  if (action) await action();
+                }}
+                style={{
+                  padding: '10px 20px', fontSize: '14px',
+                  backgroundColor: taskReferenceWarning.action === 'complete' ? '#38a169' :
+                                   taskReferenceWarning.action === 'na' ? '#718096' : '#e53e3e',
+                  color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
+                }}
+              >
+                {taskReferenceWarning.action === 'complete' ? 'Yes, Mark Completed' :
+                 taskReferenceWarning.action === 'na' ? 'Yes, Mark NA' :
+                 taskReferenceWarning.action === 'remove-tracking' ? 'Yes, Remove' : 'Yes, Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

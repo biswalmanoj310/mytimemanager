@@ -857,7 +857,7 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ show, onClose, onS
             </label>
             <select
               name="monitoring_duration_days"
-              defaultValue="90"
+              defaultValue=""
               style={{
                 width: '100%',
                 padding: '8px',
@@ -865,16 +865,16 @@ export const AddHabitModal: React.FC<AddHabitModalProps> = ({ show, onClose, onS
                 borderRadius: '4px'
               }}
             >
+              <option value="">Never ending — always visible until I mark it complete ✅ (Recommended)</option>
               <option value="21">21 days (Build Foundation)</option>
               <option value="30">30 days (1 Month)</option>
               <option value="60">60 days (2 Months)</option>
-              <option value="90">90 days (3 Months - Recommended)</option>
+              <option value="90">90 days (3 Months)</option>
               <option value="180">180 days (6 Months)</option>
               <option value="365">365 days (1 Year)</option>
-              <option value="">Ongoing (No end date)</option>
             </select>
             <small style={{ color: '#666', display: 'block', marginTop: '4px' }}>
-              Research shows it takes 21-66 days to form a habit. 90 days is optimal for lasting change.
+              The habit stays in your active list every day until you explicitly mark it as completed.
             </small>
           </div>
 

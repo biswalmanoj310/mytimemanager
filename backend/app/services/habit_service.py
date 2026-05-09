@@ -29,26 +29,13 @@ class HabitService:
     
     @staticmethod
     def get_all_habits(db: Session, active_only: bool = True) -> List[Habit]:
-        """Get all habits - automatically marks habits past end_date as inactive"""
-        from datetime import date as date_type
-        
-        # First, auto-complete habits that are past their end_date
-        today = date_type.today()
-        expired_habits = db.query(Habit).filter(
-            Habit.is_active == True,
-            Habit.end_date.isnot(None),
-            Habit.end_date < today
-        ).all()
-        
-        for habit in expired_habits:
-            habit.is_active = False
-        
-        if expired_habits:
-            db.commit()
-        
-        # Now return habits based on active_only filter
+        """Get all habits.
+        end_date is informational only — a habit moves to 'completed' only when
+        is_completed is explicitly set to True via the mark-complete endpoint.
+        """
         query = db.query(Habit)
         if active_only:
+            # Active = not explicitly marked complete (end_date alone is not enough)
             query = query.filter(Habit.is_active == True, Habit.is_completed == False)
         return query.order_by(Habit.created_at.desc()).all()
     

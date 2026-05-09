@@ -202,6 +202,68 @@ def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+@router.get("/{task_id}/references")
+def get_task_references(task_id: int, db: Session = Depends(get_db)):
+    """
+    Get all places where this task is referenced:
+    habits, challenges linked to it, and which other tabs are monitoring it.
+    Used to warn the user before completing/deleting/NA-ing a daily task.
+    """
+    from app.models.models import Habit, Challenge, WeeklyTaskStatus, MonthlyTaskStatus, YearlyTaskStatus
+
+    task = TaskService.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
+
+    # Habits linked to this task
+    linked_habits = db.query(Habit).filter(
+        Habit.linked_task_id == task_id,
+        Habit.is_active == True
+    ).all()
+
+    # Challenges linked to this task
+    linked_challenges = db.query(Challenge).filter(
+        Challenge.linked_task_id == task_id,
+        Challenge.is_active == True
+    ).all()
+
+    # Tabs monitoring this task
+    monitoring_tabs = []
+    if db.query(WeeklyTaskStatus).filter(WeeklyTaskStatus.task_id == task_id).first():
+        monitoring_tabs.append("Weekly")
+    if db.query(MonthlyTaskStatus).filter(MonthlyTaskStatus.task_id == task_id).first():
+        monitoring_tabs.append("Monthly")
+    if db.query(YearlyTaskStatus).filter(YearlyTaskStatus.task_id == task_id).first():
+        monitoring_tabs.append("Yearly")
+
+    return {
+        "task_id": task_id,
+        "task_name": task.name,
+        "habits": [
+            {
+                "id": h.id,
+                "name": h.name,
+                "habit_type": h.habit_type,
+                "target_frequency": h.target_frequency,
+                "pillar_name": h.pillar.name if h.pillar else None,
+                "category_name": h.category.name if h.category else None,
+            }
+            for h in linked_habits
+        ],
+        "challenges": [
+            {
+                "id": c.id,
+                "name": c.name,
+                "status": c.status,
+                "pillar_name": c.pillar.name if c.pillar else None,
+            }
+            for c in linked_challenges
+        ],
+        "monitoring_tabs": monitoring_tabs,
+        "has_references": bool(linked_habits or linked_challenges or monitoring_tabs),
+    }
+
+
 @router.post("/{task_id}/complete", response_model=TaskResponse)
 def mark_task_completed(task_id: int, db: Session = Depends(get_db)):
     """
