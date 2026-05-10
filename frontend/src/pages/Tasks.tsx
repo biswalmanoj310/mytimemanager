@@ -11075,11 +11075,13 @@ export default function Tasks() {
                       }
                     }}
                     onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                      const scrollY = window.scrollY;
                       try {
                         await api.put(`/api/tasks/${taskId}`, {
                           due_date: newDueDate
                         });
                         await loadMiscTaskGroups();
+                        requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
                       } catch (err: any) {
                         console.error('Error updating due date:', err);
                         alert('Failed to update due date. Please try again.');
@@ -11267,9 +11269,11 @@ export default function Tasks() {
                                     }
                                   }}
                                   onUpdateDueDate={async (taskId: number, newDueDate: string) => {
+                                    const scrollY = window.scrollY;
                                     try {
                                       await api.put(`/api/tasks/${taskId}`, { due_date: newDueDate });
                                       await loadMiscTaskGroups();
+                                      requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
                                     } catch (err: any) {
                                       console.error('Error updating due date:', err);
                                       alert('Failed to update due date. Please try again.');
