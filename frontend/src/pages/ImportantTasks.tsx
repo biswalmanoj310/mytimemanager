@@ -113,9 +113,9 @@ const ImportantTasks: React.FC = () => {
   const countTasksWithChildren = (tasks: ImportantTask[]): number => {
     let count = 0;
     tasks.forEach(task => {
-      count++; // Count the task itself
+      if (task.is_active !== false) count++; // count only active tasks in the header badge
       if (task.children && task.children.length > 0) {
-        count += countTasksWithChildren(task.children); // Count all children recursively
+        count += countTasksWithChildren(task.children);
       }
     });
     return count;
@@ -124,60 +124,43 @@ const ImportantTasks: React.FC = () => {
   const loadImportantTasks = async () => {
     try {
       const response = await axios.get('http://localhost:8000/api/important-tasks');
-      
-      console.log('[ImportantTasks] Loaded tasks from API:', response.data);
-      
-      // Separate active and completed tasks
       const allTasksData = response.data;
-      const activeTasks: ImportantTask[] = [];
-      const completed: ImportantTask[] = [];
-      
-      allTasksData.forEach((task: any) => {
-        if (task.is_active) {
-          activeTasks.push(task);
-        } else {
-          completed.push(task);
-        }
-      });
-      
-      console.log('[ImportantTasks] Active tasks:', activeTasks.length, 'Completed:', completed.length);
-      
-      // Organize active tasks into hierarchy
+
+      // Build full task map from ALL tasks (active and completed) so that
+      // completed children are placed under their parent rather than floating.
       const taskMap = new Map<number, any>();
-      activeTasks.forEach((task: any) => {
+      allTasksData.forEach((task: any) => {
         taskMap.set(task.id, { ...task, children: [] });
       });
 
-      const rootTasks: any[] = [];
-      
-      activeTasks.forEach((task: any) => {
+      // Attach every child to its parent regardless of active/completed status.
+      // Root tasks split by is_active: active → tasks state, completed → completedTasks state.
+      const rootActiveTasks: any[] = [];
+      const rootCompletedTasks: any[] = [];
+      allTasksData.forEach((task: any) => {
         if (task.parent_id) {
-          console.log('[ImportantTasks] Found child task:', task.name, 'parent_id:', task.parent_id);
           const parent = taskMap.get(task.parent_id);
           if (parent) {
-            parent.children = parent.children || [];
             parent.children.push(taskMap.get(task.id)!);
-            console.log('[ImportantTasks] Added child to parent:', parent.name);
           } else {
-            console.warn('[ImportantTasks] Parent not found for task:', task.name, 'parent_id:', task.parent_id);
+            // Orphan (parent not found) – treat as root
+            if (task.is_active) rootActiveTasks.push(taskMap.get(task.id)!);
+            else rootCompletedTasks.push(taskMap.get(task.id)!);
           }
         } else {
-          rootTasks.push(taskMap.get(task.id)!);
+          if (task.is_active) rootActiveTasks.push(taskMap.get(task.id)!);
+          else rootCompletedTasks.push(taskMap.get(task.id)!);
         }
       });
 
-      console.log('[ImportantTasks] Root tasks:', rootTasks.length, 'Expanded parents:', Array.from(expandedTasks));
-      console.log('[ImportantTasks] Task hierarchy:', rootTasks);
-
-      setTasks(rootTasks);
-      // Sort completed tasks by last_check_date descending (most recent first)
-      const sortedCompleted = [...completed].sort((a, b) => {
+      setTasks(rootActiveTasks);
+      // Sort completed root tasks by last_check_date descending (most recent first)
+      const sortedCompleted = [...rootCompletedTasks].sort((a, b) => {
         const dateA = a.last_check_date ? new Date(a.last_check_date).getTime() : 0;
         const dateB = b.last_check_date ? new Date(b.last_check_date).getTime() : 0;
         return dateB - dateA;
       });
       setCompletedTasks(sortedCompleted);
-      // Don't modify expandedTasks - keep previous state
       setLoading(false);
     } catch (error) {
       console.error('Error loading important tasks:', error);
@@ -197,7 +180,7 @@ const ImportantTasks: React.FC = () => {
       return result;
     };
 
-    const allTasks = flattenTasks(tasks);
+    const allTasks = flattenTasks(tasks).filter((t: any) => t.is_active); // only count active tasks
     const overdueTasks = allTasks.filter(t => t.diff < 0);
     const onTimeTasks = allTasks.filter(t => t.diff >= 0);
     const totalGap = allTasks.reduce((sum, t) => sum + (t.ideal_gap_days || 0), 0);
@@ -230,12 +213,13 @@ const ImportantTasks: React.FC = () => {
     
     const filterByStatus = (taskList: ImportantTask[]): ImportantTask[] => {
       return taskList.filter(task => {
-        if (task.status === filterStatus) {
-          return true;
-        }
+        // Always keep completed children (is_active=false) — shown with strikethrough under parent
+        if (!task.is_active) return true;
+        if (task.status === filterStatus) return true;
         if (task.children && task.children.length > 0) {
           task.children = filterByStatus(task.children);
-          return task.children.length > 0;
+          // Keep parent if any active children survived the filter
+          return task.children.some((c: ImportantTask) => c.is_active);
         }
         return false;
       });
@@ -256,11 +240,14 @@ const ImportantTasks: React.FC = () => {
   };
 
   const handleMarkDone = async (taskId: number) => {
-    // Block if task has active sub-tasks
+    // Block only if task has ACTIVE sub-tasks (completed children are fine)
     const task = findTaskInHierarchy(tasks, taskId);
-    if (task && task.children && task.children.length > 0) {
-      alert(`Cannot mark "${task.name}" as done.\n\nIt has ${task.children.length} active sub-task(s) that must be completed first.`);
-      return;
+    if (task && task.children) {
+      const activeChildren = task.children.filter((c: ImportantTask) => c.is_active);
+      if (activeChildren.length > 0) {
+        alert(`Cannot mark "${task.name}" as done.\n\nIt has ${activeChildren.length} active sub-task(s) that must be completed first.`);
+        return;
+      }
     }
 
     try {
@@ -287,11 +274,14 @@ const ImportantTasks: React.FC = () => {
   };
 
   const handleDelete = async (taskId: number) => {
-    // Block if task has active sub-tasks
+    // Block only if task has ACTIVE sub-tasks (completed children are fine)
     const task = findTaskInHierarchy(tasks, taskId);
-    if (task && task.children && task.children.length > 0) {
-      alert(`Cannot delete "${task.name}".\n\nIt has ${task.children.length} active sub-task(s) that must be completed or deleted first.`);
-      return;
+    if (task && task.children) {
+      const activeChildren = task.children.filter((c: ImportantTask) => c.is_active);
+      if (activeChildren.length > 0) {
+        alert(`Cannot delete "${task.name}".\n\nIt has ${activeChildren.length} active sub-task(s) that must be completed or deleted first.`);
+        return;
+      }
     }
 
     if (!confirm('Are you sure you want to delete this task?')) return;
@@ -391,6 +381,38 @@ const ImportantTasks: React.FC = () => {
   };
 
   const renderTask = (task: ImportantTask, level: number = 0, index: { count: number } = { count: 0 }) => {
+    // Completed child under a still-active parent: render with strikethrough/done styling
+    if (!task.is_active) {
+      const currentNumber = ++index.count;
+      return (
+        <React.Fragment key={task.id}>
+          <tr style={{ backgroundColor: '#f0fdf4', borderBottom: '1px solid #bbf7d0', height: '35px', opacity: 0.88 }}>
+            <td className="col-number" style={{ textAlign: 'center', color: '#bbb', fontSize: '12px' }}>{currentNumber}</td>
+            <td className="col-date" style={{ fontSize: '12px', color: '#9ca3af' }}>{formatDate(task.start_date || task.created_at)}</td>
+            <td className="col-task-name" style={{ paddingLeft: `${level * 20 + 8}px` }}>
+              {level > 0 && <span style={{ marginRight: '8px', color: '#999', fontSize: '14px' }}>⟶</span>}
+              <span style={{ marginRight: '6px' }}>✅</span>
+              <span style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '13px' }}>{task.name}</span>
+              <span style={{ marginLeft: '6px', fontSize: '10px', color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>done</span>
+            </td>
+            <td className="col-date" style={{ textAlign: 'center', fontSize: '12px', color: '#15803d', fontWeight: '600' }}>
+              {formatDate(task.last_check_date) !== '-' ? formatDate(task.last_check_date) : '—'}
+            </td>
+            <td className="col-number" style={{ textAlign: 'center', color: '#9ca3af' }}>{task.ideal_gap_days}</td>
+            <td className="col-number" />
+            <td className="col-number" />
+            <td className="col-action" style={{ textAlign: 'center' }}>
+              <button
+                onClick={() => handleUndoComplete(task.id)}
+                title="Move back to active"
+                style={{ padding: '3px 8px', fontSize: '11px', fontWeight: '600', backgroundColor: '#6b7280', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+              >↩ Undo</button>
+            </td>
+          </tr>
+        </React.Fragment>
+      );
+    }
+
     const hasChildren = task.children && task.children.length > 0;
     const isExpanded = expandedTasks.has(task.id);
     const currentNumber = ++index.count;
@@ -786,7 +808,7 @@ const ImportantTasks: React.FC = () => {
                 minWidth: '28px',
                 textAlign: 'center'
               }}>
-                {completedTasks.length}
+                {completedTasks.reduce((n: number, t: ImportantTask) => n + 1 + (t.children ? t.children.length : 0), 0)}
               </span>
             </div>
             <span style={{ fontSize: '18px', color: '#155724', fontWeight: 'bold' }}>
@@ -901,61 +923,91 @@ const ImportantTasks: React.FC = () => {
                             </thead>
                             <tbody>
                               {catTasks.map((task, idx) => (
-                                <tr
-                                  key={task.id}
-                                  style={{
-                                    backgroundColor: idx % 2 === 0 ? '#fafffe' : '#f0fdf4',
-                                    borderBottom: '1px solid #e6f4ea',
-                                    transition: 'background 0.15s'
-                                  }}
-                                >
-                                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#bbb', fontSize: '12px' }}>{idx + 1}</td>
-                                  <td style={{ padding: '8px 12px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      <span style={{ color: '#15803d', fontSize: '13px' }}>✓</span>
-                                      <span style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '13px' }}>{task.name}</span>
-                                      {task.parent_id && (
-                                        <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic', background: '#f3f4f6', padding: '1px 5px', borderRadius: '4px' }}>sub-task</span>
-                                      )}
-                                    </div>
-                                  </td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>
-                                    {formatDate(task.start_date || task.created_at)}
-                                  </td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                    <span style={{
-                                      fontWeight: '600',
-                                      color: '#15803d',
-                                      fontSize: '13px',
-                                      background: '#dcfce7',
-                                      padding: '2px 8px',
-                                      borderRadius: '6px'
-                                    }}>
-                                      {formatDate(task.last_check_date) !== '-' ? formatDate(task.last_check_date) : '—'}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>
-                                    {task.ideal_gap_days}d
-                                  </td>
-                                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
-                                    <button
-                                      onClick={() => handleUndoComplete(task.id)}
-                                      title="Move back to active"
-                                      style={{
-                                        padding: '3px 10px',
-                                        fontSize: '11px',
+                                <React.Fragment key={task.id}>
+                                  <tr
+                                    style={{
+                                      backgroundColor: idx % 2 === 0 ? '#fafffe' : '#f0fdf4',
+                                      borderBottom: '1px solid #e6f4ea',
+                                      transition: 'background 0.15s'
+                                    }}
+                                  >
+                                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#bbb', fontSize: '12px' }}>{idx + 1}</td>
+                                    <td style={{ padding: '8px 12px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span style={{ color: '#15803d', fontSize: '13px' }}>✓</span>
+                                        <span style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '13px' }}>{task.name}</span>
+                                        {task.children && task.children.length > 0 && (
+                                          <span style={{ fontSize: '10px', color: '#15803d', background: '#dcfce7', padding: '1px 6px', borderRadius: '4px', fontWeight: '600' }}>
+                                            {task.children.length} sub-task{task.children.length > 1 ? 's' : ''}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>
+                                      {formatDate(task.start_date || task.created_at)}
+                                    </td>
+                                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                      <span style={{
                                         fontWeight: '600',
-                                        backgroundColor: '#6b7280',
-                                        color: 'white',
-                                        border: 'none',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer'
-                                      }}
-                                    >
-                                      ↩ Undo
-                                    </button>
-                                  </td>
-                                </tr>
+                                        color: '#15803d',
+                                        fontSize: '13px',
+                                        background: '#dcfce7',
+                                        padding: '2px 8px',
+                                        borderRadius: '6px'
+                                      }}>
+                                        {formatDate(task.last_check_date) !== '-' ? formatDate(task.last_check_date) : '—'}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: '8px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>
+                                      {task.ideal_gap_days}d
+                                    </td>
+                                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                      <button
+                                        onClick={() => handleUndoComplete(task.id)}
+                                        title="Move back to active"
+                                        style={{
+                                          padding: '3px 10px',
+                                          fontSize: '11px',
+                                          fontWeight: '600',
+                                          backgroundColor: '#6b7280',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '4px',
+                                          cursor: 'pointer'
+                                        }}
+                                      >
+                                        ↩ Undo
+                                      </button>
+                                    </td>
+                                  </tr>
+                                  {/* Completed children nested under their completed parent */}
+                                  {task.children && task.children.map((child: ImportantTask) => (
+                                    <tr key={child.id} style={{ backgroundColor: '#f0fff4', borderBottom: '1px solid #bbf7d0', borderLeft: '5px solid #86efac' }}>
+                                      <td style={{ padding: '6px 12px', textAlign: 'center', color: '#86efac', fontSize: '15px' }}>↳</td>
+                                      <td style={{ padding: '6px 12px 6px 28px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ color: '#15803d', fontSize: '12px' }}>✓</span>
+                                          <span style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '12px' }}>{child.name}</span>
+                                          <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic', background: '#f3f4f6', padding: '1px 5px', borderRadius: '4px' }}>sub-task</span>
+                                        </div>
+                                      </td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '11px' }}>{formatDate(child.start_date || child.created_at)}</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                                        <span style={{ fontWeight: '600', color: '#15803d', fontSize: '12px', background: '#dcfce7', padding: '2px 8px', borderRadius: '6px' }}>
+                                          {formatDate(child.last_check_date) !== '-' ? formatDate(child.last_check_date) : '—'}
+                                        </span>
+                                      </td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '11px' }}>{child.ideal_gap_days}d</td>
+                                      <td style={{ padding: '6px 12px', textAlign: 'center' }}>
+                                        <button
+                                          onClick={() => handleUndoComplete(child.id)}
+                                          title="Move sub-task back to active"
+                                          style={{ padding: '2px 8px', fontSize: '10px', fontWeight: '600', backgroundColor: '#9ca3af', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                                        >↩ Undo</button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </React.Fragment>
                               ))}
                             </tbody>
                           </table>
