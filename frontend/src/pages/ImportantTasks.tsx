@@ -78,6 +78,7 @@ const ImportantTasks: React.FC = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [highestGapTaskId, setHighestGapTaskId] = useState<number | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
+  const [expandedCompletedCategories, setExpandedCompletedCategories] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Load expanded state from localStorage
@@ -169,7 +170,13 @@ const ImportantTasks: React.FC = () => {
       console.log('[ImportantTasks] Task hierarchy:', rootTasks);
 
       setTasks(rootTasks);
-      setCompletedTasks(completed);
+      // Sort completed tasks by last_check_date descending (most recent first)
+      const sortedCompleted = [...completed].sort((a, b) => {
+        const dateA = a.last_check_date ? new Date(a.last_check_date).getTime() : 0;
+        const dateB = b.last_check_date ? new Date(b.last_check_date).getTime() : 0;
+        return dateB - dateA;
+      });
+      setCompletedTasks(sortedCompleted);
       // Don't modify expandedTasks - keep previous state
       setLoading(false);
     } catch (error) {
@@ -237,7 +244,25 @@ const ImportantTasks: React.FC = () => {
     return filterByStatus(JSON.parse(JSON.stringify(tasks)));
   };
 
+  const findTaskInHierarchy = (taskList: ImportantTask[], id: number): ImportantTask | null => {
+    for (const task of taskList) {
+      if (task.id === id) return task;
+      if (task.children && task.children.length > 0) {
+        const found = findTaskInHierarchy(task.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
   const handleMarkDone = async (taskId: number) => {
+    // Block if task has active sub-tasks
+    const task = findTaskInHierarchy(tasks, taskId);
+    if (task && task.children && task.children.length > 0) {
+      alert(`Cannot mark "${task.name}" as done.\n\nIt has ${task.children.length} active sub-task(s) that must be completed first.`);
+      return;
+    }
+
     try {
       // Use local date format (YYYY-MM-DD) instead of UTC ISO string
       const today = new Date();
@@ -262,6 +287,13 @@ const ImportantTasks: React.FC = () => {
   };
 
   const handleDelete = async (taskId: number) => {
+    // Block if task has active sub-tasks
+    const task = findTaskInHierarchy(tasks, taskId);
+    if (task && task.children && task.children.length > 0) {
+      alert(`Cannot delete "${task.name}".\n\nIt has ${task.children.length} active sub-task(s) that must be completed or deleted first.`);
+      return;
+    }
+
     if (!confirm('Are you sure you want to delete this task?')) return;
     
     try {
@@ -720,55 +752,221 @@ const ImportantTasks: React.FC = () => {
 
       {/* Completed Tasks Section */}
       {completedTasks.length > 0 && (
-        <div style={{ marginTop: '40px' }}>
-          <h3 
+        <div style={{ marginTop: '48px' }}>
+          {/* Section Header */}
+          <div
             onClick={() => setShowCompletedSection(!showCompletedSection)}
-            style={{ 
-              marginBottom: '15px', 
-              color: '#666', 
-              cursor: 'pointer',
+            style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              userSelect: 'none'
+              justifyContent: 'space-between',
+              padding: '14px 20px',
+              background: 'linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%)',
+              borderRadius: '10px',
+              border: '1px solid #b2dfdb',
+              cursor: 'pointer',
+              userSelect: 'none',
+              marginBottom: showCompletedSection ? '20px' : '0',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+              transition: 'box-shadow 0.2s'
             }}
           >
-            {showCompletedSection ? '▼' : '▶'} Completed Important Tasks ({completedTasks.length})
-          </h3>
-          {showCompletedSection && (
-            <div className="tasks-table-container">
-              <table className="tasks-table important-tasks-table">
-                <thead>
-                  <tr>
-                    <th className="col-date">Start Date</th>
-                    <th className="col-task-name">Task Name</th>
-                    <th className="col-date">Completed Date</th>
-                    <th className="col-number">Target Gap</th>
-                    <th className="col-action">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {completedTasks.map(task => (
-                    <tr key={task.id} style={{ backgroundColor: '#f0f0f0', opacity: 0.7 }}>
-                      <td className="col-date">{formatDate(task.start_date || task.created_at)}</td>
-                      <td className="col-task-name">{task.name}</td>
-                      <td className="col-date">{formatDate(task.last_check_date)}</td>
-                      <td className="col-number" style={{ textAlign: 'center' }}>{task.ideal_gap_days}</td>
-                      <td className="col-action">
-                        <button 
-                          className="btn-edit"
-                          onClick={() => handleUndoComplete(task.id)}
-                          style={{ padding: '4px 8px', fontSize: '12px', backgroundColor: '#10b981' }}
-                        >
-                          UNDO
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span style={{ fontSize: '20px' }}>✅</span>
+              <span style={{ fontSize: '16px', fontWeight: '700', color: '#155724' }}>
+                Completed Important Tasks
+              </span>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: '700',
+                color: '#fff',
+                backgroundColor: '#28a745',
+                borderRadius: '12px',
+                padding: '2px 10px',
+                minWidth: '28px',
+                textAlign: 'center'
+              }}>
+                {completedTasks.length}
+              </span>
             </div>
-          )}
+            <span style={{ fontSize: '18px', color: '#155724', fontWeight: 'bold' }}>
+              {showCompletedSection ? '▲' : '▼'}
+            </span>
+          </div>
+
+          {showCompletedSection && (() => {
+            const hierarchyOrder: { [key: string]: number } = {
+              'Hard Work|Office-Tasks': 1,
+              'Hard Work|Learning': 2,
+              'Hard Work|Confidence': 3,
+              'Calmness|Yoga': 4,
+              'Calmness|Sleep': 5,
+              'Family|My Tasks': 6,
+              'Family|Home Tasks': 7,
+              'Family|Time Waste': 8,
+            };
+
+            const completedByCategory = completedTasks.reduce((acc, task) => {
+              const key = task.category_name || 'Uncategorized';
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(task);
+              return acc;
+            }, {} as Record<string, ImportantTask[]>);
+
+            const sortedCats = Object.keys(completedByCategory).sort((a, b) => {
+              const aPillar = completedByCategory[a][0]?.pillar_name || '';
+              const bPillar = completedByCategory[b][0]?.pillar_name || '';
+              const orderA = hierarchyOrder[`${aPillar}|${a}`] || 999;
+              const orderB = hierarchyOrder[`${bPillar}|${b}`] || 999;
+              return orderA - orderB;
+            });
+
+            const toggleCompletedCategory = (key: string) => {
+              setExpandedCompletedCategories(prev => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            };
+
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {sortedCats.map(catName => {
+                  const catTasks = completedByCategory[catName];
+                  const pillarName = catTasks[0]?.pillar_name || '';
+                  let pillarColor = '#718096';
+                  let pillarBg = '#f7fafc';
+                  let pillarIcon = '📋';
+                  if (pillarName === 'Hard Work') { pillarColor = '#2563eb'; pillarBg = '#eff6ff'; pillarIcon = '💼'; }
+                  else if (pillarName === 'Calmness') { pillarColor = '#16a34a'; pillarBg = '#f0fdf4'; pillarIcon = '🧘'; }
+                  else if (pillarName === 'Family') { pillarColor = '#9333ea'; pillarBg = '#faf5ff'; pillarIcon = '👨‍👩‍👦'; }
+
+                  const isCatExpanded = expandedCompletedCategories.has(catName);
+
+                  return (
+                    <div key={catName} style={{
+                      border: `1px solid ${pillarColor}30`,
+                      borderRadius: '10px',
+                      overflow: 'hidden',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.06)'
+                    }}>
+                      {/* Category Header - clickable */}
+                      <div
+                        onClick={() => toggleCompletedCategory(catName)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 16px',
+                          backgroundColor: pillarBg,
+                          borderLeft: `5px solid ${pillarColor}`,
+                          cursor: 'pointer',
+                          userSelect: 'none',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ fontSize: '16px' }}>{pillarIcon}</span>
+                          <span style={{ fontSize: '14px', fontWeight: '700', color: pillarColor }}>{catName}</span>
+                          <span style={{
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            color: 'white',
+                            backgroundColor: pillarColor,
+                            borderRadius: '10px',
+                            padding: '1px 8px'
+                          }}>{catTasks.length}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ fontSize: '11px', color: '#999' }}>{pillarName}</span>
+                          <span style={{ fontSize: '14px', color: pillarColor, fontWeight: 'bold' }}>
+                            {isCatExpanded ? '▲' : '▼'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Category Tasks Table */}
+                      {isCatExpanded && (
+                        <div style={{ backgroundColor: '#fff' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: `${pillarColor}12` }}>
+                                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#666', fontWeight: '600', width: '40px', borderBottom: `2px solid ${pillarColor}30` }}>#</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'left', color: '#333', fontWeight: '600', borderBottom: `2px solid ${pillarColor}30` }}>Task Name</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#666', fontWeight: '600', width: '120px', borderBottom: `2px solid ${pillarColor}30` }}>Start Date</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#15803d', fontWeight: '700', width: '140px', borderBottom: `2px solid ${pillarColor}30` }}>✅ Done On</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#666', fontWeight: '600', width: '90px', borderBottom: `2px solid ${pillarColor}30` }}>Gap (days)</th>
+                                <th style={{ padding: '8px 12px', textAlign: 'center', color: '#666', fontWeight: '600', width: '80px', borderBottom: `2px solid ${pillarColor}30` }}>Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {catTasks.map((task, idx) => (
+                                <tr
+                                  key={task.id}
+                                  style={{
+                                    backgroundColor: idx % 2 === 0 ? '#fafffe' : '#f0fdf4',
+                                    borderBottom: '1px solid #e6f4ea',
+                                    transition: 'background 0.15s'
+                                  }}
+                                >
+                                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#bbb', fontSize: '12px' }}>{idx + 1}</td>
+                                  <td style={{ padding: '8px 12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <span style={{ color: '#15803d', fontSize: '13px' }}>✓</span>
+                                      <span style={{ textDecoration: 'line-through', color: '#6b7280', fontSize: '13px' }}>{task.name}</span>
+                                      {task.parent_id && (
+                                        <span style={{ fontSize: '10px', color: '#aaa', fontStyle: 'italic', background: '#f3f4f6', padding: '1px 5px', borderRadius: '4px' }}>sub-task</span>
+                                      )}
+                                    </div>
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>
+                                    {formatDate(task.start_date || task.created_at)}
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                    <span style={{
+                                      fontWeight: '600',
+                                      color: '#15803d',
+                                      fontSize: '13px',
+                                      background: '#dcfce7',
+                                      padding: '2px 8px',
+                                      borderRadius: '6px'
+                                    }}>
+                                      {formatDate(task.last_check_date) !== '-' ? formatDate(task.last_check_date) : '—'}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center', color: '#9ca3af', fontSize: '12px' }}>
+                                    {task.ideal_gap_days}d
+                                  </td>
+                                  <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                                    <button
+                                      onClick={() => handleUndoComplete(task.id)}
+                                      title="Move back to active"
+                                      style={{
+                                        padding: '3px 10px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
+                                        backgroundColor: '#6b7280',
+                                        color: 'white',
+                                        border: 'none',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer'
+                                      }}
+                                    >
+                                      ↩ Undo
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
       )}
 

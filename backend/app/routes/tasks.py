@@ -182,11 +182,48 @@ def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
         if task.due_date:
             print(f"Due date received: {task.due_date} (type: {type(task.due_date)})")
         
+        # Capture old allocated_minutes before update to detect changes
+        old_task = TaskService.get_task(db, task_id)
+        old_allocated = old_task.allocated_minutes if old_task else None
+        old_task_type = old_task.task_type if old_task else None
+        old_freq = old_task.follow_up_frequency if old_task else None
+
         updated_task = TaskService.update_task(db, task_id, task)
         
         print(f"After update - due_date in DB: {updated_task.due_date}")
-        print(f"=== END DEBUG ===\n")
-        
+        print(f"=== END DEBUG ===")
+
+        # Recalculate daily summaries if anything affecting daily TIME allocation changed
+        allocation_changed = (
+            updated_task.follow_up_frequency == 'daily' and
+            (updated_task.task_type or '').upper() == 'TIME' and
+            (
+                (task.allocated_minutes is not None and task.allocated_minutes != old_allocated) or
+                (task.task_type is not None and (task.task_type or '').upper() != (old_task_type or '').upper()) or
+                (task.follow_up_frequency is not None and task.follow_up_frequency != old_freq)
+            )
+        ) or (
+            # Also recalc if the task WAS a daily TIME task before and changed to something else
+            old_freq == 'daily' and (old_task_type or '').upper() == 'TIME' and
+            (
+                (task.follow_up_frequency is not None and task.follow_up_frequency != 'daily') or
+                (task.task_type is not None and (task.task_type or '').upper() != 'TIME')
+            )
+        )
+        if allocation_changed:
+            from app.services.daily_time_service import update_daily_summary
+            from datetime import timedelta
+            active_start = date(2025, 11, 1)
+            today = date.today()
+            recalc_start = max(active_start, today - timedelta(days=60))
+            current = recalc_start
+            while current <= today:
+                try:
+                    update_daily_summary(db, current)
+                except Exception:
+                    pass
+                current += timedelta(days=1)
+
         # Parse additional_whys from JSON string
         task_dict = TaskResponse.model_validate(updated_task).model_dump()
         if updated_task.additional_whys:
@@ -272,7 +309,29 @@ def mark_task_completed(task_id: int, db: Session = Depends(get_db)):
     """
     try:
         completed_task = TaskService.mark_task_completed(db, task_id)
-        
+
+        # Recalculate daily summaries for past 60 days when a daily TIME task is completed.
+        # Completing a task removes it from total_allocated; summaries must be refreshed so
+        # that total_spent is also recalculated without the completed task's entries,
+        # keeping the two figures consistent and preventing false "Incomplete Day" alerts.
+        if (
+            completed_task.follow_up_frequency == 'daily' and
+            (completed_task.task_type or '').upper() == 'TIME' and
+            not (completed_task.is_daily_one_time)
+        ):
+            from app.services.daily_time_service import update_daily_summary
+            from datetime import timedelta
+            active_start = date(2025, 11, 1)
+            today = date.today()
+            recalc_start = max(active_start, today - timedelta(days=60))
+            current = recalc_start
+            while current <= today:
+                try:
+                    update_daily_summary(db, current)
+                except Exception:
+                    pass
+                current += timedelta(days=1)
+
         # Parse additional_whys from JSON string
         task_dict = TaskResponse.model_validate(completed_task).model_dump()
         if completed_task.additional_whys:

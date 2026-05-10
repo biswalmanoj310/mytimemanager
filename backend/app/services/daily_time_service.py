@@ -204,13 +204,17 @@ def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
         )
     ).all()
 
-    # Get time entries for this date from ALL daily TIME tasks (active AND inactive/deleted).
-    # Using only active task IDs would cause us to miss entries on past dates for tasks that
-    # were later deleted, incorrectly reducing total_spent and flipping is_complete to False.
+    # Get time entries for this date from currently active, non-completed daily TIME tasks.
+    # We use the same filter as total_allocated so that total_spent stays consistent:
+    # entries from tasks that were later completed or soft-deleted are excluded.
+    # This prevents a mismatch where a completed task's entries inflate total_spent
+    # while its allocated_minutes are no longer counted in total_allocated.
     all_time_based_task_ids = db.query(Task.id).filter(
         and_(
             Task.follow_up_frequency == 'daily',
             func.upper(Task.task_type) == 'TIME',
+            Task.is_active == True,
+            Task.is_completed == False,
             or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
         )
     ).all()
@@ -297,11 +301,15 @@ def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayRespo
 
     result = []
     for summary in summaries:
+        # Use the stored per-day total_allocated (captured when the summary was last
+        # recalculated) rather than current_allocated which is the same for all days.
+        # This shows the correct allocation that was in effect for each specific day.
+        day_allocated = summary.total_allocated if summary.total_allocated else current_allocated
         result.append(IncompleteDayResponse(
             entry_date=summary.entry_date,
-            total_allocated=current_allocated,
+            total_allocated=day_allocated,
             total_spent=summary.total_spent,
-            difference=abs(current_allocated - summary.total_spent)
+            difference=abs(day_allocated - summary.total_spent)
         ))
 
     return result
