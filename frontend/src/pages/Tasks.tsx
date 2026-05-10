@@ -6321,7 +6321,12 @@ export default function Tasks() {
             {hasSubTasks && (
               <button 
                 className="btn-expand"
-                onClick={() => onToggleExpand(task.id)}
+                onClick={(e) => {
+                  e.preventDefault();
+                  const scrollY = window.scrollY;
+                  onToggleExpand(task.id);
+                  requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
+                }}
               >
                 {isExpanded ? '▼' : '▶'}
               </button>
@@ -10953,7 +10958,8 @@ export default function Tasks() {
                     return (
                       <div key={categoryKey} style={{ marginBottom: '20px' }}>
                         <div 
-                          onClick={() => {
+                          onClick={(e) => {
+                            const scrollY = window.scrollY;
                             const newExpanded = new Set(expandedMiscCategories);
                             if (isExpanded) {
                               newExpanded.delete(categoryKey);
@@ -10962,6 +10968,7 @@ export default function Tasks() {
                             }
                             setExpandedMiscCategories(newExpanded);
                             localStorage.setItem('expandedMiscCategories', JSON.stringify(Array.from(newExpanded)));
+                            requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
                           }}
                           style={{ 
                             fontSize: '17px', 
@@ -11193,11 +11200,13 @@ export default function Tasks() {
                       return (
                         <div key={categoryKey} style={{ marginBottom: '16px' }}>
                           <div
-                            onClick={() => {
+                            onClick={(e) => {
+                              const scrollY = window.scrollY;
                               const newExpanded = new Set(expandedMiscCategories);
                               if (isExpanded) { newExpanded.delete(categoryKey); } else { newExpanded.add(categoryKey); }
                               setExpandedMiscCategories(newExpanded);
                               localStorage.setItem('expandedMiscCategories', JSON.stringify(Array.from(newExpanded)));
+                              requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
                             }}
                             style={{
                               fontSize: '15px',
