@@ -512,11 +512,13 @@ def _recalculate_goal_progress(db: Session, goal_id: int):
     days_total = (goal.target_date - goal.start_date).days if goal.target_date >= goal.start_date else 1
     expected_progress = ((days_total - days_remaining) / days_total) * 100 if days_total > 0 else 0
     
-    if goal.progress_percentage >= 100:
-        goal.status = 'completed'
-        if not goal.actual_completion_date:
-            goal.actual_completion_date = today
-    elif goal.progress_percentage == 0:
+    # Never auto-complete: only manual user action sets status='completed'
+    # Preserve manually set completed/abandoned status
+    if goal.status in ('completed', 'abandoned'):
+        goal.updated_at = today
+        db.commit()
+        return
+    if goal.progress_percentage == 0:
         # Check if any project has completed tasks or active work
         has_project_activity = False
         for project in linked_projects:

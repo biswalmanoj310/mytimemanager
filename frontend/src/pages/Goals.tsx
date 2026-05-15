@@ -2281,6 +2281,7 @@ export default function Goals() {
   const [goalCategories, setGoalCategories] = useState<any[]>([]);
   const [showAddGoalModal, setShowAddGoalModal] = useState(false);
   const [showGoalListView, setShowGoalListView] = useState(() => localStorage.getItem('listView_goals') === 'true');
+  const [expandedGoalIdInList, setExpandedGoalIdInList] = useState<number | null>(null);
   const [goalListSortCol, setGoalListSortCol] = useState<string>('');
   const [goalListSortDir, setGoalListSortDir] = useState<'asc' | 'desc'>('asc');
   const [goalListActiveCollapsed, setGoalListActiveCollapsed] = useState(false);
@@ -3260,127 +3261,52 @@ export default function Goals() {
             </div>
           </div>
 
-          {/* Center: Circular Progress (Goal Milestones, Goal Tasks, Project Milestones, Project Tasks, Projects) */}
-          <div style={{ flex: 1, display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'flex-start' }}>
-            {/* Goal Milestones Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-              <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🏁 Goal Milestones ({goalMilestonesCompleted}/{goalMilestonesTotal})</span>
-              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                <circle 
-                  cx="40" cy="40" r="32" fill="none" stroke="#ec4899" strokeWidth="8"
-                  strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (goalMilestonesTotal > 0 ? goalMilestonesCompleted / goalMilestonesTotal : 0))}`}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.3s' }}
-                />
-              </svg>
-            </div>
-            {/* Goal Tasks Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-              <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>✅ Goal Tasks ({goal.stats?.linked_tasks?.completed || 0}/{goal.stats?.linked_tasks?.total || 0})</span>
-              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                <circle 
-                  cx="40" cy="40" r="32" fill="none" stroke="#8b5cf6" strokeWidth="8"
-                  strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.linked_tasks?.total || 0) > 0 ? (goal.stats?.linked_tasks?.completed || 0) / (goal.stats?.linked_tasks?.total || 0) : 0))}`}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.3s' }}
-                />
-              </svg>
-            </div>
-            {/* Project Milestones Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-              <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>🎯 Project Milestones ({projectMilestonesCompleted}/{projectMilestonesTotal})</span>
-              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                <circle 
-                  cx="40" cy="40" r="32" fill="none" stroke="#f59e0b" strokeWidth="8"
-                  strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (projectMilestonesTotal > 0 ? projectMilestonesCompleted / projectMilestonesTotal : 0))}`}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.3s' }}
-                />
-              </svg>
-            </div>
-            {/* Project Tasks Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-              <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📊 Project Tasks ({allTasksCompleted}/{allTasksTotal})</span>
-              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                <circle 
-                  cx="40" cy="40" r="32" fill="none" stroke="#10b981" strokeWidth="8"
-                  strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - (allTasksTotal > 0 ? allTasksCompleted / allTasksTotal : 0))}`}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.3s' }}
-                />
-              </svg>
-            </div>
-            {/* Projects Circle */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-              <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>📁 Projects ({goal.stats?.goal_projects?.completed || 0}/{goal.stats?.goal_projects?.total || 0})</span>
-              <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                <circle 
-                  cx="40" cy="40" r="32" fill="none" stroke="#3b82f6" strokeWidth="8"
-                  strokeDasharray={`${2 * Math.PI * 32}`}
-                  strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.goal_projects?.total || 0) > 0 ? (goal.stats?.goal_projects?.completed || 0) / (goal.stats?.goal_projects?.total || 0) : 0))}`}
-                  strokeLinecap="round"
-                  style={{ transition: 'stroke-dashoffset 0.3s' }}
-                />
-              </svg>
-            </div>
-            {/* One-time / Important Tasks Circle (regular tasks with one_time frequency linked to projects) */}
+          {/* Center: Progress Blocks */}
+          <div style={{ flex: 1, display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+            {[
+              { label: '🏁 Goal Milestones', done: goalMilestonesCompleted, total: goalMilestonesTotal, color: '#db2777', bg: '#fce7f3', border: '#f9a8d4' },
+              { label: '✅ Goal Tasks', done: goal.stats?.linked_tasks?.completed || 0, total: goal.stats?.linked_tasks?.total || 0, color: '#7c3aed', bg: '#f3e8ff', border: '#c4b5fd' },
+              { label: '🎯 Proj. Milestones', done: projectMilestonesCompleted, total: projectMilestonesTotal, color: '#d97706', bg: '#fef3c7', border: '#fde68a' },
+              { label: '📊 Proj. Tasks', done: allTasksCompleted, total: allTasksTotal, color: '#059669', bg: '#d1fae5', border: '#6ee7b7' },
+              { label: '📁 Projects', done: goal.stats?.goal_projects?.completed || 0, total: goal.stats?.goal_projects?.total || 0, color: '#2563eb', bg: '#dbeafe', border: '#93c5fd' },
+            ].map(({ label, done, total, color, bg, border }) => (
+              <div key={label} style={{ background: bg, border: `1.5px solid ${border}`, borderRadius: '8px', padding: '7px 12px', minWidth: '115px' }}>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '3px', whiteSpace: 'nowrap' }}>{label}</div>
+                <div style={{ fontWeight: '700', color: total > 0 && done === total ? '#059669' : color, fontSize: '15px', lineHeight: 1 }}>
+                  {done}<span style={{ color: '#9ca3af', fontWeight: '400' }}>/{total}</span>
+                </div>
+                {total > 0 && (
+                  <div style={{ marginTop: '4px', height: '4px', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.round((done / total) * 100)}%`, background: total > 0 && done === total ? '#059669' : color, borderRadius: '2px', transition: 'width 0.3s' }} />
+                  </div>
+                )}
+              </div>
+            ))}
             {(goal.stats?.project_onetime_tasks?.total || 0) > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>
-                  📌 Important Tasks ({goal.stats?.project_onetime_tasks?.completed || 0}/{goal.stats?.project_onetime_tasks?.total || 0})
-                  {(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 && (
-                    <span style={{ marginLeft: '4px', color: '#dc2626', fontWeight: '700', fontSize: '11px', background: '#fee2e2', padding: '1px 5px', borderRadius: '6px' }}>
-                      🚨{goal.stats.project_onetime_tasks!.overdue}
-                    </span>
-                  )}
-                </span>
-                <div style={{ position: 'relative' }}>
-                  <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                    <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                    <circle 
-                      cx="40" cy="40" r="32" fill="none"
-                      stroke={(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#dc2626' : '#f97316'} strokeWidth="8"
-                      strokeDasharray={`${2 * Math.PI * 32}`}
-                      strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.project_onetime_tasks?.total || 0) > 0 ? (goal.stats?.project_onetime_tasks?.completed || 0) / (goal.stats?.project_onetime_tasks?.total || 0) : 0))}`}
-                      strokeLinecap="round"
-                      style={{ transition: 'stroke-dashoffset 0.3s' }}
-                    />
-                  </svg>
+              <div style={{ background: (goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#fee2e2' : '#fff7ed', border: `1.5px solid ${(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#fca5a5' : '#fed7aa'}`, borderRadius: '8px', padding: '7px 12px', minWidth: '115px' }}>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '3px', whiteSpace: 'nowrap' }}>
+                  📌 Important Tasks
+                  {(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 && <span style={{ marginLeft: '4px', color: '#dc2626', fontWeight: '700', fontSize: '10px' }}>🚨{goal.stats.project_onetime_tasks!.overdue}</span>}
+                </div>
+                <div style={{ fontWeight: '700', color: (goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#dc2626' : '#ea580c', fontSize: '15px', lineHeight: 1 }}>
+                  {goal.stats?.project_onetime_tasks?.completed || 0}<span style={{ color: '#9ca3af', fontWeight: '400' }}>/{goal.stats?.project_onetime_tasks?.total || 0}</span>
+                </div>
+                <div style={{ marginTop: '4px', height: '4px', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.round(((goal.stats?.project_onetime_tasks?.completed || 0) / (goal.stats?.project_onetime_tasks?.total || 1)) * 100)}%`, background: (goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#dc2626' : '#ea580c', borderRadius: '2px' }} />
                 </div>
               </div>
             )}
-            {/* Recurring Tasks Circle (daily/weekly/monthly/yearly tasks linked to projects) */}
             {(goal.stats?.project_recurring_tasks?.total || 0) > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-                <span style={{ fontSize: '13px', color: '#4a5568', fontWeight: '500' }}>
-                  🔄 Recurring Tasks ({goal.stats?.project_recurring_tasks?.active || 0} active/{goal.stats?.project_recurring_tasks?.total || 0})
-                  {(goal.stats?.project_recurring_tasks?.overdue || 0) > 0 && (
-                    <span style={{ marginLeft: '4px', color: '#dc2626', fontWeight: '700', fontSize: '11px', background: '#fee2e2', padding: '1px 5px', borderRadius: '6px' }}>
-                      🚨{goal.stats.project_recurring_tasks!.overdue}
-                    </span>
-                  )}
-                </span>
-                <div style={{ position: 'relative' }}>
-                  <svg width="80" height="80" viewBox="0 0 80 80" style={{ transform: 'rotate(-90deg)' }}>
-                    <circle cx="40" cy="40" r="32" fill="none" stroke="#e2e8f0" strokeWidth="8" />
-                    <circle 
-                      cx="40" cy="40" r="32" fill="none"
-                      stroke={(goal.stats?.project_recurring_tasks?.overdue || 0) > 0 ? '#dc2626' : '#8b5cf6'} strokeWidth="8"
-                      strokeDasharray={`${2 * Math.PI * 32}`}
-                      strokeDashoffset={`${2 * Math.PI * 32 * (1 - ((goal.stats?.project_recurring_tasks?.total || 0) > 0 ? (goal.stats?.project_recurring_tasks?.active || 0) / (goal.stats?.project_recurring_tasks?.total || 0) : 0))}`}
-                      strokeLinecap="round"
-                      style={{ transition: 'stroke-dashoffset 0.3s' }}
-                    />
-                  </svg>
+              <div style={{ background: (goal.stats?.project_recurring_tasks?.overdue || 0) > 0 ? '#fee2e2' : '#f3e8ff', border: `1.5px solid ${(goal.stats?.project_recurring_tasks?.overdue || 0) > 0 ? '#fca5a5' : '#c4b5fd'}`, borderRadius: '8px', padding: '7px 12px', minWidth: '115px' }}>
+                <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '3px', whiteSpace: 'nowrap' }}>
+                  🔄 Recurring
+                  {(goal.stats?.project_recurring_tasks?.overdue || 0) > 0 && <span style={{ marginLeft: '4px', color: '#dc2626', fontWeight: '700', fontSize: '10px' }}>🚨{goal.stats.project_recurring_tasks!.overdue}</span>}
+                </div>
+                <div style={{ fontWeight: '700', color: (goal.stats?.project_recurring_tasks?.overdue || 0) > 0 ? '#dc2626' : '#7c3aed', fontSize: '15px', lineHeight: 1 }}>
+                  {goal.stats?.project_recurring_tasks?.active || 0}<span style={{ color: '#9ca3af', fontWeight: '400' }}>/{goal.stats?.project_recurring_tasks?.total || 0}</span>
+                </div>
+                <div style={{ marginTop: '4px', height: '4px', background: '#e5e7eb', borderRadius: '2px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.round(((goal.stats?.project_recurring_tasks?.active || 0) / (goal.stats?.project_recurring_tasks?.total || 1)) * 100)}%`, background: (goal.stats?.project_recurring_tasks?.overdue || 0) > 0 ? '#dc2626' : '#7c3aed', borderRadius: '2px' }} />
                 </div>
               </div>
             )}
@@ -5229,7 +5155,67 @@ return (
                 };
                 const sortedActiveGoals = [...activeGoals].sort(goalSortBy);
                 const sortedCompletedGoals = [...completedGoals].sort(goalSortBy);
-                const renderGoalRow = (goal: LifeGoalData, idx: number, isCompleted: boolean) => {
+
+                const renderExpandedGoalRow = (goal: LifeGoalData, isCompleted: boolean): JSX.Element => {
+                  const gmDone = goal.stats?.milestones?.goal_milestones?.completed ?? (goal.stats?.milestones?.completed || 0);
+                  const gmTotal = goal.stats?.milestones?.goal_milestones?.total ?? (goal.stats?.milestones?.total || 0);
+                  const pmDone = goal.stats?.milestones?.project_milestones?.completed || 0;
+                  const pmTotal = goal.stats?.milestones?.project_milestones?.total || 0;
+                  const atDone = goal.stats?.all_tasks?.completed || 0;
+                  const atTotal = goal.stats?.all_tasks?.total || 0;
+                  const chips = [
+                    { label: '🏁 Goal Milestones', done: gmDone, total: gmTotal, color: '#db2777', bg: '#fce7f3', border: '#f9a8d4' },
+                    { label: '✅ Goal Tasks', done: goal.stats?.linked_tasks?.completed || 0, total: goal.stats?.linked_tasks?.total || 0, color: '#7c3aed', bg: '#f3e8ff', border: '#c4b5fd' },
+                    { label: '🎯 Proj. Milestones', done: pmDone, total: pmTotal, color: '#d97706', bg: '#fef3c7', border: '#fde68a' },
+                    { label: '📊 All Tasks', done: atDone, total: atTotal, color: '#059669', bg: '#d1fae5', border: '#6ee7b7' },
+                    { label: '📁 Projects', done: goal.stats?.goal_projects?.completed || 0, total: goal.stats?.goal_projects?.total || 0, color: '#2563eb', bg: '#dbeafe', border: '#93c5fd' },
+                  ].filter(c => c.total > 0);
+                  return (
+                    <tr key={`exp-${goal.id}`} style={{ background: '#f8f6ff' }}>
+                      <td colSpan={11} style={{ padding: 0, borderBottom: '2px solid #818cf8' }}>
+                        <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '12px', color: '#6b7280', minWidth: '64px' }}>Progress</span>
+                            <div style={{ flex: 1, height: '8px', background: '#e5e7eb', borderRadius: '4px', overflow: 'hidden', maxWidth: '320px' }}>
+                              <div style={{ height: '100%', width: `${Math.min(goal.progress_percentage || 0, 100)}%`, background: (goal.progress_percentage || 0) >= 80 ? '#059669' : (goal.progress_percentage || 0) >= 40 ? '#3b82f6' : '#f59e0b', borderRadius: '4px', transition: 'width 0.4s' }} />
+                            </div>
+                            <span style={{ fontSize: '13px', fontWeight: '700', color: '#374151' }}>{(goal.progress_percentage || 0).toFixed(0)}%</span>
+                            {goal.description && <span style={{ fontSize: '12px', color: '#6b7280', fontStyle: 'italic', marginLeft: '8px' }}>"{goal.description.slice(0, 90)}{goal.description.length > 90 ? '…' : ''}"</span>}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {chips.map(({ label, done, total, color, bg, border }) => (
+                              <div key={label} style={{ background: bg, border: `1.5px solid ${border}`, borderRadius: '8px', padding: '6px 10px', minWidth: '110px' }}>
+                                <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px', whiteSpace: 'nowrap' }}>{label}</div>
+                                <div style={{ fontWeight: '700', color: done === total ? '#059669' : color, fontSize: '14px', lineHeight: 1 }}>
+                                  {done}<span style={{ color: '#9ca3af', fontWeight: '400' }}>/{total}</span>
+                                  <span style={{ fontSize: '10px', color: '#9ca3af', marginLeft: '4px' }}>({Math.round((done / total) * 100)}%)</span>
+                                </div>
+                              </div>
+                            ))}
+                            {(goal.stats?.project_onetime_tasks?.total || 0) > 0 && (
+                              <div style={{ background: (goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#fee2e2' : '#fff7ed', border: `1.5px solid ${(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#fca5a5' : '#fed7aa'}`, borderRadius: '8px', padding: '6px 10px', minWidth: '110px' }}>
+                                <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '2px' }}>📌 Important {(goal.stats?.project_onetime_tasks?.overdue || 0) > 0 && <span style={{ color: '#dc2626' }}>🚨{goal.stats!.project_onetime_tasks!.overdue}</span>}</div>
+                                <div style={{ fontWeight: '700', color: (goal.stats?.project_onetime_tasks?.overdue || 0) > 0 ? '#dc2626' : '#ea580c', fontSize: '14px' }}>{goal.stats?.project_onetime_tasks?.completed || 0}/{goal.stats?.project_onetime_tasks?.total || 0}</div>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                            <button onClick={(e) => { e.stopPropagation(); handleViewGoalDetails(goal); }} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>👁️ View Full Details</button>
+                            <button onClick={(e) => { e.stopPropagation(); handleEditGoal(goal); }} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#6b7280', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>✏️ Edit</button>
+                            {isCompleted ? (
+                              <button onClick={async (e) => { e.stopPropagation(); try { await api.put(`/api/life-goals/${goal.id}`, { status: 'on_track', actual_completion_date: null }); await loadLifeGoals(); } catch { showAlert('Failed to reopen goal', 'error'); } }} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#f59e0b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>↻ Reopen Goal</button>
+                            ) : (
+                              <button onClick={async (e) => { e.stopPropagation(); try { await api.put(`/api/life-goals/${goal.id}`, { status: 'completed', actual_completion_date: new Date().toISOString().split('T')[0] }); await loadLifeGoals(); } catch { showAlert('Failed to complete goal', 'error'); } }} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>✓ Mark Complete</button>
+                            )}
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteGoal(goal.id); }} style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>🗑️ Delete</button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                };
+
+                const renderGoalRow = (goal: LifeGoalData, idx: number, isCompleted: boolean, isExpanded: boolean) => {
                   const overdue = goal.stats?.overdue_tasks || 0;
                   const total = goal.stats?.total_tasks || 0;
                   const done = goal.stats?.completed_tasks || 0;
@@ -5257,13 +5243,15 @@ return (
                     return d < t;
                   })();
                   return (
-                    <tr key={goal.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
-                      onClick={() => { setSelectedGoal(goal); loadGoalDetails(goal.id); navigate(`/goals?goal=${goal.id}`); }}
+                    <tr key={goal.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s', outline: isExpanded ? '2px solid #818cf8' : 'none' }}
+                      onClick={() => setExpandedGoalIdInList(prev => prev === goal.id ? null : goal.id)}
                       onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
                       onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
                     >
-                      <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>{idx + 1}</td>
-                      <td style={{ padding: '8px 10px', fontWeight: '600', color: isCompleted ? '#059669' : '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '210px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td style={{ padding: '8px 10px', color: '#94a3b8', fontWeight: '600', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', whiteSpace: 'nowrap' }}>
+                        <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'none', marginRight: '4px', fontSize: '10px' }}>▶</span>{idx + 1}
+                      </td>
+                      <td style={{ padding: '8px 10px', fontWeight: '600', color: isCompleted ? '#059669' : '#1e293b', borderBottom: isExpanded ? 'none' : '1px solid #e5e7eb', maxWidth: '210px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {isCompleted && <span style={{ marginRight: '4px' }}>🏆</span>}{goal.name}
                       </td>
                       <td style={{ padding: '8px 10px', textAlign: 'center', borderBottom: '1px solid #e5e7eb', fontWeight: '600', color: numProjects > 0 ? '#374151' : '#cbd5e1' }}>
@@ -5356,7 +5344,7 @@ return (
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                             <thead>{colHeaderRow}</thead>
-                            <tbody>{sortedActiveGoals.map((g, i) => renderGoalRow(g, i, false))}</tbody>
+                            <tbody>{sortedActiveGoals.flatMap((g, i) => { const exp = expandedGoalIdInList === g.id; const rows: JSX.Element[] = [renderGoalRow(g, i, false, exp)]; if (exp) rows.push(renderExpandedGoalRow(g, false)); return rows; })}</tbody>
                             <tfoot>{totalFooterRow(activeGoals, 'Active Goals')}</tfoot>
                           </table>
                         </div>
@@ -5378,7 +5366,7 @@ return (
                           <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                               <thead>{colHeaderRow}</thead>
-                              <tbody>{sortedCompletedGoals.map((g, i) => renderGoalRow(g, i, true))}</tbody>
+                              <tbody>{sortedCompletedGoals.flatMap((g, i) => { const exp = expandedGoalIdInList === g.id; const rows: JSX.Element[] = [renderGoalRow(g, i, true, exp)]; if (exp) rows.push(renderExpandedGoalRow(g, true)); return rows; })}</tbody>
                               <tfoot>{totalFooterRow(completedGoals, '🏆 Completed Goals')}</tfoot>
                             </table>
                           </div>
