@@ -71,6 +71,7 @@ export default function UpcomingTasks() {
   const [editDueDate, setEditDueDate] = useState('');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [ageFilter, setAgeFilter] = useState<string | null>(null);
+  const [showLongestWaiting, setShowLongestWaiting] = useState(false);
   // Sub-task suggestion modal state
   const [subtaskModal, setSubtaskModal] = useState<{
     visible: boolean;
@@ -685,26 +686,26 @@ export default function UpcomingTasks() {
 
   return (
     <div style={{ padding: '20px' }}>
-      {/* Header with View Toggle */}
+      {/* Header with View Toggle + Age Distribution */}
       <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
         marginBottom: '20px',
         padding: '16px',
         backgroundColor: '#f3f4f6',
         borderRadius: '8px'
       }}>
-        <div>
-          <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#1f2937' }}>
-            📅 Upcoming Tasks
-          </h2>
-          {data && (
-            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
-              {formatDateDisplay(data.start_date)} - {formatDateDisplay(data.end_date)} • {totalTasks} tasks
-            </p>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0' }}>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '600', color: '#1f2937' }}>
+              📅 Upcoming Tasks
+            </h2>
+            {data && (
+              <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#6b7280' }}>
+                {formatDateDisplay(data.start_date)} - {formatDateDisplay(data.end_date)} • {totalTasks} tasks
+              </p>
+            )}
+          </div>
         </div>
+
       </div>
 
       {/* Browse Tasks by Week/Month */}
@@ -716,11 +717,63 @@ export default function UpcomingTasks() {
           borderRadius: '8px',
           border: '1px solid #e5e7eb'
         }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#374151' }}>
-            🗓️ Browse Tasks
-          </h4>
-          
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+              🗓️ Browse Tasks
+            </h4>
+            {/* Age distribution — compact pills, right side of Browse Tasks header */}
+            {data && totalTasks > 0 && data.age_distribution && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: '600', color: '#6b7280', whiteSpace: 'nowrap' }}>🕰️ Filter by age:</span>
+                {([
+                  { key: 'le7',  label: '≤ 7 days',   bg: '#dcfce7', border: '#86efac', color: '#15803d' },
+                  { key: 'le15', label: '8–15 days',  bg: '#fef9c3', border: '#fde047', color: '#854d0e' },
+                  { key: 'le30', label: '16–30 days', bg: '#fef3c7', border: '#fcd34d', color: '#92400e' },
+                  { key: 'le60', label: '31–60 days', bg: '#ffedd5', border: '#fdba74', color: '#c2410c' },
+                  { key: 'le90', label: '61–90 days', bg: '#fee2e2', border: '#fca5a5', color: '#b91c1c' },
+                  { key: 'gt90', label: '> 90 days',  bg: '#fce7f3', border: '#f9a8d4', color: '#be185d' },
+                ] as const).map(({ key, label, bg, border, color }) => {
+                  const count = data.age_distribution[key] || 0;
+                  const isActive = ageFilter === key;
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setAgeFilter(isActive ? null : key)}
+                      disabled={count === 0}
+                      style={{
+                        padding: '5px 10px',
+                        borderRadius: '8px',
+                        border: `2px solid ${isActive ? color : border}`,
+                        backgroundColor: isActive ? color : bg,
+                        color: isActive ? '#fff' : color,
+                        cursor: count === 0 ? 'default' : 'pointer',
+                        opacity: count === 0 ? 0.35 : 1,
+                        fontWeight: '600',
+                        fontSize: '12px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '1px',
+                        minWidth: '58px',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      <span style={{ fontSize: '15px', fontWeight: '700', lineHeight: 1 }}>{count}</span>
+                      <span style={{ fontSize: '10px', fontWeight: '500', lineHeight: 1 }}>{label}</span>
+                    </button>
+                  );
+                })}
+                {ageFilter && (
+                  <button
+                    onClick={() => setAgeFilter(null)}
+                    style={{ fontSize: '11px', padding: '3px 8px', backgroundColor: '#6b7280', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer' }}
+                  >✕ Clear</button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             {/* All Tasks Button */}
             <button
               onClick={() => {
@@ -809,87 +862,33 @@ export default function UpcomingTasks() {
                 {month.label} ({month.count})
               </button>
             ))}
-          </div>
-        </div>
-      )}
 
-      {/* ===== TASK AGE DISTRIBUTION PANEL ===== */}
-      {data && totalTasks > 0 && data.age_distribution && (
-        <div style={{
-          marginBottom: '20px',
-          padding: '16px',
-          backgroundColor: '#fafafa',
-          borderRadius: '10px',
-          border: '1px solid #e5e7eb',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#374151' }}>
-              🕰️ Task Age Distribution
-            </h4>
-            {ageFilter && (
+            {/* Longest Waiting toggle — right side */}
+            {data.longest_tasks && data.longest_tasks.length > 0 && (
               <button
-                onClick={() => setAgeFilter(null)}
+                onClick={() => setShowLongestWaiting(v => !v)}
                 style={{
-                  fontSize: '11px', padding: '3px 8px',
-                  backgroundColor: '#6b7280', color: 'white',
-                  border: 'none', borderRadius: '12px', cursor: 'pointer'
+                  marginLeft: 'auto',
+                  padding: '7px 14px',
+                  fontSize: '12px',
+                  backgroundColor: showLongestWaiting ? '#ea580c' : '#fff7f0',
+                  color: showLongestWaiting ? '#fff' : '#9a3412',
+                  border: '1px solid #fed7aa',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                ✕ Clear filter
+                ⏳ Longest Waiting — Top {data.longest_tasks.length} {showLongestWaiting ? '▲' : '▼'}
               </button>
             )}
           </div>
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {([
-              { key: 'le7',  label: '≤ 7 days',   bg: '#dcfce7', border: '#86efac', color: '#15803d' },
-              { key: 'le15', label: '8–15 days',  bg: '#fef9c3', border: '#fde047', color: '#854d0e' },
-              { key: 'le30', label: '16–30 days', bg: '#fef3c7', border: '#fcd34d', color: '#92400e' },
-              { key: 'le60', label: '31–60 days', bg: '#ffedd5', border: '#fdba74', color: '#c2410c' },
-              { key: 'le90', label: '61–90 days', bg: '#fee2e2', border: '#fca5a5', color: '#b91c1c' },
-              { key: 'gt90', label: '> 90 days',  bg: '#fce7f3', border: '#f9a8d4', color: '#be185d' },
-            ] as const).map(({ key, label, bg, border, color }) => {
-              const count = data.age_distribution[key] || 0;
-              const isActive = ageFilter === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setAgeFilter(isActive ? null : key)}
-                  disabled={count === 0}
-                  style={{
-                    padding: '8px 14px',
-                    borderRadius: '8px',
-                    border: `2px solid ${isActive ? color : border}`,
-                    backgroundColor: isActive ? color : bg,
-                    color: isActive ? '#fff' : color,
-                    cursor: count === 0 ? 'default' : 'pointer',
-                    opacity: count === 0 ? 0.35 : 1,
-                    fontWeight: '600',
-                    fontSize: '13px',
-                    transition: 'all 0.15s ease',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '2px',
-                    minWidth: '90px'
-                  }}
-                >
-                  <span style={{ fontSize: '18px', fontWeight: '700' }}>{count}</span>
-                  <span style={{ fontSize: '11px' }}>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {ageFilter && (
-            <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
-              Showing tasks in the selected age bucket. Sections with 0 matching tasks are hidden.
-            </p>
-          )}
         </div>
       )}
 
-      {/* ===== LONGEST WAITING TASKS PANEL ===== */}
-      {data && data.longest_tasks && data.longest_tasks.length > 0 && (
+      {/* ===== LONGEST WAITING TASKS PANEL (collapsible) ===== */}
+      {data && data.longest_tasks && data.longest_tasks.length > 0 && showLongestWaiting && (
         <div style={{
           marginBottom: '20px',
           padding: '16px',
@@ -898,9 +897,15 @@ export default function UpcomingTasks() {
           border: '1px solid #fed7aa',
           boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
         }}>
-          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '700', color: '#9a3412' }}>
-            ⏳ Longest Waiting — Top {data.longest_tasks.length} Oldest Tasks
-          </h4>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#9a3412' }}>
+              ⏳ Longest Waiting — Top {data.longest_tasks.length} Oldest Tasks
+            </h4>
+            <button
+              onClick={() => setShowLongestWaiting(false)}
+              style={{ fontSize: '11px', padding: '3px 8px', backgroundColor: '#9a3412', color: 'white', border: 'none', borderRadius: '12px', cursor: 'pointer' }}
+            >✕ Close</button>
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             {data.longest_tasks.map((task, idx) => {
               const badge = getAgeBadgeStyle(task.days_old || 0);
