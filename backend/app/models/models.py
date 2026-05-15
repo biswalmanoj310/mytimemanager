@@ -206,6 +206,9 @@ class Task(Base):
     
     # Priority (1-10, where 1 is highest priority)
     priority = Column(Integer, default=10, nullable=True)
+
+    # Postpone tracking: incremented each time due_date is moved forward
+    postpone_count = Column(Integer, default=0, nullable=True)
     
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())

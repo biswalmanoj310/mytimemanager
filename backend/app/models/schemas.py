@@ -285,6 +285,7 @@ class TaskResponse(TaskBase):
     completed_at: Optional[datetime] = None
     na_marked_at: Optional[datetime] = None
     priority: int = 10
+    postpone_count: int = 0
     created_at: datetime
     updated_at: Optional[datetime] = None
     pillar_name: Optional[str] = None

@@ -238,6 +238,24 @@ class TaskService:
         if 'additional_whys' in update_data and update_data['additional_whys'] is not None:
             update_data['additional_whys'] = json.dumps(update_data['additional_whys'])
         
+        # Increment postpone_count when due_date is moved forward (postponed)
+        if 'due_date' in update_data and update_data['due_date'] is not None and db_task.due_date is not None:
+            new_due = update_data['due_date']
+            old_due = db_task.due_date
+            # Normalize both to offset-naive UTC for comparison
+            if hasattr(new_due, 'tzinfo') and new_due.tzinfo is not None:
+                import datetime as _dt
+                new_due_cmp = new_due.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+            else:
+                new_due_cmp = new_due
+            if hasattr(old_due, 'tzinfo') and old_due.tzinfo is not None:
+                import datetime as _dt
+                old_due_cmp = old_due.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+            else:
+                old_due_cmp = old_due
+            if new_due_cmp.date() > old_due_cmp.date():
+                update_data['postpone_count'] = (db_task.postpone_count or 0) + 1
+
         # Handle completion
         if task_data.is_completed is not None and task_data.is_completed and not db_task.is_completed:
             # Store current date at midnight in local timezone

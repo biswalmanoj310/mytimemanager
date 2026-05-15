@@ -22,6 +22,19 @@ interface UpcomingTask {
   goal_name?: string;
   group_name?: string;
   project_id?: number;
+  wish_title?: string;
+  created_at?: string;
+  days_old: number;
+  postpone_count: number;
+}
+
+interface AgeDistribution {
+  le7: number;
+  le15: number;
+  le30: number;
+  le60: number;
+  le90: number;
+  gt90: number;
 }
 
 interface UpcomingResponse {
@@ -32,6 +45,7 @@ interface UpcomingResponse {
   goal_tasks: UpcomingTask[];
   important_tasks: UpcomingTask[];
   misc_tasks: UpcomingTask[];
+  dream_tasks: UpcomingTask[];
   available_months: Array<{
     year: number;
     month: number;
@@ -41,6 +55,8 @@ interface UpcomingResponse {
   next_week_count: number;
   next_month_count: number;
   all_tasks_count: number;
+  age_distribution: AgeDistribution;
+  longest_tasks: UpcomingTask[];
 }
 
 export default function UpcomingTasks() {
@@ -54,6 +70,17 @@ export default function UpcomingTasks() {
   const [editName, setEditName] = useState('');
   const [editDueDate, setEditDueDate] = useState('');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [ageFilter, setAgeFilter] = useState<string | null>(null);
+  // Sub-task suggestion modal state
+  const [subtaskModal, setSubtaskModal] = useState<{
+    visible: boolean;
+    parentTaskId: number | null;
+    parentTaskName: string;
+    parentPillarId?: number;
+    parentCategoryId?: number;
+    parentFrequency?: string;
+  }>({ visible: false, parentTaskId: null, parentTaskName: '' });
+  const [subtaskName, setSubtaskName] = useState('');
 
   useEffect(() => {
     loadData();
@@ -189,6 +216,62 @@ export default function UpcomingTasks() {
     setEditDueDate('');
   };
 
+  // Returns styling config for age badges
+  const getAgeBadgeStyle = (daysOld: number): { label: string; bg: string; color: string } => {
+    if (daysOld <= 7)  return { label: `${daysOld}d`, bg: '#dcfce7', color: '#15803d' };
+    if (daysOld <= 15) return { label: `${daysOld}d`, bg: '#fef9c3', color: '#854d0e' };
+    if (daysOld <= 30) return { label: `${daysOld}d`, bg: '#fef3c7', color: '#92400e' };
+    if (daysOld <= 60) return { label: `${daysOld}d`, bg: '#ffedd5', color: '#c2410c' };
+    if (daysOld <= 90) return { label: `${daysOld}d`, bg: '#fee2e2', color: '#b91c1c' };
+    return { label: `${daysOld}d`, bg: '#fce7f3', color: '#be185d' };
+  };
+
+  // Row background tint based on age
+  const getAgeRowBg = (daysOld: number, isOverdue: boolean): string => {
+    if (isOverdue) return '#fee2e2';
+    if (daysOld > 90) return '#fff0f5';
+    if (daysOld > 60) return '#fff7f0';
+    return '#fff';
+  };
+
+  const handleCreateSubtask = async () => {
+    if (!subtaskName.trim() || !subtaskModal.parentTaskId) return;
+    try {
+      // Fetch parent task details to clone pillar/category
+      const parent = await api.get<any>(`/api/tasks/${subtaskModal.parentTaskId}`);
+      await api.post('/api/tasks/', {
+        name: subtaskName.trim(),
+        pillar_id: parent.pillar_id,
+        category_id: parent.category_id,
+        follow_up_frequency: parent.follow_up_frequency || 'one_time',
+        allocated_minutes: 30,
+        parent_task_id: subtaskModal.parentTaskId
+      });
+      setSubtaskModal({ visible: false, parentTaskId: null, parentTaskName: '' });
+      setSubtaskName('');
+      await loadData();
+      await refreshAll();
+    } catch (err) {
+      console.error('Error creating sub-task:', err);
+      alert('Failed to create sub-task');
+    }
+  };
+
+  // Filter tasks by age bucket
+  const filterByAge = (tasks: UpcomingTask[]): UpcomingTask[] => {
+    if (!ageFilter) return tasks;
+    return tasks.filter(t => {
+      const d = t.days_old || 0;
+      if (ageFilter === 'le7')  return d <= 7;
+      if (ageFilter === 'le15') return d > 7 && d <= 15;
+      if (ageFilter === 'le30') return d > 15 && d <= 30;
+      if (ageFilter === 'le60') return d > 30 && d <= 60;
+      if (ageFilter === 'le90') return d > 60 && d <= 90;
+      if (ageFilter === 'gt90') return d > 90;
+      return true;
+    });
+  };
+
   const toggleSection = (sectionId: string) => {
     setExpandedSections(prev => {
       const newSet = new Set(prev);
@@ -226,9 +309,10 @@ export default function UpcomingTasks() {
     pillarColor: string,
     taskType: string
   ) => {
-    if (tasks.length === 0) return null;
+    const filteredTasks = filterByAge(tasks);
+    if (filteredTasks.length === 0) return null;
 
-    const sortedTasks = [...tasks].sort((a, b) => 
+    const sortedTasks = [...filteredTasks].sort((a, b) => 
       new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
     );
 
@@ -263,7 +347,7 @@ export default function UpcomingTasks() {
           }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span>{icon}</span>
-              <span>{title} ({sortedTasks.length})</span>
+              <span>{title} ({sortedTasks.length}{ageFilter ? ` filtered` : ''})</span>
             </span>
             <span style={{ fontSize: '14px' }}>
               {isExpanded ? '▼' : '▶'}
@@ -314,6 +398,16 @@ export default function UpcomingTasks() {
                   textAlign: 'center', 
                   fontWeight: '600', 
                   color: `${pillarColor}`,
+                  width: '80px',
+                  borderRight: `2px solid ${pillarColor}` 
+                }}>
+                  Age
+                </th>
+                <th style={{ 
+                  padding: '12px', 
+                  textAlign: 'center', 
+                  fontWeight: '600', 
+                  color: `${pillarColor}`,
                   width: '280px' 
                 }}>
                   Action
@@ -325,8 +419,10 @@ export default function UpcomingTasks() {
                 const dueDateClass = getDueDateColorClass(task.due_date);
                 const isOverdue = dueDateClass === 'overdue';
                 const isEditing = editingTaskId === task.id && editingTaskType === taskType;
-                const rowBgColor = isOverdue ? '#fee2e2' : '#fff';
-                const rowHoverColor = isOverdue ? '#fecaca' : '#f1f5f9';
+                const daysOld = task.days_old || 0;
+                const rowBgColor = getAgeRowBg(daysOld, isOverdue);
+                const rowHoverColor = isOverdue ? '#fecaca' : daysOld > 90 ? '#ffe4ef' : '#f1f5f9';
+                const ageBadge = getAgeBadgeStyle(daysOld);
                 
                 return (
                   <tr 
@@ -363,7 +459,20 @@ export default function UpcomingTasks() {
                           autoFocus
                         />
                       ) : (
-                        task.name
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span>{task.name}</span>
+                          {(task.postpone_count || 0) > 0 && (
+                            <span style={{
+                              fontSize: '10px',
+                              color: (task.postpone_count || 0) >= 3 ? '#be185d' : '#6b7280',
+                              fontWeight: 'normal'
+                            }}>
+                              {(task.postpone_count || 0) >= 3
+                                ? `⚠️ Postponed ${task.postpone_count}× — needs attention`
+                                : `↩ Postponed ${task.postpone_count}×`}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td style={{ 
@@ -377,6 +486,7 @@ export default function UpcomingTasks() {
                       {taskType === 'misc' && task.group_name && `📋 ${task.group_name}`}
                       {taskType === 'goal' && task.goal_name && `🎯 ${task.goal_name}`}
                       {taskType === 'important' && task.category_name}
+                      {taskType === 'dream' && task.wish_title && `💭 ${task.wish_title}`}
                     </td>
                     <td style={{ 
                       padding: '8px', 
@@ -413,6 +523,26 @@ export default function UpcomingTasks() {
                           title="Click to change due date"
                         />
                       )}
+                    </td>
+                    {/* Age cell */}
+                    <td style={{
+                      padding: '8px',
+                      textAlign: 'center',
+                      borderRight: `2px solid ${pillarColor}`,
+                      background: 'inherit'
+                    }}>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '2px 7px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '600',
+                        backgroundColor: ageBadge.bg,
+                        color: ageBadge.color,
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {ageBadge.label}
+                      </span>
                     </td>
                     <td style={{ 
                       padding: '8px', 
@@ -502,6 +632,28 @@ export default function UpcomingTasks() {
                           >
                             🗑️ Delete
                           </button>
+                          {(task.postpone_count || 0) >= 3 && (
+                            <button
+                              onClick={() => setSubtaskModal({
+                                visible: true,
+                                parentTaskId: task.id,
+                                parentTaskName: task.name
+                              })}
+                              style={{
+                                padding: '4px 10px',
+                                fontSize: '11px',
+                                backgroundColor: '#7c3aed',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: '600'
+                              }}
+                              title="This task has been postponed 3+ times. Break it into smaller sub-tasks!"
+                            >
+                              🔀 Break it down
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -528,7 +680,8 @@ export default function UpcomingTasks() {
     data.project_tasks.length + 
     data.goal_tasks.length + 
     data.important_tasks.length + 
-    data.misc_tasks.length;
+    data.misc_tasks.length +
+    data.dream_tasks.length;
 
   return (
     <div style={{ padding: '20px' }}>
@@ -660,6 +813,136 @@ export default function UpcomingTasks() {
         </div>
       )}
 
+      {/* ===== TASK AGE DISTRIBUTION PANEL ===== */}
+      {data && totalTasks > 0 && data.age_distribution && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '16px',
+          backgroundColor: '#fafafa',
+          borderRadius: '10px',
+          border: '1px solid #e5e7eb',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+            <h4 style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#374151' }}>
+              🕰️ Task Age Distribution
+            </h4>
+            {ageFilter && (
+              <button
+                onClick={() => setAgeFilter(null)}
+                style={{
+                  fontSize: '11px', padding: '3px 8px',
+                  backgroundColor: '#6b7280', color: 'white',
+                  border: 'none', borderRadius: '12px', cursor: 'pointer'
+                }}
+              >
+                ✕ Clear filter
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {([
+              { key: 'le7',  label: '≤ 7 days',   bg: '#dcfce7', border: '#86efac', color: '#15803d' },
+              { key: 'le15', label: '8–15 days',  bg: '#fef9c3', border: '#fde047', color: '#854d0e' },
+              { key: 'le30', label: '16–30 days', bg: '#fef3c7', border: '#fcd34d', color: '#92400e' },
+              { key: 'le60', label: '31–60 days', bg: '#ffedd5', border: '#fdba74', color: '#c2410c' },
+              { key: 'le90', label: '61–90 days', bg: '#fee2e2', border: '#fca5a5', color: '#b91c1c' },
+              { key: 'gt90', label: '> 90 days',  bg: '#fce7f3', border: '#f9a8d4', color: '#be185d' },
+            ] as const).map(({ key, label, bg, border, color }) => {
+              const count = data.age_distribution[key] || 0;
+              const isActive = ageFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setAgeFilter(isActive ? null : key)}
+                  disabled={count === 0}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: '8px',
+                    border: `2px solid ${isActive ? color : border}`,
+                    backgroundColor: isActive ? color : bg,
+                    color: isActive ? '#fff' : color,
+                    cursor: count === 0 ? 'default' : 'pointer',
+                    opacity: count === 0 ? 0.35 : 1,
+                    fontWeight: '600',
+                    fontSize: '13px',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '2px',
+                    minWidth: '90px'
+                  }}
+                >
+                  <span style={{ fontSize: '18px', fontWeight: '700' }}>{count}</span>
+                  <span style={{ fontSize: '11px' }}>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+          {ageFilter && (
+            <p style={{ margin: '10px 0 0 0', fontSize: '12px', color: '#6b7280' }}>
+              Showing tasks in the selected age bucket. Sections with 0 matching tasks are hidden.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ===== LONGEST WAITING TASKS PANEL ===== */}
+      {data && data.longest_tasks && data.longest_tasks.length > 0 && (
+        <div style={{
+          marginBottom: '20px',
+          padding: '16px',
+          backgroundColor: '#fff7f0',
+          borderRadius: '10px',
+          border: '1px solid #fed7aa',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+        }}>
+          <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '700', color: '#9a3412' }}>
+            ⏳ Longest Waiting — Top {data.longest_tasks.length} Oldest Tasks
+          </h4>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {data.longest_tasks.map((task, idx) => {
+              const badge = getAgeBadgeStyle(task.days_old || 0);
+              return (
+                <div key={`${task.id}-${idx}`} style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '8px 12px',
+                  backgroundColor: '#fff',
+                  borderRadius: '6px',
+                  border: '1px solid #fed7aa'
+                }}>
+                  <span style={{
+                    width: '22px', height: '22px',
+                    borderRadius: '50%',
+                    backgroundColor: '#ea580c',
+                    color: 'white',
+                    fontSize: '11px', fontWeight: '700',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0
+                  }}>{idx + 1}</span>
+                  <span style={{ flex: 1, fontSize: '13px', fontWeight: '600', color: '#1e293b' }}>{task.name}</span>
+                  <span style={{
+                    padding: '2px 8px', borderRadius: '12px',
+                    fontSize: '11px', fontWeight: '700',
+                    backgroundColor: badge.bg, color: badge.color,
+                    whiteSpace: 'nowrap'
+                  }}>{badge.label} old</span>
+                  {(task.postpone_count || 0) > 0 && (
+                    <span style={{
+                      padding: '2px 8px', borderRadius: '12px',
+                      fontSize: '11px', fontWeight: '600',
+                      backgroundColor: '#f3e8ff', color: '#7c3aed',
+                      whiteSpace: 'nowrap'
+                    }}>↩ {task.postpone_count}×</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Empty State */}
       {totalTasks === 0 && (
         <div style={{
@@ -714,6 +997,93 @@ export default function UpcomingTasks() {
         '📁',
         '#10b981',
         'misc'
+      )}
+
+      {data.dream_tasks && data.dream_tasks.length > 0 && renderTaskTable(
+        'dream-tasks',
+        '💭 Dream Tasks',
+        data.dream_tasks,
+        '💭',
+        '#ec4899',
+        'dream'
+      )}
+
+      {/* ===== SUB-TASK CREATION MODAL ===== */}
+      {subtaskModal.visible && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            padding: '28px',
+            width: '440px',
+            maxWidth: '95vw',
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+          }}>
+            <h3 style={{ margin: '0 0 8px 0', fontSize: '18px', color: '#1e293b', fontWeight: '700' }}>
+              🔀 Break it Down
+            </h3>
+            <p style={{ margin: '0 0 16px 0', fontSize: '13px', color: '#64748b' }}>
+              <strong>"{subtaskModal.parentTaskName}"</strong> has been postponed multiple times.
+              Creating a focused sub-task can help you make progress!
+            </p>
+            <label style={{ fontSize: '13px', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '6px' }}>
+              Sub-task name
+            </label>
+            <input
+              type="text"
+              value={subtaskName}
+              onChange={(e) => setSubtaskName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateSubtask()}
+              placeholder="e.g. 'Research options for first 30 minutes'"
+              autoFocus
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                fontSize: '14px',
+                border: '2px solid #e2e8f0',
+                borderRadius: '8px',
+                outline: 'none',
+                boxSizing: 'border-box',
+                marginBottom: '20px'
+              }}
+            />
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => {
+                  setSubtaskModal({ visible: false, parentTaskId: null, parentTaskName: '' });
+                  setSubtaskName('');
+                }}
+                style={{
+                  padding: '8px 18px', fontSize: '13px',
+                  backgroundColor: '#f1f5f9', color: '#374151',
+                  border: '1px solid #e2e8f0', borderRadius: '8px',
+                  cursor: 'pointer', fontWeight: '600'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateSubtask}
+                disabled={!subtaskName.trim()}
+                style={{
+                  padding: '8px 18px', fontSize: '13px',
+                  backgroundColor: subtaskName.trim() ? '#7c3aed' : '#c4b5fd',
+                  color: 'white',
+                  border: 'none', borderRadius: '8px',
+                  cursor: subtaskName.trim() ? 'pointer' : 'not-allowed',
+                  fontWeight: '600'
+                }}
+              >
+                ✨ Create Sub-task
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

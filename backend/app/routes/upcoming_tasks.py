@@ -1,6 +1,6 @@
 """
 API routes for Upcoming Tasks
-Displays future tasks across all categories (projects, goals, important, misc)
+Displays future tasks across all categories (projects, goals, important, misc, dream)
 Excludes daily tasks, habits, and challenges
 """
 
@@ -12,11 +12,39 @@ from typing import List, Optional
 from collections import defaultdict
 
 from app.database.config import get_db
-from app.models.models import Task, MiscTaskItem, MiscTaskGroup, Pillar, Category, ProjectTask, Project, DailyTaskStatus
+from app.models.models import Task, MiscTaskItem, MiscTaskGroup, Pillar, Category, ProjectTask, Project, DailyTaskStatus, Wish
 from app.models.goal import LifeGoal, GoalProject, GoalProjectTaskLink
 
 
 router = APIRouter(prefix="/api/upcoming-tasks", tags=["upcoming_tasks"])
+
+
+def _days_old(created_at) -> int:
+    """Return how many days ago a task was created (0 if today)."""
+    if created_at is None:
+        return 0
+    try:
+        if hasattr(created_at, 'date'):
+            created_date = created_at.date()
+        else:
+            created_date = created_at
+        return max(0, (date.today() - created_date).days)
+    except Exception:
+        return 0
+
+
+def _age_bucket(days: int) -> str:
+    if days <= 7:
+        return "le7"
+    if days <= 15:
+        return "le15"
+    if days <= 30:
+        return "le30"
+    if days <= 60:
+        return "le60"
+    if days <= 90:
+        return "le90"
+    return "gt90"
 
 
 @router.get("/")
@@ -80,8 +108,14 @@ def get_upcoming_tasks(
         "goal_tasks": [],
         "important_tasks": [],
         "misc_tasks": [],
+        "dream_tasks": [],
         "available_months": [],
-        "all_tasks_count": 0  # Will be calculated at the end
+        "all_tasks_count": 0,  # Will be calculated at the end
+        "age_distribution": {
+            "le7": 0, "le15": 0, "le30": 0,
+            "le60": 0, "le90": 0, "gt90": 0
+        },
+        "longest_tasks": []
     }
     
     # 1. Important Tasks (from Task model)
@@ -107,6 +141,7 @@ def get_upcoming_tasks(
     important_tasks = important_tasks_query.all()
     
     for task in important_tasks:
+        age = _days_old(task.created_at)
         result["important_tasks"].append({
             "id": task.id,
             "name": task.name,
@@ -116,8 +151,12 @@ def get_upcoming_tasks(
             "category_name": task.category.name if task.category else None,
             "frequency": task.follow_up_frequency,
             "allocated_minutes": task.allocated_minutes,
-            "task_type": task.task_type if task.task_type else None
+            "task_type": task.task_type if task.task_type else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "days_old": age,
+            "postpone_count": task.postpone_count or 0
         })
+        result["age_distribution"][_age_bucket(age)] += 1
     
     # 2. Project Tasks (both standalone projects and goal projects)
     project_tasks = db.query(ProjectTask).join(
@@ -131,6 +170,7 @@ def get_upcoming_tasks(
     
     for task in project_tasks:
         project = task.project
+        age = _days_old(task.created_at)
         result["project_tasks"].append({
             "id": task.id,
             "name": task.name,
@@ -138,8 +178,12 @@ def get_upcoming_tasks(
             "due_date": task.due_date.isoformat() if task.due_date else None,
             "priority": task.priority_new or 10,
             "project_name": project.name if project else None,
-            "allocated_minutes": task.allocated_minutes
+            "allocated_minutes": task.allocated_minutes,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "days_old": age,
+            "postpone_count": task.postpone_count if hasattr(task, 'postpone_count') else 0
         })
+        result["age_distribution"][_age_bucket(age)] += 1
     
     # 3. Goal-linked Tasks (via GoalProjectTaskLink)
     goal_task_links_query = db.query(GoalProjectTaskLink).join(
@@ -166,7 +210,7 @@ def get_upcoming_tasks(
         task = link.task
         goal_project = link.goal_project
         goal = goal_project.goal if goal_project else None
-        
+        age = _days_old(task.created_at)
         result["goal_tasks"].append({
             "id": task.id,
             "name": task.name,
@@ -175,8 +219,12 @@ def get_upcoming_tasks(
             "priority": task.priority,
             "project_name": goal_project.name if goal_project else None,
             "goal_name": goal.name if goal else None,
-            "category_name": goal.category.name if goal and goal.category else None
+            "category_name": goal.category.name if goal and goal.category else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "days_old": age,
+            "postpone_count": task.postpone_count or 0
         })
+        result["age_distribution"][_age_bucket(age)] += 1
     
     # 4. Misc Tasks (from misc_task_items table)
     misc_tasks = db.query(MiscTaskItem).join(
@@ -197,7 +245,10 @@ def get_upcoming_tasks(
             "due_date": task.due_date.isoformat() if task.due_date else None,
             "priority": task.priority,
             "group_name": group.name if group else None,
-            "category_name": group.category.name if group and group.category else None
+            "category_name": group.category.name if group and group.category else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "days_old": _days_old(task.created_at),
+            "postpone_count": task.postpone_count if hasattr(task, 'postpone_count') else 0
         })
     
     # Also query tasks with follow_up_frequency='misc' from tasks table
@@ -210,15 +261,64 @@ def get_upcoming_tasks(
     ).all()
     
     for task in misc_frequency_tasks:
+        age = _days_old(task.created_at)
         result["misc_tasks"].append({
             "id": task.id,
             "name": task.name,
             "description": task.description,
             "due_date": task.due_date.isoformat() if task.due_date else None,
             "priority": task.priority,
-            "category_name": task.category.name if task.category else None
+            "category_name": task.category.name if task.category else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "days_old": age,
+            "postpone_count": task.postpone_count or 0
         })
+        result["age_distribution"][_age_bucket(age)] += 1
+
+    # 5. Dream Tasks (tasks linked to a Wish/Dream via related_wish_id)
+    dream_tasks_query = db.query(Task).filter(
+        Task.related_wish_id.isnot(None),
+        Task.due_date.isnot(None),
+        Task.due_date >= start_date,
+        Task.due_date <= end_date,
+        Task.is_completed == False,
+        Task.is_active == True
+    )
+    dream_tasks = dream_tasks_query.all()
+
+    for task in dream_tasks:
+        age = _days_old(task.created_at)
+        wish = db.query(Wish).filter(Wish.id == task.related_wish_id).first()
+        result["dream_tasks"].append({
+            "id": task.id,
+            "name": task.name,
+            "description": task.description,
+            "due_date": task.due_date.isoformat() if task.due_date else None,
+            "priority": task.priority,
+            "category_name": task.category.name if task.category else None,
+            "wish_title": wish.title if wish else None,
+            "created_at": task.created_at.isoformat() if task.created_at else None,
+            "days_old": age,
+            "postpone_count": task.postpone_count or 0
+        })
+        result["age_distribution"][_age_bucket(age)] += 1
     
+    # Compute top-5 oldest tasks across all sections (for "Longest Waiting" panel)
+    all_upcoming_tasks_flat = (
+        result["important_tasks"]
+        + result["goal_tasks"]
+        + result["misc_tasks"]
+        + result["dream_tasks"]
+    )
+    # project_tasks come from ProjectTask model - add them separately with days_old
+    for pt in result["project_tasks"]:
+        if "days_old" not in pt:
+            pt["days_old"] = 0
+    all_upcoming_tasks_flat += result["project_tasks"]
+
+    sorted_by_age = sorted(all_upcoming_tasks_flat, key=lambda t: t.get("days_old", 0), reverse=True)
+    result["longest_tasks"] = sorted_by_age[:5]
+
     # Calculate available months (months that have tasks)
     # Query all tasks with future due dates
     all_future_important = db.query(Task.due_date).filter(
