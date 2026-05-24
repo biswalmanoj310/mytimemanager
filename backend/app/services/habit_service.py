@@ -148,47 +148,98 @@ class HabitService:
     # ============================================
     
     @staticmethod
+    def _get_entries_for_streak(db: Session, habit_id: int):
+        """Return (entry_date, is_successful) pairs for streak calculation.
+        For linked-task habits reads DailyTimeEntry; otherwise reads HabitEntry."""
+        habit = db.query(Habit).filter(Habit.id == habit_id).first()
+        if not habit:
+            return []
+
+        if habit.linked_task_id:
+            habit_start = habit.start_date.date() if isinstance(habit.start_date, datetime) else habit.start_date
+            rows = db.query(
+                func.date(DailyTimeEntry.entry_date).label('d'),
+                func.sum(DailyTimeEntry.minutes).label('total')
+            ).filter(
+                DailyTimeEntry.task_id == habit.linked_task_id,
+                func.date(DailyTimeEntry.entry_date) >= habit_start
+            ).group_by(func.date(DailyTimeEntry.entry_date)).all()
+
+            result = []
+            for row in rows:
+                if isinstance(row.d, str):
+                    entry_date = datetime.strptime(row.d, '%Y-%m-%d').date()
+                else:
+                    entry_date = row.d
+                total = row.total or 0
+                if habit.target_value:
+                    if habit.target_comparison == 'at_most':
+                        success = total <= habit.target_value
+                    elif habit.target_comparison == 'exactly':
+                        success = total == habit.target_value
+                    else:
+                        success = total >= habit.target_value
+                else:
+                    success = total > 0
+
+                class _E:
+                    pass
+                e = _E()
+                e.entry_date = entry_date
+                e.is_successful = success
+                result.append(e)
+            return result
+        else:
+            return db.query(HabitEntry).filter(
+                HabitEntry.habit_id == habit_id
+            ).all()
+
+    @staticmethod
     def calculate_current_streak(db: Session, habit_id: int) -> int:
         """Calculate the current active streak for a habit"""
         today = date.today()
-        
-        # Get all entries in reverse chronological order
-        entries = db.query(HabitEntry).filter(
-            HabitEntry.habit_id == habit_id
-        ).order_by(HabitEntry.entry_date.desc()).all()
-        
-        if not entries:
+
+        raw_entries = HabitService._get_entries_for_streak(db, habit_id)
+        if not raw_entries:
             return 0
-        
+
+        # Sort descending by date
+        def _to_date(e):
+            return e.entry_date.date() if isinstance(e.entry_date, datetime) else e.entry_date
+
+        entries = sorted(raw_entries, key=_to_date, reverse=True)
+
         streak = 0
         current_date = today
-        
+
         for entry in entries:
-            entry_date = entry.entry_date.date() if isinstance(entry.entry_date, datetime) else entry.entry_date
-            
-            # Check if this entry is for the expected date
+            entry_date = _to_date(entry)
+
             if entry_date == current_date:
                 if entry.is_successful:
                     streak += 1
                     current_date -= timedelta(days=1)
                 else:
-                    # Streak broken
                     break
             elif entry_date < current_date:
                 # Gap in entries - streak broken
                 break
-        
+
         return streak
     
     @staticmethod
     def recalculate_streaks(db: Session, habit_id: int) -> None:
         """Recalculate all streaks for a habit and update streak records"""
-        
+
         # Get all entries for this habit, ordered by date
-        entries = db.query(HabitEntry).filter(
-            HabitEntry.habit_id == habit_id
-        ).order_by(HabitEntry.entry_date.asc()).all()
-        
+        # For linked-task habits this reads DailyTimeEntry instead of HabitEntry
+        raw_entries = HabitService._get_entries_for_streak(db, habit_id)
+
+        def _to_date(e):
+            return e.entry_date.date() if isinstance(e.entry_date, datetime) else e.entry_date
+
+        entries = sorted(raw_entries, key=_to_date)
+
         if not entries:
             return
         

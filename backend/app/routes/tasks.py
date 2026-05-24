@@ -22,6 +22,70 @@ from app.models.models import FollowUpFrequency
 
 router = APIRouter()
 
+# ---------------------------------------------------------------------------
+# Allocation History Helpers
+# ---------------------------------------------------------------------------
+
+def _manage_task_allocation_history(db: Session, task_id: int, new_allocated: int, old_allocated: int = None):
+    """
+    Create / update TaskAllocationHistory when a daily TIME task's allocated_minutes changes.
+
+    - old_allocated=None  → new task; create an open-ended entry from today.
+    - old_allocated!=None → allocation changed; close the current open entry
+      (preserving the old value for past dates) and open a new one from today.
+      If no history exists yet (pre-fix deployment), a catch-up entry is created
+      from the app's active start date to yesterday using the OLD value so that
+      past summaries recalculate correctly.
+    """
+    from app.models.models import TaskAllocationHistory
+    from datetime import timedelta
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    active_start = date(2025, 11, 1)
+
+    open_entries = db.query(TaskAllocationHistory).filter(
+        TaskAllocationHistory.task_id == task_id,
+        TaskAllocationHistory.effective_to == None
+    ).all()
+
+    if open_entries:
+        # Close existing open entries
+        for entry in open_entries:
+            # Guard: effective_to must not be before effective_from
+            entry.effective_to = max(entry.effective_from, yesterday)
+    elif old_allocated is not None:
+        # No history exists yet – create a catch-up entry with the OLD value
+        # so recalculating past summaries returns historically accurate figures.
+        catch_up = TaskAllocationHistory(
+            task_id=task_id,
+            allocated_minutes=old_allocated,
+            effective_from=active_start,
+            effective_to=yesterday,
+        )
+        db.add(catch_up)
+
+    # Create new open-ended entry from today
+    db.add(TaskAllocationHistory(
+        task_id=task_id,
+        allocated_minutes=new_allocated,
+        effective_from=today,
+        effective_to=None,
+    ))
+
+
+def _close_task_allocation_history(db: Session, task_id: int):
+    """Close open allocation history entries when a task is completed or deleted."""
+    from app.models.models import TaskAllocationHistory
+    from datetime import timedelta
+    yesterday = date.today() - timedelta(days=1)
+
+    open_entries = db.query(TaskAllocationHistory).filter(
+        TaskAllocationHistory.task_id == task_id,
+        TaskAllocationHistory.effective_to == None
+    ).all()
+    for entry in open_entries:
+        entry.effective_to = max(entry.effective_from, yesterday)
+
 
 @router.post("/", response_model=TaskResponse, status_code=201)
 def create_task(task: TaskCreate, db: Session = Depends(get_db)):
@@ -45,7 +109,16 @@ def create_task(task: TaskCreate, db: Session = Depends(get_db)):
     """
     try:
         db_task = TaskService.create_task(db, task)
-        
+
+        # Create initial allocation history for new daily TIME tasks
+        if (
+            db_task.follow_up_frequency == 'daily' and
+            (db_task.task_type or '').upper() == 'TIME' and
+            not db_task.is_daily_one_time
+        ):
+            _manage_task_allocation_history(db, db_task.id, db_task.allocated_minutes, old_allocated=None)
+            db.commit()
+
         # Note: If task is one_time (Important Task), it should be created 
         # through the /api/important-tasks/ endpoint instead
         # The old one_time_tasks table has been replaced with important_tasks
@@ -211,6 +284,22 @@ def update_task(task_id: int, task: TaskUpdate, db: Session = Depends(get_db)):
             )
         )
         if allocation_changed:
+            still_daily_time = (
+                updated_task.follow_up_frequency == 'daily' and
+                (updated_task.task_type or '').upper() == 'TIME' and
+                not updated_task.is_daily_one_time
+            )
+
+            if still_daily_time and (task.allocated_minutes is not None and task.allocated_minutes != old_allocated):
+                # Only allocated_minutes changed – manage history so past summaries
+                # keep their historically accurate allocated figure.
+                _manage_task_allocation_history(db, task_id, updated_task.allocated_minutes, old_allocated=old_allocated)
+            else:
+                # Task left the daily TIME category (or type/freq changed) – close history.
+                _close_task_allocation_history(db, task_id)
+
+            db.commit()
+
             from app.services.daily_time_service import update_daily_summary
             from datetime import timedelta
             active_start = date(2025, 11, 1)
@@ -319,6 +408,11 @@ def mark_task_completed(task_id: int, db: Session = Depends(get_db)):
             (completed_task.task_type or '').upper() == 'TIME' and
             not (completed_task.is_daily_one_time)
         ):
+            # Close allocation history so past summaries (via history) correctly
+            # exclude this task's allocated_minutes from tomorrow onwards.
+            _close_task_allocation_history(db, completed_task.id)
+            db.commit()
+
             from app.services.daily_time_service import update_daily_summary
             from datetime import timedelta
             active_start = date(2025, 11, 1)
@@ -361,6 +455,16 @@ def delete_task(task_id: int, db: Session = Depends(get_db)):
     task = TaskDeletionService.soft_delete_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found")
+
+    # Close allocation history so past summaries keep the task's historical
+    # allocation while today onwards correctly reflects its removal.
+    if (
+        task.follow_up_frequency == 'daily' and
+        (task.task_type or '').upper() == 'TIME' and
+        not task.is_daily_one_time
+    ):
+        _close_task_allocation_history(db, task.id)
+        db.commit()
 
     # Recalculate recent daily summaries so is_complete flags stay accurate
     # after the task list changes (covers up to 60 past days).
@@ -414,6 +518,107 @@ def restore_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Task with id {task_id} not found or not deleted")
     
     return {"message": "Task restored successfully", "task_id": task_id}
+
+
+# ---------------------------------------------------------------------------
+# Allocation History Repair Endpoints
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel as _BaseModel
+
+class AllocationHistoryEntry(_BaseModel):
+    allocated_minutes: int
+    effective_from: date
+    effective_to: Optional[date] = None
+
+
+@router.get("/{task_id}/allocation-history")
+def get_allocation_history(task_id: int, db: Session = Depends(get_db)):
+    """
+    Get the allocation history for a task.
+    Shows the allocated_minutes that were in effect on each date range.
+    """
+    from app.models.models import TaskAllocationHistory
+    task = TaskService.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    records = db.query(TaskAllocationHistory).filter(
+        TaskAllocationHistory.task_id == task_id
+    ).order_by(TaskAllocationHistory.effective_from).all()
+
+    return {
+        "task_id": task_id,
+        "task_name": task.name,
+        "history": [
+            {
+                "id": r.id,
+                "allocated_minutes": r.allocated_minutes,
+                "effective_from": str(r.effective_from),
+                "effective_to": str(r.effective_to) if r.effective_to else None,
+            }
+            for r in records
+        ]
+    }
+
+
+@router.put("/{task_id}/allocation-history")
+def set_allocation_history(
+    task_id: int,
+    entries: List[AllocationHistoryEntry],
+    db: Session = Depends(get_db)
+):
+    """
+    Replace the full allocation history for a task and recalculate past summaries.
+
+    Use this to fix historical allocations that were corrupted by a retroactive
+    change.  Supply the complete history from the oldest entry to the current one.
+    Example body:
+      [
+        {"allocated_minutes": 390, "effective_from": "2025-11-01", "effective_to": "2026-05-23"},
+        {"allocated_minutes": 360, "effective_from": "2026-05-24", "effective_to": null}
+      ]
+    """
+    from app.models.models import TaskAllocationHistory
+    from app.services.daily_time_service import update_daily_summary
+    from datetime import timedelta
+
+    task = TaskService.get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    # Delete existing history for this task
+    db.query(TaskAllocationHistory).filter(TaskAllocationHistory.task_id == task_id).delete()
+
+    # Insert new history
+    for entry in entries:
+        db.add(TaskAllocationHistory(
+            task_id=task_id,
+            allocated_minutes=entry.allocated_minutes,
+            effective_from=entry.effective_from,
+            effective_to=entry.effective_to,
+        ))
+    db.commit()
+
+    # Recalculate all past summaries (they will now use the corrected history)
+    active_start = date(2025, 11, 1)
+    today = date.today()
+    recalc_start = max(active_start, today - timedelta(days=180))  # up to 6 months
+    current = recalc_start
+    count = 0
+    while current <= today:
+        try:
+            update_daily_summary(db, current)
+            count += 1
+        except Exception:
+            pass
+        current += timedelta(days=1)
+
+    return {
+        "message": f"Allocation history updated and {count} daily summaries recalculated.",
+        "task_id": task_id,
+        "entries_set": len(entries),
+    }
 
 
 @router.get("/by-pillar/{pillar_id}/summary")

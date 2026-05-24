@@ -222,6 +222,7 @@ class Task(Base):
     goal = relationship("Goal", back_populates="tasks")
     project = relationship("Project")
     time_entries = relationship("TimeEntry", back_populates="task", cascade="all, delete-orphan")
+    allocation_history = relationship("TaskAllocationHistory", back_populates="task", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Task(name='{self.name}', pillar='{self.pillar.name if self.pillar else None}')>"
@@ -312,6 +313,27 @@ class DailySummary(Base):
 
     def __repr__(self):
         return f"<DailySummary(date={self.entry_date}, allocated={self.total_allocated}, spent={self.total_spent}, complete={self.is_complete}, ignored={self.is_ignored})>"
+
+
+class TaskAllocationHistory(Base):
+    """
+    Tracks historical changes to a task's allocated_minutes.
+    Used to compute accurate historical total_allocated for DailySummary so that
+    changing a task's allocation does not retroactively alter past summaries.
+    """
+    __tablename__ = "task_allocation_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False, index=True)
+    allocated_minutes = Column(Integer, nullable=False)
+    effective_from = Column(Date, nullable=False)   # First day this allocation was active
+    effective_to = Column(Date, nullable=True)      # Last day (NULL = still active)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    task = relationship("Task", back_populates="allocation_history")
+
+    def __repr__(self):
+        return f"<TaskAllocationHistory(task_id={self.task_id}, allocated={self.allocated_minutes}, from={self.effective_from}, to={self.effective_to})>"
 
 
 class WeeklyTimeEntry(Base):

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
-from app.models.models import DailyTimeEntry, DailySummary, Task
+from app.models.models import DailyTimeEntry, DailySummary, Task, TaskAllocationHistory
 from app.models.schemas import DailyTimeEntryCreate, DailySummaryResponse, IncompleteDayResponse
 
 
@@ -187,56 +187,109 @@ def bulk_save_daily_entries(db: Session, entry_date: date, entries: List[Dict]) 
 
 
 def update_daily_summary(db: Session, entry_date: date) -> DailySummary:
-    """Calculate and update daily summary"""
+    """Calculate and update daily summary.
+
+    For historical dates (before today): uses TaskAllocationHistory to compute
+    total_allocated so that changing a task's allocated_minutes does not
+    retroactively alter past summaries.  total_spent is also derived from the
+    same historical task set for consistency.
+
+    For today: uses the current live task list (existing behaviour).
+    """
     from app.models.models import DailyTaskStatus
-    
-    # Get time-based tasks from Daily tab's ⏰Time-Based Tasks section ONLY
-    # Excludes is_daily_one_time tasks (which appear in separate "Daily: One Time Tasks" section)
-    # User ensures these tasks total 1440 minutes (24 hours)
-    # Note: task_type can be 'TIME' or 'time' (case-insensitive in database)
-    time_based_tasks = db.query(Task).filter(
-        and_(
-            Task.follow_up_frequency == 'daily',
-            func.upper(Task.task_type) == 'TIME',  # Case-insensitive match
-            Task.is_active == True,
-            Task.is_completed == False,
-            or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
-        )
-    ).all()
 
-    # Get time entries for this date from currently active, non-completed daily TIME tasks.
-    # We use the same filter as total_allocated so that total_spent stays consistent:
-    # entries from tasks that were later completed or soft-deleted are excluded.
-    # This prevents a mismatch where a completed task's entries inflate total_spent
-    # while its allocated_minutes are no longer counted in total_allocated.
-    all_time_based_task_ids = db.query(Task.id).filter(
-        and_(
-            Task.follow_up_frequency == 'daily',
-            func.upper(Task.task_type) == 'TIME',
-            Task.is_active == True,
-            Task.is_completed == False,
-            or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
-        )
-    ).all()
-    all_time_based_task_ids = [t[0] for t in all_time_based_task_ids]
-    entries = db.query(DailyTimeEntry).filter(
-        and_(
-            func.date(DailyTimeEntry.entry_date) == entry_date,
-            DailyTimeEntry.task_id.in_(all_time_based_task_ids)
-        )
-    ).all()
-    
-    # Calculate total allocated
-    # Since user ensures daily TIME tasks always total 1440 minutes (24 hours),
-    # we sum ALL active daily TIME tasks as they represent what should be in the table
-    total_allocated = sum(task.allocated_minutes for task in time_based_tasks)
+    today = date.today()
 
-    # Calculate total spent (only from time-based tasks, excluding one-time tasks)
-    total_spent = sum(entry.minutes for entry in entries)
+    if entry_date < today:
+        # ── Historical date ─────────────────────────────────────────────────
+        # Use allocation history: gives the allocation that was in effect on
+        # that specific day, regardless of subsequent changes.
+        history_records = db.query(TaskAllocationHistory).filter(
+            and_(
+                TaskAllocationHistory.effective_from <= entry_date,
+                or_(
+                    TaskAllocationHistory.effective_to == None,
+                    TaskAllocationHistory.effective_to >= entry_date
+                )
+            )
+        ).all()
+
+        if history_records:
+            hist_task_ids = [r.task_id for r in history_records]
+            total_allocated = sum(r.allocated_minutes for r in history_records)
+            entries = db.query(DailyTimeEntry).filter(
+                and_(
+                    func.date(DailyTimeEntry.entry_date) == entry_date,
+                    DailyTimeEntry.task_id.in_(hist_task_ids)
+                )
+            ).all()
+            total_spent = sum(e.minutes for e in entries)
+        else:
+            # No history yet (pre-migration or empty table) – fall back to
+            # current task state so existing behaviour is preserved.
+            time_based_tasks = db.query(Task).filter(
+                and_(
+                    Task.follow_up_frequency == 'daily',
+                    func.upper(Task.task_type) == 'TIME',
+                    Task.is_active == True,
+                    Task.is_completed == False,
+                    or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
+                )
+            ).all()
+            total_allocated = sum(task.allocated_minutes for task in time_based_tasks)
+            all_ids = [t.id for t in time_based_tasks]
+            entries = db.query(DailyTimeEntry).filter(
+                and_(
+                    func.date(DailyTimeEntry.entry_date) == entry_date,
+                    DailyTimeEntry.task_id.in_(all_ids) if all_ids else False
+                )
+            ).all()
+            total_spent = sum(e.minutes for e in entries)
+    else:
+        # ── Today ────────────────────────────────────────────────────────────
+        # Get time-based tasks from Daily tab's ⏰Time-Based Tasks section ONLY
+        # Excludes is_daily_one_time tasks (which appear in separate "Daily: One Time Tasks" section)
+        # User ensures these tasks total 1440 minutes (24 hours)
+        # Note: task_type can be 'TIME' or 'time' (case-insensitive in database)
+        time_based_tasks = db.query(Task).filter(
+            and_(
+                Task.follow_up_frequency == 'daily',
+                func.upper(Task.task_type) == 'TIME',  # Case-insensitive match
+                Task.is_active == True,
+                Task.is_completed == False,
+                or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
+            )
+        ).all()
+
+        # Get time entries for this date from currently active, non-completed daily TIME tasks.
+        # We use the same filter as total_allocated so that total_spent stays consistent.
+        all_time_based_task_ids = db.query(Task.id).filter(
+            and_(
+                Task.follow_up_frequency == 'daily',
+                func.upper(Task.task_type) == 'TIME',
+                Task.is_active == True,
+                Task.is_completed == False,
+                or_(Task.is_daily_one_time == False, Task.is_daily_one_time == None)
+            )
+        ).all()
+        all_time_based_task_ids = [t[0] for t in all_time_based_task_ids]
+        entries = db.query(DailyTimeEntry).filter(
+            and_(
+                func.date(DailyTimeEntry.entry_date) == entry_date,
+                DailyTimeEntry.task_id.in_(all_time_based_task_ids) if all_time_based_task_ids else False
+            )
+        ).all()
+
+        # Calculate total allocated
+        total_allocated = sum(task.allocated_minutes for task in time_based_tasks)
+
+        # Calculate total spent (only from time-based tasks, excluding one-time tasks)
+        total_spent = sum(entry.minutes for entry in entries)
 
     # Check if day is complete
-    # Day is complete if spent time equals exactly 1440 minutes (24 hours)
-    # Allow 5 minute tolerance for rounding errors
+    # Day is complete if the user has accounted for all 1440 minutes in the day (within 5 min tolerance).
+    # We use the hardcoded 1440 (24 hours) because daily tasks are designed to total 1440 min,
+    # and changing a task's allocation should not affect past completeness status.
     difference = abs(1440 - total_spent)
     is_complete = difference <= 5 and total_spent > 0
 
@@ -307,9 +360,9 @@ def get_incomplete_days(db: Session, limit: int = 30) -> List[IncompleteDayRespo
         day_allocated = summary.total_allocated if summary.total_allocated else current_allocated
         result.append(IncompleteDayResponse(
             entry_date=summary.entry_date,
-            total_allocated=day_allocated,
+            total_allocated=1440,  # hardcoded 1440 (daily tasks are designed to total 1440 min)
             total_spent=summary.total_spent,
-            difference=abs(day_allocated - summary.total_spent)
+            difference=abs(1440 - summary.total_spent)
         ))
 
     return result
