@@ -97,7 +97,9 @@ class AnalyticsService:
         ).all()
 
         # Build time entry query from DailyTimeEntry table for SPENT time
-        # JOIN with Task to filter ONLY Time-Based Task Table entries (task_type=time, is_daily_one_time=False/NULL)
+        # JOIN with Task to filter only time-type entries
+        # Exclude is_daily_one_time=True tasks — those hours are already counted in regular tasks
+        # (one-time tasks are monitoring overlays on the same time, not additional hours)
         # Then use snapshot columns for pillar aggregation (handles renamed/deleted tasks)
         spent_query = self.db.query(
             DailyTimeEntry.pillar_id_snapshot,
@@ -210,7 +212,15 @@ class AnalyticsService:
         active_task_category_map = {task.id: task.category_id for task in active_tasks}
 
         # --- SPENT routing: date-range aware task set (so historical entries map to correct category) ---
-        tasks_query = self.db.query(Task).filter(*base_filter)
+        # Exclude is_daily_one_time tasks — those hours are already counted in regular tasks
+        # (source of truth is only the Time-Based Task Table, which excludes one-time tasks)
+        spent_task_filter = [
+            Task.follow_up_frequency == 'daily',
+            Task.task_type == 'time',
+            Task.is_active == True,
+            or_(Task.is_daily_one_time == False, Task.is_daily_one_time.is_(None)),
+        ]
+        tasks_query = self.db.query(Task).filter(*spent_task_filter)
 
         if start_date or end_date:
             if start_date and end_date and start_date == end_date:
@@ -248,8 +258,8 @@ class AnalyticsService:
         task_category_map = {task.id: task.category_id for task in daily_tab_tasks}
         
         # Build time entry query from DailyTimeEntry table for SPENT time
-        # JOIN with Task table to ensure we only get entries for Time-Based Task Table
-        # This matches Daily Tab filter: task_type = time AND is_daily_one_time = False/NULL
+        # Matches Daily Tab Time-Based Task Table: task_type = time AND is_daily_one_time = False/NULL
+        # Exclude is_daily_one_time tasks — their hours are already counted in regular tasks
         time_query = self.db.query(
             DailyTimeEntry.task_id,
             func.sum(DailyTimeEntry.minutes).label('total_minutes')

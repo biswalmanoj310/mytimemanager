@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
 import WheelsOfLife from '../components/WheelsOfLife';
 import {
@@ -314,6 +314,24 @@ export default function Analytics() {
   const [modalMonth, setModalMonth] = useState(formatDateForInput(new Date()).substring(0, 7)); // YYYY-MM format
 
   // Note: Weekly/Monthly toggles intentionally reset to false on every page load/refresh
+
+  // Effective days for weekly/monthly averages — exclude today if no data entered yet
+  const effectiveDaysInWeek = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const weekStart = getWeekStart(today);
+    const rawDays = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const todaySpent = dailyPillarData.reduce((sum: number, p: PillarData) => sum + (p.spent_hours || 0), 0);
+    const todayIsLogged = dailyPillarData.length === 0 || todaySpent > 0;
+    return todayIsLogged ? rawDays : Math.max(1, rawDays - 1);
+  }, [dailyPillarData]);
+
+  const effectiveDaysInMonth = useMemo(() => {
+    const rawDays = new Date().getDate();
+    const todaySpent = dailyPillarData.reduce((sum: number, p: PillarData) => sum + (p.spent_hours || 0), 0);
+    const todayIsLogged = dailyPillarData.length === 0 || todaySpent > 0;
+    return todayIsLogged ? rawDays : Math.max(1, rawDays - 1);
+  }, [dailyPillarData]);
 
   // Ref holding the scroll Y to restore after data loads
   const pendingScrollRef = useRef<number | null>(null);
@@ -1282,14 +1300,9 @@ export default function Analytics() {
                     console.log('weekCategoryData:', weekCategoryData);
                     console.log('monthCategoryData:', monthCategoryData);
                     
-                    // Calculate days in week and month (Monday-based weeks)
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate(); // Current day of month
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
-                    console.log('Week start (Monday):', weekStart);
                     console.log('Days in week so far:', daysInWeek);
                     console.log('Days in month so far:', daysInMonth);
                     
@@ -1425,12 +1438,8 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
-                    // Calculate days for proper averaging
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     // Map ALL tasks with all time periods
                     const mappedTaskData = allTasksData
@@ -1575,12 +1584,8 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
-                    // Calculate days for proper averaging
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     // Map ONE-TIME tasks with all time periods
                     return allOneTimeTasksData
@@ -1719,12 +1724,8 @@ export default function Analytics() {
                       const weekData = weeklyPillarData.find(w => w.pillar_id === pillar.pillar_id);
                       const monthData = monthlyPillarData.find(m => m.pillar_id === pillar.pillar_id);
                       
-                      // Calculate days for proper averaging
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0); // Normalize to midnight
-                      const weekStart = getWeekStart(today);
-                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                      const daysInMonth = today.getDate();
+                      const daysInWeek = effectiveDaysInWeek;
+                      const daysInMonth = effectiveDaysInMonth;
                       
                       return {
                         name: pillar.pillar_name,
@@ -1845,11 +1846,8 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     return allTasksData
                       .map((task) => {
@@ -2111,11 +2109,8 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     // Aggregate task data by category
                     const categoryMap = new Map<string, {
@@ -2393,11 +2388,8 @@ export default function Analytics() {
               <ResponsiveContainer width="100%" height={500}>
                 <BarChart 
                   data={(() => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     return allOneTimeTasksData
                       .map((task) => {
@@ -2657,11 +2649,8 @@ export default function Analytics() {
                     const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
                     const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
                     const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     return {
                       category_name: category.category_name,
@@ -2825,11 +2814,8 @@ export default function Analytics() {
                     const todayData = todayTaskData.find(t => t.task_id === task.task_id);
                     const weekData = weekTaskData.find(w => w.task_id === task.task_id);
                     const monthData = monthTaskData.find(m => m.task_id === task.task_id);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     const taskData = {
                       task_name: task.task_name,
@@ -4833,11 +4819,8 @@ export default function Analytics() {
                     data={dailyPillarData.map((pillar) => {
                       const weekData = weeklyPillarData.find(w => w.pillar_id === pillar.pillar_id);
                       const monthData = monthlyPillarData.find(m => m.pillar_id === pillar.pillar_id);
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0); // Normalize to midnight
-                      const weekStart = getWeekStart(today);
-                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                      const daysInMonth = today.getDate();
+                      const daysInWeek = effectiveDaysInWeek;
+                      const daysInMonth = effectiveDaysInMonth;
                       return {
                         name: pillar.pillar_name,
                         allocated: pillar.allocated_hours,
@@ -4871,11 +4854,8 @@ export default function Analytics() {
                       const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
                       const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
                       const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0); // Normalize to midnight
-                      const weekStart = getWeekStart(today);
-                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                      const daysInMonth = today.getDate();
+                      const daysInWeek = effectiveDaysInWeek;
+                      const daysInMonth = effectiveDaysInMonth;
                       return {
                         category_name: category.category_name,
                         allocated: category.allocated_hours, // Now from daily tab tasks
@@ -4909,11 +4889,8 @@ export default function Analytics() {
                         const todayTask = todayTaskData.find(t => t.task_id === task.task_id);
                         const weekTask = weekTaskData.find(t => t.task_id === task.task_id);
                         const monthTask = monthTaskData.find(t => t.task_id === task.task_id);
-                        const today = new Date();
-                        today.setHours(0, 0, 0, 0); // Normalize to midnight
-                        const weekStart = getWeekStart(today);
-                        const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                        const daysInMonth = today.getDate();
+                        const daysInWeek = effectiveDaysInWeek;
+                        const daysInMonth = effectiveDaysInMonth;
                         return {
                           name: task.task_name,
                           allocated: task.allocated_minutes / 60,
@@ -4955,11 +4932,8 @@ export default function Analytics() {
                 <ResponsiveContainer width="100%" height={Math.max(700, allTasksData.length * 35)}>
                   <BarChart 
                     data={(() => {
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0); // Normalize to midnight
-                      const weekStart = getWeekStart(today);
-                      const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                      const daysInMonth = today.getDate();
+                      const daysInWeek = effectiveDaysInWeek;
+                      const daysInMonth = effectiveDaysInMonth;
                       
                       return allTasksData
                         .map((task) => {
@@ -5038,11 +5012,8 @@ export default function Analytics() {
                     const todayData = todayTaskData.find(t => t.task_id === task.task_id);
                     const weekData = weekTaskData.find(w => w.task_id === task.task_id);
                     const monthData = monthTaskData.find(m => m.task_id === task.task_id);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     return {
                       task_name: task.task_name,
@@ -5181,11 +5152,8 @@ export default function Analytics() {
                     const todayData = todayCategoryData.find(t => t.category_id === category.category_id);
                     const weekData = weekCategoryData.find(w => w.category_id === category.category_id);
                     const monthData = monthCategoryData.find(m => m.category_id === category.category_id);
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0); // Normalize to midnight
-                    const weekStart = getWeekStart(today);
-                    const daysInWeek = Math.ceil((today.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-                    const daysInMonth = today.getDate();
+                    const daysInWeek = effectiveDaysInWeek;
+                    const daysInMonth = effectiveDaysInMonth;
                     
                     return {
                       category_name: category.category_name,
