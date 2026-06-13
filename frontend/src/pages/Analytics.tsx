@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
 import WheelsOfLife from '../components/WheelsOfLife';
 import HourlyTaskTimeline from '../components/HourlyTaskTimeline';
+import TimeDistributionChart from '../components/TimeDistributionChart';
 import {
   XAxis,
   YAxis,
@@ -1261,6 +1262,9 @@ export default function Analytics() {
         <>
           {/* HOURLY TASK TIMELINE */}
           <HourlyTaskTimeline />
+
+          {/* TIME DISTRIBUTION DONUT CHART */}
+          <TimeDistributionChart />
 
           {/* CATEGORY TIME COMPARISON */}
           <div className="comparative-charts-section">
