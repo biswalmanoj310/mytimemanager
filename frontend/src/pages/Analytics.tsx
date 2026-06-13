@@ -297,6 +297,12 @@ export default function Analytics() {
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeekAll, setShowTaskBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
+  // Per-chart Time / % toggle for the 4 overview comparison charts
+  const [catShowPct,      setCatShowPct]      = useState(false);
+  const [taskShowPct,     setTaskShowPct]     = useState(false);
+  const [oneTimeShowPct,  setOneTimeShowPct]  = useState(false);
+  const [pillarShowPct,   setPillarShowPct]   = useState(false);
+
   const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(false);
   const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(false);
   const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(false);
@@ -1274,6 +1280,10 @@ export default function Analytics() {
                 <p className="chart-description">Ideal allocation vs actual time spent by category</p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setCatShowPct(v => !v)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: catShowPct ? '#4299e1' : '#edf2f7', color: catShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                >{catShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
                 <button 
                   className={`toggle-month-btn ${showCategoryWeek ? 'active' : ''}`}
                   onClick={() => setShowCategoryWeek(!showCategoryWeek)}
@@ -1353,6 +1363,13 @@ export default function Analytics() {
                         .filter(cat => cat.today > 0)
                         .forEach(cat => console.error(`  ${cat.category_name}: ${cat.today.toFixed(2)} hours`));
                     }
+                    // Add pct fields
+                    mappedData.forEach((d: any) => {
+                      const alloc = d.allocated || 0;
+                      d.todayPct    = alloc > 0 ? Math.round((d.today    / alloc) * 100) : 0;
+                      d.weekAvgPct  = alloc > 0 ? Math.round((d.weekAvg  / alloc) * 100) : 0;
+                      d.monthAvgPct = alloc > 0 ? Math.round((d.monthAvg / alloc) * 100) : 0;
+                    });
                     return mappedData;
                   })()}
                   barSize={12}
@@ -1369,40 +1386,43 @@ export default function Analytics() {
                     fontSize={12}
                   />
                   <YAxis 
-                    label={{ value: 'Hours', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: catShowPct ? '% of Allocation' : 'Hours', angle: -90, position: 'insideLeft' }} 
                     domain={[0, 'auto']}
+                    tickFormatter={catShowPct ? (v: number) => `${v}%` : undefined}
                   />
                   <Legend />
+                  {!catShowPct && (
+                    <Bar 
+                      dataKey="allocated" 
+                      name="Allocated (Daily)" 
+                      fill="#cbd5e0" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#666', fontSize: 10, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
                   <Bar 
-                    dataKey="allocated" 
-                    name="Allocated (Daily)" 
-                    fill="#cbd5e0" 
-                    radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#666', fontSize: 10, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
-                  <Bar 
-                    dataKey="today" 
+                    dataKey={catShowPct ? 'todayPct' : 'today'} 
                     name="Today" 
                     fill="#4299e1" 
                     radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                   />
                   {showCategoryWeek && (
                     <Bar 
-                      dataKey="weekAvg" 
+                      dataKey={catShowPct ? 'weekAvgPct' : 'weekAvg'} 
                       name="Week Avg/Day" 
                       fill="#48bb78" 
                       radius={[6, 6, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                   {showCategoryMonth && (
                     <Bar 
-                      dataKey="monthAvg" 
+                      dataKey={catShowPct ? 'monthAvgPct' : 'monthAvg'} 
                       name="Month Avg/Day" 
                       fill="#ed8936" 
                       radius={[6, 6, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                 </BarChart>
@@ -1418,6 +1438,10 @@ export default function Analytics() {
                 <p className="chart-description">Ideal allocation vs actual time spent (tasks from Daily tab ⏰Time-Based Tasks section)</p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setTaskShowPct(v => !v)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: taskShowPct ? '#4299e1' : '#edf2f7', color: taskShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                >{taskShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
                 <button 
                   className={`toggle-month-btn ${showTaskWeek ? 'active' : ''}`}
                   onClick={() => setShowTaskWeek(!showTaskWeek)}
@@ -1497,7 +1521,12 @@ export default function Analytics() {
                       console.error('❌ TIME-BASED TASKS ERROR: Total time exceeds 24 hours!');
                     }
                     
-                    return mappedTaskData;
+                    return mappedTaskData.map((d: any) => ({
+                      ...d,
+                      todayPct:   d.allocated > 0 ? Math.round((d.today   / d.allocated) * 100) : 0,
+                      weeklyPct:  d.allocated > 0 ? Math.round((d.weekly  / d.allocated) * 100) : 0,
+                      monthlyPct: d.allocated > 0 ? Math.round((d.monthly / d.allocated) * 100) : 0,
+                    }));
                   })()}
                   barSize={10}
                   barCategoryGap={25}
@@ -1511,44 +1540,47 @@ export default function Analytics() {
                     tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
-                    label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: taskShowPct ? '% of Allocation' : 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
+                    tickFormatter={taskShowPct ? (v: number) => `${v}%` : undefined}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '10px' }}
                     iconType="rect"
                   />
+                  {!taskShowPct && (
+                    <Bar 
+                      dataKey="allocated" 
+                      name="Ideal (Allocated)" 
+                      fill="#cbd5e0" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#666', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
                   <Bar 
-                    dataKey="allocated" 
-                    name="Ideal (Allocated)" 
-                    fill="#cbd5e0" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#666', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
-                  <Bar 
-                    dataKey="today" 
+                    dataKey={taskShowPct ? 'todayPct' : 'today'} 
                     name="Today (Actual)" 
                     fill="#4299e1" 
                     radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                   />
                   {showTaskWeek && (
                     <Bar 
-                      dataKey="weekly" 
+                      dataKey={taskShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
                       fill="#48bb78" 
                       radius={[4, 4, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                   {showTaskMonth && (
                     <Bar 
-                      dataKey="monthly" 
+                      dataKey={taskShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
                       fill="#ed8936" 
                       radius={[4, 4, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                 </BarChart>
@@ -1564,6 +1596,10 @@ export default function Analytics() {
                 <p className="chart-description">Ideal allocation vs actual time spent (tasks from Daily tab ⏰Daily: One Time Tasks section)</p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setOneTimeShowPct(v => !v)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: oneTimeShowPct ? '#4299e1' : '#edf2f7', color: oneTimeShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                >{oneTimeShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
                 <button 
                   className={`toggle-month-btn ${showOneTimeTaskWeek ? 'active' : ''}`}
                   onClick={() => setShowOneTimeTaskWeek(!showOneTimeTaskWeek)}
@@ -1626,7 +1662,13 @@ export default function Analytics() {
                         const taskOrderB = getTaskOrder(b.name);
                         if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
                         return a.name.localeCompare(b.name);
-                      });
+                      })
+                      .map((d: any) => ({
+                        ...d,
+                        todayPct:   d.allocated > 0 ? Math.round((d.today   / d.allocated) * 100) : 0,
+                        weeklyPct:  d.allocated > 0 ? Math.round((d.weekly  / d.allocated) * 100) : 0,
+                        monthlyPct: d.allocated > 0 ? Math.round((d.monthly / d.allocated) * 100) : 0,
+                      }));
                   })()}
                   barSize={10}
                   barCategoryGap={25}
@@ -1640,50 +1682,51 @@ export default function Analytics() {
                     tick={<CustomMultilineLabel />}
                   />
                   <YAxis 
-                    label={{ value: 'Minutes (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: oneTimeShowPct ? '% of Allocation' : 'Minutes (Daily Average)', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
+                    tickFormatter={oneTimeShowPct ? (v: number) => `${v}%` : undefined}
                   />
                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
                   <ReferenceLine y={0} stroke="#000" />
                   
-                  {/* Allocated - Target line */}
-                  <Bar 
-                    dataKey="allocated" 
-                    name="Allocated (Daily)" 
-                    fill="#cbd5e0" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
-                  />
-                  
-                  {/* Today's Actual */}
-                  <Bar 
-                    dataKey="today" 
-                    name="Today (Actual)" 
-                    fill="#4299e1" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
-                  />
-                  
-                  {/* This Week Average - Only show if toggle is ON */}
-                  {showOneTimeTaskWeek && (
+                  {/* Allocated - Target */}
+                  {!oneTimeShowPct && (
                     <Bar 
-                      dataKey="weekly" 
-                      name="Weekly Avg (Actual)" 
-                      fill="#48bb78" 
+                      dataKey="allocated" 
+                      name="Allocated (Daily)" 
+                      fill="#cbd5e0" 
                       radius={[4, 4, 0, 0]}
                       label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
                     />
                   )}
                   
-                  {/* This Month Average - Only show if toggle is ON */}
+                  {/* Today's Actual */}
+                  <Bar 
+                    dataKey={oneTimeShowPct ? 'todayPct' : 'today'} 
+                    name="Today (Actual)" 
+                    fill="#4299e1" 
+                    radius={[4, 4, 0, 0]}
+                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? oneTimeShowPct ? `${value}%` : `${value.toFixed(0)}m` : '' }}
+                  />
+                  
+                  {showOneTimeTaskWeek && (
+                    <Bar 
+                      dataKey={oneTimeShowPct ? 'weeklyPct' : 'weekly'} 
+                      name="Weekly Avg (Actual)" 
+                      fill="#48bb78" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? oneTimeShowPct ? `${value}%` : `${value.toFixed(0)}m` : '' }}
+                    />
+                  )}
+                  
                   {showOneTimeTaskMonth && (
                     <Bar 
-                      dataKey="monthly" 
+                      dataKey={oneTimeShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
                       fill="#ed8936" 
                       radius={[4, 4, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? `${value.toFixed(0)}m` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? oneTimeShowPct ? `${value}%` : `${value.toFixed(0)}m` : '' }}
                     />
                   )}
                 </BarChart>
@@ -1699,6 +1742,10 @@ export default function Analytics() {
                 <p className="chart-description">Ideal allocation vs actual time spent across your life pillars</p>
               </div>
               <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setPillarShowPct(v => !v)}
+                  style={{ fontSize: '11px', padding: '6px 10px', background: pillarShowPct ? '#4299e1' : '#edf2f7', color: pillarShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                >{pillarShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
                 <button 
                   className={`toggle-month-btn ${showPillarWeek ? 'active' : ''}`}
                   onClick={() => setShowPillarWeek(!showPillarWeek)}
@@ -1750,7 +1797,12 @@ export default function Analytics() {
                       const orderA = getPillarOrder(a.name);
                       const orderB = getPillarOrder(b.name);
                       return orderA - orderB;
-                    });
+                    }).map((d: any) => ({
+                      ...d,
+                      todayPct:   d.allocated > 0 ? Math.round((d.today   / d.allocated) * 100) : 0,
+                      weeklyPct:  d.allocated > 0 ? Math.round((d.weekly  / d.allocated) * 100) : 0,
+                      monthlyPct: d.allocated > 0 ? Math.round((d.monthly / d.allocated) * 100) : 0,
+                    }));
                   })()}
                   barSize={35}
                   margin={{ top: 40, right: 30, left: 20, bottom: 5 }}
@@ -1765,44 +1817,47 @@ export default function Analytics() {
                     style={{ fontSize: '14px', fontWeight: 600 }}
                   />
                   <YAxis 
-                    label={{ value: 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
+                    label={{ value: pillarShowPct ? '% of Allocation' : 'Hours (Daily Average)', angle: -90, position: 'insideLeft' }} 
                     style={{ fontSize: '12px' }}
                     domain={[0, 'auto']}
+                    tickFormatter={pillarShowPct ? (v: number) => `${v}%` : undefined}
                   />
                   <Legend 
                     wrapperStyle={{ paddingTop: '20px' }}
                     iconType="rect"
                   />
+                  {!pillarShowPct && (
+                    <Bar 
+                      dataKey="allocated" 
+                      name="Ideal (Allocated)" 
+                      fill="#cbd5e0" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#666', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
                   <Bar 
-                    dataKey="allocated" 
-                    name="Ideal (Allocated)" 
-                    fill="#cbd5e0" 
-                    radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#666', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
-                  />
-                  <Bar 
-                    dataKey="today" 
+                    dataKey={pillarShowPct ? 'todayPct' : 'today'} 
                     name="Today (Actual)" 
                     fill="#4299e1" 
                     radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                    label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                   />
                   {showPillarWeek && (
                     <Bar 
-                      dataKey="weekly" 
+                      dataKey={pillarShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
                       fill="#48bb78" 
                       radius={[6, 6, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                   {showMonthColumn && (
                     <Bar 
-                      dataKey="monthly" 
+                      dataKey={pillarShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
                       fill="#ed8936" 
                       radius={[6, 6, 0, 0]}
-                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
+                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
                 </BarChart>

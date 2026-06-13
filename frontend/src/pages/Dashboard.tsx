@@ -10,6 +10,7 @@ import { api } from '../services/api';
 import { formatDateForInput, getWeekStart } from '../utils/dateHelpers';
 import TaskForm from '../components/TaskForm';
 import GoalForm from '../components/GoalForm';
+import TimeDistributionMini, { MiniViewType } from '../components/TimeDistributionMini';
 import { AddChallengeModal } from '../components/AddChallengeModal';
 import {
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
@@ -172,6 +173,7 @@ export default function Dashboard() {
   const [yearOneTimeCircle, setYearOneTimeCircle] = useState<CirclePeriod[]>([]);
   const [circleLoading, setCircleLoading] = useState(true);
   const [circlePeriod, setCirclePeriod] = useState<'week'|'month'|'year'>('week');
+  const [miniViewType,  setMiniViewType]  = useState<MiniViewType>('category');
 
   const navigate = useNavigate();
 
@@ -766,6 +768,49 @@ export default function Dashboard() {
                     </div>
                   );
                 })}
+
+                {/* ── Time Distribution Donut Charts ── */}
+                {(() => {
+                  const accentColor = '#6366f1';
+                  const periods = circlePeriod === 'week'
+                    ? [...weekCategoryCircle].reverse()
+                    : circlePeriod === 'month'
+                      ? [...monthCategoryCircle].reverse()
+                      : [...yearCategoryCircle].reverse();
+                  return (
+                    <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px', border: `2px solid ${accentColor}22` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '17px', fontWeight: '700', color: accentColor }}>🍩 Time Distribution</div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>How time is split across pillars &amp; categories</div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          <button
+                            onClick={() => setMiniViewType('category')}
+                            style={{ padding: '4px 12px', borderRadius: '20px', border: miniViewType === 'category' ? `2px solid ${accentColor}` : '2px solid #e2e8f0', background: miniViewType === 'category' ? accentColor : 'white', color: miniViewType === 'category' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}
+                          >📂 Category</button>
+                          <button
+                            onClick={() => setMiniViewType('pillar')}
+                            style={{ padding: '4px 12px', borderRadius: '20px', border: miniViewType === 'pillar' ? `2px solid ${accentColor}` : '2px solid #e2e8f0', background: miniViewType === 'pillar' ? accentColor : 'white', color: miniViewType === 'pillar' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}
+                          >🎯 Pillar</button>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {periods.map((p, i) => (
+                          <TimeDistributionMini
+                            key={p.label}
+                            start={p.start}
+                            end={p.end}
+                            label={p.label}
+                            isNewest={i === 0}
+                            accentColor={accentColor}
+                            viewType={miniViewType}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </section>
