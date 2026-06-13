@@ -1,3 +1,281 @@
+/* ─── Hourly Task Timeline ─── */
+.hourly-timeline-section {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 28px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  position: relative;
+}
+
+.hourly-timeline-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.hourly-timeline-header h2 {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.hourly-view-toggle {
+  display: flex;
+  gap: 6px;
+}
+
+.hourly-toggle-btn {
+  padding: 5px 14px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 20px;
+  background: #f9fafb;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: #374151;
+  font-weight: 500;
+}
+
+.hourly-toggle-btn:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: #eef2ff;
+}
+
+.hourly-toggle-btn.active {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
+
+.hourly-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.hourly-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+.hourly-legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.hourly-timeline-wrapper {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.hourly-timeline-table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 0.8rem;
+}
+
+.hourly-timeline-table thead tr {
+  background: #f8fafc;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.hourly-timeline-table th {
+  padding: 7px 4px;
+  text-align: center;
+  font-weight: 600;
+  color: #6b7280;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  border-right: 1px solid #f1f5f9;
+}
+
+/* Left "Date" sticky column header */
+.hourly-label-col {
+  min-width: 72px;
+  max-width: 80px;
+  width: 80px;
+  text-align: left !important;
+  padding-left: 8px !important;
+  position: sticky;
+  left: 0;
+  background: #f8fafc;
+  z-index: 2;
+  border-right: 1px solid #e5e7eb !important;
+}
+
+.hourly-hour-col {
+  min-width: 30px;
+  width: 30px;
+}
+
+/* Grouped 12am–5am column is wider to represent 5 hours */
+.hourly-hour-col-early {
+  min-width: 52px;
+  width: 52px;
+  font-size: 0.68rem !important;
+  line-height: 1.2;
+  color: #6366f1 !important;
+  background: #f5f3ff;
+}
+
+.hourly-cell-early {
+  min-width: 52px;
+  width: 52px;
+}
+
+.hourly-row {
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.hourly-row:last-child {
+  border-bottom: none;
+}
+
+.hourly-row:hover {
+  background: #fafbff;
+}
+
+/* Date label cell (sticky left column) */
+.hourly-date-cell {
+  padding: 4px 6px 4px 8px;
+  text-align: left;
+  white-space: nowrap;
+  position: sticky;
+  left: 0;
+  background: #fff;
+  z-index: 1;
+  border-right: 1px solid #e5e7eb;
+  min-width: 72px;
+  max-width: 80px;
+  width: 80px;
+  font-weight: 700;
+  font-size: 0.76rem;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.hourly-date-day {
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: #9ca3af;
+}
+
+.hourly-row:hover .hourly-date-cell {
+  background: #fafbff;
+}
+
+/* Hour cells */
+.hourly-cell {
+  padding: 2px 1px;
+  border-right: 1px solid #f1f5f9;
+  height: 26px;
+  vertical-align: middle;
+  min-width: 30px;
+  cursor: default;
+}
+
+.hourly-cell-filled {
+  cursor: pointer;
+}
+
+.hourly-cell-filled:hover {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+  border-radius: 3px;
+}
+
+/* Stacked color segments inside a cell */
+.hourly-cell-inner {
+  display: flex;
+  height: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  gap: 1px;
+}
+
+.hourly-seg {
+  border-radius: 3px;
+  min-width: 4px;
+}
+
+/* ── Tooltip ── */
+.hourly-tooltip {
+  position: fixed;
+  z-index: 9999;
+  background: #1e293b;
+  color: #f1f5f9;
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 160px;
+  max-width: 260px;
+  font-size: 0.8rem;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  pointer-events: none;
+}
+
+.hourly-tooltip-header {
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  margin-bottom: 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.hourly-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.hourly-tooltip-row:last-child {
+  margin-bottom: 0;
+}
+
+.hourly-tooltip-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.hourly-tooltip-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hourly-tooltip-mins {
+  font-weight: 700;
+  color: #a5f3fc;
+  flex-shrink: 0;
+}
+
+/* ─── End Hourly Task Timeline ─── */
+
 .analytics-container {
   padding: 2rem;
   max-width: 1400px;

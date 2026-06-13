@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
 import WheelsOfLife from '../components/WheelsOfLife';
+import HourlyTaskTimeline from '../components/HourlyTaskTimeline';
 import {
   XAxis,
   YAxis,
@@ -1258,6 +1259,9 @@ export default function Analytics() {
       {/* OVERVIEW MODE: Unified Comparison Charts */}
       {viewMode === 'overview' && (
         <>
+          {/* HOURLY TASK TIMELINE */}
+          <HourlyTaskTimeline />
+
           {/* CATEGORY TIME COMPARISON */}
           <div className="comparative-charts-section">
             <div className="section-header-with-toggle">
