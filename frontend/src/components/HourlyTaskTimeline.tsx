@@ -132,7 +132,7 @@ const SEGMENT_PRIORITY: Record<string, number> = {
 export default function HourlyTaskTimeline() {
   const today = formatDateForInput(new Date());
 
-  const [viewMode, setViewMode] = useState<ViewMode>('task');
+  const [viewMode, setViewMode] = useState<ViewMode>('pillar');
   const [tasks,    setTasks]    = useState<TaskInfo[]>([]);
   const [entries,  setEntries]  = useState<HourlyEntry[]>([]);
   const [loading,  setLoading]  = useState(true);
