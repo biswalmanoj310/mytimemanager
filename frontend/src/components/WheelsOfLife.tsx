@@ -435,31 +435,18 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
     const maxPercent = Math.max(...radarData.map(d => d.spent), 100);
     const dynamicMax = Math.max(100, Math.ceil(maxPercent / 50) * 50);
 
-    // Custom tick renderer: task name only, word-wrapped at ~12 chars
+    // Custom tick renderer: 2 words per line, max 2 lines (4 words total)
     const CustomTick = (props: any) => {
       const { x, y, payload, textAnchor } = props;
       const taskName: string = payload.value;
-
-      const words = taskName.split(' ');
-      const lines: string[] = [];
-      let cur = '';
-      words.forEach((w: string) => {
-        if ((cur ? cur + ' ' + w : w).length <= 12) {
-          cur = cur ? cur + ' ' + w : w;
-        } else {
-          if (cur) lines.push(cur);
-          cur = w;
-        }
-      });
-      if (cur) lines.push(cur);
+      const words = taskName.split(' ').filter(Boolean);
+      const line1 = words.slice(0, 2).join(' ');
+      const line2 = words.slice(2, 4).join(' ');
 
       return (
         <text x={x} y={y} textAnchor={textAnchor || 'middle'} dominantBaseline="central">
-          {lines.slice(0, 2).map((line: string, i: number) => (
-            <tspan key={i} x={x} dy={i === 0 ? 0 : 10} fontSize={9} fontWeight={500} fill="#2b6cb0">
-              {line}
-            </tspan>
-          ))}
+          <tspan x={x} dy={0} fontSize={9} fontWeight={500} fill="#2b6cb0">{line1}</tspan>
+          {line2 && <tspan x={x} dy={10} fontSize={9} fontWeight={500} fill="#2b6cb0">{line2}</tspan>}
         </text>
       );
     };
@@ -574,6 +561,17 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
         {renderTaskWheel(todayOneTimeTaskData, 'Today - One-Time Tasks', '📅', '#4299e1')}
         {renderTaskWheel(weekOneTimeTaskData, 'This Week - One-Time Tasks', '📊', '#48bb78')}
         {renderTaskWheel(monthOneTimeTaskData, 'This Month - One-Time Tasks', '📈', '#ed8936')}
+      </div>
+
+      {/* Combined Tasks Wheels: Today, Weekly, Monthly */}
+      <h2 style={{ marginTop: '3rem', marginBottom: '1rem' }}>🔄 All Tasks Combined</h2>
+      <p className="chart-description">
+        Combined view of all Time-Based Tasks and One-Time Tasks — shows each task's completion percentage in a single wheel.
+      </p>
+      <div className="wheel-comparison-container">
+        {renderTaskWheel([...todayTaskData, ...todayOneTimeTaskData], 'Today - All Tasks', '📅', '#805ad5')}
+        {renderTaskWheel([...weekTaskData, ...weekOneTimeTaskData], 'This Week - All Tasks', '📊', '#d69e2e')}
+        {renderTaskWheel([...monthTaskData, ...monthOneTimeTaskData], 'This Month - All Tasks', '📈', '#e53e3e')}
       </div>
     </div>
   );
