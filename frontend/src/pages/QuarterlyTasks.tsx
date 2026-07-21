@@ -595,12 +595,12 @@ const QuarterlyTasks: React.FC = () => {
               </button>
               <button 
                 className="btn btn-sm" 
-                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#e53e3e', color: 'white', border: 'none', borderRadius: '4px' }}
-                onClick={() => handleRemoveFromQuarterly(task.id)}
+                style={{ padding: '4px 8px', fontSize: '11px', backgroundColor: '#718096', color: 'white', border: 'none', borderRadius: '4px' }}
+                onClick={() => handleMarkNA(task.id)}
                 disabled={loading}
-                title="Remove from Quarterly"
+                title="Archive this task for the quarter (moves to completed section)"
               >
-                <i className="fas fa-trash"></i> Delete
+                <i className="fas fa-archive"></i> Archive
               </button>
             </div>
           ) : (
@@ -686,7 +686,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">⏰</span>
                 <span>Time-Based Tasks (Daily)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -711,7 +711,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">🔢</span>
                 <span>Count-Based Tasks (Daily)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -738,7 +738,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">⏰</span>
                 <span>Time-Based Tasks (Weekly)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -763,7 +763,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">🔢</span>
                 <span>Count-Based Tasks (Weekly)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -790,7 +790,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">⏰</span>
                 <span>Time-Based Tasks (Monthly)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -815,7 +815,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">🔢</span>
                 <span>Count-Based Tasks (Monthly)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -842,7 +842,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">⏰</span>
                 <span>Time-Based Tasks (Quarterly)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -867,7 +867,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span className="emoji">🔢</span>
                 <span>Count-Based Tasks (Quarterly)</span>
               </h3>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
@@ -920,7 +920,7 @@ const QuarterlyTasks: React.FC = () => {
               
               {showCompletedSection && (
                 <>
-                  <div className="tasks-table-container">
+                  <div className="tasks-table-container quarterly-container">
                     <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #718096 0%, #4a5568 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>

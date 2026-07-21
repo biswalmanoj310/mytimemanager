@@ -424,6 +424,12 @@ td.section-header-cell.boolean-based {
   width: max-content;
   min-width: 0;
 }
+
+/* Quarterly container: shrink-wrap to table width so no whitespace after last column */
+.quarterly-container {
+  width: fit-content;
+  max-width: 100%;
+}
   position: relative;
   z-index: 1;
 }

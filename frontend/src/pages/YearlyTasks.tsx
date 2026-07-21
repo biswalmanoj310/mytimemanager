@@ -208,27 +208,29 @@ const YearlyTasks: React.FC = () => {
   };
 
   const getYearlyRowColorClass = (task: Task, totalSpent: number, trackingStartMonth: number | null): string => {
-    // Row color based on YEAR-TO-DATE progress (days elapsed from Jan 1)
     const today = new Date();
     const yearStart = new Date(yearStartDate);
     const currentYear = today.getFullYear();
     const selectedYear = yearStart.getFullYear();
-    
-    // Don't color future years
+
     if (selectedYear > currentYear) return '';
-    
-    // Calculate days elapsed in the year so far
+
+    // Use tracking start month so daysElapsed matches the same window as totalSpent
+    const effectiveStartMonth = trackingStartMonth ?? 1;
+    const effectiveStart = new Date(selectedYear, effectiveStartMonth - 1, 1);
+
     let daysElapsed = 0;
     if (selectedYear === currentYear) {
-      // Current year: calculate days from Jan 1 to today
-      const startOfYear = new Date(currentYear, 0, 1);
-      daysElapsed = Math.floor((today.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      daysElapsed = Math.max(1, Math.floor((today.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
     } else {
-      // Past year: 365 days
-      daysElapsed = 365;
+      // Past year: days from effectiveStart to Dec 31
+      const yearEnd = new Date(selectedYear, 11, 31);
+      daysElapsed = Math.floor((yearEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
     }
-    
-    // Calculate expected based on days elapsed
+
+    // Months elapsed from effective start (for monthly frequency)
+    const monthsElapsed = today.getMonth() + 1 - (effectiveStartMonth - 1);
+
     let expectedTarget = 0;
     if (task.task_type === TaskType.COUNT) {
       if (task.follow_up_frequency === 'daily') {
@@ -236,8 +238,7 @@ const YearlyTasks: React.FC = () => {
       } else if (task.follow_up_frequency === 'weekly') {
         expectedTarget = (task.target_value || 0) * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        const monthsElapsed = today.getMonth() + 1;
-        expectedTarget = (task.target_value || 0) * monthsElapsed;
+        expectedTarget = (task.target_value || 0) * Math.max(1, monthsElapsed);
       } else {
         expectedTarget = (task.target_value || 0) * (daysElapsed / 365);
       }
@@ -247,25 +248,25 @@ const YearlyTasks: React.FC = () => {
       } else if (task.follow_up_frequency === 'weekly') {
         expectedTarget = daysElapsed / 7;
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedTarget = today.getMonth() + 1;
+        expectedTarget = Math.max(1, monthsElapsed);
       } else {
         expectedTarget = daysElapsed / 365;
       }
     } else {
-      // TIME task
       if (task.follow_up_frequency === 'daily') {
         expectedTarget = task.allocated_minutes * daysElapsed;
       } else if (task.follow_up_frequency === 'weekly') {
         expectedTarget = task.allocated_minutes * (daysElapsed / 7);
       } else if (task.follow_up_frequency === 'monthly') {
-        expectedTarget = task.allocated_minutes * (today.getMonth() + 1);
+        expectedTarget = task.allocated_minutes * Math.max(1, monthsElapsed);
       } else {
         expectedTarget = task.allocated_minutes * (daysElapsed / 365);
       }
     }
-    
+
     if (totalSpent >= expectedTarget) return 'weekly-on-track';
-    else if (totalSpent > 0) return 'weekly-below-target';
+    // Show red even for zero progress — expectedTarget > 0 means tracking has started
+    else if (expectedTarget > 0) return 'weekly-below-target';
     return '';
   };
 
@@ -551,6 +552,23 @@ const YearlyTasks: React.FC = () => {
               <button className={`btn-na ${isYearlyNA ? 'active' : ''}`} onClick={() => handleYearlyTaskNA(task.id)} title="Mark as NA for this year only">
                 NA
               </button>
+              {/* Remove from Yearly: only for non-native monitored tasks (daily/weekly/monthly added to yearly) */}
+              {(task.follow_up_frequency !== 'yearly') && (
+                <button
+                  className="btn-na"
+                  style={{ background: 'linear-gradient(135deg, #fc8181 0%, #e53e3e 100%)', fontSize: '11px', padding: '4px 8px' }}
+                  onClick={async () => {
+                    if (!window.confirm('Remove this task from yearly monitoring? It will stay in its home tab.')) return;
+                    try {
+                      await fetch(`/api/yearly-time/status/${task.id}/${yearStartDate.getFullYear()}-01-01`, { method: 'DELETE' });
+                      await loadYearlyTaskStatuses(yearStartDate.getFullYear());
+                    } catch (err) { console.error('Remove from yearly failed', err); }
+                  }}
+                  title="Remove from yearly monitoring (task stays in its home tab)"
+                >
+                  Remove
+                </button>
+              )}
             </div>
           )}
         </td>
