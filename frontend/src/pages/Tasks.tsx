@@ -7135,156 +7135,47 @@ export default function Tasks() {
                 <button className="btn-close" onClick={() => setShowAddQuarterlyTaskModal(false)}>×</button>
               </div>
               <div className="modal-body">
-                <p style={{ marginBottom: '15px', color: '#666' }}>
-                  Select an existing task to track quarterly:
+                <p style={{ marginBottom: '8px', color: '#2d3748', fontWeight: 600 }}>
+                  Quarterly tab is for strategic goals only (quarterly or yearly frequency).
                 </p>
-                
-                <div className="form-group">
-                  <label htmlFor="dailyTaskSelectQuarterly">Select from Daily Tasks:</label>
-                  <select 
-                    id="dailyTaskSelectQuarterly"
-                    className="form-control"
-                    value={selectedDailyTaskForQuarterly || ''}
-                    onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a daily task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'daily') return false;
-                        if (yearlyTaskStatuses[task.id]) return false; // Already added to quarterly
-                        if (task.is_completed) return false;
-                        const completionDateStr = dailyTaskCompletionDates.get(task.id);
-                        if (completionDateStr) return false;
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        if (orderA !== orderB) return orderA - orderB;
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
-                        return (
+                <p style={{ marginBottom: '20px', color: '#718096', fontSize: '13px' }}>
+                  Daily/weekly/monthly tasks belong in their own tabs and are tracked there.
+                  Create a new quarterly or yearly task below, or assign an existing task
+                  the "quarterly" or "yearly" follow-up frequency to make it appear here automatically.
+                </p>
+
+                {/* Existing quarterly/yearly tasks not yet tracked */}
+                {(() => {
+                  const untracked = tasks.filter(t =>
+                    (t.follow_up_frequency === 'quarterly' || t.follow_up_frequency === 'yearly') &&
+                    !yearlyTaskStatuses[t.id] &&
+                    t.is_active && !t.is_completed
+                  );
+                  if (untracked.length === 0) return null;
+                  return (
+                    <div className="form-group" style={{ marginBottom: '20px' }}>
+                      <label htmlFor="existingQuarterlySelect">
+                        Or select an existing quarterly/yearly task to track:
+                      </label>
+                      <select
+                        id="existingQuarterlySelect"
+                        className="form-control"
+                        value={selectedDailyTaskForQuarterly || ''}
+                        onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
+                        style={{ width: '100%', padding: '8px', marginTop: '5px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                      >
+                        <option value="">-- Select a quarterly/yearly task --</option>
+                        {untracked.map(task => (
                           <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
+                            [{task.follow_up_frequency}] {task.pillar_name} - {task.category_name}: {task.name}
                           </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
 
-                <div className="form-group" style={{ marginTop: '20px' }}>
-                  <label htmlFor="weeklyTaskSelectQuarterly">Select from Weekly Tasks:</label>
-                  <select 
-                    id="weeklyTaskSelectQuarterly"
-                    className="form-control"
-                    value={selectedDailyTaskForQuarterly || ''}
-                    onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a weekly task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'weekly') return false;
-                        if (yearlyTaskStatuses[task.id]) return false; // Already added to quarterly
-                        if (weeklyTaskStatuses[task.id]) return false; // Exclude completed/NA weekly tasks
-                        if (task.is_completed) return false;
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        if (orderA !== orderB) return orderA - orderB;
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ marginTop: '20px' }}>
-                  <label htmlFor="monthlyTaskSelectQuarterly">Select from Monthly Tasks:</label>
-                  <select 
-                    id="monthlyTaskSelectQuarterly"
-                    className="form-control"
-                    value={selectedDailyTaskForQuarterly || ''}
-                    onChange={(e) => setSelectedDailyTaskForQuarterly(e.target.value ? Number(e.target.value) : null)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '8px', 
-                      marginTop: '5px',
-                      borderRadius: '4px',
-                      border: '1px solid #cbd5e0'
-                    }}
-                  >
-                    <option value="">-- Select a monthly task --</option>
-                    {tasks
-                      .filter(task => {
-                        if (task.follow_up_frequency !== 'monthly') return false;
-                        if (yearlyTaskStatuses[task.id]) return false; // Already added to quarterly
-                        if (task.is_completed) return false;
-                        return task.is_active;
-                      })
-                      .sort((a, b) => {
-                        const keyA = `${a.pillar_name || ''}|${a.category_name || ''}`;
-                        const keyB = `${b.pillar_name || ''}|${b.category_name || ''}`;
-                        const orderA = hierarchyOrder[keyA] || 999;
-                        const orderB = hierarchyOrder[keyB] || 999;
-                        if (orderA !== orderB) return orderA - orderB;
-                        const taskOrderA = taskNameOrder[a.name || ''] || 999;
-                        const taskOrderB = taskNameOrder[b.name || ''] || 999;
-                        if (taskOrderA !== taskOrderB) return taskOrderA - taskOrderB;
-                        return (a.name || '').localeCompare(b.name || '');
-                      })
-                      .map(task => {
-                        const displayValue = task.task_type === 'time' ? ` (${task.allocated_minutes} min)` : task.task_type === 'count' ? ` (${task.target_value} ${task.unit || 'count'})` : ' (Yes/No)';
-                        return (
-                          <option key={task.id} value={task.id}>
-                            {task.pillar_name} - {task.category_name}: {task.name}{displayValue}
-                          </option>
-                        );
-                      })
-                    }
-                  </select>
-                </div>
-
-                <div style={{ margin: '20px 0', textAlign: 'center', color: '#999' }}>
-                  OR
-                </div>
-
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => {
                     setSelectedDailyTaskForQuarterly(null);
@@ -7292,12 +7183,12 @@ export default function Tasks() {
                   }}
                   style={{ width: '100%' }}
                 >
-                  Create New Task
+                  ✏️ Create New Quarterly/Yearly Task
                 </button>
               </div>
               <div className="modal-footer">
-                <button 
-                  className="btn btn-secondary" 
+                <button
+                  className="btn btn-secondary"
                   onClick={() => {
                     setShowAddQuarterlyTaskModal(false);
                     setSelectedDailyTaskForQuarterly(null);
@@ -7305,10 +7196,11 @@ export default function Tasks() {
                 >
                   Cancel
                 </button>
-                <button 
-                  className="btn btn-primary" 
+                <button
+                  className="btn btn-primary"
                   onClick={handleAddQuarterlyTask}
                   disabled={!selectedDailyTaskForQuarterly}
+                  style={{ opacity: selectedDailyTaskForQuarterly ? 1 : 0.5, cursor: selectedDailyTaskForQuarterly ? 'pointer' : 'not-allowed' }}
                 >
                   Add to Quarterly
                 </button>
