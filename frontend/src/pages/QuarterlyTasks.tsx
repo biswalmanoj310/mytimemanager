@@ -4,7 +4,7 @@
  * ============================================================================
  * 
  * Quarterly task tracking showing 4-quarter aggregate view
- * Uses yearlyTaskStatuses and yearlyMonthlyAggregates from context
+ * Uses quarterlyTaskStatuses and yearlyMonthlyAggregates from context
  * Similar architecture to YearlyTasks but shows quarters instead of months
  * 
  * ============================================================================
@@ -23,9 +23,9 @@ import {
 const QuarterlyTasks: React.FC = () => {
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
   const { 
-    yearlyTaskStatuses,
-    loadYearlyTaskStatuses,
-    updateYearlyTaskStatus,
+    quarterlyTaskStatuses,
+    loadQuarterlyTaskStatuses,
+    updateQuarterlyTaskStatus,
     yearlyMonthlyAggregates,
     loadMonthlyAggregatesForYear,
   } = useTimeEntriesContext();
@@ -69,7 +69,7 @@ const QuarterlyTasks: React.FC = () => {
         loadTasks(),
         loadPillars(),
         loadCategories(),
-        loadYearlyTaskStatuses(yearNumber),
+        loadQuarterlyTaskStatuses(yearNumber),
         loadMonthlyAggregatesForYear(yearNumber)
       ]);
       setDataLoaded(true);
@@ -81,8 +81,8 @@ const QuarterlyTasks: React.FC = () => {
   const filteredTasks = useMemo(() => {
     console.log('🔍 QuarterlyTasks: Filtering tasks', {
       totalTasks: tasks.length,
-      yearlyTaskStatusesKeys: Object.keys(yearlyTaskStatuses).length,
-      yearlyTaskStatuses,
+      quarterlyTaskStatusesKeys: Object.keys(quarterlyTaskStatuses).length,
+      quarterlyTaskStatuses,
       yearlyMonthlyAggregatesKeys: Object.keys(yearlyMonthlyAggregates).length
     });
     
@@ -91,14 +91,14 @@ const QuarterlyTasks: React.FC = () => {
       // Purpose: "Is my daily reading target (8 hrs/day) being achieved this quarter?"
       // Native quarterly/yearly tasks always show. Lower-frequency tasks show if explicitly added to monitoring.
       const isNativeQuarterlyYearly = task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly';
-      const hasBeenAddedToMonitoring = yearlyTaskStatuses[task.id] !== undefined;
+      const hasBeenAddedToMonitoring = quarterlyTaskStatuses[task.id] !== undefined;
       if (!isNativeQuarterlyYearly && !hasBeenAddedToMonitoring) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;
       
       // Exclude completed and NA tasks from main table
-      const yearlyStatus = yearlyTaskStatuses[task.id];
+      const yearlyStatus = quarterlyTaskStatuses[task.id];
       const isCompleted = yearlyStatus?.is_completed || false;
       const isNA = yearlyStatus?.is_na || false;
       if (isCompleted || isNA) return false;
@@ -107,7 +107,7 @@ const QuarterlyTasks: React.FC = () => {
       return true;
     });
     return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+  }, [tasks, quarterlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
 
   // Completed/NA tasks for bottom section
   const completedTasks = useMemo(() => {
@@ -117,13 +117,13 @@ const QuarterlyTasks: React.FC = () => {
     
     let filtered = tasks.filter(task => {
       const isNativeQuarterlyYearly = task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly';
-      const hasBeenAddedToMonitoring = yearlyTaskStatuses[task.id] !== undefined;
+      const hasBeenAddedToMonitoring = quarterlyTaskStatuses[task.id] !== undefined;
       if (!isNativeQuarterlyYearly && !hasBeenAddedToMonitoring) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;
       
-      const yearlyStatus = yearlyTaskStatuses[task.id];
+      const yearlyStatus = quarterlyTaskStatuses[task.id];
       const isCompleted = yearlyStatus?.is_completed || false;
       const isNA = yearlyStatus?.is_na || false;
       
@@ -138,7 +138,7 @@ const QuarterlyTasks: React.FC = () => {
       return true;
     });
     return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+  }, [tasks, quarterlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
 
   // Split into TIME-based and COUNT-based tasks
   const timeBasedTasks = useMemo(() => {
@@ -364,13 +364,13 @@ const QuarterlyTasks: React.FC = () => {
     let nativeAchieved = 0, nativeBehind = 0;
     nativeTasks.forEach(task => {
       const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
-      const cls = getQuarterlyRowColorClass(task, totalSpent, null, yearlyTaskStatuses[task.id]?.created_at);
+      const cls = getQuarterlyRowColorClass(task, totalSpent, null, quarterlyTaskStatuses[task.id]?.created_at);
       if (cls === 'weekly-on-track') nativeAchieved++; else nativeBehind++;
     });
     let monAchieved = 0, monBehind = 0;
     monitoringTasks.forEach(task => {
       const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
-      const cls = getQuarterlyRowColorClass(task, totalSpent, null, yearlyTaskStatuses[task.id]?.created_at);
+      const cls = getQuarterlyRowColorClass(task, totalSpent, null, quarterlyTaskStatuses[task.id]?.created_at);
       if (cls === 'weekly-on-track') monAchieved++; else monBehind++;
     });
     return {
@@ -382,8 +382,8 @@ const QuarterlyTasks: React.FC = () => {
   const handleCompleteTask = async (taskId: number) => {
     try {
       setLoading(true);
-      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: true, is_na: false });
-      await loadYearlyTaskStatuses(yearNumber);
+      await updateQuarterlyTaskStatus(taskId, yearNumber, { is_completed: true, is_na: false });
+      await loadQuarterlyTaskStatuses(yearNumber);
     } catch (error) {
       console.error('Error completing task:', error);
       alert('Failed to complete task');
@@ -395,8 +395,8 @@ const QuarterlyTasks: React.FC = () => {
   const handleMarkNA = async (taskId: number) => {
     try {
       setLoading(true);
-      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: true });
-      await loadYearlyTaskStatuses(yearNumber);
+      await updateQuarterlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: true });
+      await loadQuarterlyTaskStatuses(yearNumber);
     } catch (error) {
       console.error('Error marking task as NA:', error);
       alert('Failed to mark task as NA');
@@ -408,8 +408,8 @@ const QuarterlyTasks: React.FC = () => {
   const handleRestoreTask = async (taskId: number) => {
     try {
       setLoading(true);
-      await updateYearlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: false });
-      await loadYearlyTaskStatuses(yearNumber);
+      await updateQuarterlyTaskStatus(taskId, yearNumber, { is_completed: false, is_na: false });
+      await loadQuarterlyTaskStatuses(yearNumber);
     } catch (error) {
       console.error('Error restoring task:', error);
       alert('Failed to restore task');
@@ -425,10 +425,10 @@ const QuarterlyTasks: React.FC = () => {
     try {
       setLoading(true);
       // Remove yearly_task_status row so the task returns to native (unmonitored) state
-      await fetch(`/api/yearly-time/status/${taskId}/${yearNumber}-01-01`, {
+      await fetch(`/api/quarterly-time/status/${taskId}/${yearNumber}-01-01`, {
         method: 'DELETE'
       });
-      await loadYearlyTaskStatuses(yearNumber);
+      await loadQuarterlyTaskStatuses(yearNumber);
     } catch (error) {
       console.error('Error removing task:', error);
       alert('Failed to remove task from quarterly tracking');
@@ -438,7 +438,7 @@ const QuarterlyTasks: React.FC = () => {
   };
 
   const renderTaskRow = (task: Task, isCompleted: boolean = false) => {
-    const yearlyStatus = yearlyTaskStatuses[task.id];
+    const yearlyStatus = quarterlyTaskStatuses[task.id];
 
     // --- Period: current quarter (not the full year) ---
     const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);

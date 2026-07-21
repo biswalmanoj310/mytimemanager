@@ -504,6 +504,29 @@ class YearlyTaskStatus(Base):
         return f"<YearlyTaskStatus(task_id={self.task_id}, year={self.year_start_date}, completed={self.is_completed})>"
 
 
+class QuarterlyTaskStatus(Base):
+    """
+    Track completion status of tasks per year in the quarterly view.
+    Fully independent of yearly_task_status — a task can be monitored in
+    quarterly without being in yearly and vice versa.
+    """
+    __tablename__ = "quarterly_task_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    year_start_date = Column(DateTime(timezone=True), nullable=False, index=True)
+    is_completed = Column(Boolean, nullable=False, default=False)
+    is_na = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    task = relationship("Task", backref="quarterly_statuses")
+
+    def __repr__(self):
+        return f"<QuarterlyTaskStatus(task_id={self.task_id}, year={self.year_start_date}, completed={self.is_completed})>"
+
+
 class MotivationalQuote(Base):
     """
     Motivational quotes displayed on the dashboard

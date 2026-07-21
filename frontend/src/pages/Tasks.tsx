@@ -194,6 +194,7 @@ export default function Tasks() {
   const [yearlyMonthlyAggregates, setYearlyMonthlyAggregates] = useState<Record<string, number>>({});
   // Yearly task statuses - key format: "taskId", value: {is_completed, is_na}
   const [yearlyTaskStatuses, setYearlyTaskStatuses] = useState<Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}>>({});
+  const [quarterlyTaskStatuses, setQuarterlyTaskStatuses] = useState<Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}>>({});
   // Selected year start date for yearly tab
   const [selectedYearStart, setSelectedYearStart] = useState<Date>(() => {
     const today = new Date();
@@ -1734,7 +1735,7 @@ export default function Tasks() {
         }
         
       } else if (activeTab === 'quarterly') {
-        const hasBeenAddedToQuarterly = yearlyTaskStatuses[task.id] !== undefined;
+        const hasBeenAddedToQuarterly = quarterlyTaskStatuses[task.id] !== undefined;
         
         // Show if explicitly added OR if it's a daily/weekly/monthly task
         if (!hasBeenAddedToQuarterly && task.follow_up_frequency !== 'daily' && task.follow_up_frequency !== 'weekly' && task.follow_up_frequency !== 'monthly') {
@@ -3215,6 +3216,19 @@ export default function Tasks() {
       console.log('✅ Yearly task statuses loaded:', Object.keys(statusMap).length, 'tasks', statusMap);
       setYearlyTaskStatuses(statusMap);
       console.log('🔄 State updated, component should re-render now');
+
+      // Load quarterly task statuses (independent from yearly)
+      try {
+        const qStatusResponse: any = await api.get(`/api/quarterly-time/status/${dateStr}`);
+        const qStatusData = Array.isArray(qStatusResponse) ? qStatusResponse : (qStatusResponse.data || []);
+        const qStatusMap: Record<number, {is_completed: boolean, is_na: boolean, created_at?: string}> = {};
+        if (Array.isArray(qStatusData)) {
+          qStatusData.forEach((s: any) => {
+            qStatusMap[s.task_id] = { is_completed: s.is_completed || false, is_na: s.is_na || false, created_at: s.created_at };
+          });
+        }
+        setQuarterlyTaskStatuses(qStatusMap);
+      } catch { setQuarterlyTaskStatuses({}); }
     } catch (err: any) {
       console.error('Error loading yearly entries:', err);
       // Initialize empty states on error
@@ -3351,20 +3365,17 @@ export default function Tasks() {
     }
 
     try {
-      // Add to yearly tracking (quarterly shares yearly status)
+      // Add to QUARTERLY tracking (independent from yearly)
       const yearNumber = selectedYearStart.getFullYear();
       const dateStr = `${yearNumber}-01-01`;
-      
-      // year_start_date must be in URL path, not request body
-      await api.post(`/api/yearly-time/status/${selectedDailyTaskForQuarterly}/${dateStr}`, {
+      await api.post(`/api/quarterly-time/status/${selectedDailyTaskForQuarterly}/${dateStr}`, {
         is_completed: false,
         is_na: false
       });
 
       setShowAddQuarterlyTaskModal(false);
       setSelectedDailyTaskForQuarterly(null);
-      
-      // Reload yearly data to get updated statuses
+      // Reload yearly entries so aggregates are available for the quarterly view
       await loadYearlyEntries(selectedYearStart);
     } catch (err: any) {
       console.error('Error adding task to quarterly:', err);
@@ -7150,7 +7161,7 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a daily task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'daily' && !yearlyTaskStatuses[task.id] && !task.is_completed && task.is_active)
+                      .filter(task => task.follow_up_frequency === 'daily' && !quarterlyTaskStatuses[task.id] && !task.is_completed && task.is_active)
                       .sort((a, b) => (a.pillar_name || '').localeCompare(b.pillar_name || '') || (a.name || '').localeCompare(b.name || ''))
                       .map(task => (
                         <option key={task.id} value={task.id}>
@@ -7172,7 +7183,7 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a weekly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'weekly' && !yearlyTaskStatuses[task.id] && !task.is_completed && task.is_active)
+                      .filter(task => task.follow_up_frequency === 'weekly' && !quarterlyTaskStatuses[task.id] && !task.is_completed && task.is_active)
                       .sort((a, b) => (a.pillar_name || '').localeCompare(b.pillar_name || '') || (a.name || '').localeCompare(b.name || ''))
                       .map(task => (
                         <option key={task.id} value={task.id}>
@@ -7194,7 +7205,7 @@ export default function Tasks() {
                   >
                     <option value="">-- Select a monthly task --</option>
                     {tasks
-                      .filter(task => task.follow_up_frequency === 'monthly' && !yearlyTaskStatuses[task.id] && !task.is_completed && task.is_active)
+                      .filter(task => task.follow_up_frequency === 'monthly' && !quarterlyTaskStatuses[task.id] && !task.is_completed && task.is_active)
                       .sort((a, b) => (a.pillar_name || '').localeCompare(b.pillar_name || '') || (a.name || '').localeCompare(b.name || ''))
                       .map(task => (
                         <option key={task.id} value={task.id}>

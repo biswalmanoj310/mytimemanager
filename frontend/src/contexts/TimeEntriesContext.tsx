@@ -144,6 +144,11 @@ interface TimeEntriesContextValue {
   loadYearlyTaskStatuses: (year: number) => Promise<void>;
   updateYearlyTaskStatus: (taskId: number, year: number, status: Partial<TaskStatus>) => Promise<void>;
   loadMonthlyAggregatesForYear: (year: number) => Promise<void>;
+
+  // Quarterly operations (independent from yearly)
+  quarterlyTaskStatuses: Record<number, TaskStatus>;
+  loadQuarterlyTaskStatuses: (year: number) => Promise<void>;
+  updateQuarterlyTaskStatus: (taskId: number, year: number, status: Partial<TaskStatus>) => Promise<void>;
   
   // One-time operations
   loadOneTimeEntries: () => Promise<void>;
@@ -168,6 +173,7 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
   const [weeklyTaskStatuses, setWeeklyTaskStatuses] = useState<Record<number, TaskStatus>>({});
   const [monthlyTaskStatuses, setMonthlyTaskStatuses] = useState<Record<number, TaskStatus>>({});
   const [yearlyTaskStatuses, setYearlyTaskStatuses] = useState<Record<number, TaskStatus>>({});
+  const [quarterlyTaskStatuses, setQuarterlyTaskStatuses] = useState<Record<number, TaskStatus>>({});
   
   // Daily aggregates for weekly/monthly views
   const [dailyAggregatesWeekly, setDailyAggregatesWeekly] = useState<Record<string, number>>({});
@@ -540,6 +546,43 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     }
   }, [loadYearlyTaskStatuses]);
 
+  // ── Quarterly status (fully independent from yearly) ──────────────────────
+  const loadQuarterlyTaskStatuses = useCallback(async (year: number) => {
+    try {
+      setError(null);
+      const yearStartDate = `${year}-01-01`;
+      const response: any = await api.get(`/api/quarterly-time/status/${yearStartDate}`);
+      const statusData = Array.isArray(response) ? response : (response.data || []);
+      const statusMap: Record<number, TaskStatus> = {};
+      if (Array.isArray(statusData)) {
+        statusData.forEach((s: any) => {
+          statusMap[s.task_id] = {
+            is_completed: s.is_completed,
+            is_na: s.is_na,
+            created_at: s.created_at,
+            completed_at: s.completed_at
+          };
+        });
+      }
+      setQuarterlyTaskStatuses(statusMap);
+    } catch (err: any) {
+      console.error('Error loading quarterly task statuses:', err);
+      setQuarterlyTaskStatuses({});
+    }
+  }, []);
+
+  const updateQuarterlyTaskStatus = useCallback(async (taskId: number, year: number, status: Partial<TaskStatus>) => {
+    try {
+      const yearStartDate = `${year}-01-01`;
+      await api.post(`/api/quarterly-time/status/${taskId}/${yearStartDate}`, status);
+      await loadQuarterlyTaskStatuses(year);
+    } catch (err: any) {
+      console.error('Error updating quarterly task status:', err);
+      setError('Failed to update quarterly task status');
+      throw err;
+    }
+  }, [loadQuarterlyTaskStatuses]);
+
   const loadMonthlyAggregatesForYear = useCallback(async (year: number) => {
     try {
       setError(null);
@@ -652,6 +695,9 @@ export const TimeEntriesProvider: React.FC<TimeEntriesProviderProps> = ({ childr
     loadYearlyTaskStatuses,
     updateYearlyTaskStatus,
     loadMonthlyAggregatesForYear,
+    quarterlyTaskStatuses,
+    loadQuarterlyTaskStatuses,
+    updateQuarterlyTaskStatus,
     loadOneTimeEntries,
     saveOneTimeEntry,
     updateOneTimeEntry,
