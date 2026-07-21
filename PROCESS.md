@@ -61,6 +61,7 @@ Before every significant implementation, silently ask: *"Will this change make t
 | 2024-03-01 | timezone_utils.py as mandatory datetime wrapper | Windows/Mac UTC inconsistency; single fix point |
 | 2024-04-01 | Docker for family deployment | Eliminates Python/Node installation friction for non-technical family members |
 | 2026-07-20 | Custom agent (makingmehappier) with REQUIREMENTS/SOLUTIONS/PROCESS docs | Persistent context across Copilot sessions; no more re-explaining |
+| 2026-07-20 | Weekly/Monthly/Quarterly/Yearly tabs are AGGREGATION MONITORS — not goal trackers | Same recurring task (e.g. "Read 8 hrs/day") is monitored at multiple time scales. Quarterly tab shows: "Is my daily reading on track this quarter?" NOT "what quarterly goals do I have?". Project/Goal/Misc pages handle outcomes and deliverables. |
 
 ---
 
