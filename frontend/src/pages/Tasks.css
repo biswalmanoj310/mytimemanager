@@ -425,15 +425,22 @@ td.section-header-cell.boolean-based {
 .tasks-table thead {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-bottom: 2px solid #5a67d8;
-  position: sticky;
-  top: 0;
-  z-index: 20;
+  /* position:sticky on <thead> is unreliable cross-browser — applied to <th> instead */
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .tasks-table thead th {
   border-bottom: 1px solid #5a67d8;
   color: #ffffff;
+  /* Sticky header: applied to <th> (cross-browser safe — works in Chrome, Firefox, Safari) */
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+/* Corner cells are sticky both vertically (top) and horizontally (left) — need highest z-index */
+.tasks-table thead th.sticky-col {
+  z-index: 50;
 }
 
 .tasks-table th {
