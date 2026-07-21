@@ -86,8 +86,11 @@ const MonthlyTasks: React.FC = () => {
 
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter(task => {
+      const isNativeMonthlyTask = task.follow_up_frequency === 'monthly';
       const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToMonthly) return false;
+      // Native monthly tasks always show (this is their home tab)
+      // Monitoring tasks (daily/weekly) only show if explicitly added
+      if (!isNativeMonthlyTask && !hasBeenAddedToMonthly) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;
@@ -111,8 +114,9 @@ const MonthlyTasks: React.FC = () => {
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
     let filtered = tasks.filter(task => {
+      const isNativeMonthlyTask = task.follow_up_frequency === 'monthly';
       const hasBeenAddedToMonthly = monthlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToMonthly) return false;
+      if (!isNativeMonthlyTask && !hasBeenAddedToMonthly) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;

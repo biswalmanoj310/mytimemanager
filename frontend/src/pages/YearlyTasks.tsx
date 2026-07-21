@@ -101,8 +101,11 @@ const YearlyTasks: React.FC = () => {
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
     let filtered = tasks.filter(task => {
+      const isNativeYearlyTask = task.follow_up_frequency === 'yearly';
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToYearly) return false;
+      // Native yearly tasks always show (this is their home tab)
+      // Monitoring tasks (daily/weekly/monthly) only show if explicitly added
+      if (!isNativeYearlyTask && !hasBeenAddedToYearly) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;
@@ -126,8 +129,9 @@ const YearlyTasks: React.FC = () => {
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
     let filtered = tasks.filter(task => {
+      const isNativeYearlyTask = task.follow_up_frequency === 'yearly';
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToYearly) return false;
+      if (!isNativeYearlyTask && !hasBeenAddedToYearly) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;

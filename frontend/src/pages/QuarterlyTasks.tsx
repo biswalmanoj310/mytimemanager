@@ -88,14 +88,11 @@ const QuarterlyTasks: React.FC = () => {
     
     let filtered = tasks.filter(task => {
       // Quarterly view is a strategic altitude — only quarterly & yearly scoped tasks belong here
+      // Native quarterly/yearly tasks always show; lower-level tasks only if explicitly added to yearly monitoring
       const isStrategicFrequency = task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly';
-      if (!isStrategicFrequency) return false;
-
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToYearly) {
-        console.log(`❌ Task ${task.id} "${task.name}" not in yearly statuses`);
-        return false;
-      }
+      if (!isStrategicFrequency && !hasBeenAddedToYearly) return false;
+      if (!isStrategicFrequency) return false; // enforce strategic-only: daily/weekly/monthly tasks excluded even if added to yearly
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;
@@ -121,10 +118,9 @@ const QuarterlyTasks: React.FC = () => {
     let filtered = tasks.filter(task => {
       // Same strategic filter — quarterly/yearly scoped only
       const isStrategicFrequency = task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly';
-      if (!isStrategicFrequency) return false;
-
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
-      if (!hasBeenAddedToYearly) return false;
+      if (!isStrategicFrequency && !hasBeenAddedToYearly) return false;
+      if (!isStrategicFrequency) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;
       if (selectedCategory && task.category_name !== selectedCategory) return false;
       if (!showInactive && !task.is_active) return false;
