@@ -387,9 +387,7 @@ const YearlyTasks: React.FC = () => {
   };
 
   const renderTaskRow = (task: Task) => {
-    const totalSpent = months.reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
-    
-    // Determine tracking start month from when task was ADDED to yearly tab (not task created_at)
+    // Determine tracking start month FIRST — totalSpent must only count from this month onwards
     const yearlyStatus = yearlyTaskStatuses[task.id];
     let trackingStartMonth: number | null = 1; // Default to January
     const addedToYearlyDate = yearlyStatus?.created_at;
@@ -408,6 +406,12 @@ const YearlyTasks: React.FC = () => {
       }
     }
     
+    // totalSpent only counts months from trackingStartMonth onwards.
+    // Prevents absurd % when a task is added mid-year: all-year data ÷ 1 day = 11000%.
+    const totalSpent = months
+      .filter(m => m.month >= (trackingStartMonth ?? 1))
+      .reduce((sum, m) => sum + getYearlyTime(task.id, m.month), 0);
+
     const today = new Date();
     const yearStart = new Date(yearStartDate);
     
