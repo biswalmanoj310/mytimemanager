@@ -171,29 +171,9 @@ export default function Dashboard() {
   const [weekOneTimeCircle, setWeekOneTimeCircle] = useState<CirclePeriod[]>([]);
   const [monthOneTimeCircle, setMonthOneTimeCircle] = useState<CirclePeriod[]>([]);
   const [yearOneTimeCircle, setYearOneTimeCircle] = useState<CirclePeriod[]>([]);
-  const [weekCombinedCircle, setWeekCombinedCircle] = useState<CirclePeriod[]>([]);
-  const [monthCombinedCircle, setMonthCombinedCircle] = useState<CirclePeriod[]>([]);
-  const [yearCombinedCircle, setYearCombinedCircle] = useState<CirclePeriod[]>([]);
   const [circleLoading, setCircleLoading] = useState(true);
   const [circlePeriod, setCirclePeriod] = useState<'week'|'month'|'year'>('week');
   const [miniViewType,  setMiniViewType]  = useState<MiniViewType>('category');
-  const [expandedCircle, setExpandedCircle] = useState<{ period: { label: string; start: string; end: string; data: any[] }; chartLabel: string; accentColor: string } | null>(null);
-  const [collapsedCharts, setCollapsedCharts] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('dashboardCollapsedCharts');
-      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
-    } catch { return new Set<string>(); }
-  });
-
-  const toggleChart = (label: string) => {
-    setCollapsedCharts(prev => {
-      const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
-      try { localStorage.setItem('dashboardCollapsedCharts', JSON.stringify([...next])); } catch {}
-      return next;
-    });
-  };
 
   const navigate = useNavigate();
 
@@ -481,21 +461,11 @@ export default function Dashboard() {
             return { name: c.category_name||'Unknown', spent: raw, score, allocated: 100 };
           });
         } else {
-          // Re-sort by pillar → category → task_id so combined lists are in daily-tab order
-          const sorted = [...data].sort((a: any, b: any) => {
-            const pa = PILLAR_ORDER.indexOf(a.pillar_name || '');
-            const pb = PILLAR_ORDER.indexOf(b.pillar_name || '');
-            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
-            const ca = CATEGORY_ORDER.indexOf(a.category_name || '');
-            const cb = CATEGORY_ORDER.indexOf(b.category_name || '');
-            if (ca !== cb) return (ca === -1 ? 999 : ca) - (cb === -1 ? 999 : cb);
-            return (a.task_id || 0) - (b.task_id || 0);
-          });
-          return sorted.map((t: any) => {
+          return (data as any[]).map((t: any) => {
             const raw = t.allocated_hours > 0 ? Math.round((t.spent_hours/days/t.allocated_hours)*100) : 0;
             const isDrain = DRAIN_NAMES.includes(t.category_name || '') || DRAIN_NAMES.includes(t.name || '');
             const score = Math.min(100, raw);
-            return { name: t.name||'Unknown', pillar_name: t.pillar_name||'', category_name: t.category_name||'', task_id: t.task_id||0, spent: raw, score, allocated: 100, isDrain };
+            return { name: t.name||'Unknown', spent: raw, score, allocated: 100, isDrain };
           });
         }
       };
@@ -520,14 +490,14 @@ export default function Dashboard() {
             const ca = CATEGORY_ORDER.indexOf(a.category_name || '');
             const cb = CATEGORY_ORDER.indexOf(b.category_name || '');
             if (ca !== cb) return (ca === -1 ? 999 : ca) - (cb === -1 ? 999 : cb);
-            return (a.id || 0) - (b.id || 0);
+            return (a.id || 0) - (b.id || 0); // task ID = Daily tab insertion order
           })
-          .map(t => ({ name: t.name, pillar_name: t.pillar_name || '', category_name: t.category_name || '', task_id: t.id || 0, allocated_hours: t.allocated_minutes/60, spent_hours: (spentMap.get(t.id)||0)/60 }));
+          .map(t => ({ name: t.name, category_name: t.category_name || '', allocated_hours: t.allocated_minutes/60, spent_hours: (spentMap.get(t.id)||0)/60 }));
         return { cats, timeTasks: toTaskRows(baseTimeTasks), oneTimeTasks: toTaskRows(baseOneTimeTasks), startStr, endStr };
       };
 
       // Build 4 weeks
-      const weekPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[],[]];
+      const weekPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[]];
       for (let i = 3; i >= 0; i--) {
         const wStart = weekStart(today);
         wStart.setDate(wStart.getDate() - i*7);
@@ -541,21 +511,18 @@ export default function Dashboard() {
           weekPeriods[0].push({ label, start: startStr, end: endStr, data: buildRadar(cats, startStr, endStr, 'category') });
           weekPeriods[1].push({ label, start: startStr, end: endStr, data: buildRadar(timeTasks, startStr, endStr, 'tasks') });
           weekPeriods[2].push({ label, start: startStr, end: endStr, data: buildRadar(oneTimeTasks, startStr, endStr, 'one_time') });
-          weekPeriods[3].push({ label, start: startStr, end: endStr, data: buildRadar([...timeTasks, ...oneTimeTasks], startStr, endStr, 'tasks') });
         } catch {
           weekPeriods[0].push({ label, start: startStr, end: endStr, data: [] });
           weekPeriods[1].push({ label, start: startStr, end: endStr, data: [] });
           weekPeriods[2].push({ label, start: startStr, end: endStr, data: [] });
-          weekPeriods[3].push({ label, start: startStr, end: endStr, data: [] });
         }
       }
       setWeekCategoryCircle(weekPeriods[0]);
       setWeekTasksCircle(weekPeriods[1]);
       setWeekOneTimeCircle(weekPeriods[2]);
-      setWeekCombinedCircle(weekPeriods[3]);
 
       // Build 4 months
-      const monthPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[],[]];
+      const monthPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[]];
       for (let i = 3; i >= 0; i--) {
         const mStart = new Date(today.getFullYear(), today.getMonth()-i, 1);
         const mEnd = new Date(today.getFullYear(), today.getMonth()-i+1, 0);
@@ -567,21 +534,18 @@ export default function Dashboard() {
           monthPeriods[0].push({ label, start: startStr, end: endStr, data: buildRadar(cats, startStr, endStr, 'category') });
           monthPeriods[1].push({ label, start: startStr, end: endStr, data: buildRadar(timeTasks, startStr, endStr, 'tasks') });
           monthPeriods[2].push({ label, start: startStr, end: endStr, data: buildRadar(oneTimeTasks, startStr, endStr, 'one_time') });
-          monthPeriods[3].push({ label, start: startStr, end: endStr, data: buildRadar([...timeTasks, ...oneTimeTasks], startStr, endStr, 'tasks') });
         } catch {
           monthPeriods[0].push({ label, start: startStr, end: endStr, data: [] });
           monthPeriods[1].push({ label, start: startStr, end: endStr, data: [] });
           monthPeriods[2].push({ label, start: startStr, end: endStr, data: [] });
-          monthPeriods[3].push({ label, start: startStr, end: endStr, data: [] });
         }
       }
       setMonthCategoryCircle(monthPeriods[0]);
       setMonthTasksCircle(monthPeriods[1]);
       setMonthOneTimeCircle(monthPeriods[2]);
-      setMonthCombinedCircle(monthPeriods[3]);
 
       // Build 4 years
-      const yearPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[],[]];
+      const yearPeriods: { label: string; start: string; end: string; data: any[] }[][] = [[],[],[]];
       for (let i = 3; i >= 0; i--) {
         const yr = today.getFullYear() - i;
         const yStart = new Date(yr, 0, 1);
@@ -594,18 +558,15 @@ export default function Dashboard() {
           yearPeriods[0].push({ label, start: startStr, end: endStr, data: buildRadar(cats, startStr, endStr, 'category') });
           yearPeriods[1].push({ label, start: startStr, end: endStr, data: buildRadar(timeTasks, startStr, endStr, 'tasks') });
           yearPeriods[2].push({ label, start: startStr, end: endStr, data: buildRadar(oneTimeTasks, startStr, endStr, 'one_time') });
-          yearPeriods[3].push({ label, start: startStr, end: endStr, data: buildRadar([...timeTasks, ...oneTimeTasks], startStr, endStr, 'tasks') });
         } catch {
           yearPeriods[0].push({ label, start: startStr, end: endStr, data: [] });
           yearPeriods[1].push({ label, start: startStr, end: endStr, data: [] });
           yearPeriods[2].push({ label, start: startStr, end: endStr, data: [] });
-          yearPeriods[3].push({ label, start: startStr, end: endStr, data: [] });
         }
       }
       setYearCategoryCircle(yearPeriods[0]);
       setYearTasksCircle(yearPeriods[1]);
       setYearOneTimeCircle(yearPeriods[2]);
-      setYearCombinedCircle(yearPeriods[3]);
     } catch (err) {
       console.error('[Dashboard] Error loading circle charts:', err);
     } finally {
@@ -714,29 +675,23 @@ export default function Dashboard() {
       {/* ─── Circle of Life Charts ─────────────────────────────────────────── */}
       {(() => {
         const CHART_TYPES = [
-          { label: '📁 Category Distribution', desc: 'Categories across pillars',      weekData: weekCategoryCircle,  monthData: monthCategoryCircle,  yearData: yearCategoryCircle,  color: '#4299e1' },
-          { label: '⏱️ Time-Based Tasks',       desc: 'Recurring task time',            weekData: weekTasksCircle,     monthData: monthTasksCircle,     yearData: yearTasksCircle,     color: '#10b981' },
-          { label: '🗂️ One-Time Tasks',         desc: 'Projects & one-offs',            weekData: weekOneTimeCircle,   monthData: monthOneTimeCircle,   yearData: yearOneTimeCircle,   color: '#a855f7' },
-          { label: '🔄 All Tasks Combined',     desc: 'Time-Based + One-Time tasks',    weekData: weekCombinedCircle,  monthData: monthCombinedCircle,  yearData: yearCombinedCircle,  color: '#e53e3e' },
+          { label: '📁 Category Distribution', desc: 'Categories across pillars',      weekData: weekCategoryCircle, monthData: monthCategoryCircle, yearData: yearCategoryCircle, color: '#4299e1' },
+          { label: '⏱️ Time-Based Tasks',       desc: 'Recurring task time',      weekData: weekTasksCircle,    monthData: monthTasksCircle,   yearData: yearTasksCircle,   color: '#10b981' },
+          { label: '🗂️ One-Time Tasks',         desc: 'Projects & one-offs',      weekData: weekOneTimeCircle,  monthData: monthOneTimeCircle, yearData: yearOneTimeCircle,  color: '#a855f7' },
         ];
 
-        const RadarCard = ({ period, isNewest, accentColor, onExpand }: { period: { label: string; start: string; end: string; data: any[] }; isNewest: boolean; accentColor: string; onExpand: () => void }) => {
+        const RadarCard = ({ period, isNewest, accentColor }: { period: { label: string; start: string; end: string; data: any[] }; isNewest: boolean; accentColor: string }) => {
           const totalSpent = period.data.reduce((s: number, d: any) => s + d.spent, 0);
           const avg = (period.data.length && totalSpent > 0) ? period.data.reduce((s: number, d: any) => s + d.score, 0) / period.data.length : 0;
           const maxSpent = period.data.length ? Math.max(...period.data.map((d: any) => d.spent), 100) : 100;
           const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50);
           return (
-            <div onClick={onExpand} title="Click to expand" style={{ background: 'white', borderRadius: '12px', padding: '12px', boxShadow: isNewest ? `0 0 0 2px ${accentColor}, 0 4px 12px rgba(0,0,0,0.1)` : '0 2px 8px rgba(0,0,0,0.07)', border: isNewest ? `2px solid ${accentColor}` : '1px solid #e5e7eb', flex: '1', minWidth: '180px', cursor: 'pointer', transition: 'box-shadow 0.15s, transform 0.15s' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLDivElement).style.boxShadow = `0 0 0 2px ${accentColor}, 0 8px 20px rgba(0,0,0,0.15)`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.transform = ''; (e.currentTarget as HTMLDivElement).style.boxShadow = isNewest ? `0 0 0 2px ${accentColor}, 0 4px 12px rgba(0,0,0,0.1)` : '0 2px 8px rgba(0,0,0,0.07)'; }}>
+            <div style={{ background: 'white', borderRadius: '12px', padding: '12px', boxShadow: isNewest ? `0 0 0 2px ${accentColor}, 0 4px 12px rgba(0,0,0,0.1)` : '0 2px 8px rgba(0,0,0,0.07)', border: isNewest ? `2px solid ${accentColor}` : '1px solid #e5e7eb', flex: '1', minWidth: '180px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                 <div style={{ fontSize: '13px', fontWeight: '700', color: isNewest ? accentColor : '#374151' }}>{isNewest && '★ '}{period.label}</div>
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  {period.data.length > 0 && (
-                    <div style={{ fontSize: '11px', fontWeight: '600', color: avg>=80?'#16a34a':avg>=60?'#b45309':'#dc2626', background: avg>=80?'#d1fae5':avg>=60?'#fef3c7':'#fee2e2', padding: '2px 6px', borderRadius: '10px' }}>{Math.round(avg)}%</div>
-                  )}
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }} title="Click to expand">⤢</div>
-                </div>
+                {period.data.length > 0 && (
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: avg>=80?'#16a34a':avg>=60?'#b45309':'#dc2626', background: avg>=80?'#d1fae5':avg>=60?'#fef3c7':'#fee2e2', padding: '2px 6px', borderRadius: '10px' }}>{Math.round(avg)}%</div>
+                )}
               </div>
               {period.data.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: '12px' }}>No data</div>
@@ -746,13 +701,18 @@ export default function Dashboard() {
                     <PolarGrid gridType="circle" strokeDasharray="3 3" />
                     <PolarAngleAxis dataKey="name" tick={(props: any) => {
                       const { x, y, payload, textAnchor } = props;
-                      const words: string[] = (payload.value as string).split(' ').filter(Boolean);
-                      const line1 = words.slice(0, 2).join(' ');
-                      const line2 = words.slice(2, 4).join(' ');
+                      const name: string = payload.value;
+                      const words = name.split(' ');
+                      const lines: string[] = [];
+                      let cur = '';
+                      words.forEach((w: string) => {
+                        if ((cur+(cur?' ':'')+w).length <= 12) { cur = cur?cur+' '+w:w; }
+                        else { if (cur) lines.push(cur); cur = w; }
+                      });
+                      if (cur) lines.push(cur);
                       return (
                         <text x={x} y={y} textAnchor={textAnchor||'middle'} fontSize={9} fontWeight={600} fill="#374151">
-                          <tspan x={x} dy={0}>{line1}</tspan>
-                          {line2 && <tspan x={x} dy={11}>{line2}</tspan>}
+                          {lines.map((l: string, i: number) => <tspan key={i} x={x} dy={i===0?0:11}>{l}</tspan>)}
                         </text>
                       );
                     }} />
@@ -769,29 +729,24 @@ export default function Dashboard() {
 
         return (
           <section style={{ marginBottom: '32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: collapsedCharts.has('🔮 Circle of Life') ? 0 : '20px', flexWrap: 'wrap' }}>
-              <div onClick={() => toggleChart('🔮 Circle of Life')} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                <span style={{ fontSize: '13px', color: '#3B82F6', transition: 'transform 0.2s', display: 'inline-block', transform: collapsedCharts.has('🔮 Circle of Life') ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▼</span>
-                <h2 style={{ color: '#3B82F6', margin: 0 }}>🔮 Circle of Life</h2>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <h2 style={{ color: '#3B82F6', margin: 0 }}>🔮 Circle of Life</h2>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  onClick={() => setCirclePeriod('week')}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='week' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='week' ? '#3B82F6' : 'white', color: circlePeriod==='week' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                >📆 Last 4 Weeks</button>
+                <button
+                  onClick={() => setCirclePeriod('month')}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='month' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='month' ? '#3B82F6' : 'white', color: circlePeriod==='month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                >📅 Last 4 Months</button>
+                <button
+                  onClick={() => setCirclePeriod('year')}
+                  style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='year' ? '2px solid #9333ea' : '2px solid #e2e8f0', background: circlePeriod==='year' ? '#9333ea' : 'white', color: circlePeriod==='year' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                >📊 Last 4 Years</button>
               </div>
-              {!collapsedCharts.has('🔮 Circle of Life') && (
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => setCirclePeriod('week')}
-                    style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='week' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='week' ? '#3B82F6' : 'white', color: circlePeriod==='week' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
-                  >📆 Last 4 Weeks</button>
-                  <button
-                    onClick={() => setCirclePeriod('month')}
-                    style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='month' ? '2px solid #3B82F6' : '2px solid #e2e8f0', background: circlePeriod==='month' ? '#3B82F6' : 'white', color: circlePeriod==='month' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
-                  >📅 Last 4 Months</button>
-                  <button
-                    onClick={() => setCirclePeriod('year')}
-                    style={{ padding: '6px 16px', borderRadius: '8px', border: circlePeriod==='year' ? '2px solid #9333ea' : '2px solid #e2e8f0', background: circlePeriod==='year' ? '#9333ea' : 'white', color: circlePeriod==='year' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
-                  >📊 Last 4 Years</button>
-                </div>
-              )}
             </div>
-            {!collapsedCharts.has('🔮 Circle of Life') && (circleLoading ? (
+            {circleLoading ? (
               <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>⏳ Loading charts...</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -800,24 +755,16 @@ export default function Dashboard() {
                   const reversedData = [...activeData].reverse();
                   return (
                     <div key={ct.label} style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px', border: `2px solid ${ct.color}22` }}>
-                      <div
-                        onClick={() => toggleChart(ct.label)}
-                        style={{ marginBottom: collapsedCharts.has(ct.label) ? 0 : '14px', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}
-                      >
-                        <span style={{ fontSize: '13px', color: ct.color, transition: 'transform 0.2s', display: 'inline-block', transform: collapsedCharts.has(ct.label) ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▼</span>
-                        <div>
-                          <div style={{ fontSize: '17px', fontWeight: '700', color: ct.color }}>{ct.label}</div>
-                          {!collapsedCharts.has(ct.label) && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{ct.desc}</div>}
-                        </div>
+                      <div style={{ marginBottom: '14px' }}>
+                        <div style={{ fontSize: '17px', fontWeight: '700', color: ct.color }}>{ct.label}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{ct.desc}</div>
                       </div>
                       {/* 4 charts in a row — latest first */}
-                      {!collapsedCharts.has(ct.label) && (
-                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                          {reversedData.map((p, i) => (
-                            <RadarCard key={p.label} period={p} isNewest={i === 0} accentColor={ct.color} onExpand={() => setExpandedCircle({ period: p, chartLabel: ct.label, accentColor: ct.color })} />
-                          ))}
-                        </div>
-                      )}
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {reversedData.map((p, i) => (
+                          <RadarCard key={p.label} period={p} isNewest={i === 0} accentColor={ct.color} />
+                        ))}
+                      </div>
                     </div>
                   );
                 })}
@@ -832,18 +779,12 @@ export default function Dashboard() {
                       : [...yearCategoryCircle].reverse();
                   return (
                     <div style={{ background: '#f8fafc', borderRadius: '14px', padding: '20px', border: `2px solid ${accentColor}22` }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: collapsedCharts.has('🍩 Time Distribution') ? 0 : '14px', flexWrap: 'wrap', gap: '8px' }}>
-                        <div
-                          onClick={() => toggleChart('🍩 Time Distribution')}
-                          style={{ cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}
-                        >
-                          <span style={{ fontSize: '13px', color: accentColor, transition: 'transform 0.2s', display: 'inline-block', transform: collapsedCharts.has('🍩 Time Distribution') ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▼</span>
-                          <div>
-                            <div style={{ fontSize: '17px', fontWeight: '700', color: accentColor }}>🍩 Time Distribution</div>
-                            {!collapsedCharts.has('🍩 Time Distribution') && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>How time is split across pillars &amp; categories</div>}
-                          </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <div style={{ fontSize: '17px', fontWeight: '700', color: accentColor }}>🍩 Time Distribution</div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>How time is split across pillars &amp; categories</div>
                         </div>
-                        {!collapsedCharts.has('🍩 Time Distribution') && <div style={{ display: 'flex', gap: '5px' }}>
+                        <div style={{ display: 'flex', gap: '5px' }}>
                           <button
                             onClick={() => setMiniViewType('category')}
                             style={{ padding: '4px 12px', borderRadius: '20px', border: miniViewType === 'category' ? `2px solid ${accentColor}` : '2px solid #e2e8f0', background: miniViewType === 'category' ? accentColor : 'white', color: miniViewType === 'category' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}
@@ -852,28 +793,26 @@ export default function Dashboard() {
                             onClick={() => setMiniViewType('pillar')}
                             style={{ padding: '4px 12px', borderRadius: '20px', border: miniViewType === 'pillar' ? `2px solid ${accentColor}` : '2px solid #e2e8f0', background: miniViewType === 'pillar' ? accentColor : 'white', color: miniViewType === 'pillar' ? 'white' : '#374151', fontWeight: '600', cursor: 'pointer', fontSize: '12px' }}
                           >🎯 Pillar</button>
-                        </div>}
-                      </div>
-                      {!collapsedCharts.has('🍩 Time Distribution') && (
-                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                          {periods.map((p, i) => (
-                            <TimeDistributionMini
-                              key={p.label}
-                              start={p.start}
-                              end={p.end}
-                              label={p.label}
-                              isNewest={i === 0}
-                              accentColor={accentColor}
-                              viewType={miniViewType}
-                            />
-                          ))}
                         </div>
-                      )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                        {periods.map((p, i) => (
+                          <TimeDistributionMini
+                            key={p.label}
+                            start={p.start}
+                            end={p.end}
+                            label={p.label}
+                            isNewest={i === 0}
+                            accentColor={accentColor}
+                            viewType={miniViewType}
+                          />
+                        ))}
+                      </div>
                     </div>
                   );
                 })()}
               </div>
-            ))}
+            )}
           </section>
         );
       })()}
@@ -1473,82 +1412,6 @@ export default function Dashboard() {
           </div>
         </div>
       , document.body)}
-
-      {/* ─── Expanded Circle Modal ─────────────────────────────────────── */}
-      {expandedCircle && createPortal(
-        <div onClick={() => setExpandedCircle(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: 'white', borderRadius: '16px', width: '100%', maxWidth: '920px', maxHeight: '90vh', overflow: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.4)', border: `3px solid ${expandedCircle.accentColor}` }}>
-            {/* Modal Header */}
-            <div style={{ position: 'sticky', top: 0, background: 'white', padding: '16px 20px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderRadius: '16px 16px 0 0', zIndex: 1 }}>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '800', color: expandedCircle.accentColor }}>{expandedCircle.chartLabel}</div>
-                <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>{expandedCircle.period.label}</div>
-              </div>
-              <button onClick={() => setExpandedCircle(null)} style={{ width: '34px', height: '34px', borderRadius: '50%', border: 'none', background: '#f1f5f9', cursor: 'pointer', fontSize: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#374151', fontWeight: '700' }}>×</button>
-            </div>
-            {/* Modal Body */}
-            {expandedCircle.period.data.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>No data</div>
-            ) : (() => {
-              const d = expandedCircle.period.data;
-              const maxSpent = Math.max(...d.map((x: any) => x.spent), 100);
-              const dynMax = Math.max(100, Math.ceil(maxSpent / 50) * 50);
-              return (
-                <div style={{ padding: '20px' }}>
-                  <ResponsiveContainer width="100%" height={Math.max(540, d.length * 24 + 120)}>
-                    <RadarChart data={d} margin={{ top: 50, right: 80, bottom: 50, left: 80 }}>
-                      <PolarGrid gridType="circle" strokeDasharray="3 3" />
-                      <PolarAngleAxis dataKey="name" tick={(props: any) => {
-                        const { x, y, payload, textAnchor } = props;
-                        const words: string[] = (payload.value as string).split(' ').filter(Boolean);
-                        const line1 = words.slice(0, 2).join(' ');
-                        const line2 = words.slice(2, 4).join(' ');
-                        return (
-                          <text x={x} y={y} textAnchor={textAnchor || 'middle'} fontSize={12} fontWeight={600} fill="#374151">
-                            <tspan x={x} dy={0}>{line1}</tspan>
-                            {line2 && <tspan x={x} dy={14}>{line2}</tspan>}
-                          </text>
-                        );
-                      }} />
-                      <PolarRadiusAxis angle={90} domain={[0, dynMax]} tickCount={Math.floor(dynMax / 50) + 1} tickFormatter={(v: any) => `${v}%`} tick={{ fontSize: 11, fill: '#ff6b35', fontWeight: 600 }} />
-                      <Radar name="Actual" dataKey="spent" stroke={expandedCircle.accentColor} fill={expandedCircle.accentColor} fillOpacity={0.45} strokeWidth={2.5} />
-                      <Radar dataKey="allocated" legendType="none" dot={false} isAnimationActive={false} shape={(props: any) => { const {cx,cy,outerRadius}=props; if(!outerRadius) return <g/>; const r=(100/dynMax)*outerRadius; return <circle cx={cx} cy={cy} r={r} fill="none" stroke="#15803d" strokeWidth={3} strokeDasharray="8 4" />; }} />
-                      <Tooltip formatter={(v: any, n: string) => [`${v}%`, n]} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                  {/* Breakdown table */}
-                  <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '8px', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ background: '#f8fafc' }}>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: 700 }}>Name</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: 700 }}>Spent %</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: 700 }}>✓ Score</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {d.map((item: any, idx: number) => (
-                        <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? 'white' : '#fafafa' }}>
-                          <td style={{ padding: '7px 12px', fontWeight: 500 }}>{item.isDrain ? '⚠️ ' : ''}{item.name}</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 600, color: item.spent > 100 ? '#b45309' : item.spent >= 80 ? '#16a34a' : item.spent >= 60 ? '#b45309' : '#dc2626' }}>{item.spent}%</td>
-                          <td style={{ padding: '7px 12px', textAlign: 'right', fontWeight: 700, color: item.score >= 80 ? '#16a34a' : item.score >= 60 ? '#b45309' : '#dc2626' }}>{item.score}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr style={{ background: '#f0f9ff', fontWeight: 700, borderTop: '2px solid #e5e7eb' }}>
-                        <td style={{ padding: '8px 12px' }}>Average ({d.length} items)</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right' }}>{d.length > 0 ? Math.round(d.reduce((s: number, x: any) => s + x.spent, 0) / d.length) : 0}%</td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right' }}>{d.length > 0 ? Math.round(d.reduce((s: number, x: any) => s + x.score, 0) / d.length) : 0}%</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-        </div>,
-        document.body
-      )}
     </div>
   );
 }
