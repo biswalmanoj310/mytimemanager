@@ -138,6 +138,8 @@
 | REQ-102 | 2026-07-20 | SOLUTIONS.md — log of major solutions and features implemented, linked to REQ-NNN | 2026-07-20 | See SOLUTIONS.md | ✅ DONE |
 | REQ-103 | 2026-07-20 | PROCESS.md — process notes, retrospectives, and periodic life analyses stored persistently | 2026-07-20 | See PROCESS.md | ✅ DONE |
 | REQ-104 | 2026-07-20 | Periodic life analysis: agent analyzes Hard Work / Calmness / Family pillar balance, identifies top 3 gaps, writes findings to PROCESS.md | — | Trigger phrase: "analyze my life" / "CANI check" | 📋 BACKLOG |
+| REQ-105 | 2026-07-20 | makingmehappier agent Guru role: agent acts as life/time management expert and wise advisor — evaluates necessity of features before implementing, applies GTD/CANI/Atomic Habits/Essentialism wisdom, prevents over-engineering and over-planning | 2026-07-20 | Documented in PROCESS.md "Agent Philosophy & Role" and .github/agents/makingmehappier.agent.md | ✅ DONE |
+| REQ-106 | 2026-07-20 | Quarterly tab strategic filter: only show quarterly and yearly frequency tasks — exclude daily/weekly/monthly tasks that were added to yearly monitoring. Altitude-aware design principle | 2026-07-20 | frontend/src/pages/QuarterlyTasks.tsx | ✅ DONE |
 
 ---
 

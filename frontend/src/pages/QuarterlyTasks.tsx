@@ -87,6 +87,10 @@ const QuarterlyTasks: React.FC = () => {
     });
     
     let filtered = tasks.filter(task => {
+      // Quarterly view is a strategic altitude — only quarterly & yearly scoped tasks belong here
+      const isStrategicFrequency = task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly';
+      if (!isStrategicFrequency) return false;
+
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
       if (!hasBeenAddedToYearly) {
         console.log(`❌ Task ${task.id} "${task.name}" not in yearly statuses`);
@@ -115,6 +119,10 @@ const QuarterlyTasks: React.FC = () => {
     oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
     
     let filtered = tasks.filter(task => {
+      // Same strategic filter — quarterly/yearly scoped only
+      const isStrategicFrequency = task.follow_up_frequency === 'quarterly' || task.follow_up_frequency === 'yearly';
+      if (!isStrategicFrequency) return false;
+
       const hasBeenAddedToYearly = yearlyTaskStatuses[task.id] !== undefined;
       if (!hasBeenAddedToYearly) return false;
       if (selectedPillar && task.pillar_name !== selectedPillar) return false;

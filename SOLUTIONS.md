@@ -76,4 +76,17 @@
 
 ---
 
+### SOL-006 — Quarterly Tab Strategic Filter (Altitude-Aware Design)
+| Field | Value |
+|-------|-------|
+| REQ | REQ-106 |
+| Date | 2026-07-20 |
+| Problem | Daily tasks added to yearly monitoring were bleeding into the Quarterly tab, cluttering a strategic-level view with operational noise |
+| Approach | Added `follow_up_frequency === 'quarterly' \|\| 'yearly'` guard at the top of both `filteredTasks` and `completedTasks` memo blocks in `QuarterlyTasks.tsx`. Quarterly view is a strategic altitude — only tasks scoped at quarterly/yearly level belong there |
+| Files | `frontend/src/pages/QuarterlyTasks.tsx` |
+| Outcome | Quarterly tab now shows only strategic tasks; daily/weekly tasks remain in their own tabs |
+| Wisdom | GTD principle: each "altitude" of review (daily, weekly, quarterly, yearly) should show only the granularity appropriate to that level. Mixing altitudes creates cognitive noise and defeats the purpose of the review. |
+
+---
+
 *Last updated: 2026-07-20 | Add entries here whenever a major feature or fix lands*
