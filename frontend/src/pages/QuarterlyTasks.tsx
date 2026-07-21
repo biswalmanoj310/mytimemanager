@@ -41,7 +41,7 @@ const QuarterlyTasks: React.FC = () => {
   } = useUserPreferencesContext();
 
   const [loading, setLoading] = useState(false);
-  const [showCompletedSection, setShowCompletedSection] = useState(false);
+  const [showCompletedSection, setShowCompletedSection] = useState(true);
 
   const yearStartDate = useMemo(() => getYearStart(selectedDate), [selectedDate]);
   const yearNumber = useMemo(() => yearStartDate.getFullYear(), [yearStartDate]);
@@ -426,8 +426,8 @@ const QuarterlyTasks: React.FC = () => {
     }
     try {
       setLoading(true);
-      // Remove task from yearly status (which quarterly shares)
-      await fetch(`/api/yearly-time/status/${taskId}?year=${yearNumber}`, {
+      // Remove yearly_task_status row so the task returns to native (unmonitored) state
+      await fetch(`/api/yearly-time/status/${taskId}/${yearNumber}-01-01`, {
         method: 'DELETE'
       });
       await loadYearlyTaskStatuses(yearNumber);
@@ -440,85 +440,72 @@ const QuarterlyTasks: React.FC = () => {
   };
 
   const renderTaskRow = (task: Task, isCompleted: boolean = false) => {
-    const totalSpent = quarters.reduce((sum, q) => sum + getQuarterlyTime(task.id, q.quarter), 0);
-    
-    // Determine tracking start quarter from created_at
     const yearlyStatus = yearlyTaskStatuses[task.id];
-    let trackingStartQuarter: number | null = 1; // Default to Q1 if no created_at
-    
+
+    // --- Period: current quarter (not the full year) ---
+    const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
+    const currentQuarterObj = quarters.find(q => q.quarter === currentQuarter)!;
+    const currentQStartMonth = currentQuarterObj.months[0];   // e.g. 7 for Q3
+    const currentQEndMonth   = currentQuarterObj.months[2];   // e.g. 9 for Q3
+    const yr = yearStartDate.getFullYear();
+    const quarterEnd = new Date(yr, currentQEndMonth, 0);     // last day of last quarter month
+
+    // --- Tracking start: when task was added to monitoring (capped to current Q start) ---
+    let trackingStartMonth: number | null = null;
+    let trackingStartQuarter: number | null = 1;
     if (yearlyStatus?.created_at) {
       const createdDate = new Date(yearlyStatus.created_at);
-      // Only apply tracking start if created in current year
-      if (createdDate.getFullYear() === yearStartDate.getFullYear()) {
-        trackingStartQuarter = Math.ceil((createdDate.getMonth() + 1) / 3);
-      } else if (createdDate.getFullYear() < yearStartDate.getFullYear()) {
-        // Task added in previous year, track from Q1
-        trackingStartQuarter = 1;
-      } else {
-        // Task added in future year (shouldn't happen), track from Q1
-        trackingStartQuarter = 1;
+      if (createdDate.getFullYear() === yr) {
+        trackingStartMonth = createdDate.getMonth() + 1;   // 1-based
+        trackingStartQuarter = Math.ceil(trackingStartMonth / 3);
       }
     }
-    
-    const currentQuarter = Math.ceil((today.getMonth() + 1) / 3);
-    
-    // Calculate effective start date (task creation or year start)
-    const effectiveStart = yearlyStatus?.created_at 
-      ? new Date(Math.max(new Date(yearlyStatus.created_at).getTime(), yearStartDate.getTime()))
-      : yearStartDate;
-    
-    // Calculate days elapsed from effective start
-    const yearEnd = new Date(yearStartDate.getFullYear(), 11, 31); // Dec 31
-    const endOfPeriod = today < yearEnd ? today : yearEnd;
+    // Effective start month within the current quarter
+    const effectiveStartMonth = trackingStartMonth
+      ? Math.max(trackingStartMonth, currentQStartMonth)
+      : currentQStartMonth;
+
+    // totalSpent: only sum months in the CURRENT quarter from effectiveStartMonth onwards.
+    // Using full-year totals would cause absurd percentages for recently-added tasks.
+    const totalSpent = currentQuarterObj.months
+      .filter(m => m >= effectiveStartMonth)
+      .reduce((sum, m) => sum + (yearlyMonthlyAggregates[`${task.id}-${m}`] || 0), 0);
+
+    // effectiveStart day: if tracking started mid-quarter use exact date, else 1st of month
+    let effectiveStartDay = 1;
+    if (trackingStartMonth && trackingStartMonth >= currentQStartMonth && yearlyStatus?.created_at) {
+      effectiveStartDay = new Date(yearlyStatus.created_at).getDate();
+    }
+    const effectiveStart = new Date(yr, effectiveStartMonth - 1, effectiveStartDay);
+
+    const endOfPeriod = today < quarterEnd ? today : quarterEnd;
     const daysElapsed = Math.max(1, Math.ceil((endOfPeriod.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
-    
-    // Calculate days in tracking period (effective start to year end)
-    const daysInTrackingPeriod = Math.ceil((yearEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-    
-    // Calculate DAILY ideal (for display - NOT adjusted for daysElapsed)
+    const daysInTrackingPeriod = Math.ceil((quarterEnd.getTime() - effectiveStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+    // --- Daily ideal (per-day rate, frequency-aware) ---
     let dailyIdeal = 0;
     if (task.task_type === TaskType.COUNT) {
-      if (task.follow_up_frequency === 'daily') {
-        dailyIdeal = task.target_value || 0;
-      } else if (task.follow_up_frequency === 'weekly') {
-        dailyIdeal = Math.round(((task.target_value || 0) * 52) / 365);
-      } else if (task.follow_up_frequency === 'monthly') {
-        dailyIdeal = Math.round(((task.target_value || 0) * 12) / 365);
-      } else {
-        dailyIdeal = Math.round((task.target_value || 0) / 365);
-      }
+      if (task.follow_up_frequency === 'daily')        dailyIdeal = task.target_value || 0;
+      else if (task.follow_up_frequency === 'weekly')  dailyIdeal = ((task.target_value || 0) * 52) / 365;
+      else if (task.follow_up_frequency === 'monthly') dailyIdeal = ((task.target_value || 0) * 12) / 365;
+      else                                              dailyIdeal = (task.target_value || 0) / 365;
     } else if (task.task_type === TaskType.BOOLEAN) {
-      if (task.follow_up_frequency === 'daily') {
-        dailyIdeal = 1;
-      } else if (task.follow_up_frequency === 'weekly') {
-        dailyIdeal = Math.round(52 / 365);
-      } else if (task.follow_up_frequency === 'monthly') {
-        dailyIdeal = Math.round(12 / 365);
-      } else {
-        dailyIdeal = Math.round(1 / 365);
-      }
+      if (task.follow_up_frequency === 'daily')        dailyIdeal = 1;
+      else if (task.follow_up_frequency === 'weekly')  dailyIdeal = 52 / 365;
+      else if (task.follow_up_frequency === 'monthly') dailyIdeal = 12 / 365;
+      else                                              dailyIdeal = 1 / 365;
     } else {
-      if (task.follow_up_frequency === 'daily') {
-        dailyIdeal = task.allocated_minutes;
-      } else if (task.follow_up_frequency === 'weekly') {
-        dailyIdeal = Math.round((task.allocated_minutes * 52) / 365);
-      } else if (task.follow_up_frequency === 'monthly') {
-        dailyIdeal = Math.round((task.allocated_minutes * 12) / 365);
-      } else {
-        dailyIdeal = Math.round(task.allocated_minutes / 365);
-      }
+      if (task.follow_up_frequency === 'daily')        dailyIdeal = task.allocated_minutes;
+      else if (task.follow_up_frequency === 'weekly')  dailyIdeal = (task.allocated_minutes * 52) / 365;
+      else if (task.follow_up_frequency === 'monthly') dailyIdeal = (task.allocated_minutes * 12) / 365;
+      else                                              dailyIdeal = task.allocated_minutes / 365;
     }
-    
-    // Calculate yearly target using daysInTrackingPeriod
-    const yearlyTarget = dailyIdeal * daysInTrackingPeriod;
-    
-    // Avg spent per day
-    const avgSpentPerDay = Math.round(totalSpent / daysElapsed);
-    
-    // Needed avg per day (remaining target / remaining days)
-    const daysRemaining = Math.max(0, daysInTrackingPeriod - daysElapsed);
-    const remainingTarget = Math.max(0, yearlyTarget - totalSpent);
-    const avgRemainingPerDay = daysRemaining > 0 ? Math.round(remainingTarget / daysRemaining) : 0;
+
+    const quarterTarget    = dailyIdeal * daysInTrackingPeriod;
+    const avgSpentPerDay   = totalSpent / Math.max(1, daysElapsed);
+    const daysRemaining    = Math.max(0, daysInTrackingPeriod - daysElapsed);
+    const remainingTarget  = Math.max(0, quarterTarget - totalSpent);
+    const avgRemainingPerDay = daysRemaining > 0 ? remainingTarget / daysRemaining : 0;
 
     const rowColorClass = getQuarterlyRowColorClass(task, totalSpent, trackingStartQuarter, yearlyStatus?.created_at);
 
@@ -700,7 +687,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Time-Based Tasks (Daily)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -725,7 +712,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Count-Based Tasks (Daily)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -752,7 +739,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Time-Based Tasks (Weekly)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -777,7 +764,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Count-Based Tasks (Weekly)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -804,7 +791,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Time-Based Tasks (Monthly)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -829,7 +816,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Count-Based Tasks (Monthly)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -856,7 +843,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Time-Based Tasks (Quarterly)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -881,7 +868,7 @@ const QuarterlyTasks: React.FC = () => {
                 <span>Count-Based Tasks (Quarterly)</span>
               </h3>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#dbeafe', minWidth: '250px' }}>Task</th>
@@ -934,7 +921,7 @@ const QuarterlyTasks: React.FC = () => {
               {showCompletedSection && (
                 <>
                   <div className="tasks-table-container">
-                    <table className="tasks-table daily-table">
+                    <table className="tasks-table daily-table quarterly-table">
                       <thead style={{ display: 'table-header-group', visibility: 'visible', background: 'linear-gradient(135deg, #718096 0%, #4a5568 100%)', position: 'sticky', top: 0, zIndex: 20 }}>
                         <tr>
                           <th className="col-task sticky-col sticky-col-1" style={{ color: '#1e40af', padding: '12px 8px', fontWeight: 600, fontSize: '13px', textAlign: 'left', background: '#718096', minWidth: '250px' }}>Task</th>

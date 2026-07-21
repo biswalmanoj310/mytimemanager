@@ -417,6 +417,13 @@ td.section-header-cell.boolean-based {
   table-layout: auto; /* Allow columns to auto-size based on content */
   min-width: 800px; /* Minimum width for readability, triggers horizontal scroll if needed */
 }
+
+/* Quarterly tables: don't stretch to 100% — take only as much width as content needs.
+   The container handles horizontal scroll via overflow-x:auto. */
+.quarterly-table {
+  width: max-content;
+  min-width: 0;
+}
   position: relative;
   z-index: 1;
 }
