@@ -396,17 +396,16 @@ td.section-header-cell.boolean-based {
   border-top: none;
   border-radius: 0 0 8px 8px;
   overflow-x: auto;
-  overflow-y: auto;
-  max-height: calc(100vh - 250px); /* Allow vertical scrolling */
+  overflow-y: clip; /* 'clip' does NOT create a scroll container — lets position:sticky on <th> work relative to page scroll.
+                       'auto' would create a scroll container and break sticky for short tables. */
   max-width: 100%; /* Prevent overflow beyond viewport - Windows fix */
   width: 100%;
   position: relative;
   isolation: isolate;
 }
 
-/* Only for daily time-based table - needs more height */
+/* Only for daily time-based table */
 .daily-table-container {
-  max-height: calc(100vh - 280px);
   min-height: 400px;
 }
 
