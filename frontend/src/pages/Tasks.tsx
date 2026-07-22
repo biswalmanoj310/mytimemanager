@@ -212,6 +212,12 @@ export default function Tasks() {
   // Today tab - Month filter state
   const [selectedTodayMonth, setSelectedTodayMonth] = useState<string | null>(null); // Format: "YYYY-MM" or null for all
 
+  // Today tab - Sub-tab state ('due-today' vs 'needs-attention')
+  const [todaySubTab, setTodaySubTab] = useState<'due-today' | 'needs-attention'>(() => {
+    const saved = localStorage.getItem('todaySubTab');
+    return (saved === 'due-today' || saved === 'needs-attention') ? saved : 'due-today';
+  });
+
   // One-time tasks state
   interface OneTimeTaskData {
     id: number;
@@ -537,6 +543,11 @@ export default function Tasks() {
   useEffect(() => {
     localStorage.setItem('todayTabSections', JSON.stringify(todayTabSections));
   }, [todayTabSections]);
+
+  // Save today sub-tab to localStorage
+  useEffect(() => {
+    localStorage.setItem('todaySubTab', todaySubTab);
+  }, [todaySubTab]);
   
   // Reset selected project when navigating away from projects tab.
   // Guard with hasMountedRef so initial render sequence never clears a
@@ -15442,6 +15453,7 @@ export default function Tasks() {
             const goalCount = goalTasksDueToday.filter(t => !t.is_completed).length;
             const miscCount = miscTasksDueToday.length;
             const importantCount = importantTasksDueToday.length;
+            const todaysOnlyCount = todaysOnlyTasks.length;
             
             // Count today's habits and challenges
             const habitsCount = todaysHabits.length + todaysChallenges.length;
@@ -15474,8 +15486,10 @@ export default function Tasks() {
               item.reason === 'yearly'
             ).length;
             
-            // Calculate total using the same filtered counts as displayed
-            const totalTasks = projectCount + goalCount + miscCount + importantCount + habitsCount + weeklyNeedsAttentionCount + monthlyNeedsAttentionCount + quarterlyNeedsAttentionCount + yearlyNeedsAttentionCount;
+            // Calculate total based on active sub-tab
+            const totalTasks = todaySubTab === 'due-today'
+              ? projectCount + goalCount + miscCount + todaysOnlyCount
+              : importantCount + habitsCount + weeklyNeedsAttentionCount + monthlyNeedsAttentionCount + quarterlyNeedsAttentionCount + yearlyNeedsAttentionCount;
 
             // Scroll to section helper
             const scrollToSection = (sectionId: string) => {
@@ -15497,7 +15511,7 @@ export default function Tasks() {
                 scrollMarginTop: '80px'
               }}>
                 <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-                  📈 Overdue Tasks: Today's Tab
+                  {todaySubTab === 'due-today' ? '📅 Due Today: Summary' : '⚠️ Needs Attention: Summary'}
                 </h4>
                 <div style={{
                   display: 'flex',
@@ -15518,7 +15532,7 @@ export default function Tasks() {
                   </div>
 
                   {/* Project Tasks */}
-                  {projectCount > 0 && (
+                  {todaySubTab === 'due-today' && projectCount > 0 && (
                   <button
                     onClick={() => scrollToSection('project-tasks-section')}
                     style={{
@@ -15545,7 +15559,7 @@ export default function Tasks() {
                   )}
 
                   {/* Goal Tasks */}
-                  {goalCount > 0 && (
+                  {todaySubTab === 'due-today' && goalCount > 0 && (
                   <button
                     onClick={() => scrollToSection('goal-tasks-section')}
                     style={{
@@ -15572,7 +15586,7 @@ export default function Tasks() {
                   )}
 
                   {/* Misc Tasks */}
-                  {miscCount > 0 && (
+                  {todaySubTab === 'due-today' && miscCount > 0 && (
                   <button
                     onClick={() => scrollToSection('misc-tasks-section')}
                     style={{
@@ -15598,8 +15612,23 @@ export default function Tasks() {
                   </button>
                   )}
 
+                  {/* Today's Only Tasks */}
+                  {todaySubTab === 'due-today' && todaysOnlyCount > 0 && (
+                  <button
+                    onClick={() => scrollToSection('todays-only-tasks-section')}
+                    style={{
+                      padding: '8px 14px', borderRadius: '6px', backgroundColor: '#fff1f2', color: '#881337',
+                      fontWeight: '500', border: '1px solid #fecdd3', cursor: 'pointer', transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#ffe4e6'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = '#fff1f2'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                  >
+                    ⏰ Today Only: {todaysOnlyCount}
+                  </button>
+                  )}
+
                   {/* Important Tasks */}
-                  {importantCount > 0 && (
+                  {todaySubTab === 'needs-attention' && importantCount > 0 && (
                   <button
                     onClick={() => scrollToSection('important-tasks-section')}
                     style={{
@@ -15626,7 +15655,7 @@ export default function Tasks() {
                   )}
 
                   {/* Habits */}
-                  {habitsCount > 0 && (
+                  {todaySubTab === 'needs-attention' && habitsCount > 0 && (
                   <button
                     onClick={() => scrollToSection('habits-section')}
                     style={{
@@ -15653,7 +15682,7 @@ export default function Tasks() {
                   )}
                   
                   {/* Weekly Needs Attention */}
-                  {weeklyNeedsAttentionCount > 0 && (
+                  {todaySubTab === 'needs-attention' && weeklyNeedsAttentionCount > 0 && (
                     <button
                       onClick={() => scrollToSection('weekly-needs-attention-section')}
                       style={{
@@ -15680,7 +15709,7 @@ export default function Tasks() {
                   )}
                   
                   {/* Monthly Needs Attention */}
-                  {monthlyNeedsAttentionCount > 0 && (
+                  {todaySubTab === 'needs-attention' && monthlyNeedsAttentionCount > 0 && (
                     <button
                       onClick={() => scrollToSection('monthly-needs-attention-section')}
                       style={{
@@ -15707,7 +15736,7 @@ export default function Tasks() {
                   )}
                   
                   {/* Quarterly Needs Attention */}
-                  {quarterlyNeedsAttentionCount > 0 && (
+                  {todaySubTab === 'needs-attention' && quarterlyNeedsAttentionCount > 0 && (
                     <button
                       onClick={() => scrollToSection('quarterly-needs-attention-section')}
                       style={{
@@ -15734,7 +15763,7 @@ export default function Tasks() {
                   )}
                   
                   {/* Yearly Needs Attention */}
-                  {yearlyNeedsAttentionCount > 0 && (
+                  {todaySubTab === 'needs-attention' && yearlyNeedsAttentionCount > 0 && (
                     <button
                       onClick={() => scrollToSection('yearly-needs-attention-section')}
                       style={{
@@ -17096,10 +17125,40 @@ export default function Tasks() {
       {/* ========== TODAY TAB SECTIONS ========== */}
       {activeTab === 'today' && (
         <div style={{ marginTop: '30px' }}>
-          
+
+          {/* Sub-tab switcher */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '12px' }}>
+            <button
+              onClick={() => setTodaySubTab('due-today')}
+              style={{
+                padding: '8px 24px', borderRadius: '20px', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s',
+                border: todaySubTab === 'due-today' ? 'none' : '1px solid #e2e8f0',
+                backgroundColor: todaySubTab === 'due-today' ? '#2563eb' : '#f8fafc',
+                color: todaySubTab === 'due-today' ? '#ffffff' : '#4a5568',
+                fontWeight: todaySubTab === 'due-today' ? '600' : '400',
+                boxShadow: todaySubTab === 'due-today' ? '0 2px 4px rgba(37,99,235,0.3)' : 'none',
+              }}
+            >
+              📅 Due Today ({projectTasksDueToday.filter(t => !t.is_completed).length + goalTasksDueToday.filter(t => !t.is_completed).length + miscTasksDueToday.length + todaysOnlyTasks.length})
+            </button>
+            <button
+              onClick={() => setTodaySubTab('needs-attention')}
+              style={{
+                padding: '8px 24px', borderRadius: '20px', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s',
+                border: todaySubTab === 'needs-attention' ? 'none' : '1px solid #e2e8f0',
+                backgroundColor: todaySubTab === 'needs-attention' ? '#dc2626' : '#f8fafc',
+                color: todaySubTab === 'needs-attention' ? '#ffffff' : '#4a5568',
+                fontWeight: todaySubTab === 'needs-attention' ? '600' : '400',
+                boxShadow: todaySubTab === 'needs-attention' ? '0 2px 4px rgba(220,38,38,0.3)' : 'none',
+              }}
+            >
+              ⚠️ Needs Attention ({importantTasksDueToday.length + todaysHabits.length + todaysChallenges.length + tasksNeedingAttention.length})
+            </button>
+          </div>
+
           {/* Today's Only Tasks Section - Always show header if there are any tasks */}
-          {todaysOnlyTasks.length > 0 && (
-            <div style={{ marginBottom: '30px' }}>
+          {todaySubTab === 'due-today' && todaysOnlyTasks.length > 0 && (
+            <div id="todays-only-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
               <div 
                 onClick={() => setTodayTabSections(prev => ({ ...prev, todaysOnlyTasks: !prev.todaysOnlyTasks }))}
                 style={{
@@ -17328,6 +17387,7 @@ export default function Tasks() {
 
           {/* Project Tasks Due Today & Overdue Section */}
           {(() => {
+            if (todaySubTab !== 'due-today') return null;
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const today = new Date(); today.setHours(0, 0, 0, 0);
             const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
@@ -17503,6 +17563,7 @@ export default function Tasks() {
 
           {/* Goal Tasks Due Today & Overdue Section */}
           {(() => {
+            if (todaySubTab !== 'due-today') return null;
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const today = new Date(); today.setHours(0, 0, 0, 0);
             // Filter out NOW tasks (priority 1-3 with today/past due_date) - they should only appear in NOW tab
@@ -17656,6 +17717,7 @@ export default function Tasks() {
 
           {/* Misc Tasks Due Today & Overdue Section */}
           {(() => {
+            if (todaySubTab !== 'due-today') return null;
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const filteredTasks = miscTasksDueToday.filter(t => filterByMonth(t));
             
@@ -17906,6 +17968,7 @@ export default function Tasks() {
 
           {/* Important Tasks Due Today & Overdue Section */}
           {(() => {
+            if (todaySubTab !== 'needs-attention') return null;
             const filterByMonth = (window as any).__todayTabMonthFilter || (() => true);
             const today = new Date(); today.setHours(0, 0, 0, 0);
             // Filter out NOW tasks (priority 1-3 with today/past due_date) - they should only appear in NOW tab
@@ -18048,7 +18111,7 @@ export default function Tasks() {
           })()}
 
           {/* Needs Attention Section - Only show in Today tab */}
-          {activeTab === 'today' && (() => {
+          {activeTab === 'today' && todaySubTab === 'needs-attention' && (() => {
             // Show ALL tasks needing attention regardless of priority
             const weeklyTasks = tasksNeedingAttention.filter(item => 
               item.reason === 'weekly'
@@ -18795,7 +18858,7 @@ export default function Tasks() {
       )}
 
           {/* Compact Habits & Challenges - Bottom of Today Tab */}
-      {activeTab === 'today' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
+      {activeTab === 'today' && todaySubTab === 'needs-attention' && (todaysHabits.length > 0 || todaysChallenges.length > 0) && (
         <div id="habits-section" style={{ marginTop: '30px', marginBottom: '20px', scrollMarginTop: '80px' }}>
           {/* Compact Active Habits */}
           {todaysHabits.length > 0 && (
