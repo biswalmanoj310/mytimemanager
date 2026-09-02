@@ -148,6 +148,8 @@
 | REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
 |--------|------------|----------------------|-----|----------|--------|
 | REQ-200 | 2026-07-20 | Analytics frontend dashboard improvements — richer cross-pillar time trends, habit streak visualization, goal progress summary charts | — | analytics-requirements.md exists in repo memory | 📋 BACKLOG |
+| REQ-201 | 2026-09-02 | Analytics Overview tab: consolidate 9 stacked comparison charts (Pillar/Category/Daily Time-Based/Daily One-Time/3x Utilization/2x Breakdown) into one page with checkbox chart-picker (persisted to localStorage) + shared This Week/Last Week and This Month/Last Month selector so the Week/Month avg columns on every chart use the same period | 2026-09-02 | frontend/src/pages/Analytics.tsx — visibleOverviewCharts state, getOverviewWeekRange()/getOverviewMonthRange() helpers | ✅ DONE |
+| REQ-202 | 2026-09-02 | Follow-up: true custom date-range picker (arbitrary start/end, not just This/Last Week/Month) for the Overview comparison charts | — | Would require passing a date range into getOverviewWeekRange/getOverviewMonthRange instead of a fixed offset | 📋 BACKLOG |
 | REQ-201 | 2026-07-20 | Mobile-responsive layout improvements — current UI designed for desktop, needs mobile breakpoints for family use | — | | 📋 BACKLOG |
 | REQ-202 | 2026-07-20 | Cloud database migration: SQLite → PostgreSQL for multi-device live sync without file-copy workarounds | — | Would enable true family real-time sync; update backend/app/database/config.py | 📋 BACKLOG |
 | REQ-203 | 2026-07-20 | Frontend component tests — Jest + React Testing Library for TaskContext, TimeEntriesContext, key page components | — | Currently manual testing only | 📋 BACKLOG |

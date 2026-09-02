@@ -76,4 +76,16 @@
 
 ---
 
+### SOL-006 — Analytics Overview Chart Consolidation
+| Field | Value |
+|-------|-------|
+| REQ | REQ-201 |
+| Date | 2026-09-02 |
+| Problem | Overview tab stacked 9 full-size comparison charts vertically — user had to scroll past all of them to find the one they wanted, making "where did my time go" checks tedious |
+| Approach | Added a filter bar at the top of the Overview tab: (1) checkbox pills to tick which of the 9 charts render (visibility via inline `display: none`, state persisted to localStorage so the choice sticks); default ticks the 5 highest-value charts (Pillar, Category, Daily Time-Based, Daily One-Time, Utilization: Daily Tasks). (2) Two dropdowns — Week: This Week/Last Week, Month: This Month/Last Month — that replace the previously hardcoded "Monday-to-today" / "1st-to-today" ranges via new `getOverviewWeekRange()`/`getOverviewMonthRange()` helpers, feeding all three comparative-data loaders (pillar/category/task) |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Same page, far less scrolling; user can also compare against last week/last month instead of only week/month-to-date |
+
+---
+
 *Last updated: 2026-07-20 | Add entries here whenever a major feature or fix lands*

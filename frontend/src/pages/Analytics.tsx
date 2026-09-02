@@ -169,6 +169,68 @@ interface BadgeData {
   total_earned: number;
 }
 
+// Overview tab: which comparison charts are visible (declutters the page — tick only what you need)
+type OverviewChartKey =
+  | 'pillar' | 'category' | 'dailyTimeBased' | 'dailyOneTime'
+  | 'utilizationTasks' | 'utilizationCategories' | 'utilizationOneTime'
+  | 'categoryBreakdown' | 'taskBreakdown';
+
+const OVERVIEW_CHART_OPTIONS: { key: OverviewChartKey; label: string }[] = [
+  { key: 'pillar', label: '🎯 Pillar Time Comparison' },
+  { key: 'category', label: '📂 Category Time Comparison' },
+  { key: 'dailyTimeBased', label: '⏰ Daily: Time-Based Tasks' },
+  { key: 'dailyOneTime', label: '⏰ Daily: One-Time Tasks' },
+  { key: 'utilizationTasks', label: '📊 Utilization: Daily Tasks' },
+  { key: 'utilizationCategories', label: '📊 Utilization: Daily Categories' },
+  { key: 'utilizationOneTime', label: '📊 Utilization: One-Time Tasks' },
+  { key: 'categoryBreakdown', label: '📊 Category Breakdown by Pillar' },
+  { key: 'taskBreakdown', label: '📋 Task Breakdown by Pillar' },
+];
+
+// Default: only the 5 charts most useful for a daily "where did my time go" check are shown
+const DEFAULT_OVERVIEW_CHARTS: Record<OverviewChartKey, boolean> = {
+  pillar: true,
+  category: true,
+  dailyTimeBased: true,
+  dailyOneTime: true,
+  utilizationTasks: true,
+  utilizationCategories: false,
+  utilizationOneTime: false,
+  categoryBreakdown: false,
+  taskBreakdown: false,
+};
+
+const OVERVIEW_CHARTS_STORAGE_KEY = 'analytics_overview_visible_charts_v1';
+
+// Trailing-period options for the shared Week / Month selector in the Overview filter bar
+type WeekPeriodOption = 'hide' | 0 | 1 | 2 | 4;
+type MonthPeriodOption = 'hide' | 0 | 1 | 3 | 6;
+
+// Pure date-range helpers (module scope so they're hoisted and usable anywhere, no TDZ issues)
+function getWeekRangeForOption(option: 0 | 1 | 2 | 4): { start: string; end: string } {
+  const today = new Date();
+  const thisWeekStart = getWeekStart(today);
+  if (option === 0) {
+    return { start: formatDateForInput(thisWeekStart), end: formatDateForInput(today) };
+  }
+  // N trailing *complete* weeks (Mon→Sun), ending the Sunday before this week started
+  const end = new Date(thisWeekStart.getTime() - 24 * 60 * 60 * 1000);
+  const start = new Date(end.getTime() - (option * 7 - 1) * 24 * 60 * 60 * 1000);
+  return { start: formatDateForInput(start), end: formatDateForInput(end) };
+}
+
+function getMonthRangeForOption(option: 0 | 1 | 3 | 6): { start: string; end: string } {
+  const today = new Date();
+  if (option === 0) {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start: formatDateForInput(start), end: formatDateForInput(today) };
+  }
+  // N trailing *complete* calendar months, ending the last day of the previous month
+  const end = new Date(today.getFullYear(), today.getMonth(), 0);
+  const start = new Date(end.getFullYear(), end.getMonth() - (option - 1), 1);
+  return { start: formatDateForInput(start), end: formatDateForInput(end) };
+}
+
 export default function Analytics() {
   const [pillarData, setPillarData] = useState<PillarData[]>([]);
   const [categoryData, setCategoryData] = useState<CategoryData[]>([]);
@@ -282,33 +344,38 @@ export default function Analytics() {
   const [monthOneTimeTaskData, setMonthOneTimeTaskData] = useState<TaskData[]>([]);
   const [allOneTimeTasksData, setAllOneTimeTasksData] = useState<TaskData[]>([]); // Base one-time tasks
   
-  const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Pillars)
+  const [showMonthColumn, setShowMonthColumn] = useState(false); // Toggle for month average column (Detailed tab)
   const [showWeekColumn, setShowWeekColumn] = useState(false); // Toggle for week average column (Pillars)
-  const [showCategoryMonth, setShowCategoryMonth] = useState(false); // Toggle for Categories
-  const [showCategoryWeek, setShowCategoryWeek] = useState(false); // Toggle for Categories weekly
-  const [showTaskMonth, setShowTaskMonth] = useState(false); // Toggle for Tasks
-  const [showTaskWeek, setShowTaskWeek] = useState(false); // Toggle for Tasks weekly
-  const [showOneTimeTaskMonth, setShowOneTimeTaskMonth] = useState(false); // Toggle for One-Time Tasks
-  const [showOneTimeTaskWeek, setShowOneTimeTaskWeek] = useState(false); // Toggle for One-Time Tasks weekly
-  const [showPillarWeek, setShowPillarWeek] = useState(false); // Toggle for Pillar weekly data
   const [showCategoryBreakdownWeek, setShowCategoryBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
-  const [showCategoryBreakdownWeekAll, setShowCategoryBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showCategoryBreakdownMonth, setShowCategoryBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   const [showTaskBreakdownWeek, setShowTaskBreakdownWeek] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
-  const [showTaskBreakdownWeekAll, setShowTaskBreakdownWeekAll] = useState(false); // Section-level toggle
   const [showTaskBreakdownMonth, setShowTaskBreakdownMonth] = useState<{[key: string]: boolean}>({}); // Toggle per pillar
   // Per-chart Time / % toggle for the 4 overview comparison charts
+
+  // Overview: which charts are visible — persisted so the choice sticks between visits
+  const [visibleOverviewCharts, setVisibleOverviewCharts] = useState<Record<OverviewChartKey, boolean>>(() => {
+    try {
+      const saved = localStorage.getItem(OVERVIEW_CHARTS_STORAGE_KEY);
+      if (saved) return { ...DEFAULT_OVERVIEW_CHARTS, ...JSON.parse(saved) };
+    } catch { /* ignore malformed storage */ }
+    return DEFAULT_OVERVIEW_CHARTS;
+  });
+  useEffect(() => {
+    localStorage.setItem(OVERVIEW_CHARTS_STORAGE_KEY, JSON.stringify(visibleOverviewCharts));
+  }, [visibleOverviewCharts]);
+
+  // Overview: which Week / Month the "Week Avg" and "Month Avg" columns represent — 'hide' also hides the column on ALL charts
+  const [overviewWeekOption, setOverviewWeekOption] = useState<WeekPeriodOption>(0);
+  const [overviewMonthOption, setOverviewMonthOption] = useState<MonthPeriodOption>(0);
+  // Derived: single source of truth for every chart's weekly/monthly column visibility
+  const showWeekColumnGlobal = overviewWeekOption !== 'hide';
+  const showMonthColumnGlobal = overviewMonthOption !== 'hide';
+  const weekRangeOption: 0 | 1 | 2 | 4 = overviewWeekOption === 'hide' ? 0 : overviewWeekOption;
+  const monthRangeOption: 0 | 1 | 3 | 6 = overviewMonthOption === 'hide' ? 0 : overviewMonthOption;
   const [catShowPct,      setCatShowPct]      = useState(false);
   const [taskShowPct,     setTaskShowPct]     = useState(false);
   const [oneTimeShowPct,  setOneTimeShowPct]  = useState(false);
   const [pillarShowPct,   setPillarShowPct]   = useState(false);
-
-  const [showUtilizationTaskWeek, setShowUtilizationTaskWeek] = useState(false);
-  const [showUtilizationTaskMonth, setShowUtilizationTaskMonth] = useState(false);
-  const [showUtilizationCategoryWeek, setShowUtilizationCategoryWeek] = useState(false);
-  const [showUtilizationCategoryMonth, setShowUtilizationCategoryMonth] = useState(false);
-  const [showUtilizationOneTimeWeek, setShowUtilizationOneTimeWeek] = useState(false);
-  const [showUtilizationOneTimeMonth, setShowUtilizationOneTimeMonth] = useState(false);
   
   // Modal state for detail view
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -325,6 +392,7 @@ export default function Analytics() {
 
   // Effective days for weekly/monthly averages — exclude today if no data entered yet
   const effectiveDaysInWeek = useMemo(() => {
+    if (weekRangeOption > 0) return weekRangeOption * 7; // Trailing complete weeks always have 7 days each
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const weekStart = getWeekStart(today);
@@ -332,14 +400,18 @@ export default function Analytics() {
     const todaySpent = dailyPillarData.reduce((sum: number, p: PillarData) => sum + (p.spent_hours || 0), 0);
     const todayIsLogged = dailyPillarData.length === 0 || todaySpent > 0;
     return todayIsLogged ? rawDays : Math.max(1, rawDays - 1);
-  }, [dailyPillarData]);
+  }, [dailyPillarData, weekRangeOption]);
 
   const effectiveDaysInMonth = useMemo(() => {
+    if (monthRangeOption > 0) {
+      const { start, end } = getMonthRangeForOption(monthRangeOption);
+      return Math.round((new Date(end).getTime() - new Date(start).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    }
     const rawDays = new Date().getDate();
     const todaySpent = dailyPillarData.reduce((sum: number, p: PillarData) => sum + (p.spent_hours || 0), 0);
     const todayIsLogged = dailyPillarData.length === 0 || todaySpent > 0;
     return todayIsLogged ? rawDays : Math.max(1, rawDays - 1);
-  }, [dailyPillarData]);
+  }, [dailyPillarData, monthRangeOption]);
 
   // Ref holding the scroll Y to restore after data loads
   const pendingScrollRef = useRef<number | null>(null);
@@ -383,6 +455,13 @@ export default function Analytics() {
     loadComparativeCategoryData();
     loadComparativeTaskData();
   }, [dateRange, selectedPillar, customStartDate, customEndDate]);
+
+  // Reload the Week/Month comparison columns when the user changes the shared period selector
+  useEffect(() => {
+    loadComparativePillarData();
+    loadComparativeCategoryData();
+    loadComparativeTaskData();
+  }, [overviewWeekOption, overviewMonthOption]);
 
   // Update customStartDate and customEndDate when detailed view date changes
   useEffect(() => {
@@ -642,6 +721,12 @@ export default function Analytics() {
     }
   };
 
+  // Overview: date range for the "Week" column, per the shared selector (This/Last/Last 2/Last 4 Weeks)
+  const getOverviewWeekRange = () => getWeekRangeForOption(weekRangeOption);
+
+  // Overview: date range for the "Month" column, per the shared selector (This/Last/Last 3/Last 6 Months)
+  const getOverviewMonthRange = () => getMonthRangeForOption(monthRangeOption);
+
   const loadComparativePillarData = async () => {
     try {
       // Load Today's data
@@ -650,16 +735,14 @@ export default function Analytics() {
       const dailyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${todayStr}&end_date=${todayStr}`);
       setDailyPillarData(dailyResponse.data.pillars || []);
       
-      // Load This Week's data (Monday to today)
-      const weekStart = getWeekStart(today);
-      const weekStartStr = formatDateForInput(weekStart);
-      const todayEndStr = formatDateForInput(today); // Week data up to today, not full week
-      const weeklyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${weekStartStr}&end_date=${todayEndStr}`);
+      // Load Week column data (this week to date, or last full week)
+      const weekRange = getOverviewWeekRange();
+      const weeklyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${weekRange.start}&end_date=${weekRange.end}`);
       setWeeklyPillarData(weeklyResponse.data.pillars || []);
       
-      // Load This Month's data (1st to today, not full month)
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthlyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${formatDateForInput(monthStart)}&end_date=${formatDateForInput(today)}`);
+      // Load Month column data (this month to date, or last full month)
+      const monthRange = getOverviewMonthRange();
+      const monthlyResponse = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${monthRange.start}&end_date=${monthRange.end}`);
       setMonthlyPillarData(monthlyResponse.data.pillars || []);
     } catch (error) {
       console.error('Error loading comparative pillar data:', error);
@@ -700,20 +783,17 @@ export default function Analytics() {
       console.log('Today category response:', todayResponse.data);
       setTodayCategoryData(todayResponse.data.categories || []);
       
-      // Load This Week's category data (Monday to today)
-      const weekStart = getWeekStart(today);
-      const weekStartStr = formatDateForInput(weekStart);
-      const todayEndStr = formatDateForInput(today);
-      console.log('Loading week category data from:', weekStartStr, 'to', todayEndStr);
-      const weekResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${weekStartStr}&end_date=${todayEndStr}`);
+      // Load Week column category data (this week to date, or last full week)
+      const weekRange = getOverviewWeekRange();
+      console.log('Loading week category data from:', weekRange.start, 'to', weekRange.end);
+      const weekResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${weekRange.start}&end_date=${weekRange.end}`);
       console.log('Week category response:', weekResponse.data);
       setWeekCategoryData(weekResponse.data.categories || []);
       
-      // Load This Month's category data
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-      console.log('Loading month category data from:', formatDateForInput(monthStart), 'to', formatDateForInput(monthEnd));
-      const monthResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${formatDateForInput(monthStart)}&end_date=${formatDateForInput(monthEnd)}`);
+      // Load Month column category data (this month to date, or last full month)
+      const monthRange = getOverviewMonthRange();
+      console.log('Loading month category data from:', monthRange.start, 'to', monthRange.end);
+      const monthResponse = await apiClient.get(`/api/analytics/category-breakdown?start_date=${monthRange.start}&end_date=${monthRange.end}`);
       console.log('Month category response:', monthResponse.data);
       setMonthCategoryData(monthResponse.data.categories || []);
     } catch (error) {
@@ -864,10 +944,9 @@ export default function Analytics() {
       setTodayOneTimeTaskData(todayOneTimeTasks);
       console.log('Today tasks with spent time:', todayTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
       
-      // Load This Week's task time entries (Monday to today)
-      const weekStart = getWeekStart(today);
-      const weekStartStr = formatDateForInput(weekStart);
-      const weekEntries = await apiClient.get(`/api/daily-time?start_date=${weekStartStr}&end_date=${todayStr}`);
+      // Load Week column task time entries (this week to date, or last full week)
+      const weekRange = getOverviewWeekRange();
+      const weekEntries = await apiClient.get(`/api/daily-time?start_date=${weekRange.start}&end_date=${weekRange.end}`);
       console.log('Week entries API response (first 5):', (weekEntries.data || []).slice(0, 5));
       const weekTaskMap = new Map<number, number>();
       (weekEntries.data || []).forEach((entry: any) => {
@@ -888,11 +967,9 @@ export default function Analytics() {
       setWeekOneTimeTaskData(weekOneTimeTasks);
       console.log('Week tasks with spent time:', weekTasks.filter(t => t.spent_minutes > 0).slice(0, 3));
       
-      // Load This Month's task time entries
-      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-      const monthStartStr = formatDateForInput(monthStart);
-      const monthEndStr = formatDateForInput(today);
-      const monthEntries = await apiClient.get(`/api/daily-time?start_date=${monthStartStr}&end_date=${monthEndStr}`);
+      // Load Month column task time entries (this month to date, or last full month)
+      const monthRange = getOverviewMonthRange();
+      const monthEntries = await apiClient.get(`/api/daily-time?start_date=${monthRange.start}&end_date=${monthRange.end}`);
       console.log('Month entries API response (first 5):', (monthEntries.data || []).slice(0, 5));
       const monthTaskMap = new Map<number, number>();
       (monthEntries.data || []).forEach((entry: any) => {
@@ -1102,70 +1179,73 @@ export default function Analytics() {
   return (
     <div className="analytics-container">
       <div className="analytics-header">
-        <h1>Analytics Dashboard</h1>
-        
-        {/* Combined Streak & Achievements Panel */}
-        {(streakData || (badgeData && badgeData.badges.length > 0)) && (
-          <div style={{ 
-            padding: '12px 20px', 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
-            color: 'white',
-            borderRadius: '12px', 
-            marginBottom: '16px',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
-              {/* Streak Section */}
-              {streakData && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '28px' }}>
-                    {streakData.streak_status === 'active' ? '🔥' : 
-                     streakData.streak_status === 'at_risk' ? '⚡' : '💤'}
+        {/* Compact title + Streak + Achievements bar */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px',
+          padding: '6px 14px',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          borderRadius: '8px',
+          marginBottom: '10px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        }}>
+          <h1 style={{ fontSize: '13px', fontWeight: 700, margin: 0, whiteSpace: 'nowrap', opacity: 0.95 }}>📊 Analytics</h1>
+
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+            {/* Streak Section */}
+            {streakData && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '15px' }}>
+                  {streakData.streak_status === 'active' ? '🔥' : 
+                   streakData.streak_status === 'at_risk' ? '⚡' : '💤'}
+                </span>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 700 }}>{streakData.current_streak}</span>
+                  <span style={{ fontSize: '10px', opacity: 0.9 }}>day streak</span>
+                  <span style={{ fontSize: '10px', marginLeft: '4px', opacity: 0.8 }}>
+                    {streakData.streak_status === 'active' && '🎉'}
+                    {streakData.streak_status === 'at_risk' && '⚠️'}
+                    {streakData.streak_status === 'broken' && '💪'}
+                    {streakData.streak_status === 'inactive' && '🚀'}
                   </span>
-                  <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                    <span style={{ fontSize: '24px', fontWeight: 700 }}>{streakData.current_streak}</span>
-                    <span style={{ fontSize: '14px', opacity: 0.9 }}>day streak</span>
-                    <span style={{ fontSize: '12px', marginLeft: '8px', opacity: 0.8 }}>
-                      {streakData.streak_status === 'active' && '🎉 Keep going!'}
-                      {streakData.streak_status === 'at_risk' && '⚠️ Track today!'}
-                      {streakData.streak_status === 'broken' && '💪 Restart!'}
-                      {streakData.streak_status === 'inactive' && '🚀 Start!'}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', fontSize: '10px', marginLeft: '8px', opacity: 0.85 }}>
+                  <span>Longest: {streakData.longest_streak}</span>
+                  <span>Total: {streakData.total_tracked_days}</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Achievements Section */}
+            {badgeData && badgeData.badges.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.95 }}>🏆 ({badgeData.total_earned})</span>
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                  {badgeData.badges.slice(0, 5).map((badge) => (
+                    <span 
+                      key={badge.id} 
+                      style={{ 
+                        fontSize: '9px', 
+                        padding: '2px 7px', 
+                        background: 'rgba(255,255,255,0.2)', 
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,255,255,0.3)',
+                        backdropFilter: 'blur(10px)'
+                      }}
+                      title={badge.description}
+                    >
+                      {badge.name.split(' ')[0]} {badge.name.replace(badge.name.split(' ')[0], '').trim()}
                     </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '12px', marginLeft: '16px', opacity: 0.85 }}>
-                    <span>Longest: {streakData.longest_streak}</span>
-                    <span>Total: {streakData.total_tracked_days}</span>
-                  </div>
+                  ))}
                 </div>
-              )}
-              
-              {/* Achievements Section */}
-              {badgeData && badgeData.badges.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '14px', fontWeight: 600, opacity: 0.95 }}>🏆 Achievements ({badgeData.total_earned})</span>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {badgeData.badges.slice(0, 5).map((badge) => (
-                      <span 
-                        key={badge.id} 
-                        style={{ 
-                          fontSize: '11px', 
-                          padding: '4px 10px', 
-                          background: 'rgba(255,255,255,0.2)', 
-                          borderRadius: '14px',
-                          border: '1px solid rgba(255,255,255,0.3)',
-                          backdropFilter: 'blur(10px)'
-                        }}
-                        title={badge.description}
-                      >
-                        {badge.name.split(' ')[0]} {badge.name.replace(badge.name.split(' ')[0], '').trim()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
         
         {/* View Mode Tabs */}
         <div className="view-mode-tabs">
@@ -1269,11 +1349,75 @@ export default function Analytics() {
           {/* HOURLY TASK TIMELINE */}
           <HourlyTaskTimeline />
 
-          {/* TIME DISTRIBUTION DONUT CHART */}
-          <TimeDistributionChart />
+          {/* CHART VISIBILITY + PERIOD FILTER BAR — tick only the charts you want, pick which Week/Month every chart compares against */}
+          <div className="overview-filter-bar" style={{ background: 'white', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+              <strong style={{ fontSize: '12px', color: '#374151' }}>📌 Charts shown below</strong>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <label style={{ fontSize: '11px', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  Week:
+                  <select
+                    value={overviewWeekOption}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setOverviewWeekOption(v === 'hide' ? 'hide' : (Number(v) as 0 | 1 | 2 | 4));
+                    }}
+                    style={{ fontSize: '11px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                  >
+                    <option value="hide">Hide</option>
+                    <option value={0}>This Week</option>
+                    <option value={1}>Last Week</option>
+                    <option value={2}>Last 2 Weeks</option>
+                    <option value={4}>Last 4 Weeks</option>
+                  </select>
+                </label>
+                <label style={{ fontSize: '11px', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  Month:
+                  <select
+                    value={overviewMonthOption}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setOverviewMonthOption(v === 'hide' ? 'hide' : (Number(v) as 0 | 1 | 3 | 6));
+                    }}
+                    style={{ fontSize: '11px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                  >
+                    <option value="hide">Hide</option>
+                    <option value={0}>This Month</option>
+                    <option value={1}>Last Month</option>
+                    <option value={3}>Last 3 Months</option>
+                    <option value={6}>Last 6 Months</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {OVERVIEW_CHART_OPTIONS.map(opt => (
+                <label key={opt.key} style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '3px 8px',
+                  background: visibleOverviewCharts[opt.key] ? '#4299e1' : '#edf2f7',
+                  color: visibleOverviewCharts[opt.key] ? 'white' : '#374151',
+                  borderRadius: '999px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={visibleOverviewCharts[opt.key]}
+                    onChange={(e) => setVisibleOverviewCharts(prev => ({ ...prev, [opt.key]: e.target.checked }))}
+                    style={{ margin: 0 }}
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
+          </div>
 
           {/* CATEGORY TIME COMPARISON */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.category ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>📂 Category Time Comparison</h2>
@@ -1284,20 +1428,6 @@ export default function Analytics() {
                   onClick={() => setCatShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: catShowPct ? '#4299e1' : '#edf2f7', color: catShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{catShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                <button 
-                  className={`toggle-month-btn ${showCategoryWeek ? 'active' : ''}`}
-                  onClick={() => setShowCategoryWeek(!showCategoryWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showCategoryWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showCategoryMonth ? 'active' : ''}`}
-                  onClick={() => setShowCategoryMonth(!showCategoryMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showCategoryMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
               </div>
             </div>
             
@@ -1309,7 +1439,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     console.log('=== Category Chart Data Mapping ===');
@@ -1407,7 +1537,7 @@ export default function Analytics() {
                     radius={[6, 6, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                   />
-                  {showCategoryWeek && (
+                  {showWeekColumnGlobal && (
                     <Bar 
                       dataKey={catShowPct ? 'weekAvgPct' : 'weekAvg'} 
                       name="Week Avg/Day" 
@@ -1416,7 +1546,7 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  {showCategoryMonth && (
+                  {showMonthColumnGlobal && (
                     <Bar 
                       dataKey={catShowPct ? 'monthAvgPct' : 'monthAvg'} 
                       name="Month Avg/Day" 
@@ -1431,7 +1561,7 @@ export default function Analytics() {
           </div>
 
           {/* DAILY TIME-BASED TASKS COMPARISON */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.dailyTimeBased ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>⏰ Daily: Time-Based Tasks</h2>
@@ -1442,20 +1572,6 @@ export default function Analytics() {
                   onClick={() => setTaskShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: taskShowPct ? '#4299e1' : '#edf2f7', color: taskShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{taskShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                <button 
-                  className={`toggle-month-btn ${showTaskWeek ? 'active' : ''}`}
-                  onClick={() => setShowTaskWeek(!showTaskWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showTaskWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showTaskMonth ? 'active' : ''}`}
-                  onClick={() => setShowTaskMonth(!showTaskMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
               </div>
             </div>
             
@@ -1467,7 +1583,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     const daysInWeek = effectiveDaysInWeek;
@@ -1565,7 +1681,7 @@ export default function Analytics() {
                     radius={[4, 4, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                   />
-                  {showTaskWeek && (
+                  {showWeekColumnGlobal && (
                     <Bar 
                       dataKey={taskShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
@@ -1574,7 +1690,7 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  {showTaskMonth && (
+                  {showMonthColumnGlobal && (
                     <Bar 
                       dataKey={taskShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
@@ -1589,7 +1705,7 @@ export default function Analytics() {
           </div>
 
           {/* DAILY ONE-TIME TASKS COMPARISON */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.dailyOneTime ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>⏰ Daily: One-Time Tasks</h2>
@@ -1600,20 +1716,6 @@ export default function Analytics() {
                   onClick={() => setOneTimeShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: oneTimeShowPct ? '#4299e1' : '#edf2f7', color: oneTimeShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{oneTimeShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                <button 
-                  className={`toggle-month-btn ${showOneTimeTaskWeek ? 'active' : ''}`}
-                  onClick={() => setShowOneTimeTaskWeek(!showOneTimeTaskWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showOneTimeTaskWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showOneTimeTaskMonth ? 'active' : ''}`}
-                  onClick={() => setShowOneTimeTaskMonth(!showOneTimeTaskMonth)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showOneTimeTaskMonth ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
               </div>
             </div>
             
@@ -1625,7 +1727,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     const daysInWeek = effectiveDaysInWeek;
@@ -1710,7 +1812,7 @@ export default function Analytics() {
                     label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? oneTimeShowPct ? `${value}%` : `${value.toFixed(0)}m` : '' }}
                   />
                   
-                  {showOneTimeTaskWeek && (
+                  {showWeekColumnGlobal && (
                     <Bar 
                       dataKey={oneTimeShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
@@ -1720,7 +1822,7 @@ export default function Analytics() {
                     />
                   )}
                   
-                  {showOneTimeTaskMonth && (
+                  {showMonthColumnGlobal && (
                     <Bar 
                       dataKey={oneTimeShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
@@ -1735,7 +1837,7 @@ export default function Analytics() {
           </div>
 
           {/* UNIFIED PILLAR COMPARISON CHART */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.pillar ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>🎯 Pillar Time Comparison</h2>
@@ -1746,20 +1848,6 @@ export default function Analytics() {
                   onClick={() => setPillarShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: pillarShowPct ? '#4299e1' : '#edf2f7', color: pillarShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{pillarShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                <button 
-                  className={`toggle-month-btn ${showPillarWeek ? 'active' : ''}`}
-                  onClick={() => setShowPillarWeek(!showPillarWeek)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showPillarWeek ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-                  onClick={() => setShowMonthColumn(!showMonthColumn)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
               </div>
             </div>
             
@@ -1771,7 +1859,7 @@ export default function Analytics() {
               }}
               title="Click to view enlarged chart"
             >
-              <ResponsiveContainer width="100%" height={400}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     // Map all pillars with data
@@ -1842,7 +1930,7 @@ export default function Analytics() {
                     radius={[6, 6, 0, 0]}
                     label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                   />
-                  {showPillarWeek && (
+                  {showWeekColumnGlobal && (
                     <Bar 
                       dataKey={pillarShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
@@ -1851,7 +1939,7 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  {showMonthColumn && (
+                  {showMonthColumnGlobal && (
                     <Bar 
                       dataKey={pillarShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
@@ -1866,7 +1954,7 @@ export default function Analytics() {
           </div>
 
           {/* UTILIZATION PERCENTAGE CHART - TASKS */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.utilizationTasks ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>📊 Time Utilization: Daily Tasks</h2>
@@ -1878,20 +1966,6 @@ export default function Analytics() {
                   style={{ fontSize: '11px', padding: '6px 10px', background: showUtilizationAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   {showUtilizationAsHours ? '⏱️ Hours' : '📊 %'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationTaskWeek ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationTaskWeek(!showUtilizationTaskWeek)}
-                  style={{ fontSize: '11px', padding: '6px 10px' }}
-                >
-                  {showUtilizationTaskWeek ? 'Hide Weekly' : 'Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationTaskMonth ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationTaskMonth(!showUtilizationTaskMonth)}
-                  style={{ fontSize: '11px', padding: '6px 10px' }}
-                >
-                  {showUtilizationTaskMonth ? 'Hide Monthly' : 'Show Monthly'}
                 </button>
                 <button 
                   onClick={() => {
@@ -1906,7 +1980,7 @@ export default function Analytics() {
             </div>
             
             <div className="unified-comparison-chart">
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     const daysInWeek = effectiveDaysInWeek;
@@ -2027,7 +2101,7 @@ export default function Analytics() {
                       />
                     </Bar>
                   )}
-                  {showUtilizationTaskWeek && (
+                  {showWeekColumnGlobal && (
                     <>
                       <Bar 
                         dataKey="weekly" 
@@ -2075,7 +2149,7 @@ export default function Analytics() {
                       )}
                     </>
                   )}
-                  {showUtilizationTaskMonth && (
+                  {showMonthColumnGlobal && (
                     <>
                       <Bar 
                         dataKey="monthly" 
@@ -2129,7 +2203,7 @@ export default function Analytics() {
           </div>
 
           {/* UTILIZATION PERCENTAGE CHART - CATEGORIES */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.utilizationCategories ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>📊 Time Utilization: Daily Categories</h2>
@@ -2141,20 +2215,6 @@ export default function Analytics() {
                   style={{ fontSize: '11px', padding: '6px 10px', background: showUtilizationAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   {showUtilizationAsHours ? '⏱️ Hours' : '📊 %'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationCategoryWeek ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationCategoryWeek(!showUtilizationCategoryWeek)}
-                  style={{ fontSize: '11px', padding: '6px 10px' }}
-                >
-                  {showUtilizationCategoryWeek ? 'Hide Weekly' : 'Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationCategoryMonth ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationCategoryMonth(!showUtilizationCategoryMonth)}
-                  style={{ fontSize: '11px', padding: '6px 10px' }}
-                >
-                  {showUtilizationCategoryMonth ? 'Hide Monthly' : 'Show Monthly'}
                 </button>
                 <button 
                   onClick={() => {
@@ -2169,7 +2229,7 @@ export default function Analytics() {
             </div>
             
             <div className="unified-comparison-chart">
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     const daysInWeek = effectiveDaysInWeek;
@@ -2306,7 +2366,7 @@ export default function Analytics() {
                       />
                     </Bar>
                   )}
-                  {showUtilizationCategoryWeek && (
+                  {showWeekColumnGlobal && (
                     <>
                       <Bar 
                         dataKey="weekly" 
@@ -2354,7 +2414,7 @@ export default function Analytics() {
                       )}
                     </>
                   )}
-                  {showUtilizationCategoryMonth && (
+                  {showMonthColumnGlobal && (
                     <>
                       <Bar 
                         dataKey="monthly" 
@@ -2408,7 +2468,7 @@ export default function Analytics() {
           </div>
 
           {/* UTILIZATION PERCENTAGE CHART - ONE-TIME TASKS */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.utilizationOneTime ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>📊 Time Utilization: Daily: One-Time Tasks</h2>
@@ -2420,20 +2480,6 @@ export default function Analytics() {
                   style={{ fontSize: '11px', padding: '6px 10px', background: showUtilizationAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
                 >
                   {showUtilizationAsHours ? '⏱️ Hours' : '📊 %'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationOneTimeWeek ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationOneTimeWeek(!showUtilizationOneTimeWeek)}
-                  style={{ fontSize: '11px', padding: '6px 10px' }}
-                >
-                  {showUtilizationOneTimeWeek ? 'Hide Weekly' : 'Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showUtilizationOneTimeMonth ? 'active' : ''}`}
-                  onClick={() => setShowUtilizationOneTimeMonth(!showUtilizationOneTimeMonth)}
-                  style={{ fontSize: '11px', padding: '6px 10px' }}
-                >
-                  {showUtilizationOneTimeMonth ? 'Hide Monthly' : 'Show Monthly'}
                 </button>
                 <button 
                   onClick={() => {
@@ -2448,7 +2494,7 @@ export default function Analytics() {
             </div>
             
             <div className="unified-comparison-chart">
-              <ResponsiveContainer width="100%" height={500}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart 
                   data={(() => {
                     const daysInWeek = effectiveDaysInWeek;
@@ -2570,7 +2616,7 @@ export default function Analytics() {
                       />
                     </Bar>
                   )}
-                  {showUtilizationOneTimeWeek && (
+                  {showWeekColumnGlobal && (
                     <>
                       <Bar 
                         dataKey="weekly" 
@@ -2618,7 +2664,7 @@ export default function Analytics() {
                       )}
                     </>
                   )}
-                  {showUtilizationOneTimeMonth && (
+                  {showMonthColumnGlobal && (
                     <>
                       <Bar 
                         dataKey="monthly" 
@@ -2672,27 +2718,11 @@ export default function Analytics() {
           </div>
 
           {/* PER-PILLAR CATEGORY BREAKDOWN CHARTS */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.categoryBreakdown ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>📊 Category Breakdown by Pillar</h2>
                 <p className="chart-description">Time spent on categories within each pillar</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button 
-                  className={`toggle-month-btn ${showCategoryBreakdownWeekAll ? 'active' : ''}`}
-                  onClick={() => setShowCategoryBreakdownWeekAll(!showCategoryBreakdownWeekAll)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showCategoryBreakdownWeekAll ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-                  onClick={() => setShowMonthColumn(!showMonthColumn)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
               </div>
             </div>
             
@@ -2773,7 +2803,7 @@ export default function Analytics() {
                       title="Click to view enlarged chart"
                       style={{ cursor: 'pointer' }}
                     >
-                      <ResponsiveContainer width="100%" height={500}>
+                      <ResponsiveContainer width="100%" height={260}>
                       <BarChart 
                         data={pillarCategories}
                         barSize={35}
@@ -2833,27 +2863,11 @@ export default function Analytics() {
           </div>
 
           {/* TASK-LEVEL BREAKDOWN BY PILLAR */}
-          <div className="comparative-charts-section">
+          <div className="comparative-charts-section" style={{ display: visibleOverviewCharts.taskBreakdown ? undefined : 'none' }}>
             <div className="section-header-with-toggle">
               <div>
                 <h2>📋 Task Breakdown by Pillar</h2>
                 <p className="chart-description">Individual task performance within each pillar</p>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button 
-                  className={`toggle-month-btn ${showTaskBreakdownWeekAll ? 'active' : ''}`}
-                  onClick={() => setShowTaskBreakdownWeekAll(!showTaskBreakdownWeekAll)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showTaskBreakdownWeekAll ? '📊 Hide Weekly' : '📊 Show Weekly'}
-                </button>
-                <button 
-                  className={`toggle-month-btn ${showMonthColumn ? 'active' : ''}`}
-                  onClick={() => setShowMonthColumn(!showMonthColumn)}
-                  style={{ fontSize: '11px', padding: '6px 12px' }}
-                >
-                  {showMonthColumn ? '📊 Hide Monthly' : '📊 Show Monthly'}
-                </button>
               </div>
             </div>
             
@@ -2968,7 +2982,7 @@ export default function Analytics() {
                       title="Click to view enlarged chart"
                       style={{ cursor: 'pointer' }}
                     >
-                      <ResponsiveContainer width="100%" height={500}>
+                      <ResponsiveContainer width="100%" height={260}>
                       <BarChart 
                         data={pillarTasks}
                         barSize={20}
@@ -3026,6 +3040,9 @@ export default function Analytics() {
                 );
               })}
           </div>
+
+          {/* TIME DISTRIBUTION DONUT CHART */}
+          <TimeDistributionChart />
         </>
       )}
 
@@ -4903,7 +4920,7 @@ export default function Analytics() {
                     <Bar dataKey="allocated" name="Ideal (Allocated)" fill="#cbd5e0" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />
                     <Bar dataKey="today" name="Today (Actual)" fill="#4299e1" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />
                     <Bar dataKey="weekly" name="Weekly Avg (Actual)" fill="#48bb78" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />
-                    {showMonthColumn && <Bar dataKey="monthly" name="Monthly Avg (Actual)" fill="#ed8936" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />}
+                    {showMonthColumnGlobal && <Bar dataKey="monthly" name="Monthly Avg (Actual)" fill="#ed8936" radius={[10, 10, 0, 0]} label={{ position: 'top', fontSize: 16, fontWeight: 700 }} />}
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -4938,7 +4955,7 @@ export default function Analytics() {
                     <Bar dataKey="allocated" name="Allocated (Daily)" fill="#cbd5e0" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />
                     <Bar dataKey="today" name="Today" fill="#4299e1" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />
                     <Bar dataKey="weekAvg" name="Week Avg/Day" fill="#48bb78" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />
-                    {showCategoryMonth && <Bar dataKey="monthAvg" name="Month Avg/Day" fill="#ed8936" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />}
+                    {showMonthColumnGlobal && <Bar dataKey="monthAvg" name="Month Avg/Day" fill="#ed8936" radius={[6, 6, 0, 0]} label={{ position: 'top', fontSize: 12 }} />}
                   </BarChart>
                 </ResponsiveContainer>
               )}
@@ -4986,7 +5003,7 @@ export default function Analytics() {
                     <Bar dataKey="allocated" name="Ideal (Allocated)" fill="#cbd5e0" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />
                     <Bar dataKey="today" name="Today (Actual)" fill="#4299e1" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />
                     <Bar dataKey="weekly" name="Weekly Avg (Actual)" fill="#48bb78" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />
-                    {showTaskMonth && <Bar dataKey="monthly" name="Monthly Avg (Actual)" fill="#ed8936" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />}
+                    {showMonthColumnGlobal && <Bar dataKey="monthly" name="Monthly Avg (Actual)" fill="#ed8936" radius={[0, 4, 4, 0]} label={{ position: 'right', fontSize: 10 }} />}
                   </BarChart>
                 </ResponsiveContainer>
               )}

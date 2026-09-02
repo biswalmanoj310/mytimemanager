@@ -718,6 +718,12 @@
   background-color: #f7fafc;
 }
 
+/* Compact tabs on the Analytics page (Overview / Wheel of Life / Detailed View / Categories / Tasks) */
+.view-mode-tabs .tab-button {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+}
+
 .tab-button.active {
   color: #4299e1;
   border-bottom-color: #4299e1;
@@ -1909,22 +1915,24 @@
    ============================================ */
 
 .comparative-charts-section {
-  margin-top: 4rem;
+  margin-top: 1.25rem;
   background: white;
-  padding: 1.5rem;
+  padding: 1rem;
   border-radius: 0.75rem;
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
 }
 
 .comparative-charts-section h2 {
   margin-top: 0;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
   color: #2d3748;
 }
 
 .comparative-charts-section .chart-description {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
   color: #718096;
+  font-size: 0.78rem;
 }
 
 /* Overview controls for monthly toggle */
@@ -1957,7 +1965,7 @@
 .unified-comparison-chart {
   background: white;
   border-radius: 0.75rem;
-  padding: 1.5rem;
+  padding: 0.75rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
@@ -1966,15 +1974,17 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .section-header-with-toggle h2 {
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
 }
 
 .section-header-with-toggle .chart-description {
   margin: 0;
+  font-size: 0.78rem;
 }
 
 .toggle-month-btn {
