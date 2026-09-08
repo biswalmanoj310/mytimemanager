@@ -1,7 +1,9 @@
 /**
  * QuickAddTask Component
- * One-click task capture: shows a single-line popup to add a "today" task
- * with zero friction. Defaults to Family/Home Tasks + today's date + project "2026: Home Tasks".
+ * One-click task capture: shows a single-line popup to add a task with zero friction.
+ * On the Today tab: adds a "today" task due today.
+ * On the Misc tab: adds a "misc" task (Family/Home Tasks, 30 min, optional due date).
+ * Any other tab falls back to the "today" behavior.
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -10,11 +12,14 @@ import './QuickAddTask.css';
 
 interface QuickAddTaskProps {
   onSuccess: () => void;
+  activeTab?: string;
 }
 
-export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
+export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps) {
+  const isMisc = activeTab === 'misc';
   const [isOpen, setIsOpen] = useState(false);
   const [taskName, setTaskName] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -53,6 +58,7 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
   const handleClose = () => {
     setIsOpen(false);
     setTaskName('');
+    setDueDate('');
     setError(null);
     setSuccessMsg(null);
   };
@@ -75,34 +81,37 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
       const homeCat = categories.find((c: any) => c.name === 'Home Tasks');
       if (!homeCat) throw new Error('Home Tasks category not found under Family pillar');
 
-      // --- Resolve project: "2026: Home Tasks" (optional — skip if not found) ---
-      let projectId: number | undefined;
-      try {
-        const projects = await api.get<any[]>('/api/projects/');
-        const homeProject = projects.find((p: any) => p.name === '2026: Home Tasks');
-        if (homeProject) projectId = homeProject.id;
-      } catch {
-        // Project lookup is optional — proceed without it
-      }
-
-      // --- Today's date as datetime string (backend requires datetime, not date-only) ---
-      const todayStr = new Date().toISOString().split('T')[0];
-      const todayDatetime = `${todayStr}T00:00:00`;
-
-      // --- Create the task ---
-      await api.post('/api/tasks/', {
+      const taskPayload: any = {
         name,
         pillar_id: familyPillar.id,
         category_id: homeCat.id,
-        follow_up_frequency: 'today',
         allocated_minutes: 30,
-        due_date: todayDatetime,
         priority: 5,
-        ...(projectId !== undefined ? { project_id: projectId } : {}),
-      });
+      };
 
-      setSuccessMsg(`"${name}" added to Today!`);
+      if (isMisc) {
+        // Misc task — due date is optional, no project linkage
+        taskPayload.follow_up_frequency = 'misc';
+        if (dueDate) taskPayload.due_date = `${dueDate}T00:00:00`;
+      } else {
+        // Today task — due today, optionally linked to the "2026: Home Tasks" project
+        taskPayload.follow_up_frequency = 'today';
+        const todayStr = new Date().toISOString().split('T')[0];
+        taskPayload.due_date = `${todayStr}T00:00:00`;
+        try {
+          const projects = await api.get<any[]>('/api/projects/');
+          const homeProject = projects.find((p: any) => p.name === '2026: Home Tasks');
+          if (homeProject) taskPayload.project_id = homeProject.id;
+        } catch {
+          // Project lookup is optional — proceed without it
+        }
+      }
+
+      await api.post('/api/tasks/', taskPayload);
+
+      setSuccessMsg(isMisc ? `"${name}" added as Misc Task!` : `"${name}" added to Today!`);
       setTaskName('');
+      setDueDate('');
 
       // Brief success flash, then close and refresh
       setTimeout(() => {
@@ -130,7 +139,7 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
       <button
         className={`btn-quick-add ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(prev => !prev)}
-        title="Quick Add — capture a Today task instantly"
+        title={isMisc ? 'Quick Add — capture a Misc task instantly' : 'Quick Add — capture a Today task instantly'}
       >
         ⚡ Quick Add
       </button>
@@ -142,7 +151,7 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
           ) : (
             <>
               <div className="quick-add-hint">
-                📅 Today &nbsp;·&nbsp; 👨‍👩‍👦 Family / Home Tasks
+                {isMisc ? '📋 Misc Task · 30m' : '📅 Today'} &nbsp;·&nbsp; 👨‍👩‍👦 Family / Home Tasks
                 {' '}&nbsp;·&nbsp; <span className="quick-add-hint-tip">Press Enter to save, Esc to close</span>
               </div>
               <div className="quick-add-input-row">
@@ -150,7 +159,7 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
                   ref={inputRef}
                   type="text"
                   className="quick-add-input"
-                  placeholder="What do you need to do today?"
+                  placeholder={isMisc ? 'What misc task do you need to track?' : 'What do you need to do today?'}
                   value={taskName}
                   onChange={e => setTaskName(e.target.value)}
                   onKeyDown={e => {
@@ -169,6 +178,19 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
                   {loading ? '…' : '→'}
                 </button>
               </div>
+              {isMisc && (
+                <div className="quick-add-date-row">
+                  <label htmlFor="quick-add-due-date">📆 Due date (optional):</label>
+                  <input
+                    id="quick-add-due-date"
+                    type="date"
+                    className="quick-add-date-input"
+                    value={dueDate}
+                    onChange={e => setDueDate(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              )}
               {error && <div className="quick-add-error">⚠ {error}</div>}
             </>
           )}
@@ -177,3 +199,4 @@ export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
     </div>
   );
 }
+

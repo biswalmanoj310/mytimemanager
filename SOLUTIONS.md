@@ -86,6 +86,19 @@
 | Files | `frontend/src/pages/Analytics.tsx`, `frontend/src/pages/Analytics.css` |
 | Outcome | More horizontal room for bars/X-axis labels on the two Daily task charts; the enlarge affordance still works (click anywhere on the chart) but no longer visually competes for space |
 
+---
+
+### SOL-007 — Misc Tab Compaction + Tab-Aware Quick Add
+| Field | Value |
+|-------|-------|
+| REQ | REQ-210, REQ-211, REQ-212 |
+| Date | 2026-09-08 |
+| Problem | Tasks → Misc tab wasted a lot of vertical space: a large always-open "Overdue Tasks: Monthly" panel, oversized filter buttons/category headers, and `TaskNode` rows with big padding plus an always-visible description line meant only ~6 tasks fit on screen. Separately, `QuickAddTask` always created a "today" task regardless of which tab it was opened from, so it couldn't be used to quickly capture a misc task. |
+| Approach | Made the Monthly panel collapsible (`showMiscMonthlyPanel`, collapsed by default, persisted to localStorage) with a `▶`/`▼` clickable header. Shrunk filter-button/category-header padding and margins throughout the Misc tab. Removed the always-visible `task.description` line from `TaskNode` (still shown when editing via click) and tightened `.task-row`/`.task-node`/`.task-content`/`.task-children` CSS for a denser, spreadsheet-like list. Gave `QuickAddTask` a new `activeTab` prop: on the Misc tab it now creates a `follow_up_frequency: 'misc'` task (Family/Home Tasks, 30 min, priority 5) with an *optional* due-date input instead of forcing today's date; all other tabs keep the original "today" task behavior. |
+| Files | `frontend/src/pages/Tasks.tsx`, `frontend/src/pages/Tasks.css`, `frontend/src/components/QuickAddTask.tsx`, `frontend/src/components/QuickAddTask.css` |
+| Outcome | Misc tab shows far more tasks per screen with less scrolling; Quick Add can now be used from the Misc tab to capture a misc task in one step |
+
+
 
 
 

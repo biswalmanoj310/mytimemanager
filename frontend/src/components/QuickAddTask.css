@@ -123,6 +123,30 @@
   cursor: not-allowed;
 }
 
+/* Optional due-date row (Misc tab only) */
+.quick-add-date-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.quick-add-date-input {
+  border: 1.5px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  outline: none;
+  background: #fafafa;
+}
+
+.quick-add-date-input:focus {
+  border-color: #f59e0b;
+  background: #ffffff;
+}
+
 /* Error message */
 .quick-add-error {
   margin-top: 8px;

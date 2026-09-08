@@ -446,6 +446,7 @@ export default function Tasks() {
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
   const [showCompletedMiscTasks, setShowCompletedMiscTasks] = useState(false);
   const [showCompletedDailyTasks, setShowCompletedDailyTasks] = useState(true); // Default to expanded
+  const [showMiscMonthlyPanel, setShowMiscMonthlyPanel] = useState(() => localStorage.getItem('showMiscMonthlyPanel') === 'true'); // Collapsed by default
 
   // Task reference warning modal
   interface TaskReference {
@@ -6427,9 +6428,6 @@ export default function Tasks() {
                 ) : null;
               })()}
             </div>
-            {task.description && (
-              <span className="task-description">{task.description}</span>
-            )}
           </div>
           
           {task.due_date && (
@@ -6575,7 +6573,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -6792,7 +6790,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7061,7 +7059,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7107,7 +7105,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7275,7 +7273,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7551,7 +7549,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
           <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
             ➕ Add Task
           </button>
@@ -8050,7 +8048,7 @@ export default function Tasks() {
     <div className="tasks-page">
       <header className="tasks-header">
         <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-        <QuickAddTask onSuccess={handleQuickAddSuccess} />
+        <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
         <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
           ➕ Add Task
         </button>
@@ -10618,16 +10616,16 @@ export default function Tasks() {
           {/* Filter Buttons */}
           <div style={{
             display: 'flex',
-            gap: '10px',
-            marginBottom: '20px',
+            gap: '8px',
+            marginBottom: '8px',
             flexWrap: 'wrap'
           }}>
             <button
               className={`btn ${projectTaskFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setProjectTaskFilter('all')}
               style={{
-                padding: '8px 16px',
-                fontSize: '14px',
+                padding: '5px 12px',
+                fontSize: '13px',
                 borderRadius: '6px',
                 border: 'none',
                 cursor: 'pointer',
@@ -10642,8 +10640,8 @@ export default function Tasks() {
               className={`btn ${projectTaskFilter === 'in-progress' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setProjectTaskFilter('in-progress')}
               style={{
-                padding: '8px 16px',
-                fontSize: '14px',
+                padding: '5px 12px',
+                fontSize: '13px',
                 borderRadius: '6px',
                 border: 'none',
                 cursor: 'pointer',
@@ -10658,8 +10656,8 @@ export default function Tasks() {
               className={`btn ${projectTaskFilter === 'overdue' ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setProjectTaskFilter('overdue')}
               style={{
-                padding: '8px 16px',
-                fontSize: '14px',
+                padding: '5px 12px',
+                fontSize: '13px',
                 borderRadius: '6px',
                 border: 'none',
                 cursor: 'pointer',
@@ -10672,22 +10670,32 @@ export default function Tasks() {
             </button>
           </div>
 
-          {/* Monthly Planning Summary */}
+          {/* Monthly Planning Summary (collapsible) */}
           <div style={{
             backgroundColor: '#f7fafc',
-            padding: '16px',
+            padding: showMiscMonthlyPanel ? '8px 12px' : '4px 12px',
             borderRadius: '8px',
-            marginBottom: '20px',
+            marginBottom: '8px',
             border: '1px solid #e2e8f0'
           }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-              📊 Overdue Tasks: Monthly
+            <h4
+              onClick={() => {
+                const next = !showMiscMonthlyPanel;
+                setShowMiscMonthlyPanel(next);
+                localStorage.setItem('showMiscMonthlyPanel', String(next));
+              }}
+              style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#2d3748', cursor: 'pointer', userSelect: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <span>{showMiscMonthlyPanel ? '▼' : '▶'}</span> 📊 Overdue Tasks: Monthly
             </h4>
+            {showMiscMonthlyPanel && (
+              <>
             <div style={{
               display: 'flex',
               gap: '12px',
               flexWrap: 'wrap',
-              fontSize: '13px'
+              fontSize: '13px',
+              marginTop: '8px'
             }}>
               {(() => {
                 // Group tasks by their due date month
@@ -10780,16 +10788,18 @@ export default function Tasks() {
             <p style={{ 
               fontSize: '11px', 
               color: '#718096', 
-              marginTop: '12px', 
+              marginTop: '8px', 
               marginBottom: '0',
               fontStyle: 'italic'
             }}>
               💡 Tip: Use this overview to avoid overplanning. If you see low completion rates, consider planning fewer tasks next month.
             </p>
+              </>
+            )}
           </div>
           
           {/* Active Misc Tasks View */}
-          <div className="project-tasks-tree" style={{ marginTop: '20px' }}>
+          <div className="project-tasks-tree" style={{ marginTop: '8px' }}>
             {miscTasks.filter(t => !t.is_completed).length === 0 ? (
               <div className="empty-state">
                 <p>No active misc tasks. Click "Add Task" and select "Misc Task" to get started.</p>
@@ -10896,7 +10906,7 @@ export default function Tasks() {
                     }
 
                     return (
-                      <div key={categoryKey} style={{ marginBottom: '20px' }}>
+                      <div key={categoryKey} style={{ marginBottom: '6px' }}>
                         <div 
                           onClick={(e) => {
                             const scrollY = window.scrollY;
@@ -10911,19 +10921,19 @@ export default function Tasks() {
                             requestAnimationFrame(() => window.scrollTo({ top: scrollY, behavior: 'instant' }));
                           }}
                           style={{ 
-                            fontSize: '17px', 
+                            fontSize: '14px', 
                             fontWeight: '600', 
                             color: pillarColor, 
-                            marginBottom: isExpanded ? '15px' : '0', 
-                            paddingBottom: '8px', 
+                            marginBottom: isExpanded ? '4px' : '0', 
+                            paddingBottom: '4px', 
                             borderBottom: isExpanded ? `2px solid ${pillarColor}` : 'none',
                             cursor: 'pointer',
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            padding: '10px 15px',
+                            padding: '5px 12px',
                             background: isExpanded ? 'transparent' : '#f7fafc',
-                            borderRadius: '8px',
+                            borderRadius: '6px',
                             transition: 'all 0.2s'
                           }}
                         >
@@ -15441,6 +15451,44 @@ export default function Tasks() {
             </div>
           )}
 
+          {/* Sub-tab switcher - Today Tab */}
+          {activeTab === 'today' && (
+            <div style={{ display: 'flex', gap: '0', marginTop: '4px', marginBottom: '0' }}>
+              <button
+                onClick={() => setTodaySubTab('due-today')}
+                style={{
+                  padding: '7px 22px', borderRadius: '6px 6px 0 0', fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s',
+                  border: todaySubTab === 'due-today' ? '1px solid #2563eb' : '1px solid #e2e8f0',
+                  borderBottom: 'none', marginRight: '4px',
+                  backgroundColor: todaySubTab === 'due-today' ? '#2563eb' : '#f1f5f9',
+                  color: todaySubTab === 'due-today' ? '#ffffff' : '#64748b',
+                  fontWeight: todaySubTab === 'due-today' ? '600' : '400',
+                }}
+              >
+                📅 Due Today{' '}
+                <span style={{ background: todaySubTab === 'due-today' ? 'rgba(255,255,255,0.25)' : '#dde1e7', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '700', marginLeft: '4px' }}>
+                  {projectTasksDueToday.filter(t => !t.is_completed).length + goalTasksDueToday.filter(t => !t.is_completed).length + miscTasksDueToday.length + todaysOnlyTasks.length}
+                </span>
+              </button>
+              <button
+                onClick={() => setTodaySubTab('needs-attention')}
+                style={{
+                  padding: '7px 22px', borderRadius: '6px 6px 0 0', fontSize: '13px', cursor: 'pointer', transition: 'all 0.15s',
+                  border: todaySubTab === 'needs-attention' ? '1px solid #dc2626' : '1px solid #e2e8f0',
+                  borderBottom: 'none',
+                  backgroundColor: todaySubTab === 'needs-attention' ? '#dc2626' : '#f1f5f9',
+                  color: todaySubTab === 'needs-attention' ? '#ffffff' : '#64748b',
+                  fontWeight: todaySubTab === 'needs-attention' ? '600' : '400',
+                }}
+              >
+                ⚠️ Needs Attention{' '}
+                <span style={{ background: todaySubTab === 'needs-attention' ? 'rgba(255,255,255,0.25)' : '#fee2e2', borderRadius: '10px', padding: '1px 7px', fontSize: '11px', fontWeight: '700', marginLeft: '4px', color: todaySubTab === 'needs-attention' ? '#fff' : '#dc2626' }}>
+                  {importantTasksDueToday.length + todaysHabits.length + todaysChallenges.length + tasksNeedingAttention.length}
+                </span>
+              </button>
+            </div>
+          )}
+
           {/* Task Breakdown Panel - Today Tab */}
           {activeTab === 'today' && (() => {
             // Count ALL tasks from different sections ON TODAY TAB (all priorities)
@@ -15502,31 +15550,33 @@ export default function Tasks() {
             return (
               <div id="today-tab-tasks" style={{
                 backgroundColor: '#ffffff',
-                padding: '16px',
-                borderRadius: '8px',
-                marginBottom: '16px',
-                marginTop: '20px',
-                border: '2px solid #e2e8f0',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+                padding: '8px 12px',
+                borderRadius: todaySubTab === 'due-today' ? '0 16px 0 0' : '0 16px 16px 0',
+                marginBottom: '0',
+                marginTop: '0',
+                border: `1px solid ${todaySubTab === 'due-today' ? '#2563eb' : '#dc2626'}`,
+                borderLeft: `3px solid ${todaySubTab === 'due-today' ? '#2563eb' : '#dc2626'}`,
+                borderBottom: todaySubTab === 'due-today' ? 'none' : `1px solid #dc2626`,
                 scrollMarginTop: '80px'
               }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-                  {todaySubTab === 'due-today' ? '📅 Due Today: Summary' : '⚠️ Needs Attention: Summary'}
+                <h4 style={{ margin: '0 0 5px 0', fontSize: '11px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {todaySubTab === 'due-today' ? 'Due Today — Quick Jump' : 'Needs Attention — Quick Jump'}
                 </h4>
                 <div style={{
                   display: 'flex',
-                  gap: '10px',
+                  gap: '5px',
                   flexWrap: 'wrap',
-                  fontSize: '13px'
+                  fontSize: '12px'
                 }}>
                   {/* Total */}
                   <div style={{
-                    padding: '8px 14px',
-                    borderRadius: '6px',
-                    backgroundColor: '#3b82f6',
+                    padding: '3px 8px',
+                    borderRadius: '4px',
+                    backgroundColor: todaySubTab === 'due-today' ? '#2563eb' : '#dc2626',
                     color: '#ffffff',
-                    fontWeight: '600',
-                    border: '2px solid #2563eb'
+                    fontWeight: '700',
+                    border: 'none',
+                    fontSize: '12px'
                   }}>
                     Total: {totalTasks}
                   </div>
@@ -15823,8 +15873,8 @@ export default function Tasks() {
             );
           })()}
 
-          {/* Monthly Planning Overview Panel - Today Tab */}
-          {activeTab === 'today' && (() => {
+          {/* Monthly Planning Overview Panel - Today Tab (Due Today sub-tab only) */}
+          {activeTab === 'today' && todaySubTab === 'due-today' && (() => {
             // Gather all tasks from Today tab (excluding Upcoming Tasks section)
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -15863,34 +15913,36 @@ export default function Tasks() {
 
             return (
               <div style={{
-                backgroundColor: '#f7fafc',
-                padding: '16px',
-                borderRadius: '8px',
-                marginBottom: '20px',
-                marginTop: '20px',
-                border: '1px solid #e2e8f0'
+                backgroundColor: '#f8fafc',
+                padding: '6px 12px 8px',
+                borderRadius: '0 0 16px 16px',
+                marginBottom: '12px',
+                marginTop: '0',
+                border: '1px solid #2563eb',
+                borderLeft: '3px solid #2563eb',
+                borderTop: '1px dashed #bfdbfe'
               }}>
-                <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#2d3748' }}>
-                  📊 Overdue Tasks: Monthly
+                <h4 style={{ margin: '0 0 5px 0', fontSize: '11px', fontWeight: '700', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Filter by Month
                 </h4>
                 <div style={{
                   display: 'flex',
-                  gap: '12px',
+                  gap: '5px',
                   flexWrap: 'wrap',
-                  fontSize: '13px'
+                  fontSize: '12px'
                 }}>
                   {/* All Tasks badge */}
                   <button
                     onClick={() => setSelectedTodayMonth(null)}
                     style={{
-                      padding: '8px 12px',
-                      borderRadius: '6px',
+                      padding: '3px 9px',
+                      borderRadius: '4px',
                       border: selectedTodayMonth === null ? '2px solid #3b82f6' : '1px solid #cbd5e1',
                       backgroundColor: selectedTodayMonth === null ? '#eff6ff' : '#ffffff',
                       color: selectedTodayMonth === null ? '#1e40af' : '#64748b',
                       cursor: 'pointer',
                       fontWeight: selectedTodayMonth === null ? '600' : '500',
-                      fontSize: '13px',
+                      fontSize: '12px',
                       transition: 'all 0.2s'
                     }}
                     onMouseEnter={e => {
@@ -15952,8 +16004,8 @@ export default function Tasks() {
                         key={monthKey}
                         onClick={() => setSelectedTodayMonth(selectedTodayMonth === monthKey ? null : monthKey)}
                         style={{
-                          padding: '8px 12px',
-                          borderRadius: '6px',
+                          padding: '3px 9px',
+                          borderRadius: '4px',
                           border: selectedTodayMonth === monthKey ? '2px solid #3b82f6' : `1px solid ${borderColor}`,
                           backgroundColor: bgColor,
                           color: textColor,
@@ -17124,37 +17176,7 @@ export default function Tasks() {
 
       {/* ========== TODAY TAB SECTIONS ========== */}
       {activeTab === 'today' && (
-        <div style={{ marginTop: '30px' }}>
-
-          {/* Sub-tab switcher */}
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '2px solid #e2e8f0', paddingBottom: '12px' }}>
-            <button
-              onClick={() => setTodaySubTab('due-today')}
-              style={{
-                padding: '8px 24px', borderRadius: '20px', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s',
-                border: todaySubTab === 'due-today' ? 'none' : '1px solid #e2e8f0',
-                backgroundColor: todaySubTab === 'due-today' ? '#2563eb' : '#f8fafc',
-                color: todaySubTab === 'due-today' ? '#ffffff' : '#4a5568',
-                fontWeight: todaySubTab === 'due-today' ? '600' : '400',
-                boxShadow: todaySubTab === 'due-today' ? '0 2px 4px rgba(37,99,235,0.3)' : 'none',
-              }}
-            >
-              📅 Due Today ({projectTasksDueToday.filter(t => !t.is_completed).length + goalTasksDueToday.filter(t => !t.is_completed).length + miscTasksDueToday.length + todaysOnlyTasks.length})
-            </button>
-            <button
-              onClick={() => setTodaySubTab('needs-attention')}
-              style={{
-                padding: '8px 24px', borderRadius: '20px', fontSize: '14px', cursor: 'pointer', transition: 'all 0.2s',
-                border: todaySubTab === 'needs-attention' ? 'none' : '1px solid #e2e8f0',
-                backgroundColor: todaySubTab === 'needs-attention' ? '#dc2626' : '#f8fafc',
-                color: todaySubTab === 'needs-attention' ? '#ffffff' : '#4a5568',
-                fontWeight: todaySubTab === 'needs-attention' ? '600' : '400',
-                boxShadow: todaySubTab === 'needs-attention' ? '0 2px 4px rgba(220,38,38,0.3)' : 'none',
-              }}
-            >
-              ⚠️ Needs Attention ({importantTasksDueToday.length + todaysHabits.length + todaysChallenges.length + tasksNeedingAttention.length})
-            </button>
-          </div>
+        <div style={{ marginTop: '8px' }}>
 
           {/* Today's Only Tasks Section - Always show header if there are any tasks */}
           {todaySubTab === 'due-today' && todaysOnlyTasks.length > 0 && (
