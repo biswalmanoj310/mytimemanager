@@ -40,6 +40,58 @@
 
 ---
 
+### SOL-003 — Analytics Overview: Quick Week/Month Buttons, Task Trend Drill-Down, X-Axis Label Fix
+| Field | Value |
+|-------|-------|
+| REQ | REQ-206, REQ-207, REQ-208 |
+| Date | 2026-09-08 |
+| Problem | (1) Toggling the shared Week/Month comparison columns required scrolling up to the top filter bar every time, and it defaulted to showing This Week/This Month on every load. (2) The "📈 Trend" inline drill-down only existed on the Pillar and Category comparison charts, not on the Daily Time-Based/One-Time task charts. (3) Task names on those two charts wrapped into overlapping label boxes, making them unreadable. |
+| Approach | (1) Added `renderWeekMonthQuickButtons()` next to the ⏱ Time/% toggle on all 7 comparison chart headers; buttons set `overviewWeekOption`/`overviewMonthOption` straight to 0 (This Week/Month) or back to `'hide'`. Changed both option states' default to `'hide'`. (2) Added `taskTrendOpenFor` state + `openTaskTrend()` + `renderTaskTrendPanel()`, reusing the existing `taskTrendData`/`loadDetailedTrendData('tasks')` pipeline, wired into both Daily task chart sections. (3) Tightened `CustomMultilineLabel` (maxCharsPerLine 20→13, capped at 3 lines with ellipsis) and gave the two Daily task `BarChart`s more room (`barCategoryGap` 25→40, XAxis `height`/margin bottom 60→90). |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Faster access to weekly/monthly comparisons from any chart; per-task trend drill-down now available on Time-Based and One-Time task charts; task names no longer overlap on those charts' X-axis |
+
+---
+
+### SOL-004 — Daily Task Charts: Scrollable Fixed-Width Canvas Instead of Responsive 100%
+| Field | Value |
+|-------|-------|
+| REQ | REQ-208 |
+| Date | 2026-09-08 |
+| Problem | SOL-003's X-axis tweaks weren't enough — with many tasks, `ResponsiveContainer width="100%"` squeezed each category narrower than its multiline label box, so adjacent task-name labels still overlapped |
+| Approach | Replaced `ResponsiveContainer` with a fixed-width `BarChart` (`width = Math.max(700, taskCount * 100)`) inside an `overflowX: auto` wrapper on the "Daily: Time-Based Tasks" and "Daily: One-Time Tasks" charts, so each task always gets ≥100px of horizontal room regardless of how many tasks are plotted; extra tasks scroll horizontally instead of compressing |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Task name labels on these two charts stay legible no matter how many tasks are shown |
+
+---
+
+### SOL-005 — Revert Fixed-Width Chart Hack; Compact the Detailed Trend Analysis Section
+| Field | Value |
+|-------|-------|
+| REQ | REQ-208, REQ-209 |
+| Date | 2026-09-08 |
+| Problem | SOL-004's fixed-width scrollable `<BarChart>` (no `ResponsiveContainer`) rendered oddly — huge dead space below the X-axis and a stray scrollbar, worse than before. Separately, the legacy "Detailed Trend Analysis" section (still shown under Overview, driven by the same `detailedViewType`/`selectedTasks` state as the new inline Trend drill-downs) had oversized `<h3>` headers, a redundant color-name legend under each chart, and huge `400px`/`350px` tall charts with big gradient "Show Week-over-Week"/"Show Month-over-Month" buttons — all consuming excess page space. |
+| Approach | Reverted the two Daily task charts back to `ResponsiveContainer width="100%"`, with a shorter, single XAxis reservation (`height`/`margin.bottom` 44px, capped at 2 lines via new `CustomMultilineLabel` `maxCharsPerLine`/`maxLines` props) and `barCategoryGap="20%"` so spacing scales with the container instead of a fixed pixel/width hack. For the Detailed Trend Analysis Daily/Weekly/Monthly charts: added `getSelectedTrendNames()`/`getSelectedTrendCount()`, folded the selected task/category/pillar name(s) directly into a compact 13px header (`"<name> — Daily Utilization (N Days)"`), hid `<Legend>` when only one item is selected, and shrank chart heights (400→230, 350→220) and `.toggle-month-btn` (padding/font-size) in `Analytics.css`. |
+| Files | `frontend/src/pages/Analytics.tsx`, `frontend/src/pages/Analytics.css` |
+| Outcome | Charts render correctly again with no dead space; the Detailed Trend Analysis section is compact and shows which item a chart refers to right in its header instead of a separate legend line |
+
+---
+
+### SOL-006 — Shrink "Click to Enlarge" Badge; Reclaim Legend Margin on Daily Task Charts
+| Field | Value |
+|-------|-------|
+| REQ | REQ-208 |
+| Date | 2026-09-08 |
+| Problem | The hover-only "🔍 Click to enlarge" pill (`.clickable-chart::after`) was large and positioned top-right, next to the reserved 185px-wide Legend margin on the two Daily task charts — visually implicated in the leftover right-side space even though it's `position: absolute` and not the real cause (the Legend's `margin.right` was). Net effect: the X-axis/plot area had less width than it could, worsening label crowding. |
+| Approach | Shrunk `.clickable-chart::after` to a small 20px circular icon badge (🔍 only, no text) in the top-left corner instead of a large top-right text pill. Reduced `margin.right` on the "Daily: Time-Based Tasks" / "Daily: One-Time Tasks" charts from 185→110px and tightened their `Legend` (`fontSize` 11→10, `paddingLeft` 20→6), giving the plot area more real width |
+| Files | `frontend/src/pages/Analytics.tsx`, `frontend/src/pages/Analytics.css` |
+| Outcome | More horizontal room for bars/X-axis labels on the two Daily task charts; the enlarge affordance still works (click anywhere on the chart) but no longer visually competes for space |
+
+
+
+
+
+---
+
 ### SOL-003 — Dual Completion Tracking Architecture
 | Field | Value |
 |-------|-------|
