@@ -162,6 +162,7 @@
 | REQ-210 | 2026-09-08 | Tasks — Misc tab: make "Overdue Tasks: Monthly" panel collapsible (collapsed by default); shrink vertical spacing/padding around the Show All/In Progress/Overdue filter buttons and the monthly panel | 2026-09-08 | frontend/src/pages/Tasks.tsx — showMiscMonthlyPanel state | ✅ DONE |
 | REQ-211 | 2026-09-08 | Tasks — Misc/task list: compact "excel sheet"-style rows (less padding/margin per task and subtask), stop showing the description inline under the task name (still visible when editing via click) | 2026-09-08 | frontend/src/pages/Tasks.tsx — TaskNode; frontend/src/pages/Tasks.css — .task-row/.task-node/.task-content/.task-children | ✅ DONE |
 | REQ-212 | 2026-09-08 | QuickAddTask: adapt behavior to the active tab — Today tab creates a "today" task (unchanged); Misc tab creates a "misc" task (Family/Home Tasks, 30 min, priority 5) with an optional due-date field instead of a forced today date | 2026-09-08 | frontend/src/components/QuickAddTask.tsx — activeTab prop, isMisc branch; all QuickAddTask call sites in Tasks.tsx pass activeTab | ✅ DONE |
+| REQ-213 | 2026-09-09 | Analytics inline Trend drill-down: show the actual average value (hours or %) printed on top of each bar in the "📊 Weekly Average — Week over Week" and "📈 Monthly Average — Month over Month" charts, plus a dashed linear trend line overlay, for Pillar/Category/Task trend panels | 2026-09-09 | frontend/src/pages/Analytics.tsx — addLinearTrend(), avgBarLabel(), ComposedChart+Bar+Line | ✅ DONE |
 
 ---
 

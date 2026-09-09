@@ -98,6 +98,18 @@
 | Files | `frontend/src/pages/Tasks.tsx`, `frontend/src/pages/Tasks.css`, `frontend/src/components/QuickAddTask.tsx`, `frontend/src/components/QuickAddTask.css` |
 | Outcome | Misc tab shows far more tasks per screen with less scrolling; Quick Add can now be used from the Misc tab to capture a misc task in one step |
 
+---
+
+### SOL-008 — Weekly/Monthly Average Bar Labels + Trend Line on Analytics Drill-Downs
+| Field | Value |
+|-------|-------|
+| REQ | REQ-213 |
+| Date | 2026-09-09 |
+| Problem | The "📊 Weekly Average — Week over Week" and "📈 Monthly Average — Month over Month" bar charts (shown when drilling into a Pillar, Category, or Task trend on the Overview tab) only showed bars with no printed value, and had no way to see the overall direction (trending up/down) at a glance. |
+| Approach | Added `addLinearTrend()` helper — simple least-squares linear regression over the weekly/monthly series, appending a `trend` field to each data point. Added `avgBarLabel()` shared label formatter (shows `Xh` or `X%` on top of each bar, matching the existing Overview chart label style). Converted the three Weekly/Monthly `BarChart`s (pillar trend, category trend, task trend panels) to `ComposedChart` with the existing `Bar` (now carrying the value label) plus a new dashed red `Line` rendering the `trend` field. |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Each bar now shows its actual average hours/percentage, and a dashed trend line makes the week-over-week / month-over-month direction immediately visible |
+
 
 
 

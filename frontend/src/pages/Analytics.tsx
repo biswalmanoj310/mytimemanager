@@ -881,6 +881,71 @@ export default function Analytics() {
     });
   };
 
+  // Adds a `trend` field (simple linear regression over the series) so bar charts can overlay a trend line
+  const addLinearTrend = (data: { label: string; value: number }[]) => {
+    const n = data.length;
+    if (n < 2) return data.map(d => ({ ...d, trend: d.value }));
+    const xMean = (n - 1) / 2;
+    const yMean = data.reduce((sum, d) => sum + d.value, 0) / n;
+    let num = 0, den = 0;
+    data.forEach((d, i) => { num += (i - xMean) * (d.value - yMean); den += (i - xMean) ** 2; });
+    const slope = den === 0 ? 0 : num / den;
+    const intercept = yMean - slope * xMean;
+    return data.map((d, i) => ({ ...d, trend: slope * i + intercept }));
+  };
+
+  // Shared value-on-top-of-bar label formatter for weekly/monthly average bar charts
+  const avgBarLabel = (asHours: boolean) => ({
+    position: 'top' as const, fill: '#333', fontWeight: 600, fontSize: 10,
+    formatter: (value: number) => value > 0 ? (asHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`) : ''
+  });
+
+  // Renders a single solid trend line with an arrowhead at its last point (pointing up/down/flat) instead of a dashed line
+  const renderTrendArrowDot = (data: { trend: number }[]) => {
+    const n = data.length;
+    const direction = n < 2 ? 'flat' : data[n - 1].trend > data[0].trend ? 'up' : data[n - 1].trend < data[0].trend ? 'down' : 'flat';
+    const rotation = direction === 'up' ? -40 : direction === 'down' ? 40 : 0;
+    return (props: any) => {
+      const { cx, cy, index } = props;
+      if (index !== n - 1) return <g key={`trend-dot-${index}`} />;
+      return (
+        <g key="trend-arrow-end" transform={`translate(${cx}, ${cy}) rotate(${rotation})`}>
+          <path d="M -7 0 H 5 M 1 -4 L 6 0 L 1 4" stroke="#e53e3e" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      );
+    };
+  };
+
+  // Generic linear-regression trend series for the multi-select (Detailed Trend Analysis) charts, keyed off an arbitrary field name
+  const computeTrendSeries = (data: any[], dataKey: string): number[] => {
+    const n = data.length;
+    const values = data.map(d => d[dataKey] || 0);
+    if (n < 2) return values;
+    const xMean = (n - 1) / 2;
+    const yMean = values.reduce((a, b) => a + b, 0) / n;
+    let num = 0, den = 0;
+    values.forEach((v, i) => { num += (i - xMean) * (v - yMean); den += (i - xMean) ** 2; });
+    const slope = den === 0 ? 0 : num / den;
+    const intercept = yMean - slope * xMean;
+    return values.map((_, i) => slope * i + intercept);
+  };
+
+  // Same arrowhead trend-dot renderer as renderTrendArrowDot, but for an arbitrary field name/color (multi-series charts)
+  const renderTrendArrowDotFor = (data: any[], key: string, color: string) => {
+    const n = data.length;
+    const direction = n < 2 ? 'flat' : (data[n - 1]?.[key] ?? 0) > (data[0]?.[key] ?? 0) ? 'up' : (data[n - 1]?.[key] ?? 0) < (data[0]?.[key] ?? 0) ? 'down' : 'flat';
+    const rotation = direction === 'up' ? -40 : direction === 'down' ? 40 : 0;
+    return (props: any) => {
+      const { cx, cy, index } = props;
+      if (index !== n - 1) return <g key={`trend-dot-${key}-${index}`} />;
+      return (
+        <g key={`trend-arrow-end-${key}`} transform={`translate(${cx}, ${cy}) rotate(${rotation})`}>
+          <path d="M -7 0 H 5 M 1 -4 L 6 0 L 1 4" stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+      );
+    };
+  };
+
   // Inline drill-down panel for a task (shared by Daily: Time-Based Tasks and Daily: One-Time Tasks charts)
   const renderTaskTrendPanel = (taskId: number) => {
     const dataKey = showAsHours ? `task_${taskId}_hours` : `task_${taskId}`;
@@ -888,8 +953,8 @@ export default function Analytics() {
     const taskName = task?.task_name || 'Task';
     const taskColor = dailyPillarData.find(p => p.pillar_name === task?.pillar_name)?.color_code || '#4299e1';
     const dailyChart = taskTrendData.map((d: any) => ({ label: d.date.slice(5), value: d[dataKey] || 0 }));
-    const weeklyChart = buildWeeklyFromDaily(taskTrendData, dataKey);
-    const monthlyChart = buildMonthlyFromDaily(taskTrendData, dataKey);
+    const weeklyChart = addLinearTrend(buildWeeklyFromDaily(taskTrendData, dataKey));
+    const monthlyChart = addLinearTrend(buildMonthlyFromDaily(taskTrendData, dataKey));
     const legendRight = { layout: 'vertical' as const, verticalAlign: 'middle' as const, align: 'right' as const, wrapperStyle: { fontSize: 10 } };
     const chartMargin = { top: 10, right: 85, left: 0, bottom: 0 };
     const btnStyle = (active: boolean) => ({ fontSize: '10px', padding: '3px 8px', borderRadius: '999px', cursor: 'pointer', fontWeight: 600, border: '1px solid #cbd5e0', background: active ? '#4299e1' : 'white', color: active ? 'white' : '#374151' });
@@ -924,15 +989,16 @@ export default function Analytics() {
           <div style={{ marginBottom: '10px' }}>
             <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📊 Weekly Average — Week over Week</div>
             <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={weeklyChart} margin={chartMargin}>
+              <ComposedChart data={weeklyChart} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="label" style={{ fontSize: 9 }} />
                 <YAxis style={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: number) => showAsHours ? `${v.toFixed(2)}h` : `${v.toFixed(0)}%`} />
                 <Legend {...legendRight} />
                 {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
-                <Bar dataKey="value" name={taskName} fill={taskColor} radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Bar dataKey="value" name={taskName} fill={taskColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
+                <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(weeklyChart)} activeDot={false} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -941,15 +1007,16 @@ export default function Analytics() {
           <div>
             <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📈 Monthly Average — Month over Month</div>
             <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={monthlyChart} margin={chartMargin}>
+              <ComposedChart data={monthlyChart} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <XAxis dataKey="label" style={{ fontSize: 9 }} />
                 <YAxis style={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: number) => showAsHours ? `${v.toFixed(2)}h` : `${v.toFixed(0)}%`} />
                 <Legend {...legendRight} />
                 {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
-                <Bar dataKey="value" name={taskName} fill={taskColor} radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Bar dataKey="value" name={taskName} fill={taskColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
+                <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(monthlyChart)} activeDot={false} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
         )}
@@ -1811,8 +1878,8 @@ export default function Analytics() {
               const dataKey = showAsHours ? `category_${categoryTrendOpenFor}_hours` : `category_${categoryTrendOpenFor}`;
               const catColor = dailyPillarData.find(p => p.pillar_name === allCategoriesData.find(c => c.category_name === categoryTrendOpenFor)?.pillar_name)?.color_code || '#4299e1';
               const dailyChart = categoryTrendData.map((d: any) => ({ label: d.date.slice(5), value: d[dataKey] || 0 }));
-              const weeklyChart = buildWeeklyFromDaily(categoryTrendData, dataKey);
-              const monthlyChart = buildMonthlyFromDaily(categoryTrendData, dataKey);
+              const weeklyChart = addLinearTrend(buildWeeklyFromDaily(categoryTrendData, dataKey));
+              const monthlyChart = addLinearTrend(buildMonthlyFromDaily(categoryTrendData, dataKey));
               const legendRight = { layout: 'vertical' as const, verticalAlign: 'middle' as const, align: 'right' as const, wrapperStyle: { fontSize: 10 } };
               const chartMargin = { top: 10, right: 85, left: 0, bottom: 0 };
               const btnStyle = (active: boolean) => ({ fontSize: '10px', padding: '3px 8px', borderRadius: '999px', cursor: 'pointer', fontWeight: 600, border: '1px solid #cbd5e0', background: active ? '#4299e1' : 'white', color: active ? 'white' : '#374151' });
@@ -1847,15 +1914,16 @@ export default function Analytics() {
                     <div style={{ marginBottom: '10px' }}>
                       <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📊 Weekly Average — Week over Week</div>
                       <ResponsiveContainer width="100%" height={170}>
-                        <BarChart data={weeklyChart} margin={chartMargin}>
+                        <ComposedChart data={weeklyChart} margin={chartMargin}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis dataKey="label" style={{ fontSize: 9 }} />
                           <YAxis style={{ fontSize: 10 }} />
                           <Tooltip formatter={(v: number) => showAsHours ? `${v.toFixed(2)}h` : `${v.toFixed(0)}%`} />
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
-                          <Bar dataKey="value" name={categoryTrendOpenFor} fill={catColor} radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                          <Bar dataKey="value" name={categoryTrendOpenFor} fill={catColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(weeklyChart)} activeDot={false} />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   )}
@@ -1864,15 +1932,16 @@ export default function Analytics() {
                     <div>
                       <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📈 Monthly Average — Month over Month</div>
                       <ResponsiveContainer width="100%" height={170}>
-                        <BarChart data={monthlyChart} margin={chartMargin}>
+                        <ComposedChart data={monthlyChart} margin={chartMargin}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis dataKey="label" style={{ fontSize: 9 }} />
                           <YAxis style={{ fontSize: 10 }} />
                           <Tooltip formatter={(v: number) => showAsHours ? `${v.toFixed(2)}h` : `${v.toFixed(0)}%`} />
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
-                          <Bar dataKey="value" name={categoryTrendOpenFor} fill={catColor} radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                          <Bar dataKey="value" name={categoryTrendOpenFor} fill={catColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(monthlyChart)} activeDot={false} />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   )}
@@ -2331,8 +2400,8 @@ export default function Analytics() {
               const dataKey = showAsHours ? `pillar_${pillarTrendOpenFor}_hours` : `pillar_${pillarTrendOpenFor}`;
               const pillarColor = dailyPillarData.find(p => p.pillar_name === pillarTrendOpenFor)?.color_code || '#4299e1';
               const dailyChart = pillarTrendData.map((d: any) => ({ label: d.date.slice(5), value: d[dataKey] || 0 }));
-              const weeklyChart = buildWeeklyFromDaily(pillarTrendData, dataKey);
-              const monthlyChart = buildMonthlyFromDaily(pillarTrendData, dataKey);
+              const weeklyChart = addLinearTrend(buildWeeklyFromDaily(pillarTrendData, dataKey));
+              const monthlyChart = addLinearTrend(buildMonthlyFromDaily(pillarTrendData, dataKey));
               // Legend on the right (vertical list) instead of a wide row under the chart — keeps more width for the plot itself
               const legendRight = { layout: 'vertical' as const, verticalAlign: 'middle' as const, align: 'right' as const, wrapperStyle: { fontSize: 10 } };
               const chartMargin = { top: 10, right: 85, left: 0, bottom: 0 };
@@ -2368,15 +2437,16 @@ export default function Analytics() {
                     <div style={{ marginBottom: '10px' }}>
                       <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📊 Weekly Average — Week over Week</div>
                       <ResponsiveContainer width="100%" height={170}>
-                        <BarChart data={weeklyChart} margin={chartMargin}>
+                        <ComposedChart data={weeklyChart} margin={chartMargin}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis dataKey="label" style={{ fontSize: 9 }} />
                           <YAxis style={{ fontSize: 10 }} />
                           <Tooltip formatter={(v: number) => showAsHours ? `${v.toFixed(2)}h` : `${v.toFixed(0)}%`} />
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
-                          <Bar dataKey="value" name={pillarTrendOpenFor} fill={pillarColor} radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                          <Bar dataKey="value" name={pillarTrendOpenFor} fill={pillarColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(weeklyChart)} activeDot={false} />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   )}
@@ -2385,15 +2455,16 @@ export default function Analytics() {
                     <div>
                       <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📈 Monthly Average — Month over Month</div>
                       <ResponsiveContainer width="100%" height={170}>
-                        <BarChart data={monthlyChart} margin={chartMargin}>
+                        <ComposedChart data={monthlyChart} margin={chartMargin}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis dataKey="label" style={{ fontSize: 9 }} />
                           <YAxis style={{ fontSize: 10 }} />
                           <Tooltip formatter={(v: number) => showAsHours ? `${v.toFixed(2)}h` : `${v.toFixed(0)}%`} />
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
-                          <Bar dataKey="value" name={pillarTrendOpenFor} fill={pillarColor} radius={[4, 4, 0, 0]} />
-                        </BarChart>
+                          <Bar dataKey="value" name={pillarTrendOpenFor} fill={pillarColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(monthlyChart)} activeDot={false} />
+                        </ComposedChart>
                       </ResponsiveContainer>
                     </div>
                   )}
@@ -4252,31 +4323,8 @@ export default function Analytics() {
                 </div>
 
               {/* Weekly Utilization Chart */}
-              {showWeekOverWeek && (
-                <div className="comparative-charts-section" style={{ marginTop: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    {(() => {
-                      const trendData = detailedViewType === 'tasks' ? taskTrendData : detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
-                      const names = getSelectedTrendNames();
-                      if (trendData.length === 0) return <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{names} — Weekly Average ({showAsHours ? 'Hours' : 'Utilization %'})</h3>;
-                      const firstDate = new Date(trendData[0].date);
-                      const today = new Date(); today.setHours(0,0,0,0);
-                      const firstMonday = getWeekStart(firstDate);
-                      const currentMonday = getWeekStart(today);
-                      const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                      const actualWeeks = Math.round((currentMonday.getTime() - firstMonday.getTime()) / msPerWeek) + 1;
-                      return <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{names} — Weekly Average (Last {actualWeeks} Week{actualWeeks !== 1 ? 's' : ''}, {showAsHours ? (useMinutesForTasks ? 'Minutes' : 'Hours') : 'Utilization %'})</h3>;
-                    })()}
-                    <button
-                      onClick={() => setShowAsHours(!showAsHours)}
-                      style={{ fontSize: '11px', padding: '4px 10px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
-                    >
-                      {showAsHours ? '⏱️ h' : '📊 %'}
-                    </button>
-                  </div>
-                  <ResponsiveContainer width="100%" height={220}>
-                      <BarChart 
-                        data={(() => {
+              {showWeekOverWeek && (() => {
+                const weeklyChartData = (() => {
                           const trendData = detailedViewType === 'tasks' ? taskTrendData : 
                                           detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
                           
@@ -4348,9 +4396,43 @@ export default function Analytics() {
                             if (hasData) weeklyData.push(weekEntry);
                             weekMonday.setDate(weekMonday.getDate() + 7);
                           }
-                          
+
+                          // Attach a linear-regression trend field per selected series so it can be plotted as a Line
+                          const trendKeys = detailedViewType === 'tasks' ? selectedTasks.map(id => `task_${id}`)
+                            : detailedViewType === 'categories' ? selectedCategories.map(n => `category_${n}`)
+                            : selectedPillars.map(n => `pillar_${n}`);
+                          trendKeys.forEach(key => {
+                            const trendVals = computeTrendSeries(weeklyData, key);
+                            weeklyData.forEach((entry, i) => { entry[`${key}_trend`] = trendVals[i]; });
+                          });
+
                           return weeklyData;
-                        })()}
+                })();
+                return (
+                <div className="comparative-charts-section" style={{ marginTop: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    {(() => {
+                      const trendData = detailedViewType === 'tasks' ? taskTrendData : detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
+                      const names = getSelectedTrendNames();
+                      if (trendData.length === 0) return <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{names} — Weekly Average ({showAsHours ? 'Hours' : 'Utilization %'})</h3>;
+                      const firstDate = new Date(trendData[0].date);
+                      const today = new Date(); today.setHours(0,0,0,0);
+                      const firstMonday = getWeekStart(firstDate);
+                      const currentMonday = getWeekStart(today);
+                      const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                      const actualWeeks = Math.round((currentMonday.getTime() - firstMonday.getTime()) / msPerWeek) + 1;
+                      return <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>{names} — Weekly Average (Last {actualWeeks} Week{actualWeeks !== 1 ? 's' : ''}, {showAsHours ? (useMinutesForTasks ? 'Minutes' : 'Hours') : 'Utilization %'})</h3>;
+                    })()}
+                    <button
+                      onClick={() => setShowAsHours(!showAsHours)}
+                      style={{ fontSize: '11px', padding: '4px 10px', background: showAsHours ? '#48bb78' : '#4299e1', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      {showAsHours ? '⏱️ h' : '📊 %'}
+                    </button>
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                      <ComposedChart 
+                        data={weeklyChartData}
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
@@ -4360,63 +4442,93 @@ export default function Analytics() {
                         {getSelectedTrendCount() > 1 && <Legend wrapperStyle={{ fontSize: 10 }} />}
                         {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                         
-                        {/* Render bars for selected items */}
+                        {/* Render bars + trend line for selected items */}
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                           const colors = ['#48bb78', '#4299e1', '#ed8936'];
                           const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
                           const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
-                          return (
+                          return [
                             <Bar 
-                              key={taskId}
+                              key={`bar-${taskId}`}
                               dataKey={`task_${taskId}`}
                               name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
+                            />,
+                            <Line
+                              key={`trend-${taskId}`}
+                              type="monotone"
+                              dataKey={`task_${taskId}_trend`}
+                              name={`${task?.task_name || `Task ${taskId}`} trend`}
+                              stroke="#e53e3e"
+                              strokeWidth={2}
+                              dot={renderTrendArrowDotFor(weeklyChartData, `task_${taskId}_trend`, '#e53e3e')}
+                              activeDot={false}
+                              legendType="none"
                             />
-                          );
+                          ];
                         })}
                         
                         {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
                           const colors = ['#48bb78', '#4299e1', '#ed8936'];
-                          return (
+                          return [
                             <Bar 
-                              key={categoryName}
+                              key={`bar-${categoryName}`}
                               dataKey={`category_${categoryName}`}
                               name={categoryName}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                            />,
+                            <Line
+                              key={`trend-${categoryName}`}
+                              type="monotone"
+                              dataKey={`category_${categoryName}_trend`}
+                              name={`${categoryName} trend`}
+                              stroke="#e53e3e"
+                              strokeWidth={2}
+                              dot={renderTrendArrowDotFor(weeklyChartData, `category_${categoryName}_trend`, '#e53e3e')}
+                              activeDot={false}
+                              legendType="none"
                             />
-                          );
+                          ];
                         })}
                         
                         {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
                           const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
-                          return (
+                          return [
                             <Bar 
-                              key={pillarName}
+                              key={`bar-${pillarName}`}
                               dataKey={`pillar_${pillarName}`}
                               name={pillarName}
                               fill={pillar?.color_code || '#48bb78'}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                            />,
+                            <Line
+                              key={`trend-${pillarName}`}
+                              type="monotone"
+                              dataKey={`pillar_${pillarName}_trend`}
+                              name={`${pillarName} trend`}
+                              stroke="#e53e3e"
+                              strokeWidth={2}
+                              dot={renderTrendArrowDotFor(weeklyChartData, `pillar_${pillarName}_trend`, '#e53e3e')}
+                              activeDot={false}
+                              legendType="none"
                             />
-                          );
+                          ];
                         })}
-                      </BarChart>
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
-              )}
+                );
+              })()}
 
               {/* Monthly Utilization Chart */}
-              {showMonthOverMonth && (
-                <div className="comparative-charts-section" style={{ marginTop: '14px' }}>
-                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>{getSelectedTrendNames()} — Monthly Average (Last 3 Months, {showAsHours ? 'Hours' : 'Utilization %'})</h3>
-                  <ResponsiveContainer width="100%" height={220}>
-                      <BarChart 
-                        data={(() => {
+              {showMonthOverMonth && (() => {
+                const monthlyChartData = (() => {
                           const trendData = detailedViewType === 'tasks' ? taskTrendData : 
                                           detailedViewType === 'categories' ? categoryTrendData : pillarTrendData;
                           
@@ -4477,9 +4589,24 @@ export default function Analytics() {
 
                             monthlyData.push(monthEntry);
                           });
-                          
+
+                          // Attach a linear-regression trend field per selected series so it can be plotted as a Line
+                          const trendKeys = detailedViewType === 'tasks' ? selectedTasks.map(id => `task_${id}`)
+                            : detailedViewType === 'categories' ? selectedCategories.map(n => `category_${n}`)
+                            : selectedPillars.map(n => `pillar_${n}`);
+                          trendKeys.forEach(key => {
+                            const trendVals = computeTrendSeries(monthlyData, key);
+                            monthlyData.forEach((entry, i) => { entry[`${key}_trend`] = trendVals[i]; });
+                          });
+
                           return monthlyData;
-                        })()}
+                })();
+                return (
+                <div className="comparative-charts-section" style={{ marginTop: '14px' }}>
+                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>{getSelectedTrendNames()} — Monthly Average (Last 3 Months, {showAsHours ? 'Hours' : 'Utilization %'})</h3>
+                  <ResponsiveContainer width="100%" height={220}>
+                      <ComposedChart 
+                        data={monthlyChartData}
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
@@ -4489,55 +4616,89 @@ export default function Analytics() {
                         {getSelectedTrendCount() > 1 && <Legend wrapperStyle={{ fontSize: 10 }} />}
                         {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                         
-                        {/* Render bars for selected items */}
+                        {/* Render bars + trend line for selected items */}
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
                           const colors = ['#ed8936', '#4299e1', '#9f7aea'];
                           const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
                           const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
-                          return (
+                          return [
                             <Bar 
-                              key={taskId}
+                              key={`bar-${taskId}`}
                               dataKey={`task_${taskId}`}
                               name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
+                            />,
+                            <Line
+                              key={`trend-${taskId}`}
+                              type="monotone"
+                              dataKey={`task_${taskId}_trend`}
+                              name={`${task?.task_name || `Task ${taskId}`} trend`}
+                              stroke="#e53e3e"
+                              strokeWidth={2}
+                              dot={renderTrendArrowDotFor(monthlyChartData, `task_${taskId}_trend`, '#e53e3e')}
+                              activeDot={false}
+                              legendType="none"
                             />
-                          );
+                          ];
                         })}
                         
                         {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
                           const colors = ['#ed8936', '#4299e1', '#9f7aea'];
-                          return (
+                          return [
                             <Bar 
-                              key={categoryName}
+                              key={`bar-${categoryName}`}
                               dataKey={`category_${categoryName}`}
                               name={categoryName}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                            />,
+                            <Line
+                              key={`trend-${categoryName}`}
+                              type="monotone"
+                              dataKey={`category_${categoryName}_trend`}
+                              name={`${categoryName} trend`}
+                              stroke="#e53e3e"
+                              strokeWidth={2}
+                              dot={renderTrendArrowDotFor(monthlyChartData, `category_${categoryName}_trend`, '#e53e3e')}
+                              activeDot={false}
+                              legendType="none"
                             />
-                          );
+                          ];
                         })}
                         
                         {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
                           const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
-                          return (
+                          return [
                             <Bar 
-                              key={pillarName}
+                              key={`bar-${pillarName}`}
                               dataKey={`pillar_${pillarName}`}
                               name={pillarName}
                               fill={pillar?.color_code || '#ed8936'}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                            />,
+                            <Line
+                              key={`trend-${pillarName}`}
+                              type="monotone"
+                              dataKey={`pillar_${pillarName}_trend`}
+                              name={`${pillarName} trend`}
+                              stroke="#e53e3e"
+                              strokeWidth={2}
+                              dot={renderTrendArrowDotFor(monthlyChartData, `pillar_${pillarName}_trend`, '#e53e3e')}
+                              activeDot={false}
+                              legendType="none"
                             />
-                          );
+                          ];
                         })}
-                      </BarChart>
+                      </ComposedChart>
                     </ResponsiveContainer>
                   </div>
-              )}
+                );
+              })()}
             </div>
           )}
 
