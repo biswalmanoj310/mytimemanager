@@ -19,6 +19,7 @@ import { PillarCategorySelector } from '../components/PillarCategorySelector';
 import ImportantTasks from './ImportantTasks';
 import UpcomingTasks from './UpcomingTasks';
 import QuickAddTask from '../components/QuickAddTask';
+import QuickAddSubtask from '../components/QuickAddSubtask';
 import { useUserPreferencesContext } from '../contexts/UserPreferencesContext';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'upcoming' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
@@ -444,6 +445,7 @@ export default function Tasks() {
   const [miscSubtaskParentId, setMiscSubtaskParentId] = useState<number | null>(null);
   const [showAddMiscTaskModal, setShowAddMiscTaskModal] = useState(false);
   const [editingMiscTask, setEditingMiscTask] = useState<ProjectTaskData | null>(null);
+  const [subtaskAnchorRect, setSubtaskAnchorRect] = useState<DOMRect | null>(null);
   const [showCompletedMiscTasks, setShowCompletedMiscTasks] = useState(false);
   const [showCompletedDailyTasks, setShowCompletedDailyTasks] = useState(true); // Default to expanded
   const [showMiscMonthlyPanel, setShowMiscMonthlyPanel] = useState(() => localStorage.getItem('showMiscMonthlyPanel') === 'true'); // Collapsed by default
@@ -6305,7 +6307,7 @@ export default function Tasks() {
     getDueDateColorClass: (dueDate: string | null) => string;
     getTasksByParentId: (parentId: number | null) => ProjectTaskData[];
     projectTaskFilter?: 'all' | 'in-progress' | 'completed' | 'no-milestone' | 'overdue';
-    onAddSubtask?: (parentTask: ProjectTaskData) => void;
+    onAddSubtask?: (parentTask: ProjectTaskData, anchorRect?: DOMRect) => void;
   }) => {
     const subTasks = getTasksByParentId(task.id);
     const hasSubTasks = subTasks.length > 0;
@@ -6487,11 +6489,12 @@ export default function Tasks() {
             </button>
             <button 
               className="btn btn-sm"
-              onClick={() => {
+              onClick={(e) => {
                 console.log('➕ Sub button clicked for task:', task.name, 'ID:', task.id);
+                const anchorRect = e.currentTarget.getBoundingClientRect();
                 if (onAddSubtask) {
                   console.log('Calling onAddSubtask callback');
-                  onAddSubtask(task);
+                  onAddSubtask(task, anchorRect);
                 } else {
                   console.log('No onAddSubtask callback, using default behavior');
                   setEditingTask(task);
@@ -10248,8 +10251,9 @@ export default function Tasks() {
                               }}
                               getDueDateColorClass={getDueDateColorClass}
                               getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
-                              onAddSubtask={(parentTask: ProjectTaskData) => {
+                              onAddSubtask={(parentTask: ProjectTaskData, anchorRect?: DOMRect) => {
                                 setEditingMiscTask(parentTask);
+                                setSubtaskAnchorRect(anchorRect || null);
                                 setShowAddMiscTaskModal(true);
                               }}
                             />
@@ -11039,9 +11043,10 @@ export default function Tasks() {
                     }}
                     getDueDateColorClass={getDueDateColorClass}
                     getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
-                    onAddSubtask={(parentTask: ProjectTaskData) => {
+                    onAddSubtask={(parentTask: ProjectTaskData, anchorRect?: DOMRect) => {
                       console.log('onAddSubtask called for Misc task:', parentTask);
                       setEditingMiscTask(parentTask);
+                      setSubtaskAnchorRect(anchorRect || null);
                       setShowAddMiscTaskModal(true);
                       console.log('Modal should open now. editingMiscTask:', parentTask, 'showAddMiscTaskModal: true');
                     }}
@@ -11231,8 +11236,9 @@ export default function Tasks() {
                                   }}
                                   getDueDateColorClass={getDueDateColorClass}
                                   getTasksByParentId={(parentId: number | null) => miscTasks.filter(t => t.parent_task_id === parentId)}
-                                  onAddSubtask={(parentTask: ProjectTaskData) => {
+                                  onAddSubtask={(parentTask: ProjectTaskData, anchorRect?: DOMRect) => {
                                     setEditingMiscTask(parentTask);
+                                    setSubtaskAnchorRect(anchorRect || null);
                                     setShowAddMiscTaskModal(true);
                                   }}
                                 />
@@ -22244,291 +22250,23 @@ export default function Tasks() {
         </div>
       )}
 
-      {/* Add Misc Task Modal - Same as Project Task Modal */}
-      {showAddMiscTaskModal && (
-        <div className="modal-overlay" onClick={() => {
-          console.log('Closing Misc Task modal');
+      {/* Quick Add Subtask popup — anchored next to the ➕ Sub button that opened it */}
+      <QuickAddSubtask
+        parentTask={editingMiscTask}
+        isOpen={showAddMiscTaskModal}
+        anchorRect={subtaskAnchorRect}
+        onClose={() => {
           setShowAddMiscTaskModal(false);
-        }} style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
-            backgroundColor: '#f0f9ff',
-            padding: '24px',
-            borderRadius: '12px',
-            width: '90%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
-          }}>
-            <div style={{
-              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-              padding: '16px 20px',
-              borderRadius: '8px',
-              marginBottom: '24px',
-              boxShadow: '0 2px 8px rgba(79, 172, 254, 0.3)'
-            }}>
-              <h2 style={{ margin: 0, color: 'white', fontSize: '22px' }}>
-                ✅ {editingMiscTask?.id ? `Add Subtask to "${editingMiscTask.name}"` : 'Add New Misc Task'}
-              </h2>
-            </div>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              try {
-                const dueDate = formData.get('due_date');
-                const priorityValue = formData.get('priority');
-                
-                const taskPayload: any = {
-                  name: formData.get('name'),
-                  description: formData.get('description') || '',
-                  // If creating a subtask, inherit pillar/category from parent
-                  pillar_id: editingMiscTask?.pillar_id || 1,
-                  category_id: editingMiscTask?.category_id || 1,
-                  task_type: 'time',
-                  allocated_minutes: 30,
-                  follow_up_frequency: 'misc',
-                  separately_followed: false,
-                  is_daily_one_time: false,
-                  priority: priorityValue ? parseInt(priorityValue as string) : 5
-                };
-
-                // Only add parent_task_id if creating a subtask
-                if (editingMiscTask?.id) {
-                  taskPayload.parent_task_id = editingMiscTask.id;
-                  // Inherit parent's linkage fields
-                  if (editingMiscTask.goal_id) taskPayload.goal_id = editingMiscTask.goal_id;
-                  if (editingMiscTask.related_wish_id) taskPayload.related_wish_id = editingMiscTask.related_wish_id;
-                  // linked_project_id is only mapped in the Misc tab path; project_id is the raw field from the Project tab path
-                  const inheritedProjectId = editingMiscTask.linked_project_id || editingMiscTask.project_id;
-                  if (inheritedProjectId) taskPayload.project_id = inheritedProjectId;
-                }
-
-                // Only add due_date if it's provided
-                if (dueDate && dueDate !== '') {
-                  // Convert date string to ISO datetime format (add time component)
-                  taskPayload.due_date = dueDate + 'T00:00:00';
-                }
-
-                console.log('Creating misc task with payload:', taskPayload);
-                await api.post('/api/tasks/', taskPayload);
-                // If subtask was added to a completed parent, auto-mark parent as incomplete
-                if (editingMiscTask?.id && editingMiscTask.is_completed) {
-                  await api.put(`/api/tasks/${editingMiscTask.id}`, { is_completed: false });
-                }
-                setShowAddMiscTaskModal(false);
-                setEditingMiscTask(null);
-                await loadMiscTaskGroups();
-              } catch (err: any) {
-                console.error('Error creating misc task:', err);
-                console.error('Error response:', err.response);
-                console.error('Error data:', err.response?.data);
-                console.error('Error detail array:', err.response?.data?.detail);
-                
-                let errorMessage = 'Unknown error occurred';
-                if (err.response?.data) {
-                  const data = err.response.data;
-                  
-                  // Handle FastAPI validation errors (detail is an array)
-                  if (Array.isArray(data.detail)) {
-                    console.log('Validation errors:', data.detail);
-                    errorMessage = data.detail.map((item: any) => {
-                      console.log('Error item:', item);
-                      const field = item.loc ? item.loc.join(' -> ') : 'unknown field';
-                      return `${field}: ${item.msg}`;
-                    }).join('\n');
-                  } 
-                  // Handle string detail
-                  else if (data.detail) {
-                    errorMessage = data.detail;
-                  }
-                  // Handle object detail
-                  else if (typeof data === 'object') {
-                    errorMessage = JSON.stringify(data, null, 2);
-                  } 
-                  // Handle string data
-                  else {
-                    errorMessage = String(data);
-                  }
-                } else if (err.message) {
-                  errorMessage = err.message;
-                }
-                
-                alert('Failed to create task:\n' + errorMessage);
-              }
-            }}>
-              {editingMiscTask?.id && (
-                <div style={{ 
-                  marginBottom: '16px', 
-                  padding: '12px', 
-                  backgroundColor: '#e6f3ff', 
-                  borderRadius: '4px',
-                  border: '1px solid #b3d9ff'
-                }}>
-                  <strong>Parent Task:</strong> {editingMiscTask.name}
-                  {(editingMiscTask.goal_id || editingMiscTask.related_wish_id || editingMiscTask.linked_project_id) && (
-                    <div style={{ marginTop: '6px', fontSize: '13px', color: '#4a5568' }}>
-                      <span style={{ fontWeight: '500' }}>Inherited from parent: </span>
-                      {editingMiscTask.goal_id && <span style={{ marginRight: '10px' }}>🎯 Goal</span>}
-                      {editingMiscTask.linked_project_id && <span style={{ marginRight: '10px' }}>📁 Project</span>}
-                      {editingMiscTask.related_wish_id && <span>✨ Dream</span>}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <div style={{
-                background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-                padding: '10px 16px',
-                borderRadius: '6px',
-                marginBottom: '16px',
-                boxShadow: '0 2px 6px rgba(240, 147, 251, 0.2)'
-              }}>
-                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>📋 Task Information</span>
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                  Task Name *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  rows={3}
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px',
-                    resize: 'vertical'
-                  }}
-                />
-              </div>
-
-              <div style={{
-                background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-                padding: '10px 16px',
-                borderRadius: '6px',
-                marginBottom: '16px',
-                marginTop: '20px',
-                boxShadow: '0 2px 6px rgba(67, 233, 123, 0.2)'
-              }}>
-                <span style={{ color: 'white', fontWeight: '600', fontSize: '16px' }}>🎯 Planning & Priority</span>
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                  Due Date
-                </label>
-                <input
-                  type="date"
-                  name="due_date"
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
-                  Priority
-                </label>
-                <select
-                  name="priority"
-                  defaultValue="5"
-                  style={{
-                    width: '100%',
-                    padding: '8px',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                    fontSize: '14px'
-                  }}
-                >
-                  <option value="1">1 - Highest</option>
-                  <option value="2">2 - High</option>
-                  <option value="3">3 - Medium-High</option>
-                  <option value="4">4 - Medium</option>
-                  <option value="5">5 - Normal</option>
-                  <option value="6">6 - Medium-Low</option>
-                  <option value="7">7 - Low</option>
-                  <option value="8">8 - Very Low</option>
-                  <option value="9">9 - Minimal</option>
-                  <option value="10">10 - Lowest</option>
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowAddMiscTaskModal(false);
-                    setEditingMiscTask(null);
-                  }}
-                  style={{
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    backgroundColor: '#e2e8f0',
-                    color: '#2d3748',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    padding: '10px 20px',
-                    fontSize: '14px',
-                    backgroundColor: '#48bb78',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontWeight: '500'
-                  }}
-                >
-                  {editingMiscTask?.id ? 'Create Subtask' : 'Create Task'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+          setEditingMiscTask(null);
+          setSubtaskAnchorRect(null);
+        }}
+        onSuccess={async () => {
+          setShowAddMiscTaskModal(false);
+          setEditingMiscTask(null);
+          setSubtaskAnchorRect(null);
+          await loadMiscTaskGroups();
+        }}
+      />
       {/* Task Reference Warning Modal */}
       {taskReferenceWarning.visible && taskReferenceWarning.references && (
         <div style={{

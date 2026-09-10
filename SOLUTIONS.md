@@ -100,6 +100,18 @@
 
 ---
 
+### SOL-009 — Quick Add Subtask Popup (replaces heavy "Add Subtask" modal)
+| Field | Value |
+|-------|-------|
+| REQ | REQ-214 |
+| Date | 2026-09-09 |
+| Problem | Clicking "➕ Sub" on any task row opened a large, full form modal (name, description, due date, priority, all in styled sections) just to add a quick subtask — high friction for the common case of jotting down a one-line subtask. |
+| Approach | Built `QuickAddSubtask.tsx`, a compact centered popup mirroring the `QuickAddTask` UX: name input + optional due date visible by default, Enter-to-save, auto-focus, Esc-to-close. Added a "▼ More options (description, priority)" toggle that reveals a description textarea and priority dropdown only when needed. Preserved all existing subtask-creation logic (inherit pillar/category/goal/wish/project linkage from parent, `follow_up_frequency: 'misc'`, auto-uncomplete a completed parent) unchanged. Swapped the old `showAddMiscTaskModal` JSX block in `Tasks.tsx` for `<QuickAddSubtask parentTask={editingMiscTask} isOpen={showAddMiscTaskModal} .../>` — all 3 existing `onAddSubtask` call sites (Misc tab, Project detail, completed Misc tasks) work unchanged since they only set the same two state variables. Follow-up: the "➕ Sub" button's `onClick` now captures `e.currentTarget.getBoundingClientRect()` and threads it through `onAddSubtask(task, anchorRect)` into a new `subtaskAnchorRect` state; `QuickAddSubtask` measures its own rendered size via `useLayoutEffect` + a `popupRef` and positions itself with `position: fixed`, flipping above the button when there isn't room below and clamping horizontally to stay on-screen (falls back to a centered position if no anchor is available). Outside-click-to-close now checks against the popup's own ref instead of a full-screen dimmed overlay. |
+| Files | `frontend/src/components/QuickAddSubtask.tsx` (new), `frontend/src/components/QuickAddSubtask.css` (new), `frontend/src/pages/Tasks.tsx` |
+| Outcome | Adding a subtask is now a 2-field, one-Enter-keypress action, with description/priority still available a click away for cases that need them; the popup now opens right next to the button that was clicked instead of the center of the screen |
+
+---
+
 ### SOL-008 — Weekly/Monthly Average Bar Labels + Trend Line on Analytics Drill-Downs
 | Field | Value |
 |-------|-------|
