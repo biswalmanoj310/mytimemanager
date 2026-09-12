@@ -295,12 +295,12 @@ export default function Analytics() {
     if (v === 'category' || v === 'tasks' || v === 'one_time') return v;
     return 'pillar';
   };
-  const getInitialCirclePeriod = (): 'week' | 'month' => {
+  const getInitialCirclePeriod = (): 'week' | 'month' | 'year' => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('circlePeriod') === 'month' ? 'month' : 'week';
+    return params.get('circlePeriod') === 'month' ? 'month' : params.get('circlePeriod') === 'year' ? 'year' : 'week';
   };
 
-  const [circleOfLifePeriod, setCircleOfLifePeriod] = useState<'week' | 'month'>(getInitialCirclePeriod());
+  const [circleOfLifePeriod, setCircleOfLifePeriod] = useState<'week' | 'month' | 'year'>(getInitialCirclePeriod());
   const [circleOfLifeType, setCircleOfLifeType] = useState<'pillar' | 'category' | 'tasks' | 'one_time'>(getInitialCircleType());
   const [circleOfLifeData, setCircleOfLifeData] = useState<{label: string; start: string; end: string; data: any[]}[]>([]);
   const [circleOfLifeLoading, setCircleOfLifeLoading] = useState(false);
@@ -4951,7 +4951,7 @@ export default function Analytics() {
                   const p = data.find((d: any) => d.pillar_name === name);
                   const raw = p && p.allocated_hours > 0 ? Math.round((p.spent_hours / days / p.allocated_hours) * 100) : 0;
                   const score = Math.min(100, raw);
-                  return { name, spent: raw, score, allocated: 100 };
+                  return { name, spent: raw, score, allocated: 100, isDrain: false };
                 });
               } else if (circleOfLifeType === 'category') {
                 const items = data.filter((c: any) => c.category_name !== 'My Tasks').slice(0, 10);

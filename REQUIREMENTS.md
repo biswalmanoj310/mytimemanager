@@ -150,11 +150,11 @@
 | REQ-200 | 2026-07-20 | Analytics frontend dashboard improvements — richer cross-pillar time trends, habit streak visualization, goal progress summary charts | — | analytics-requirements.md exists in repo memory | 📋 BACKLOG |
 | REQ-201 | 2026-09-02 | Analytics Overview tab: consolidate 9 stacked comparison charts (Pillar/Category/Daily Time-Based/Daily One-Time/3x Utilization/2x Breakdown) into one page with checkbox chart-picker (persisted to localStorage) + shared This Week/Last Week and This Month/Last Month selector so the Week/Month avg columns on every chart use the same period | 2026-09-02 | frontend/src/pages/Analytics.tsx — visibleOverviewCharts state, getOverviewWeekRange()/getOverviewMonthRange() helpers | ✅ DONE |
 | REQ-202 | 2026-09-02 | Follow-up: true custom date-range picker (arbitrary start/end, not just This/Last Week/Month) for the Overview comparison charts | — | Would require passing a date range into getOverviewWeekRange/getOverviewMonthRange instead of a fixed offset | 📋 BACKLOG |
-| REQ-201 | 2026-07-20 | Mobile-responsive layout improvements — current UI designed for desktop, needs mobile breakpoints for family use | — | | 📋 BACKLOG |
-| REQ-202 | 2026-07-20 | Cloud database migration: SQLite → PostgreSQL for multi-device live sync without file-copy workarounds | — | Would enable true family real-time sync; update backend/app/database/config.py | 📋 BACKLOG |
+| REQ-215 | 2026-07-20 | Mobile-responsive layout improvements — current UI designed for desktop, needs mobile breakpoints for family use | — | Renumbered from a duplicate REQ-201 | 📋 BACKLOG |
+| REQ-216 | 2026-07-20 | Cloud database migration: SQLite → PostgreSQL for multi-device live sync without file-copy workarounds | — | Renumbered from a duplicate REQ-202; update backend/app/database/config.py | 📋 BACKLOG |
 | REQ-203 | 2026-07-20 | Frontend component tests — Jest + React Testing Library for TaskContext, TimeEntriesContext, key page components | — | Currently manual testing only | 📋 BACKLOG |
 | REQ-204 | 2026-07-20 | Drag-and-drop task reordering within daily/weekly views | — | Phase 2 UI enhancement noted in PROJECT_SUMMARY.md | 📋 BACKLOG |
-| REQ-205 | 2026-07-20 | Real-time updates via WebSocket or SSE — family members see each other's progress live | — | Needs PostgreSQL first (REQ-202) | 📋 BACKLOG |
+| REQ-205 | 2026-07-20 | Real-time updates via WebSocket or SSE — family members see each other's progress live | — | Needs PostgreSQL first (REQ-216) | 📋 BACKLOG |
 | REQ-206 | 2026-09-08 | Overview comparison charts: add "📅 This Week" / "🗓️ This Month" quick-select buttons next to each chart's ⏱ Time/% toggle so the shared Week/Month avg columns can be turned on without scrolling to the top filter bar. Also default the top "Week:"/"Month:" dropdowns to "Hide" instead of "This Week"/"This Month" | 2026-09-08 | frontend/src/pages/Analytics.tsx — renderWeekMonthQuickButtons(), overviewWeekOption/overviewMonthOption default now 'hide' | ✅ DONE |
 | REQ-207 | 2026-09-08 | Inline "📈 Trend" drill-down (previously only on Pillar Time Comparison + Category Time Comparison charts) extended to "Daily: Time-Based Tasks" and "Daily: One-Time Tasks" charts, reusing existing per-task trend data | 2026-09-08 | frontend/src/pages/Analytics.tsx — taskTrendOpenFor state, openTaskTrend(), renderTaskTrendPanel() | ✅ DONE |
 | REQ-208 | 2026-09-08 | Fix overlapping X-axis task-name labels on "Daily: Time-Based Tasks" / "Daily: One-Time Tasks" charts — narrower per-line label boxes (max 3 lines, ellipsis on overflow), taller X-axis, wider bar-category gap | 2026-09-08 | frontend/src/pages/Analytics.tsx — CustomMultilineLabel (maxCharsPerLine 20→13, maxLines 3), XAxis height 60→90, barCategoryGap 25→40 | ✅ DONE |
@@ -167,4 +167,68 @@
 
 ---
 
-*Last updated: 2026-07-20 | Maintained by makingmehappier agent*
+## Section 4 — Productization Roadmap: Bug Fixes, Design & Market-Readiness
+
+> Goal: make MyTimeManager solid enough to hand to someone outside the family, demo publicly, or sell. Grouped by known bugs first, then what's structurally required before any external users touch it.
+
+### 4A. Known Bugs (found via compiler diagnostics during this session)
+
+| REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
+|--------|------------|----------------------|-----|----------|--------|
+| REQ-217 | 2026-09-12 | TypeScript error: `circleOfLifePeriod` state is typed `'week' \| 'month'` but the UI sets/compares it to `'year'` in 3 places (Analytics.tsx ~5029-5034) — the Year option in Circle of Life is likely silently broken at runtime | 2026-09-12 | Fixed — widened useState/getInitialCirclePeriod type to `'week' \| 'month' \| 'year'` | ✅ DONE |
+| REQ-218 | 2026-09-12 | TypeScript error: `row.isDrain` accessed on a union type where the pillar-branch object doesn't define it (Analytics.tsx Circle of Life table ~5127-5129) — one of the two circle-of-life data shapes (pillar vs category) is missing the field | 2026-09-12 | Fixed — added `isDrain: false` default to the pillar-branch row objects | ✅ DONE |
+| REQ-219 | 2026-09-12 | REQUIREMENTS.md itself had duplicate REQ-201/REQ-202 IDs (two unrelated items shared the same number) | 2026-09-12 | Fixed — renumbered the older duplicates to REQ-215/REQ-216 in this pass | ✅ DONE |
+| REQ-220 | 2026-09-12 | 40+ leftover `console.log` debug statements in frontend/src/pages/Analytics.tsx (task/category load functions, chart data mapping) — noisy for end users, and some log full API response payloads to the browser console, which is a minor data-exposure concern if the app is ever exposed outside the home network | — | Strip or gate behind an `import.meta.env.DEV` check before any external release | 📋 BACKLOG |
+| REQ-221 | 2026-09-12 | Backend uses `print()` statements for debug output instead of structured logging (e.g. analytics_service.py category-breakdown debug prints) — not visible/searchable in any real hosting environment | — | backend/app/services/analytics_service.py | 📋 BACKLOG |
+
+### 4B. Security & Multi-Tenancy — required before any user outside the household uses this
+
+| REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
+|--------|------------|----------------------|-----|----------|--------|
+| REQ-222 | 2026-09-12 | No authentication/authorization exists anywhere in the app — any device on the network has full read/write access to all data. Add login (email/password or OAuth) before exposing this beyond the home LAN | — | Blocks everything else in this section | 📋 BACKLOG |
+| REQ-223 | 2026-09-12 | No per-user/per-household data isolation — every table is effectively single-tenant. Selling to multiple families requires an account/household_id column scoped into every query across all 27 services | — | Depends on REQ-222; touches backend/app/models/models.py + every service file | 📋 BACKLOG |
+| REQ-224 | 2026-09-12 | No rate limiting or brute-force protection on any endpoint | — | e.g. slowapi middleware, or enforce at a reverse proxy | 📋 BACKLOG |
+| REQ-225 | 2026-09-12 | No HTTPS/TLS in docker-compose.yml — needs a reverse proxy (Caddy/Nginx/Traefik) with automatic certs for any non-local deployment | — | | 📋 BACKLOG |
+| REQ-226 | 2026-09-12 | Backup files (backend/database/backups/) are stored unencrypted on disk — needs encryption at rest or a cloud target (e.g. S3 with server-side encryption) for a hosted offering | — | | 📋 BACKLOG |
+| REQ-227 | 2026-09-12 | No secrets-management story — any future DB credentials/API keys/payment keys must go through environment variables or a secrets manager, never committed to git | — | | 📋 BACKLOG |
+
+### 4C. Design & UX Polish
+
+| REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
+|--------|------------|----------------------|-----|----------|--------|
+| REQ-228 | 2026-09-12 | No first-run/onboarding flow — a brand-new install drops the user into an empty app with no guidance to create their first pillar/category/task | — | Needs a guided setup wizard or seeded demo data with a "start fresh" reset option | 📋 BACKLOG |
+| REQ-229 | 2026-09-12 | Accessibility audit — keyboard navigation, ARIA labels, and color-contrast check for the pillar color system (blue/green/purple), since colorblind users can't rely on color alone to distinguish pillars | — | Target WCAG AA | 📋 BACKLOG |
+| REQ-230 | 2026-09-12 | Design-system consolidation — most pages (Analytics.tsx especially) hand-roll inline `style={{...}}` objects rather than shared style tokens/components, causing visual drift between pages | — | Would reduce inconsistency before a public launch | 📋 BACKLOG |
+| REQ-231 | 2026-09-12 | Empty-state and error-state screens — list views assume data exists and API failures currently only surface in the browser console, not to the user | — | Add "No tasks yet — add your first one" style empty states + visible error banners | 📋 BACKLOG |
+
+### 4D. Testing, Quality & Operations
+
+| REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
+|--------|------------|----------------------|-----|----------|--------|
+| REQ-232 | 2026-09-12 | End-to-end test suite (Playwright/Cypress) covering core flows: create task → complete → verify analytics reflect it | — | Currently only backend pytest + manual frontend testing exist | 📋 BACKLOG |
+| REQ-233 | 2026-09-12 | CI pipeline (GitHub Actions) running backend pytest + frontend build/lint on every push/PR | — | No automated gate currently exists before merging | 📋 BACKLOG |
+| REQ-234 | 2026-09-12 | Centralized error monitoring (e.g. Sentry) for both frontend and backend | — | Errors currently only visible in local browser/server console | 📋 BACKLOG |
+
+### 4E. Business Readiness (only if distributing/selling beyond personal use)
+
+| REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
+|--------|------------|----------------------|-----|----------|--------|
+| REQ-235 | 2026-09-12 | Generic branding/config layer — remove hardcoded personal family references ("dad"/"daughter"/"wife", specific script names) from user-facing code and docs; add a configurable app name/logo/theme | — | Doesn't affect current family use, only needed for external distribution | 📋 BACKLOG |
+| REQ-236 | 2026-09-12 | Data export (JSON/CSV) and an account-deletion flow | — | Needed for GDPR-style "right to access/delete" once real external users' data is involved | 📋 BACKLOG |
+| REQ-237 | 2026-09-12 | No LICENSE file exists at the repo root, and no Terms of Service / Privacy Policy | — | Required before any public distribution or sale | 📋 BACKLOG |
+| REQ-238 | 2026-09-12 | Billing/subscription integration (e.g. Stripe) — only needed if monetizing directly as SaaS; decide self-hosted-open-source vs hosted-SaaS distribution model first, since it changes the priority of REQ-222/REQ-223 | — | Blocked on a distribution-model decision | 🔴 BLOCKED |
+
+### 4F. Mobile App Strategy (raised 2026-09-12)
+
+| REQ-ID | Start Date | Detailed Description | ETA | Comments | STATUS |
+|--------|------------|----------------------|-----|----------|--------|
+| REQ-239 | 2026-09-12 | Decide mobile app approach — 3 real options on top of the current React+TS web frontend: (1) **PWA** — add manifest.json + service worker to the existing app; lowest effort, installable, no new codebase; (2) **Capacitor/Ionic wrapper** — reuses ~90% of existing React code inside a native shell, adds access to device APIs (push, biometrics, camera); (3) **Full React Native rewrite** — most native feel, but a second UI codebase to build and maintain in parallel with the web app forever after. Recommendation: ship PWA first (near-zero cost, validates real mobile usage), layer Capacitor if push/native-feel becomes a real ask, only commit to React Native if usage data justifies a second codebase | — | 2026-09-12: confirmed scope is personal/family use, not selling a mobile app externally — this makes PWA (or Capacitor if push notifications are wanted) the clear answer; a React Native rewrite would not be worth it for personal use. Blocks REQ-240/241/242/243 below; REQ-215 (mobile-responsive layout) is a prerequisite for all 3 options | 📋 BACKLOG |
+| REQ-240 | 2026-09-12 | Token-based auth (JWT, not cookie/session) — required for any native/Capacitor mobile client regardless of which mobile path is chosen | — | Depends on REQ-222 (no auth exists yet at all); do this once, correctly, when building REQ-222 | 📋 BACKLOG |
+| REQ-241 | 2026-09-12 | Awareness: recent web-only UI work (Analytics trend-line SVG/inline-style badges, CSS-heavy components) is not portable to a React Native rewrite — fine for PWA/Capacitor (both render the same web UI in a WebView), but a hard reset if React Native is chosen later. Factor this into the REQ-239 decision — the longer that decision is deferred while polishing web-only styling, the more expensive a later React Native pivot becomes | — | No action needed until REQ-239 is decided | 📋 BACKLOG |
+| REQ-242 | 2026-09-12 | Offline-first data + background sync — mobile users expect the app to work with spotty connectivity (e.g. logging a task on the subway). Current architecture assumes always-on network (React Context fetches straight from FastAPI, no local cache/queue) | — | Needed regardless of PWA/Capacitor/React Native choice; would need IndexedDB (web) or SQLite (native) local cache + sync queue | 📋 BACKLOG |
+| REQ-243 | 2026-09-12 | Push notifications for reminders (Pomodoro break over, habit streak at risk, task overdue) — a key mobile value-add not present today | — | Needs Web Push (PWA) or FCM/APNs (Capacitor/React Native) | 📋 BACKLOG |
+| REQ-244 | 2026-09-12 | PWA basics implemented per the REQ-239 decision — manifest.json (name/icons/theme_color/standalone display), a pillar-themed SVG icon, and a minimal app-shell service worker (caches static assets, always network-first for /api/*, registered only in production builds) | 2026-09-12 | frontend/public/manifest.json, icon.svg, sw.js; frontend/index.html (manifest link + apple meta tags); frontend/src/main.tsx (SW registration). Installable on phone home screen now; offline data sync is separately tracked at REQ-242 | ✅ DONE |
+
+---
+
+*Last updated: 2026-09-12 | Maintained by makingmehappier agent*
