@@ -329,6 +329,8 @@ export default function Analytics() {
   const [taskTrendData, setTaskTrendData] = useState<any[]>([]);
   const [categoryTrendData, setCategoryTrendData] = useState<any[]>([]);
   const [pillarTrendData, setPillarTrendData] = useState<any[]>([]);
+  // How far back the Detailed Trend Analysis charts look. Defaults to the original 56-day window (~8 weeks) so the existing view is unchanged unless the user opts into a longer range
+  const [trendRangeDays, setTrendRangeDays] = useState<56 | 182 | 365>(56);
   
   // Comparative pillar data for Today/Week/Month
   const [dailyPillarData, setDailyPillarData] = useState<PillarData[]>([]);
@@ -551,7 +553,7 @@ export default function Analytics() {
   // Load detailed trend data when selections change (used by the Detailed tab AND the inline Overview drill-down)
   useEffect(() => {
     loadDetailedTrendData();
-  }, [detailedViewType, selectedTasks, selectedCategories, selectedPillars]);
+  }, [detailedViewType, selectedTasks, selectedCategories, selectedPillars, trendRangeDays]);
 
   // Load circle of life data when view type or period changes (used by the Detailed tab AND the inline Overview drill-down)
   useEffect(() => {
@@ -900,17 +902,42 @@ export default function Analytics() {
     formatter: (value: number) => value > 0 ? (asHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`) : ''
   });
 
-  // Renders a single solid trend line with an arrowhead at its last point (pointing up/down/flat) instead of a dashed line
-  const renderTrendArrowDot = (data: { trend: number }[]) => {
+  // Formats the first-to-last change in a trend line as a bracketed string, e.g. "(+12%)" or "(-1.5h)", for the small trend badge
+  const trendDeltaLabel = (delta: number, asHours: boolean, asMinutes: boolean = false): string => {
+    const sign = delta >= 0 ? '+' : '';
+    const body = !asHours ? `${sign}${delta.toFixed(0)}%` : asMinutes ? `${sign}${(delta * 60).toFixed(0)}m` : `${sign}${delta.toFixed(1)}h`;
+    return `(${body})`;
+  };
+
+  // Renders a small gray badge with the trend delta text, offset away from the arrow tip (up if trending up, down if trending down)
+  const renderTrendBadge = (cx: number, cy: number, trendingUp: boolean, label: string) => {
+    const width = label.length * 5.5 + 6;
+    return (
+      <g transform={`translate(${cx + 12}, ${trendingUp ? cy - 16 : cy + 16})`}>
+        <rect x={-2} y={-9} width={width} height={14} rx={4} fill="#f1f5f9" stroke="#cbd5e0" strokeWidth={0.5} />
+        <text x={width / 2 - 1} y={1} textAnchor="middle" fontSize={9} fontWeight={600} fill="#64748b">{label}</text>
+      </g>
+    );
+  };
+
+  // Renders a single solid trend line with an arrowhead at its last point, angled to match the actual on-screen slope
+  const renderTrendArrowDot = (data: { trend: number }[], color: string = '#e53e3e', label?: string) => {
     const n = data.length;
-    const direction = n < 2 ? 'flat' : data[n - 1].trend > data[0].trend ? 'up' : data[n - 1].trend < data[0].trend ? 'down' : 'flat';
-    const rotation = direction === 'up' ? -40 : direction === 'down' ? 40 : 0;
+    let prevPoint: { cx: number; cy: number } | null = null;
     return (props: any) => {
       const { cx, cy, index } = props;
-      if (index !== n - 1) return <g key={`trend-dot-${index}`} />;
+      if (index !== n - 1) {
+        prevPoint = { cx, cy };
+        return <g key={`trend-dot-${index}`} />;
+      }
+      const trendingUp = prevPoint ? cy < prevPoint.cy : false;
+      const rotation = prevPoint ? Math.atan2(cy - prevPoint.cy, cx - prevPoint.cx) * (180 / Math.PI) : 0;
       return (
-        <g key="trend-arrow-end" transform={`translate(${cx}, ${cy}) rotate(${rotation})`}>
-          <path d="M -7 0 H 5 M 1 -4 L 6 0 L 1 4" stroke="#e53e3e" strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <g key="trend-arrow-end">
+          <g transform={`translate(${cx}, ${cy}) rotate(${rotation})`}>
+            <path d="M -7 0 H 5 M 1 -4 L 6 0 L 1 4" stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+          {label && renderTrendBadge(cx, cy, trendingUp, label)}
         </g>
       );
     };
@@ -931,16 +958,23 @@ export default function Analytics() {
   };
 
   // Same arrowhead trend-dot renderer as renderTrendArrowDot, but for an arbitrary field name/color (multi-series charts)
-  const renderTrendArrowDotFor = (data: any[], key: string, color: string) => {
+  const renderTrendArrowDotFor = (data: any[], key: string, color: string, label?: string) => {
     const n = data.length;
-    const direction = n < 2 ? 'flat' : (data[n - 1]?.[key] ?? 0) > (data[0]?.[key] ?? 0) ? 'up' : (data[n - 1]?.[key] ?? 0) < (data[0]?.[key] ?? 0) ? 'down' : 'flat';
-    const rotation = direction === 'up' ? -40 : direction === 'down' ? 40 : 0;
+    let prevPoint: { cx: number; cy: number } | null = null;
     return (props: any) => {
       const { cx, cy, index } = props;
-      if (index !== n - 1) return <g key={`trend-dot-${key}-${index}`} />;
+      if (index !== n - 1) {
+        prevPoint = { cx, cy };
+        return <g key={`trend-dot-${key}-${index}`} />;
+      }
+      const trendingUp = prevPoint ? cy < prevPoint.cy : false;
+      const rotation = prevPoint ? Math.atan2(cy - prevPoint.cy, cx - prevPoint.cx) * (180 / Math.PI) : 0;
       return (
-        <g key={`trend-arrow-end-${key}`} transform={`translate(${cx}, ${cy}) rotate(${rotation})`}>
-          <path d="M -7 0 H 5 M 1 -4 L 6 0 L 1 4" stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <g key={`trend-arrow-end-${key}`}>
+          <g transform={`translate(${cx}, ${cy}) rotate(${rotation})`}>
+            <path d="M -7 0 H 5 M 1 -4 L 6 0 L 1 4" stroke={color} strokeWidth={2.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+          {label && renderTrendBadge(cx, cy, trendingUp, label)}
         </g>
       );
     };
@@ -997,7 +1031,7 @@ export default function Analytics() {
                 <Legend {...legendRight} />
                 {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                 <Bar dataKey="value" name={taskName} fill={taskColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
-                <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(weeklyChart)} activeDot={false} />
+                <Line type="monotone" dataKey="trend" name="Trend" stroke={taskColor} strokeWidth={2} dot={renderTrendArrowDot(weeklyChart, taskColor, weeklyChart.length > 1 ? trendDeltaLabel(weeklyChart[weeklyChart.length - 1].trend - weeklyChart[0].trend, showAsHours) : undefined)} activeDot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -1015,7 +1049,7 @@ export default function Analytics() {
                 <Legend {...legendRight} />
                 {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                 <Bar dataKey="value" name={taskName} fill={taskColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
-                <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(monthlyChart)} activeDot={false} />
+                <Line type="monotone" dataKey="trend" name="Trend" stroke={taskColor} strokeWidth={2} dot={renderTrendArrowDot(monthlyChart, taskColor, monthlyChart.length > 1 ? trendDeltaLabel(monthlyChart[monthlyChart.length - 1].trend - monthlyChart[0].trend, showAsHours) : undefined)} activeDot={false} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -1357,23 +1391,46 @@ export default function Analytics() {
     }
   };
 
+  // Runs async fetchers with a limited number in flight at once — much faster than one-at-a-time for long date ranges
+  // without hitting the backend with hundreds of simultaneous requests
+  const fetchWithConcurrencyLimit = async <T,>(fetchers: (() => Promise<T>)[], limit: number): Promise<T[]> => {
+    const results: T[] = new Array(fetchers.length);
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(limit, fetchers.length) }, async () => {
+      while (cursor < fetchers.length) {
+        const current = cursor++;
+        results[current] = await fetchers[current]();
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  };
+
   // Load detailed trend data for selected tasks/categories/pillars
   const loadDetailedTrendData = async () => {
     try {
       const today = new Date();
+      const daysBack = trendRangeDays - 1;
       
       // Load task trends if tasks are selected
       if (detailedViewType === 'tasks' && selectedTasks.length > 0) {
-        // Load last 56 days (8 weeks) of data
-        const dailyData: any[] = [];
-        for (let i = 55; i >= 0; i--) {
+        const dateStrs: string[] = [];
+        for (let i = daysBack; i >= 0; i--) {
           const date = new Date(today);
           date.setDate(date.getDate() - i);
-          const dateStr = formatDateForInput(date);
-          
-          const response = await apiClient.get(`/api/daily-time/entries/${dateStr}`);
-          const entries = response.data || [];
-          
+          dateStrs.push(formatDateForInput(date));
+        }
+        
+        const perDayEntries = await fetchWithConcurrencyLimit(
+          dateStrs.map(dateStr => async () => {
+            const response = await apiClient.get(`/api/daily-time/entries/${dateStr}`);
+            return response.data || [];
+          }),
+          8
+        );
+        
+        const dailyData: any[] = dateStrs.map((dateStr, i) => {
+          const entries = perDayEntries[i];
           // Aggregate by task
           const dayData: any = { date: dateStr };
           selectedTasks.forEach(taskId => {
@@ -1390,22 +1447,30 @@ export default function Analytics() {
               dayData[`task_${taskId}_name`] = task.task_name;
             }
           });
-          dailyData.push(dayData);
-        }
+          return dayData;
+        });
         setTaskTrendData(dailyData);
       }
       
       // Load category trends if categories are selected
       if (detailedViewType === 'categories' && selectedCategories.length > 0) {
-        const dailyData: any[] = [];
-        for (let i = 55; i >= 0; i--) {
+        const dateStrs: string[] = [];
+        for (let i = daysBack; i >= 0; i--) {
           const date = new Date(today);
           date.setDate(date.getDate() - i);
-          const dateStr = formatDateForInput(date);
-          
-          const response = await apiClient.get(`/api/analytics/category-breakdown?start_date=${dateStr}&end_date=${dateStr}`);
-          const categories = response.data.categories || [];
-          
+          dateStrs.push(formatDateForInput(date));
+        }
+        
+        const perDayCategories = await fetchWithConcurrencyLimit(
+          dateStrs.map(dateStr => async () => {
+            const response = await apiClient.get(`/api/analytics/category-breakdown?start_date=${dateStr}&end_date=${dateStr}`);
+            return response.data.categories || [];
+          }),
+          8
+        );
+        
+        const dailyData: any[] = dateStrs.map((dateStr, i) => {
+          const categories = perDayCategories[i];
           const dayData: any = { date: dateStr };
           selectedCategories.forEach(categoryName => {
             const category = categories.find((c: any) => c.category_name === categoryName);
@@ -1417,22 +1482,30 @@ export default function Analytics() {
               dayData[`category_${categoryName}_hours`] = spent;
             }
           });
-          dailyData.push(dayData);
-        }
+          return dayData;
+        });
         setCategoryTrendData(dailyData);
       }
       
       // Load pillar trends if pillars are selected
       if (detailedViewType === 'pillars' && selectedPillars.length > 0) {
-        const dailyData: any[] = [];
-        for (let i = 55; i >= 0; i--) {
+        const dateStrs: string[] = [];
+        for (let i = daysBack; i >= 0; i--) {
           const date = new Date(today);
           date.setDate(date.getDate() - i);
-          const dateStr = formatDateForInput(date);
-          
-          const response = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${dateStr}&end_date=${dateStr}`);
-          const pillars = response.data.pillars || [];
-          
+          dateStrs.push(formatDateForInput(date));
+        }
+        
+        const perDayPillars = await fetchWithConcurrencyLimit(
+          dateStrs.map(dateStr => async () => {
+            const response = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${dateStr}&end_date=${dateStr}`);
+            return response.data.pillars || [];
+          }),
+          8
+        );
+        
+        const dailyData: any[] = dateStrs.map((dateStr, i) => {
+          const pillars = perDayPillars[i];
           const dayData: any = { date: dateStr };
           selectedPillars.forEach(pillarName => {
             const pillar = pillars.find((p: any) => p.pillar_name === pillarName);
@@ -1444,8 +1517,8 @@ export default function Analytics() {
               dayData[`pillar_${pillarName}_hours`] = spent;
             }
           });
-          dailyData.push(dayData);
-        }
+          return dayData;
+        });
         setPillarTrendData(dailyData);
       }
     } catch (error) {
@@ -1922,7 +1995,7 @@ export default function Analytics() {
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                           <Bar dataKey="value" name={categoryTrendOpenFor} fill={catColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
-                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(weeklyChart)} activeDot={false} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke={catColor} strokeWidth={2} dot={renderTrendArrowDot(weeklyChart, catColor, weeklyChart.length > 1 ? trendDeltaLabel(weeklyChart[weeklyChart.length - 1].trend - weeklyChart[0].trend, showAsHours) : undefined)} activeDot={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -1940,7 +2013,7 @@ export default function Analytics() {
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                           <Bar dataKey="value" name={categoryTrendOpenFor} fill={catColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
-                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(monthlyChart)} activeDot={false} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke={catColor} strokeWidth={2} dot={renderTrendArrowDot(monthlyChart, catColor, monthlyChart.length > 1 ? trendDeltaLabel(monthlyChart[monthlyChart.length - 1].trend - monthlyChart[0].trend, showAsHours) : undefined)} activeDot={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -2445,7 +2518,7 @@ export default function Analytics() {
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                           <Bar dataKey="value" name={pillarTrendOpenFor} fill={pillarColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
-                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(weeklyChart)} activeDot={false} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke={pillarColor} strokeWidth={2} dot={renderTrendArrowDot(weeklyChart, pillarColor, weeklyChart.length > 1 ? trendDeltaLabel(weeklyChart[weeklyChart.length - 1].trend - weeklyChart[0].trend, showAsHours) : undefined)} activeDot={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -2463,7 +2536,7 @@ export default function Analytics() {
                           <Legend {...legendRight} />
                           {!showAsHours && <ReferenceLine y={100} stroke="#10b981" strokeDasharray="3 3" />}
                           <Bar dataKey="value" name={pillarTrendOpenFor} fill={pillarColor} radius={[4, 4, 0, 0]} label={avgBarLabel(showAsHours)} />
-                          <Line type="monotone" dataKey="trend" name="Trend" stroke="#e53e3e" strokeWidth={2} dot={renderTrendArrowDot(monthlyChart)} activeDot={false} />
+                          <Line type="monotone" dataKey="trend" name="Trend" stroke={pillarColor} strokeWidth={2} dot={renderTrendArrowDot(monthlyChart, pillarColor, monthlyChart.length > 1 ? trendDeltaLabel(monthlyChart[monthlyChart.length - 1].trend - monthlyChart[0].trend, showAsHours) : undefined)} activeDot={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>
@@ -4000,6 +4073,19 @@ export default function Analytics() {
             >
               {showAsHours ? '⏱️ Hours' : '📊 %'}
             </button>
+            {/* History range for these trend charts — defaults to the original ~8-week window; longer ranges are opt-in only */}
+            <label style={{ fontSize: '11px', color: '#4a5568', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              History:
+              <select
+                value={trendRangeDays}
+                onChange={(e) => setTrendRangeDays(Number(e.target.value) as 56 | 182 | 365)}
+                style={{ fontSize: '11px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+              >
+                <option value={56}>Last 8 Weeks (default)</option>
+                <option value={182}>Last 6 Months</option>
+                <option value={365}>Last 12 Months</option>
+              </select>
+            </label>
             {/* View Type Selector — same line as the title to save vertical space */}
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <button 
@@ -4462,9 +4548,9 @@ export default function Analytics() {
                               type="monotone"
                               dataKey={`task_${taskId}_trend`}
                               name={`${task?.task_name || `Task ${taskId}`} trend`}
-                              stroke="#e53e3e"
+                              stroke={colors[index]}
                               strokeWidth={2}
-                              dot={renderTrendArrowDotFor(weeklyChartData, `task_${taskId}_trend`, '#e53e3e')}
+                              dot={renderTrendArrowDotFor(weeklyChartData, `task_${taskId}_trend`, colors[index], weeklyChartData.length > 1 ? trendDeltaLabel(weeklyChartData[weeklyChartData.length - 1][`task_${taskId}_trend`] - weeklyChartData[0][`task_${taskId}_trend`], showAsHours, useMinutesForTasks) : undefined)}
                               activeDot={false}
                               legendType="none"
                             />
@@ -4487,9 +4573,9 @@ export default function Analytics() {
                               type="monotone"
                               dataKey={`category_${categoryName}_trend`}
                               name={`${categoryName} trend`}
-                              stroke="#e53e3e"
+                              stroke={colors[index]}
                               strokeWidth={2}
-                              dot={renderTrendArrowDotFor(weeklyChartData, `category_${categoryName}_trend`, '#e53e3e')}
+                              dot={renderTrendArrowDotFor(weeklyChartData, `category_${categoryName}_trend`, colors[index], weeklyChartData.length > 1 ? trendDeltaLabel(weeklyChartData[weeklyChartData.length - 1][`category_${categoryName}_trend`] - weeklyChartData[0][`category_${categoryName}_trend`], showAsHours) : undefined)}
                               activeDot={false}
                               legendType="none"
                             />
@@ -4498,12 +4584,13 @@ export default function Analytics() {
                         
                         {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
                           const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
+                          const pillarLineColor = pillar?.color_code || '#48bb78';
                           return [
                             <Bar 
                               key={`bar-${pillarName}`}
                               dataKey={`pillar_${pillarName}`}
                               name={pillarName}
-                              fill={pillar?.color_code || '#48bb78'}
+                              fill={pillarLineColor}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />,
@@ -4512,9 +4599,9 @@ export default function Analytics() {
                               type="monotone"
                               dataKey={`pillar_${pillarName}_trend`}
                               name={`${pillarName} trend`}
-                              stroke="#e53e3e"
+                              stroke={pillarLineColor}
                               strokeWidth={2}
-                              dot={renderTrendArrowDotFor(weeklyChartData, `pillar_${pillarName}_trend`, '#e53e3e')}
+                              dot={renderTrendArrowDotFor(weeklyChartData, `pillar_${pillarName}_trend`, pillarLineColor, weeklyChartData.length > 1 ? trendDeltaLabel(weeklyChartData[weeklyChartData.length - 1][`pillar_${pillarName}_trend`] - weeklyChartData[0][`pillar_${pillarName}_trend`], showAsHours) : undefined)}
                               activeDot={false}
                               legendType="none"
                             />
@@ -4603,7 +4690,7 @@ export default function Analytics() {
                 })();
                 return (
                 <div className="comparative-charts-section" style={{ marginTop: '14px' }}>
-                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>{getSelectedTrendNames()} — Monthly Average (Last 3 Months, {showAsHours ? 'Hours' : 'Utilization %'})</h3>
+                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>{getSelectedTrendNames()} — Monthly Average (Last {trendRangeDays === 56 ? '~2' : trendRangeDays === 182 ? '6' : '12'} Months, {showAsHours ? 'Hours' : 'Utilization %'})</h3>
                   <ResponsiveContainer width="100%" height={220}>
                       <ComposedChart 
                         data={monthlyChartData}
@@ -4636,9 +4723,9 @@ export default function Analytics() {
                               type="monotone"
                               dataKey={`task_${taskId}_trend`}
                               name={`${task?.task_name || `Task ${taskId}`} trend`}
-                              stroke="#e53e3e"
+                              stroke={colors[index]}
                               strokeWidth={2}
-                              dot={renderTrendArrowDotFor(monthlyChartData, `task_${taskId}_trend`, '#e53e3e')}
+                              dot={renderTrendArrowDotFor(monthlyChartData, `task_${taskId}_trend`, colors[index], monthlyChartData.length > 1 ? trendDeltaLabel(monthlyChartData[monthlyChartData.length - 1][`task_${taskId}_trend`] - monthlyChartData[0][`task_${taskId}_trend`], showAsHours, useMinutesForTasks) : undefined)}
                               activeDot={false}
                               legendType="none"
                             />
@@ -4661,9 +4748,9 @@ export default function Analytics() {
                               type="monotone"
                               dataKey={`category_${categoryName}_trend`}
                               name={`${categoryName} trend`}
-                              stroke="#e53e3e"
+                              stroke={colors[index]}
                               strokeWidth={2}
-                              dot={renderTrendArrowDotFor(monthlyChartData, `category_${categoryName}_trend`, '#e53e3e')}
+                              dot={renderTrendArrowDotFor(monthlyChartData, `category_${categoryName}_trend`, colors[index], monthlyChartData.length > 1 ? trendDeltaLabel(monthlyChartData[monthlyChartData.length - 1][`category_${categoryName}_trend`] - monthlyChartData[0][`category_${categoryName}_trend`], showAsHours) : undefined)}
                               activeDot={false}
                               legendType="none"
                             />
@@ -4672,12 +4759,13 @@ export default function Analytics() {
                         
                         {detailedViewType === 'pillars' && selectedPillars.map((pillarName, index) => {
                           const pillar = dailyPillarData.find(p => p.pillar_name === pillarName);
+                          const pillarLineColor = pillar?.color_code || '#ed8936';
                           return [
                             <Bar 
                               key={`bar-${pillarName}`}
                               dataKey={`pillar_${pillarName}`}
                               name={pillarName}
-                              fill={pillar?.color_code || '#ed8936'}
+                              fill={pillarLineColor}
                               radius={[6, 6, 0, 0]}
                               label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />,
@@ -4686,9 +4774,9 @@ export default function Analytics() {
                               type="monotone"
                               dataKey={`pillar_${pillarName}_trend`}
                               name={`${pillarName} trend`}
-                              stroke="#e53e3e"
+                              stroke={pillarLineColor}
                               strokeWidth={2}
-                              dot={renderTrendArrowDotFor(monthlyChartData, `pillar_${pillarName}_trend`, '#e53e3e')}
+                              dot={renderTrendArrowDotFor(monthlyChartData, `pillar_${pillarName}_trend`, pillarLineColor, monthlyChartData.length > 1 ? trendDeltaLabel(monthlyChartData[monthlyChartData.length - 1][`pillar_${pillarName}_trend`] - monthlyChartData[0][`pillar_${pillarName}_trend`], showAsHours) : undefined)}
                               activeDot={false}
                               legendType="none"
                             />
