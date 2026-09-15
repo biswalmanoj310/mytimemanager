@@ -177,4 +177,29 @@
 
 ---
 
-*Last updated: 2026-07-20 | Add entries here whenever a major feature or fix lands*
+### SOL-010 — Goal Page: Misc Tasks Section + Compact UI
+| Field | Value |
+|-------|-------|
+| REQ | REQ-250, REQ-251 |
+| Date | 2026-09-12 |
+| Problem | (1) A misc task linked to a Life Goal (task.goal_id set, follow_up_frequency='misc') showed up inside the "Linked Tasks (Important)" section instead of its own compact tree section like the Misc tab; its Edit button navigated to a dead `/tasks?tab=onetime&edit=` URL that Tasks.tsx never handled. (2) The goal detail page headers/padding were oversized (18-28px text, 20px+ padding), showing little info per screen |
+| Approach | Split the `/api/life-goals/{id}/linked-tasks` response client-side by `task_type` into `importantLinkedTasks` (one_time) and a new `miscLinkedTasks` (misc) tree section styled like the Misc tab (checkbox complete, ✏️ edit, ➕ Sub, 🗑 delete) — all acting on the same `tasks` row so Misc tab / Goal page stay in sync. Added `defaultGoalId` prop to `TaskForm` (mirrors `defaultWishId`) to pre-link new misc subtasks to the goal, and fixed `resetForm()` to respect `defaultParentTaskId`. Replaced the old "navigate to dead edit URL" button with an in-page `TaskForm` edit modal. Fixed `misc_tasks` goal stats in `life_goal_service.py` to query the current `Task` table (`goal_id` + `follow_up_frequency='misc'`) instead of the deprecated `MiscTaskGroup`/`MiscTaskItem` models. Compacted the goal-detail-page banner, stats bar, and the goal-tasks/projects/milestones/why/description sections (padding ~12px, headers ~14px, buttons ~4px 10px), plus the shared `.goal-section`/`.section-header`/`.milestone-item`/`.goal-task-item`/`.empty-section` CSS rules |
+| Files | `frontend/src/pages/Goals.tsx`, `frontend/src/pages/Goals.css`, `frontend/src/components/TaskForm.tsx`, `backend/app/services/life_goal_service.py` |
+| Outcome | Misc tasks linked to a goal now show in their own section with full parent/child tree and the same edit/delete/add-subtask actions as the Misc tab, staying in sync everywhere; goal detail page shows more content with less scrolling |
+
+---
+
+### SOL-011 — Analytics Overview: Per-Chart Today/Week/Month Controls + Persisted %/Time Toggles
+| Field | Value |
+|-------|-------|
+| REQ | REQ-252, REQ-253, REQ-254 |
+| Date | 2026-09-14 |
+| Problem | (1) The ⏱ Time/📊 % Utilization toggle on each comparison chart reset to "Time" on every refresh. (2) There was no explicit control for the "Today" column — it was always on with no button, unlike Week/Month which had quick-select buttons. (3) The "📅 This Week"/"🗓️ This Month" quick buttons (and the %/hours toggle on the 3 utilization charts) were wired to one shared global state, so clicking them on one chart changed the columns on all 7 comparison charts at once |
+| Approach | Added `loadChartToggles()`/`CHART_TOGGLE_STORAGE_KEY` so `catShowPct`/`taskShowPct`/`oneTimeShowPct`/`pillarShowPct`/`showUtilizationAsHours` lazy-init from and persist to localStorage. Introduced 3 new per-chart `Record<OverviewChartKey, boolean>` states — `chartTodayVisible` (default true), `chartWeekVisible`, `chartMonthVisible` (both default false, matching REQ-206's "hidden by default") — each persisted to its own localStorage key. `renderWeekMonthQuickButtons()` now takes a `chartKey` argument and renders 3 buttons (Today/This Week/This Month) that flip only that chart's own flags. Replaced the old global `showWeekColumnGlobal`/`showMonthColumnGlobal` conditionals on all 7 inline comparison charts' Today/Week/Month `<Bar>` elements with the chart-scoped flags. The top "Charts shown below" filter bar's Week:/Month: dropdowns (and the expanded "View All" modal) are untouched — they still control the shared date-range offset (This Week vs Last 2 Weeks, etc.) that a chart's own column uses once turned on |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Refreshing the page keeps whatever %/Time and Today/Week/Month state each chart was left in; toggling one chart's columns never affects any other chart |
+
+---
+
+*Last updated: 2026-09-14 | Add entries here whenever a major feature or fix lands*
+

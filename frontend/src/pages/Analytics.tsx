@@ -214,6 +214,53 @@ const OVERVIEW_MONTH_OPTION_STORAGE_KEY = 'analytics_overview_month_option_v1';
 type WeekPeriodOption = 'hide' | 0 | 1 | 2 | 4;
 type MonthPeriodOption = 'hide' | 0 | 1 | 3 | 6;
 
+// Per-chart Today/Week/Month column visibility — each of the 7 comparison charts controls its own
+// columns independently (clicking "This Week" on one chart no longer affects any other chart)
+const DEFAULT_CHART_TODAY_VISIBLE: Record<OverviewChartKey, boolean> = {
+  pillar: true, category: true, dailyTimeBased: true, dailyOneTime: true,
+  utilizationTasks: true, utilizationCategories: true, utilizationOneTime: true,
+  categoryBreakdown: true, taskBreakdown: true,
+};
+const DEFAULT_CHART_PERIOD_HIDDEN: Record<OverviewChartKey, boolean> = {
+  pillar: false, category: false, dailyTimeBased: false, dailyOneTime: false,
+  utilizationTasks: false, utilizationCategories: false, utilizationOneTime: false,
+  categoryBreakdown: false, taskBreakdown: false,
+};
+const CHART_TODAY_VISIBLE_STORAGE_KEY = 'analytics_chart_today_visible_v1';
+const CHART_WEEK_VISIBLE_STORAGE_KEY = 'analytics_chart_week_visible_v1';
+const CHART_MONTH_VISIBLE_STORAGE_KEY = 'analytics_chart_month_visible_v1';
+
+// Per-chart Time/% toggles — persisted so a refresh keeps whatever was last selected
+const CHART_TOGGLE_STORAGE_KEY = 'analytics_chart_pct_toggles_v1';
+interface ChartPctToggles {
+  catShowPct: boolean;
+  taskShowPct: boolean;
+  oneTimeShowPct: boolean;
+  pillarShowPct: boolean;
+  showUtilizationAsHours: boolean;
+}
+const DEFAULT_CHART_TOGGLES: ChartPctToggles = {
+  catShowPct: false,
+  taskShowPct: false,
+  oneTimeShowPct: false,
+  pillarShowPct: false,
+  showUtilizationAsHours: false,
+};
+function loadChartToggles(): ChartPctToggles {
+  try {
+    const saved = localStorage.getItem(CHART_TOGGLE_STORAGE_KEY);
+    if (saved) return { ...DEFAULT_CHART_TOGGLES, ...JSON.parse(saved) };
+  } catch { /* ignore malformed storage */ }
+  return DEFAULT_CHART_TOGGLES;
+}
+function loadChartVisibility(key: string, fallback: Record<OverviewChartKey, boolean>): Record<OverviewChartKey, boolean> {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved) return { ...fallback, ...JSON.parse(saved) };
+  } catch { /* ignore malformed storage */ }
+  return fallback;
+}
+
 // Pure date-range helpers (module scope so they're hoisted and usable anywhere, no TDZ issues)
 function getWeekRangeForOption(option: 0 | 1 | 2 | 4): { start: string; end: string } {
   const today = new Date();
@@ -323,7 +370,7 @@ export default function Analytics() {
   const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
   const [showMonthOverMonth, setShowMonthOverMonth] = useState(false);
   const [showAsHours, setShowAsHours] = useState(false);
-  const [showUtilizationAsHours, setShowUtilizationAsHours] = useState(false);
+  const [showUtilizationAsHours, setShowUtilizationAsHours] = useState(() => loadChartToggles().showUtilizationAsHours);
   
   // Detailed view - Historical trend data
   const [taskTrendData, setTaskTrendData] = useState<any[]>([]);
@@ -405,15 +452,37 @@ export default function Analytics() {
   useEffect(() => {
     localStorage.setItem(OVERVIEW_MONTH_OPTION_STORAGE_KEY, String(overviewMonthOption));
   }, [overviewMonthOption]);
-  // Derived: single source of truth for every chart's weekly/monthly column visibility
-  const showWeekColumnGlobal = overviewWeekOption !== 'hide';
+  // Derived: still used by the expanded "View All" modal chart (which has one set of controls, not per-chart)
   const showMonthColumnGlobal = overviewMonthOption !== 'hide';
   const weekRangeOption: 0 | 1 | 2 | 4 = overviewWeekOption === 'hide' ? 0 : overviewWeekOption;
   const monthRangeOption: 0 | 1 | 3 | 6 = overviewMonthOption === 'hide' ? 0 : overviewMonthOption;
-  const [catShowPct,      setCatShowPct]      = useState(false);
-  const [taskShowPct,     setTaskShowPct]     = useState(false);
-  const [oneTimeShowPct,  setOneTimeShowPct]  = useState(false);
-  const [pillarShowPct,   setPillarShowPct]   = useState(false);
+  const [catShowPct,      setCatShowPct]      = useState(() => loadChartToggles().catShowPct);
+  const [taskShowPct,     setTaskShowPct]     = useState(() => loadChartToggles().taskShowPct);
+  const [oneTimeShowPct,  setOneTimeShowPct]  = useState(() => loadChartToggles().oneTimeShowPct);
+  const [pillarShowPct,   setPillarShowPct]   = useState(() => loadChartToggles().pillarShowPct);
+  useEffect(() => {
+    localStorage.setItem(CHART_TOGGLE_STORAGE_KEY, JSON.stringify({
+      catShowPct, taskShowPct, oneTimeShowPct, pillarShowPct, showUtilizationAsHours
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catShowPct, taskShowPct, oneTimeShowPct, pillarShowPct, showUtilizationAsHours]);
+
+  // Per-chart Today/Week/Month column visibility (independent per chart — see DEFAULT_CHART_* above)
+  const [chartTodayVisible, setChartTodayVisible] = useState<Record<OverviewChartKey, boolean>>(() =>
+    loadChartVisibility(CHART_TODAY_VISIBLE_STORAGE_KEY, DEFAULT_CHART_TODAY_VISIBLE));
+  const [chartWeekVisible, setChartWeekVisible] = useState<Record<OverviewChartKey, boolean>>(() =>
+    loadChartVisibility(CHART_WEEK_VISIBLE_STORAGE_KEY, DEFAULT_CHART_PERIOD_HIDDEN));
+  const [chartMonthVisible, setChartMonthVisible] = useState<Record<OverviewChartKey, boolean>>(() =>
+    loadChartVisibility(CHART_MONTH_VISIBLE_STORAGE_KEY, DEFAULT_CHART_PERIOD_HIDDEN));
+  useEffect(() => {
+    localStorage.setItem(CHART_TODAY_VISIBLE_STORAGE_KEY, JSON.stringify(chartTodayVisible));
+  }, [chartTodayVisible]);
+  useEffect(() => {
+    localStorage.setItem(CHART_WEEK_VISIBLE_STORAGE_KEY, JSON.stringify(chartWeekVisible));
+  }, [chartWeekVisible]);
+  useEffect(() => {
+    localStorage.setItem(CHART_MONTH_VISIBLE_STORAGE_KEY, JSON.stringify(chartMonthVisible));
+  }, [chartMonthVisible]);
 
   // Inline drill-down: click a pillar in "Pillar Time Comparison" to see its week-over-week trend right here
   const [pillarTrendOpenFor, setPillarTrendOpenFor] = useState<string | null>(null);
@@ -1058,20 +1127,26 @@ export default function Analytics() {
     );
   };
 
-  // Quick-select buttons shown next to each chart's Time/% toggle — jump straight to This Week / This Month
-  // without scrolling up to the shared "Charts shown below" filter bar. Clicking again hides that column.
-  const renderWeekMonthQuickButtons = () => (
+  // Quick-select buttons shown next to each chart's Time/% toggle — jump straight to Today / This Week / This Month
+  // without scrolling up to the shared "Charts shown below" filter bar. Each chart's buttons are independent
+  // (chartKey-scoped state) so toggling one chart's columns never affects any other chart.
+  const renderWeekMonthQuickButtons = (chartKey: OverviewChartKey) => (
     <>
       <button
-        onClick={() => setOverviewWeekOption(overviewWeekOption === 0 ? 'hide' : 0)}
-        style={{ fontSize: '11px', padding: '6px 10px', background: overviewWeekOption === 0 ? '#48bb78' : '#edf2f7', color: overviewWeekOption === 0 ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+        onClick={() => setChartTodayVisible(prev => ({ ...prev, [chartKey]: !prev[chartKey] }))}
+        style={{ fontSize: '11px', padding: '6px 10px', background: chartTodayVisible[chartKey] ? '#4299e1' : '#edf2f7', color: chartTodayVisible[chartKey] ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+      >📅 Today</button>
+      <button
+        onClick={() => setChartWeekVisible(prev => ({ ...prev, [chartKey]: !prev[chartKey] }))}
+        style={{ fontSize: '11px', padding: '6px 10px', background: chartWeekVisible[chartKey] ? '#48bb78' : '#edf2f7', color: chartWeekVisible[chartKey] ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
       >📅 This Week</button>
       <button
-        onClick={() => setOverviewMonthOption(overviewMonthOption === 0 ? 'hide' : 0)}
-        style={{ fontSize: '11px', padding: '6px 10px', background: overviewMonthOption === 0 ? '#ed8936' : '#edf2f7', color: overviewMonthOption === 0 ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+        onClick={() => setChartMonthVisible(prev => ({ ...prev, [chartKey]: !prev[chartKey] }))}
+        style={{ fontSize: '11px', padding: '6px 10px', background: chartMonthVisible[chartKey] ? '#ed8936' : '#edf2f7', color: chartMonthVisible[chartKey] ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
       >🗓️ This Month</button>
     </>
   );
+
 
   const loadComparativePillarData = async () => {
     try {
@@ -1797,7 +1872,7 @@ export default function Analytics() {
                   onClick={() => setCatShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: catShowPct ? '#4299e1' : '#edf2f7', color: catShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{catShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('category')}
               </div>
               <p className="chart-description" style={{ margin: 0 }}>Ideal allocation vs actual time spent by category</p>
             </div>
@@ -1901,14 +1976,16 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#666', fontSize: 10, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  <Bar 
-                    dataKey={catShowPct ? 'todayPct' : 'today'} 
-                    name="Today" 
-                    fill="#4299e1" 
-                    radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
-                  />
-                  {showWeekColumnGlobal && (
+                  {chartTodayVisible.category && (
+                    <Bar 
+                      dataKey={catShowPct ? 'todayPct' : 'today'} 
+                      name="Today" 
+                      fill="#4299e1" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
+                  {chartWeekVisible.category && (
                     <Bar 
                       dataKey={catShowPct ? 'weekAvgPct' : 'weekAvg'} 
                       name="Week Avg/Day" 
@@ -1917,7 +1994,7 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 10, formatter: (value: number) => value > 0 ? catShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.category && (
                     <Bar 
                       dataKey={catShowPct ? 'monthAvgPct' : 'monthAvg'} 
                       name="Month Avg/Day" 
@@ -2032,7 +2109,7 @@ export default function Analytics() {
                   onClick={() => setTaskShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: taskShowPct ? '#4299e1' : '#edf2f7', color: taskShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{taskShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('dailyTimeBased')}
               </div>
               <p className="chart-description" style={{ margin: 0 }}>Ideal allocation vs actual time spent (tasks from Daily tab ⏰Time-Based Tasks section)</p>
             </div>
@@ -2137,14 +2214,16 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#666', fontSize: 9, fontWeight: 500, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  <Bar 
-                    dataKey={taskShowPct ? 'todayPct' : 'today'} 
-                    name="Today (Actual)" 
-                    fill="#4299e1" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
-                  />
-                  {showWeekColumnGlobal && (
+                  {chartTodayVisible.dailyTimeBased && (
+                    <Bar 
+                      dataKey={taskShowPct ? 'todayPct' : 'today'} 
+                      name="Today (Actual)" 
+                      fill="#4299e1" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
+                  {chartWeekVisible.dailyTimeBased && (
                     <Bar 
                       dataKey={taskShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
@@ -2153,7 +2232,7 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? taskShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.dailyTimeBased && (
                     <Bar 
                       dataKey={taskShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
@@ -2195,7 +2274,7 @@ export default function Analytics() {
                   onClick={() => setOneTimeShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: oneTimeShowPct ? '#4299e1' : '#edf2f7', color: oneTimeShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{oneTimeShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('dailyOneTime')}
               </div>
               <p className="chart-description" style={{ margin: 0 }}>Ideal allocation vs actual time spent (tasks from Daily tab ⏰Daily: One Time Tasks section)</p>
             </div>
@@ -2285,15 +2364,17 @@ export default function Analytics() {
                   )}
                   
                   {/* Today's Actual */}
-                  <Bar 
-                    dataKey={oneTimeShowPct ? 'todayPct' : 'today'} 
-                    name="Today (Actual)" 
-                    fill="#4299e1" 
-                    radius={[4, 4, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? oneTimeShowPct ? `${value}%` : `${value.toFixed(0)}m` : '' }}
-                  />
+                  {chartTodayVisible.dailyOneTime && (
+                    <Bar 
+                      dataKey={oneTimeShowPct ? 'todayPct' : 'today'} 
+                      name="Today (Actual)" 
+                      fill="#4299e1" 
+                      radius={[4, 4, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 600, fontSize: 9, formatter: (value: number) => value > 0 ? oneTimeShowPct ? `${value}%` : `${value.toFixed(0)}m` : '' }}
+                    />
+                  )}
                   
-                  {showWeekColumnGlobal && (
+                  {chartWeekVisible.dailyOneTime && (
                     <Bar 
                       dataKey={oneTimeShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
@@ -2303,7 +2384,7 @@ export default function Analytics() {
                     />
                   )}
                   
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.dailyOneTime && (
                     <Bar 
                       dataKey={oneTimeShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
@@ -2345,7 +2426,7 @@ export default function Analytics() {
                   onClick={() => setPillarShowPct(v => !v)}
                   style={{ fontSize: '11px', padding: '6px 10px', background: pillarShowPct ? '#4299e1' : '#edf2f7', color: pillarShowPct ? 'white' : '#374151', border: '1.5px solid #e2e8f0', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
                 >{pillarShowPct ? '📊 % Utilization' : '⏱ Time'}</button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('pillar')}
               </div>
               <p className="chart-description" style={{ margin: 0 }}>Ideal allocation vs actual time spent across your life pillars</p>
             </div>
@@ -2423,14 +2504,16 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#666', fontSize: 12, fontWeight: 600, formatter: (value: number) => value > 0 ? `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  <Bar 
-                    dataKey={pillarShowPct ? 'todayPct' : 'today'} 
-                    name="Today (Actual)" 
-                    fill="#4299e1" 
-                    radius={[6, 6, 0, 0]}
-                    label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
-                  />
-                  {showWeekColumnGlobal && (
+                  {chartTodayVisible.pillar && (
+                    <Bar 
+                      dataKey={pillarShowPct ? 'todayPct' : 'today'} 
+                      name="Today (Actual)" 
+                      fill="#4299e1" 
+                      radius={[6, 6, 0, 0]}
+                      label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
+                    />
+                  )}
+                  {chartWeekVisible.pillar && (
                     <Bar 
                       dataKey={pillarShowPct ? 'weeklyPct' : 'weekly'} 
                       name="Weekly Avg (Actual)" 
@@ -2439,7 +2522,7 @@ export default function Analytics() {
                       label={{ position: 'top', fill: '#333', fontWeight: 700, fontSize: 12, formatter: (value: number) => value > 0 ? pillarShowPct ? `${value}%` : `${value.toFixed(1)}h` : '' }}
                     />
                   )}
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.pillar && (
                     <Bar 
                       dataKey={pillarShowPct ? 'monthlyPct' : 'monthly'} 
                       name="Monthly Avg (Actual)" 
@@ -2557,7 +2640,7 @@ export default function Analytics() {
                 >
                   {showUtilizationAsHours ? '⏱️ Hours' : '📊 %'}
                 </button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('utilizationTasks')}
                 <button 
                   onClick={() => {
                     setModalChartType('utilization' as any);
@@ -2650,51 +2733,55 @@ export default function Analytics() {
                     iconType="rect"
                   />
                   {!showUtilizationAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
-                  <Bar 
-                    dataKey="today" 
-                    name={showUtilizationAsHours ? 'Today h' : 'Today %'} 
-                    stackId="today"
-                    fill="#4299e1" 
-                    radius={[0, 0, 0, 0]}
-                  >
-                    <LabelList 
-                      dataKey="today"
-                      position="top"
-                      content={(props: any) => {
-                        const { x, y, width, value } = props;
-                        if (!value || value === 0) return null;
-                        return (
-                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                            {showUtilizationAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
-                          </text>
-                        );
-                      }}
-                    />
-                  </Bar>
-                  {!showUtilizationAsHours && (
-                    <Bar 
-                      dataKey="todayOvertime" 
-                      name="Today OT" 
-                      stackId="today"
-                      fill="#dc2626" 
-                      radius={[4, 4, 0, 0]}
-                    >
-                      <LabelList 
-                        dataKey="todayOvertime"
-                        position="top"
-                        content={(props: any) => {
-                          const { x, y, width, value } = props;
-                          if (!value || value === 0) return null;
-                          return (
-                            <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                              {`${value.toFixed(0)}%`}
-                            </text>
-                          );
-                        }}
-                      />
-                    </Bar>
+                  {chartTodayVisible.utilizationTasks && (
+                    <>
+                      <Bar 
+                        dataKey="today" 
+                        name={showUtilizationAsHours ? 'Today h' : 'Today %'} 
+                        stackId="today"
+                        fill="#4299e1" 
+                        radius={[0, 0, 0, 0]}
+                      >
+                        <LabelList 
+                          dataKey="today"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {showUtilizationAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
+                      {!showUtilizationAsHours && (
+                        <Bar 
+                          dataKey="todayOvertime" 
+                          name="Today OT" 
+                          stackId="today"
+                          fill="#dc2626" 
+                          radius={[4, 4, 0, 0]}
+                        >
+                          <LabelList 
+                            dataKey="todayOvertime"
+                            position="top"
+                            content={(props: any) => {
+                              const { x, y, width, value } = props;
+                              if (!value || value === 0) return null;
+                              return (
+                                <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                  {`${value.toFixed(0)}%`}
+                                </text>
+                              );
+                            }}
+                          />
+                        </Bar>
+                      )}
+                    </>
                   )}
-                  {showWeekColumnGlobal && (
+                  {chartWeekVisible.utilizationTasks && (
                     <>
                       <Bar 
                         dataKey="weekly" 
@@ -2742,7 +2829,7 @@ export default function Analytics() {
                       )}
                     </>
                   )}
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.utilizationTasks && (
                     <>
                       <Bar 
                         dataKey="monthly" 
@@ -2806,7 +2893,7 @@ export default function Analytics() {
                 >
                   {showUtilizationAsHours ? '⏱️ Hours' : '📊 %'}
                 </button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('utilizationCategories')}
                 <button 
                   onClick={() => {
                     setModalChartType('utilization-category' as any);
@@ -2915,51 +3002,55 @@ export default function Analytics() {
                     iconType="rect"
                   />
                   {!showUtilizationAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
-                  <Bar 
-                    dataKey="today" 
-                    name={showUtilizationAsHours ? 'Today h' : 'Today %'} 
-                    stackId="today"
-                    fill="#4299e1" 
-                    radius={[0, 0, 0, 0]}
-                  >
-                    <LabelList 
-                      dataKey="today"
-                      position="top"
-                      content={(props: any) => {
-                        const { x, y, width, value } = props;
-                        if (!value || value === 0) return null;
-                        return (
-                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                            {showUtilizationAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
-                          </text>
-                        );
-                      }}
-                    />
-                  </Bar>
-                  {!showUtilizationAsHours && (
-                    <Bar 
-                      dataKey="todayOvertime" 
-                      name="Today OT" 
-                      stackId="today"
-                      fill="#dc2626" 
-                      radius={[4, 4, 0, 0]}
-                    >
-                      <LabelList 
-                        dataKey="todayOvertime"
-                        position="top"
-                        content={(props: any) => {
-                          const { x, y, width, value } = props;
-                          if (!value || value === 0) return null;
-                          return (
-                            <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                              {`${value.toFixed(0)}%`}
-                            </text>
-                          );
-                        }}
-                      />
-                    </Bar>
+                  {chartTodayVisible.utilizationCategories && (
+                    <>
+                      <Bar 
+                        dataKey="today" 
+                        name={showUtilizationAsHours ? 'Today h' : 'Today %'} 
+                        stackId="today"
+                        fill="#4299e1" 
+                        radius={[0, 0, 0, 0]}
+                      >
+                        <LabelList 
+                          dataKey="today"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {showUtilizationAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
+                      {!showUtilizationAsHours && (
+                        <Bar 
+                          dataKey="todayOvertime" 
+                          name="Today OT" 
+                          stackId="today"
+                          fill="#dc2626" 
+                          radius={[4, 4, 0, 0]}
+                        >
+                          <LabelList 
+                            dataKey="todayOvertime"
+                            position="top"
+                            content={(props: any) => {
+                              const { x, y, width, value } = props;
+                              if (!value || value === 0) return null;
+                              return (
+                                <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                  {`${value.toFixed(0)}%`}
+                                </text>
+                              );
+                            }}
+                          />
+                        </Bar>
+                      )}
+                    </>
                   )}
-                  {showWeekColumnGlobal && (
+                  {chartWeekVisible.utilizationCategories && (
                     <>
                       <Bar 
                         dataKey="weekly" 
@@ -3007,7 +3098,7 @@ export default function Analytics() {
                       )}
                     </>
                   )}
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.utilizationCategories && (
                     <>
                       <Bar 
                         dataKey="monthly" 
@@ -3071,7 +3162,7 @@ export default function Analytics() {
                 >
                   {showUtilizationAsHours ? '⏱️ Hours' : '📊 %'}
                 </button>
-                {renderWeekMonthQuickButtons()}
+                {renderWeekMonthQuickButtons('utilizationOneTime')}
                 <button 
                   onClick={() => {
                     setModalChartType('utilization-onetime' as any);
@@ -3165,51 +3256,55 @@ export default function Analytics() {
                     iconType="rect"
                   />
                   {!showUtilizationAsHours && <ReferenceLine y={100} stroke="#10b981" strokeWidth={2} strokeDasharray="3 3" />}
-                  <Bar 
-                    dataKey="today" 
-                    name={showUtilizationAsHours ? 'Today h' : 'Today %'} 
-                    stackId="today"
-                    fill="#4299e1" 
-                    radius={[0, 0, 0, 0]}
-                  >
-                    <LabelList 
-                      dataKey="today"
-                      position="top"
-                      content={(props: any) => {
-                        const { x, y, width, value } = props;
-                        if (!value || value === 0) return null;
-                        return (
-                          <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                            {showUtilizationAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
-                          </text>
-                        );
-                      }}
-                    />
-                  </Bar>
-                  {!showUtilizationAsHours && (
-                    <Bar 
-                      dataKey="todayOvertime" 
-                      name="Today OT" 
-                      stackId="today"
-                      fill="#dc2626" 
-                      radius={[4, 4, 0, 0]}
-                    >
-                      <LabelList 
-                        dataKey="todayOvertime"
-                        position="top"
-                        content={(props: any) => {
-                          const { x, y, width, value } = props;
-                          if (!value || value === 0) return null;
-                          return (
-                            <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
-                              {`${value.toFixed(0)}%`}
-                            </text>
-                          );
-                        }}
-                      />
-                    </Bar>
+                  {chartTodayVisible.utilizationOneTime && (
+                    <>
+                      <Bar 
+                        dataKey="today" 
+                        name={showUtilizationAsHours ? 'Today h' : 'Today %'} 
+                        stackId="today"
+                        fill="#4299e1" 
+                        radius={[0, 0, 0, 0]}
+                      >
+                        <LabelList 
+                          dataKey="today"
+                          position="top"
+                          content={(props: any) => {
+                            const { x, y, width, value } = props;
+                            if (!value || value === 0) return null;
+                            return (
+                              <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                {showUtilizationAsHours ? `${value.toFixed(2)}h` : `${value.toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
+                        />
+                      </Bar>
+                      {!showUtilizationAsHours && (
+                        <Bar 
+                          dataKey="todayOvertime" 
+                          name="Today OT" 
+                          stackId="today"
+                          fill="#dc2626" 
+                          radius={[4, 4, 0, 0]}
+                        >
+                          <LabelList 
+                            dataKey="todayOvertime"
+                            position="top"
+                            content={(props: any) => {
+                              const { x, y, width, value } = props;
+                              if (!value || value === 0) return null;
+                              return (
+                                <text x={x + width / 2} y={y - 5} fill="#333" textAnchor="middle" fontSize="10" fontWeight="bold">
+                                  {`${value.toFixed(0)}%`}
+                                </text>
+                              );
+                            }}
+                          />
+                        </Bar>
+                      )}
+                    </>
                   )}
-                  {showWeekColumnGlobal && (
+                  {chartWeekVisible.utilizationOneTime && (
                     <>
                       <Bar 
                         dataKey="weekly" 
@@ -3257,7 +3352,7 @@ export default function Analytics() {
                       )}
                     </>
                   )}
-                  {showMonthColumnGlobal && (
+                  {chartMonthVisible.utilizationOneTime && (
                     <>
                       <Bar 
                         dataKey="monthly" 

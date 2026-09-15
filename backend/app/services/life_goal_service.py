@@ -558,7 +558,7 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
     goal_milestones = db.query(LifeGoalMilestone).filter(LifeGoalMilestone.goal_id == goal_id).all()
     
     # Get project milestones from linked projects
-    from app.models.models import Project, ProjectMilestone, ProjectTask, MiscTaskGroup, MiscTaskItem
+    from app.models.models import Project, ProjectMilestone, ProjectTask
     linked_projects = db.query(Project).filter(Project.goal_id == goal_id).all()
     project_milestones = []
     for project in linked_projects:
@@ -587,14 +587,15 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
         ) < today
     )
 
-    # --- Misc tasks (groups linked to this goal, count all items) ---
-    linked_misc_groups = db.query(MiscTaskGroup).filter(MiscTaskGroup.goal_id == goal_id).all()
-    misc_group_ids = [g.id for g in linked_misc_groups]
-    all_misc_items = db.query(MiscTaskItem).filter(MiscTaskItem.group_id.in_(misc_group_ids)).all() if misc_group_ids else []
-    total_misc_tasks = len(all_misc_items)
-    completed_misc_tasks = sum(1 for t in all_misc_items if t.is_completed)
+    # --- Misc tasks (regular Task rows with follow_up_frequency='misc' linked directly to this goal) ---
+    linked_misc_tasks = db.query(Task).filter(
+        Task.goal_id == goal_id,
+        Task.follow_up_frequency == 'misc'
+    ).all()
+    total_misc_tasks = len(linked_misc_tasks)
+    completed_misc_tasks = sum(1 for t in linked_misc_tasks if t.is_completed)
     overdue_misc_tasks = sum(
-        1 for t in all_misc_items
+        1 for t in linked_misc_tasks
         if not t.is_completed and t.due_date and (
             t.due_date.date() if hasattr(t.due_date, 'date') else t.due_date
         ) < today
@@ -696,8 +697,7 @@ def calculate_goal_stats(db: Session, goal_id: int) -> Dict:
             "total": total_misc_tasks,
             "completed": completed_misc_tasks,
             "remaining": total_misc_tasks - completed_misc_tasks,
-            "overdue": overdue_misc_tasks,
-            "groups": len(linked_misc_groups)
+            "overdue": overdue_misc_tasks
         },
         "project_onetime_tasks": {
             "total": total_project_onetime,

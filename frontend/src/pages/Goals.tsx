@@ -8,7 +8,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import './Goals.css'; // Goals page styling
-import { Task } from '../types';
+import { Task, FollowUpFrequency } from '../types';
 import confetti from 'canvas-confetti';
 import TaskForm from '../components/TaskForm';
 import { AddGoalModal } from '../components/AddGoalModal';
@@ -2291,6 +2291,9 @@ export default function Goals() {
   const [editingGoalTask, setEditingGoalTask] = useState<GoalTaskData | null>(null); // For adding subtasks
   const [showLinkTaskModal, setShowLinkTaskModal] = useState(false);
   const [showCompletedGoalTasks, setShowCompletedGoalTasks] = useState(false);
+  const [editingLinkedTask, setEditingLinkedTask] = useState<any | null>(null); // Misc/Important task being edited (full TaskForm)
+  const [miscSubtaskParent, setMiscSubtaskParent] = useState<any | null>(null); // Parent misc task to add a subtask under
+  const [collapsedMiscGoalTaskIds, setCollapsedMiscGoalTaskIds] = useState<Set<number>>(new Set()); // Expand/collapse state for the goal's Misc Tasks tree
   const [showCreateTrackingProjectModal, setShowCreateTrackingProjectModal] = useState(false); // NEW
   const [showLinkProjectsModal, setShowLinkProjectsModal] = useState(false); // Link projects to milestone
   const [selectedMilestone, setSelectedMilestone] = useState<MilestoneData | null>(null); // Selected milestone for linking
@@ -2998,6 +3001,34 @@ export default function Goals() {
     } catch (error) {
       console.error('Error unlinking task:', error);
       showAlert('Failed to unlink task', 'error');
+    }
+  };
+
+  // Removes goal_id from a regular Task (misc/important) that was linked by setting its goal directly (not via task-links)
+  const handleRemoveTaskFromGoal = async (taskId: number) => {
+    if (!window.confirm('Remove this task from the goal?')) return;
+    try {
+      await api.put(`/api/tasks/${taskId}`, { goal_id: null, is_part_of_goal: false });
+      if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+    } catch (error: any) {
+      console.error('Error removing task from goal:', error);
+      showAlert('Failed to remove task from goal', 'error');
+    }
+  };
+
+  const handleDeleteMiscTask = async (taskId: number, allMiscTasks: any[]) => {
+    const hasIncompleteChildren = allMiscTasks.some(l => l.task?.parent_task_id === taskId && !l.task?.is_completed);
+    if (hasIncompleteChildren) {
+      showAlert('Cannot delete: complete or delete all subtasks first.', 'error');
+      return;
+    }
+    if (!window.confirm('Delete this task and all its subtasks?')) return;
+    try {
+      await api.delete(`/api/tasks/${taskId}`);
+      if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+    } catch (error: any) {
+      console.error('Error deleting misc task:', error);
+      showAlert('Failed to delete task', 'error');
     }
   };
 
@@ -5728,15 +5759,15 @@ return (
           /* Goal Detail View - Full Page */
           <div className="goal-detail-page" style={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%)',
-            borderRadius: '16px',
-            padding: '24px',
-            border: '4px solid #5a67d8'
+            borderRadius: '12px',
+            padding: '14px',
+            border: '3px solid #5a67d8'
           }}>
             <div className="goal-detail-header" style={{
               background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)',
-              padding: '20px',
-              borderRadius: '12px',
-              marginBottom: '24px',
+              padding: '12px 14px',
+              borderRadius: '10px',
+              marginBottom: '14px',
               border: '2px solid #3b82f6'
             }}>
               <button
@@ -5745,21 +5776,22 @@ return (
                 style={{
                   background: 'linear-gradient(135deg, #374151 0%, #1f2937 100%)',
                   color: 'white',
-                  border: '2px solid #6b7280',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
+                  border: '1px solid #6b7280',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
                   fontWeight: '600',
-                  marginBottom: '16px'
+                  fontSize: '12px',
+                  marginBottom: '10px'
                 }}
               >
                 ← Back to All Goals
               </button>
               
               {/* Goal Name, Dates, and Progress in one row */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '10px' }}>
                 {/* Goal Name */}
                 <div style={{ flex: 1 }}>
-                  <h2 style={{ color: 'white', fontSize: '28px', fontWeight: 'bold', margin: 0 }}>{selectedGoal.name}</h2>
+                  <h2 style={{ color: 'white', fontSize: '19px', fontWeight: 'bold', margin: 0 }}>{selectedGoal.name}</h2>
                 </div>
                 
                 {/* Dates - editable */}
@@ -5904,16 +5936,16 @@ return (
                       textAlign: 'center',
                       background: isActive ? activeBg : 'rgba(255,255,255,0.15)',
                       border: isActive ? `2px solid ${color}` : '2px solid transparent',
-                      borderRadius: '10px',
-                      padding: '6px 18px',
+                      borderRadius: '8px',
+                      padding: '4px 12px',
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                       color: 'white'
                     }}
                     title={`Click to filter by ${label}`}
                   >
-                    <div style={{ fontSize: '11px', color: isActive ? color : 'rgba(255,255,255,0.7)', fontWeight: '600', marginBottom: '2px' }}>{label}</div>
-                    <div style={{ fontSize: '26px', fontWeight: 'bold', color: isActive ? color : 'white' }}>{value}</div>
+                    <div style={{ fontSize: '10px', color: isActive ? color : 'rgba(255,255,255,0.7)', fontWeight: '600', marginBottom: '2px' }}>{label}</div>
+                    <div style={{ fontSize: '19px', fontWeight: 'bold', color: isActive ? color : 'white' }}>{value}</div>
                   </button>
                 );
               };
@@ -5921,12 +5953,12 @@ return (
               return (
                 <div style={{
                   display: 'flex',
-                  gap: '8px',
+                  gap: '6px',
                   justifyContent: 'center',
-                  marginBottom: '20px',
-                  padding: '12px 20px',
+                  marginBottom: '12px',
+                  padding: '8px 12px',
                   background: 'rgba(255,255,255,0.1)',
-                  borderRadius: '12px',
+                  borderRadius: '10px',
                   border: '1px solid rgba(255,255,255,0.2)',
                   flexWrap: 'wrap'
                 }}>
@@ -5942,13 +5974,13 @@ return (
               {/* Goal-Specific Tasks - Moved to top for priority */}
               <div className="goal-section tasks-section" style={{
                 background: 'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #0ea5e9',
-                marginBottom: '20px'
+                padding: '12px 14px',
+                borderRadius: '10px',
+                border: '2px solid #0ea5e9',
+                marginBottom: '12px'
               }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', cursor: 'pointer' }} onClick={() => toggleSection('goal-tasks')}>
-                  <h3 style={{ color: '#075985', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', cursor: 'pointer' }} onClick={() => toggleSection('goal-tasks')}>
+                  <h3 style={{ color: '#075985', fontWeight: '700', fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>{collapsedSections['goal-tasks'] ? '▶' : '▼'}</span>
                     ✅ Goal Tasks ({goalTasks.length})
                   </h3>
@@ -5961,10 +5993,11 @@ return (
                     style={{
                       background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
                       color: 'white',
-                      border: '2px solid #075985',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      fontWeight: '600'
+                      border: '1px solid #075985',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontWeight: '600',
+                      fontSize: '12px'
                     }}
                   >
                     ➕ Add Task
@@ -6064,21 +6097,25 @@ return (
               </div>
 
               {/* Linked Tasks (Misc/Important Tasks) */}
+              {(() => {
+                const importantLinkedTasks = linkedTasks.filter((l: any) => l.task_type === 'one_time');
+                const miscLinkedTasks = linkedTasks.filter((l: any) => l.task_type === 'misc');
+                return (
               <div className="goal-section linked-section" style={{
                 background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #f59e0b',
-                marginBottom: '20px'
+                padding: '12px 14px',
+                borderRadius: '10px',
+                border: '2px solid #f59e0b',
+                marginBottom: '12px'
               }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', cursor: 'pointer' }} onClick={(e) => {
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: collapsedSections['linked-tasks'] ? '0' : '10px', cursor: 'pointer' }} onClick={(e) => {
                   if (!(e.target as HTMLElement).closest('button')) {
                     toggleSection('linked-tasks');
                   }
                 }}>
-                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ color: '#92400e', fontWeight: '700', fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>{collapsedSections['linked-tasks'] ? '▶' : '▼'}</span>
-                    📋 Linked Tasks (Important Tasks)
+                    📋 Linked Tasks (Important) ({importantLinkedTasks.length})
                   </h3>
                   <button
                     className="btn btn-primary"
@@ -6089,10 +6126,11 @@ return (
                     style={{
                       background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                       color: 'white',
-                      border: '2px solid #92400e',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      fontWeight: '600'
+                      border: '1px solid #92400e',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontWeight: '600',
+                      fontSize: '12px'
                     }}
                   >
                     🔗 Link Task
@@ -6101,7 +6139,7 @@ return (
 
                 {!collapsedSections['linked-tasks'] && (
                   <>
-                {linkedTasks.length === 0 ? (
+                {importantLinkedTasks.length === 0 ? (
                   <div className="empty-section">
                     <p>No linked tasks. Connect existing Important Tasks to this goal!</p>
                   </div>
@@ -6109,11 +6147,11 @@ return (
                   <div>
                     {(() => {
                       const todayLt = new Date(); todayLt.setHours(0, 0, 0, 0);
-                      const filteredLinkedTasks = goalDetailFilter === 'all' ? linkedTasks :
-                        goalDetailFilter === 'completed' ? linkedTasks.filter((l: any) => l.task?.is_completed) :
-                        goalDetailFilter === 'in-progress' ? linkedTasks.filter((l: any) => !l.task?.is_completed) :
-                        goalDetailFilter === 'overdue' ? linkedTasks.filter((l: any) => !l.task?.is_completed && l.task?.due_date && new Date(l.task.due_date.split('T')[0]) < todayLt) :
-                        linkedTasks;
+                      const filteredLinkedTasks = goalDetailFilter === 'all' ? importantLinkedTasks :
+                        goalDetailFilter === 'completed' ? importantLinkedTasks.filter((l: any) => l.task?.is_completed) :
+                        goalDetailFilter === 'in-progress' ? importantLinkedTasks.filter((l: any) => !l.task?.is_completed) :
+                        goalDetailFilter === 'overdue' ? importantLinkedTasks.filter((l: any) => !l.task?.is_completed && l.task?.due_date && new Date(l.task.due_date.split('T')[0]) < todayLt) :
+                        importantLinkedTasks;
                       // Build parent-child tree from flat linked-task list
                       const linkedTaskIds = new Set(filteredLinkedTasks.map((l: any) => l.task?.id).filter(Boolean));
                       const rootLinks = filteredLinkedTasks.filter((l: any) => !linkedTaskIds.has(l.task?.parent_task_id));
@@ -6126,12 +6164,12 @@ return (
                         return (
                           <div key={link.id}>
                             <div style={{
-                              padding: '10px 14px',
-                              marginBottom: '6px',
+                              padding: '6px 10px',
+                              marginBottom: '4px',
                               marginLeft: `${indent}px`,
                               background: link.task?.parent_task_id ? '#fffbeb' : 'white',
-                              borderRadius: '8px',
-                              borderLeft: `4px solid ${level > 0 ? '#fcd34d' : '#f59e0b'}`,
+                              borderRadius: '6px',
+                              borderLeft: `3px solid ${level > 0 ? '#fcd34d' : '#f59e0b'}`,
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
@@ -6140,11 +6178,11 @@ return (
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                   {level > 0 && <span style={{ color: '#9ca3af', fontSize: '13px' }}>↳</span>}
-                                  <span style={{ fontWeight: '600', color: '#1f2937', fontSize: '14px' }}>
+                                  <span style={{ fontWeight: '600', color: '#1f2937', fontSize: '13px' }}>
                                     {link.task?.name || 'Task'}
                                   </span>
                                   <span style={{ fontSize: '10px', padding: '2px 6px', borderRadius: '10px', background: '#fef3c7', color: '#92400e', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                                    {link.task_type === 'one_time' ? 'Important' : link.task_type}
+                                    Important
                                   </span>
                                   <span style={{ fontSize: '11px', color: '#6b7280' }}>
                                     {link.completion_count}/{link.expected_count} ({link.completion_percentage?.toFixed(0) || 0}%)
@@ -6164,23 +6202,30 @@ return (
                                       }
                                     }
                                   }}
-                                  style={{ padding: '3px 8px', fontSize: '11px', background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                  style={{ padding: '2px 7px', fontSize: '11px', background: '#d1fae5', color: '#065f46', border: '1px solid #6ee7b7', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                                 >
                                   ✓ Done
                                 </button>
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (link.task?.id) navigate(`/tasks?tab=onetime&edit=${link.task.id}`);
+                                    if (link.task) { setEditingLinkedTask(link); }
                                   }}
-                                  style={{ padding: '3px 8px', fontSize: '11px', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                  style={{ padding: '2px 7px', fontSize: '11px', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                                 >
                                   ✏️
                                 </button>
-                                {typeof link.id === 'number' && (
+                                {typeof link.id === 'number' ? (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleUnlinkTask(link.id); }}
-                                    style={{ padding: '3px 8px', fontSize: '11px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                    style={{ padding: '2px 7px', fontSize: '11px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                                  >
+                                    Unlink
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); link.task?.id && handleRemoveTaskFromGoal(link.task.id); }}
+                                    style={{ padding: '2px 7px', fontSize: '11px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
                                   >
                                     Unlink
                                   </button>
@@ -6199,30 +6244,182 @@ return (
                   </>
                 )}
               </div>
+                );
+              })()}
+
+              {/* Misc Tasks (linked via Misc tab, compact tree — mirrors the Misc Tasks tab) */}
+              {(() => {
+                const miscLinkedTasks = linkedTasks.filter((l: any) => l.task_type === 'misc');
+                if (miscLinkedTasks.length === 0) return null;
+                const miscTaskIds = new Set(miscLinkedTasks.map((l: any) => l.task?.id).filter(Boolean));
+                const rootMiscLinks = miscLinkedTasks.filter((l: any) => !miscTaskIds.has(l.task?.parent_task_id));
+                const getMiscChildLinks = (parentTaskId: number): any[] =>
+                  miscLinkedTasks.filter((l: any) => l.task?.parent_task_id === parentTaskId);
+                const completedCount = miscLinkedTasks.filter((l: any) => l.task?.is_completed).length;
+
+                const renderMiscTaskNode = (link: any, level: number = 0): React.ReactNode => {
+                  const children = getMiscChildLinks(link.task?.id);
+                  const hasChildren = children.length > 0;
+                  const taskId = link.task?.id;
+                  const isExpanded = !collapsedMiscGoalTaskIds.has(taskId);
+                  const toggleExpand = () => {
+                    setCollapsedMiscGoalTaskIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(taskId)) next.delete(taskId); else next.add(taskId);
+                      return next;
+                    });
+                  };
+                  const indent = level * 20;
+                  return (
+                    <div key={link.id}>
+                      <div style={{
+                        padding: '6px 10px',
+                        marginBottom: '4px',
+                        marginLeft: `${indent}px`,
+                        background: link.task?.parent_task_id ? '#fffbeb' : 'white',
+                        borderRadius: '6px',
+                        borderLeft: `3px solid ${level > 0 ? '#fcd34d' : '#f59e0b'}`,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {level > 0 && <span style={{ color: '#9ca3af', fontSize: '12px' }}>↳</span>}
+                          {hasChildren ? (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleExpand(); }}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: '11px', color: '#92400e', flexShrink: 0 }}
+                              title={isExpanded ? 'Collapse' : 'Expand'}
+                            >
+                              {isExpanded ? '▼' : '▶'}
+                            </button>
+                          ) : (
+                            <span style={{ width: '13px', flexShrink: 0 }} />
+                          )}
+                          <input
+                            type="checkbox"
+                            checked={!!link.task?.is_completed}
+                            onChange={async () => {
+                              if (!link.task?.id) return;
+                              try {
+                                await api.put(`/api/tasks/${link.task.id}`, { is_completed: !link.task.is_completed });
+                                if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+                              } catch (err) {
+                                console.error('Error toggling misc task:', err);
+                              }
+                            }}
+                            style={{ width: '14px', height: '14px', cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          <span
+                            onClick={() => link.task && setEditingLinkedTask(link)}
+                            style={{
+                              fontWeight: '600',
+                              fontSize: '13px',
+                              color: link.task?.is_completed ? '#9ca3af' : '#1f2937',
+                              textDecoration: link.task?.is_completed ? 'line-through' : 'none',
+                              cursor: 'pointer'
+                            }}
+                            title="Click to edit task"
+                          >
+                            {link.task?.name || 'Task'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+                          <input
+                            type="date"
+                            value={link.task?.due_date ? link.task.due_date.split('T')[0] : ''}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={async (e) => {
+                              if (!link.task?.id) return;
+                              try {
+                                await api.put(`/api/tasks/${link.task.id}`, { due_date: e.target.value || null });
+                                if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+                              } catch (err) {
+                                console.error('Error updating due date:', err);
+                              }
+                            }}
+                            style={{ padding: '2px 6px', fontSize: '11px', border: '1px solid #fde68a', borderRadius: '4px', color: '#92400e', width: '118px' }}
+                          />
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setMiscSubtaskParent(link.task); }}
+                            style={{ padding: '2px 7px', fontSize: '11px', background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                          >
+                            ➕ Sub
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); if (link.task) setEditingLinkedTask(link); }}
+                            style={{ padding: '2px 7px', fontSize: '11px', background: '#dbeafe', color: '#1e40af', border: '1px solid #93c5fd', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); link.task?.id && handleDeleteMiscTask(link.task.id, miscLinkedTasks); }}
+                            style={{ padding: '2px 7px', fontSize: '11px', background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      </div>
+                      {hasChildren && isExpanded && children.map((child: any) => renderMiscTaskNode(child, level + 1))}
+                    </div>
+                  );
+                };
+
+                return (
+                  <div className="goal-section" style={{
+                    background: '#fffbeb',
+                    padding: '12px 14px',
+                    borderRadius: '10px',
+                    border: '2px solid #f59e0b',
+                    marginBottom: '12px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: collapsedSections['misc-tasks'] ? '0' : '10px', cursor: 'pointer' }}
+                      onClick={() => toggleSection('misc-tasks')}
+                    >
+                      <h3 style={{ margin: 0, color: '#92400e', fontSize: '14px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>{collapsedSections['misc-tasks'] ? '▶' : '▼'}</span>
+                        🎨 Misc Tasks ({miscLinkedTasks.length})
+                      </h3>
+                      <span style={{ fontSize: '11px', color: '#b45309' }}>
+                        {completedCount}/{miscLinkedTasks.length} completed
+                      </span>
+                    </div>
+                    {!collapsedSections['misc-tasks'] && (
+                      <div>
+                        {rootMiscLinks.map((link: any) => renderMiscTaskNode(link, 0))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Supporting Tasks by Frequency */}
               <div className="goal-section supporting-tasks-section" style={{
                 background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #10b981',
-                marginBottom: '20px'
+                padding: '12px 14px',
+                borderRadius: '10px',
+                border: '2px solid #10b981',
+                marginBottom: '12px'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px', cursor: 'pointer' }} onClick={() => toggleSection('supporting-tasks')}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', cursor: 'pointer' }} onClick={() => toggleSection('supporting-tasks')}>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+
+                    <h3 style={{ color: '#065f46', fontWeight: '700', fontSize: '14px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span>{collapsedSections['supporting-tasks'] ? '▶' : '▼'}</span>
                       📅 Supporting Tasks by Frequency
                     </h3>
-                    <div style={{ fontSize: '12px', color: '#059669', fontStyle: 'italic', marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', color: '#059669', fontStyle: 'italic', marginBottom: '4px' }}>
                       Tasks created with Goal link - organized by frequency (Daily, Weekly, etc.)
                     </div>
                   </div>
                 </div>
 
-                {!collapsedSections['supporting-tasks'] && (
+                {!collapsedSections['supporting-tasks'] && (() => {
+                  const recurringLinkedTasks = linkedTasks.filter(link => ['daily', 'weekly', 'monthly', 'yearly'].includes(link.task_type));
+                  return (
                   <>
-                {linkedTasks.length === 0 ? (
+                {recurringLinkedTasks.length === 0 ? (
                   <div className="empty-section">
                     <p>No supporting tasks yet. Create tasks and select this goal to track your daily/weekly/monthly efforts!</p>
                   </div>
@@ -6230,32 +6427,28 @@ return (
                   <div>
                     {(() => {
                       // Group linked tasks by frequency - only show active tasks (not 100% complete)
-                      const activeTasks = linkedTasks.filter(link => link.completion_percentage !== 100);
+                      const activeTasks = recurringLinkedTasks.filter(link => link.completion_percentage !== 100);
                       
                       const tasksByFrequency: Record<string, any[]> = {
                         daily: [],
                         weekly: [],
                         monthly: [],
-                        yearly: [],
-                        one_time: []
+                        yearly: []
                       };
                       
                       activeTasks.forEach(link => {
-                        const freq = link.task_type || 'one_time';
+                        const freq = link.task_type;
                         if (tasksByFrequency[freq]) {
                           tasksByFrequency[freq].push(link);
-                        } else {
-                          tasksByFrequency['one_time'].push(link);
                         }
                       });
                       
-                      const frequencyOrder = ['daily', 'weekly', 'monthly', 'yearly', 'one_time'];
+                      const frequencyOrder = ['daily', 'weekly', 'monthly', 'yearly'];
                       const frequencyLabels: Record<string, string> = {
                         daily: '📆 Daily Tasks',
                         weekly: '📅 Weekly Tasks',
                         monthly: '📊 Monthly Tasks',
-                        yearly: '🎯 Yearly Tasks',
-                        one_time: '📋 One-Time Tasks'
+                        yearly: '🎯 Yearly Tasks'
                       };
                       
                       return frequencyOrder.map(freq => {
@@ -6329,7 +6522,7 @@ return (
 
                 {/* Completed Supporting Tasks Section */}
                 {(() => {
-                  const completedTasks = linkedTasks.filter(link => link.completion_percentage === 100);
+                  const completedTasks = recurringLinkedTasks.filter(link => link.completion_percentage === 100);
                   
                   if (completedTasks.length === 0) return null;
                   
@@ -6374,19 +6567,20 @@ return (
                   );
                 })()}
                   </>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Projects Section */}
               {goalProjects.length > 0 && (
                 <div className="goal-section projects-section" style={{
                   background: '#fffef0',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  marginBottom: '20px'
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  marginBottom: '12px'
                 }}>
-                  <div className="section-header" style={{ marginBottom: '16px', cursor: 'pointer' }} onClick={() => toggleSection('projects')}>
-                    <h3 style={{ color: '#2d3748', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="section-header" style={{ marginBottom: '10px', cursor: 'pointer' }} onClick={() => toggleSection('projects')}>
+                    <h3 style={{ color: '#2d3748', fontWeight: '700', fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <span>{collapsedSections['projects'] ? '▶' : '▼'}</span>
                       📁 Projects
                     </h3>
@@ -6552,17 +6746,17 @@ return (
               {/* Milestones */}
               <div className="goal-section milestones-section" style={{
                 background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
-                padding: '20px',
-                borderRadius: '12px',
-                border: '3px solid #10b981',
-                marginBottom: '20px'
+                padding: '12px 14px',
+                borderRadius: '10px',
+                border: '2px solid #10b981',
+                marginBottom: '12px'
               }}>
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', cursor: 'pointer' }} onClick={(e) => {
+                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', cursor: 'pointer' }} onClick={(e) => {
                   if (!(e.target as HTMLElement).closest('button')) {
                     toggleSection('milestones');
                   }
                 }}>
-                  <h3 style={{ color: '#065f46', fontWeight: 'bold', fontSize: '18px', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <h3 style={{ color: '#065f46', fontWeight: '700', fontSize: '14px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <span>{collapsedSections['milestones'] ? '▶' : '▼'}</span>
                     🎯 Milestones
                   </h3>
@@ -6575,10 +6769,11 @@ return (
                     style={{
                       background: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
                       color: 'white',
-                      border: '2px solid #065f46',
-                      padding: '8px 16px',
-                      borderRadius: '8px',
-                      fontWeight: '600'
+                      border: '1px solid #065f46',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      fontWeight: '600',
+                      fontSize: '12px'
                     }}
                   >
                     ➕ Add Milestone
@@ -6815,17 +7010,17 @@ return (
               {selectedGoal.why_statements && selectedGoal.why_statements.length > 0 && (
                 <div className="goal-section why-section" style={{
                   background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  border: '3px solid #f59e0b',
-                  marginBottom: '20px'
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: '2px solid #f59e0b',
+                  marginBottom: '12px'
                 }}>
-                  <h3 style={{ color: '#92400e', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('why-statements')}>
+                  <h3 style={{ color: '#92400e', fontWeight: '700', fontSize: '14px', marginBottom: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => toggleSection('why-statements')}>
                     <span>{collapsedSections['why-statements'] ? '▶' : '▼'}</span>
                     💡 Why This Goal Matters
                   </h3>
                   {!collapsedSections['why-statements'] && (
-                  <ul className="why-statements-list" style={{ color: '#78350f', fontSize: '15px' }}>
+                  <ul className="why-statements-list" style={{ color: '#78350f', fontSize: '13px' }}>
                     {selectedGoal.why_statements.map((why, index) => (
                       <li key={index}>{why}</li>
                     ))}
@@ -6838,17 +7033,17 @@ return (
               {selectedGoal.description && (
                 <div className="goal-section description-section" style={{
                   background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  border: '3px solid #8b5cf6',
-                  marginBottom: '20px'
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: '2px solid #8b5cf6',
+                  marginBottom: '12px'
                 }}>
-                  <h3 style={{ color: '#5b21b6', fontWeight: 'bold', fontSize: '18px', marginBottom: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => toggleSection('description')}>
+                  <h3 style={{ color: '#5b21b6', fontWeight: '700', fontSize: '14px', marginBottom: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => toggleSection('description')}>
                     <span>{collapsedSections['description'] ? '▶' : '▼'}</span>
                     📝 Description
                   </h3>
                   {!collapsedSections['description'] && (
-                  <p style={{ color: '#4c1d95', fontSize: '15px' }}>{selectedGoal.description}</p>
+                  <p style={{ color: '#4c1d95', fontSize: '13px' }}>{selectedGoal.description}</p>
                   )}
                 </div>
               )}
@@ -7883,6 +8078,34 @@ return (
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Linked Task Modal (Important or Misc task) - keeps changes in sync with Misc/Important tabs */}
+      {editingLinkedTask?.task?.id && (
+        <TaskForm
+          isOpen={!!editingLinkedTask}
+          taskId={editingLinkedTask.task.id}
+          onClose={() => setEditingLinkedTask(null)}
+          onSuccess={async () => {
+            setEditingLinkedTask(null);
+            if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+          }}
+        />
+      )}
+
+      {/* Add Misc Subtask Modal - new subtask inherits the goal + misc frequency, appears in both Goal and Misc tab */}
+      {miscSubtaskParent && selectedGoal && (
+        <TaskForm
+          isOpen={!!miscSubtaskParent}
+          defaultParentTaskId={miscSubtaskParent.id}
+          defaultFrequency={FollowUpFrequency.MISC}
+          defaultGoalId={selectedGoal.id}
+          onClose={() => setMiscSubtaskParent(null)}
+          onSuccess={async () => {
+            setMiscSubtaskParent(null);
+            if (selectedGoal) await loadGoalDetails(selectedGoal.id);
+          }}
+        />
       )}
 
       {/* Create Tracking Project Modal */}

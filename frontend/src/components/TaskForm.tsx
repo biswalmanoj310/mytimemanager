@@ -16,6 +16,7 @@ interface TaskFormProps {
   defaultFrequency?: FollowUpFrequency;
   defaultWishId?: number;
   defaultParentTaskId?: number;
+  defaultGoalId?: number;
 }
 
 interface TaskFormData {
@@ -43,7 +44,7 @@ interface TaskFormData {
   ideal_gap_days?: number;
 }
 
-export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency, defaultWishId, defaultParentTaskId }: TaskFormProps) {
+export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFrequency, defaultWishId, defaultParentTaskId, defaultGoalId }: TaskFormProps) {
   const [formData, setFormData] = useState<TaskFormData>({
     name: '',
     description: '',
@@ -57,8 +58,8 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
     follow_up_frequency: defaultFrequency || FollowUpFrequency.TODAY,
     separately_followed: false,
     is_daily_one_time: false,
-    is_part_of_goal: false,
-    goal_id: null,
+    is_part_of_goal: !!defaultGoalId,
+    goal_id: defaultGoalId || null,
     project_id: null,
     related_wish_id: null,
     why_reason: '',
@@ -382,15 +383,15 @@ export default function TaskForm({ isOpen, onClose, onSuccess, taskId, defaultFr
       follow_up_frequency: defaultFrequency || FollowUpFrequency.TODAY,
       separately_followed: false,
       is_daily_one_time: false,
-      is_part_of_goal: false,
-      goal_id: null,
+      is_part_of_goal: !!defaultGoalId,
+      goal_id: defaultGoalId || null,
       project_id: null,
       related_wish_id: defaultWishId || null,
       why_reason: '',
       additional_whys: [],
       due_date: '',
       priority: 5,
-      parent_task_id: null,
+      parent_task_id: defaultParentTaskId || null,
     });
     setError(null);
   };
