@@ -51,12 +51,15 @@ interface TaskConfig {
 }
 
 // Custom multi-line label component for long task names
-const CustomMultilineLabel = ({ x, y, payload, index, maxCharsPerLine = 13, maxLines = 3 }: any) => {
+const CustomMultilineLabel = ({ x, y, payload, index, maxCharsPerLine = 13, maxLines = 3, forceSplitAt }: any) => {
   const text = payload.value || '';
-  const lines: string[] = [];
-  
-  // Split text into multiple lines
-  if (text.length <= maxCharsPerLine) {
+  let lines: string[] = [];
+
+  // For labels like "Jun 22–Jun 28", split cleanly at the dash instead of wrapping by character count
+  if (forceSplitAt && text.includes(forceSplitAt)) {
+    const idx = text.indexOf(forceSplitAt);
+    lines = [text.slice(0, idx).trim(), text.slice(idx + forceSplitAt.length).trim()].filter(Boolean);
+  } else if (text.length <= maxCharsPerLine) {
     lines.push(text);
   } else {
     const words = text.split(' ');
@@ -210,6 +213,27 @@ const OVERVIEW_CHARTS_STORAGE_KEY = 'analytics_overview_visible_charts_v1';
 const OVERVIEW_WEEK_OPTION_STORAGE_KEY = 'analytics_overview_week_option_v1';
 const OVERVIEW_MONTH_OPTION_STORAGE_KEY = 'analytics_overview_month_option_v1';
 
+// Detailed Trend Analysis selection (selected tasks/categories/pillars, view type, history range) — persisted so a refresh keeps the selection
+const DETAILED_TREND_SELECTION_STORAGE_KEY = 'analytics_detailed_trend_selection_v1';
+interface DetailedTrendSelection {
+  detailedViewType: 'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life';
+  selectedTasks: number[];
+  selectedCategories: string[];
+  selectedPillars: string[];
+  trendRangeDays: 56 | 91 | 182 | 365;
+  showDayOverDay: boolean;
+  showWeekOverWeek: boolean;
+  showMonthOverMonth: boolean;
+  showAsHours: boolean;
+}
+function loadDetailedTrendSelection(): Partial<DetailedTrendSelection> {
+  try {
+    const saved = localStorage.getItem(DETAILED_TREND_SELECTION_STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch { /* ignore malformed storage */ }
+  return {};
+}
+
 // Trailing-period options for the shared Week / Month selector in the Overview filter bar
 type WeekPeriodOption = 'hide' | 0 | 1 | 2 | 4;
 type MonthPeriodOption = 'hide' | 0 | 1 | 3 | 6;
@@ -313,14 +337,14 @@ export default function Analytics() {
     return 'overview';
   };
 
-  // Get initial detailedViewType from URL params or default to 'tasks'
+  // Get initial detailedViewType from URL params, then saved selection, or default to 'tasks'
   const getInitialDetailedViewType = (): 'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life' => {
     const params = new URLSearchParams(window.location.search);
     const detailView = params.get('detailView');
     if (detailView === 'categories' || detailView === 'pillars' || detailView === 'balance_visualization' || detailView === 'circle_of_life') {
       return detailView;
     }
-    return 'tasks';
+    return loadDetailedTrendSelection().detailedViewType ?? 'tasks';
   };
   
   const [viewMode, setViewMode] = useState<'overview' | 'categories' | 'tasks' | 'wheel' | 'detailed'>(getInitialViewMode());
@@ -331,10 +355,10 @@ export default function Analytics() {
   const [detailedPeriodType, setDetailedPeriodType] = useState<'day' | 'week' | 'month'>('week');
   const [detailedDate, setDetailedDate] = useState<string>(formatDateForInput(new Date()));
   
-  // Detailed view - Multi-select state (up to 3 items)
-  const [selectedTasks, setSelectedTasks] = useState<number[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedPillars, setSelectedPillars] = useState<string[]>([]);
+  // Detailed view - Multi-select state (up to 3 items) — restored from localStorage so a refresh keeps the selection
+  const [selectedTasks, setSelectedTasks] = useState<number[]>(() => loadDetailedTrendSelection().selectedTasks ?? []);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => loadDetailedTrendSelection().selectedCategories ?? []);
+  const [selectedPillars, setSelectedPillars] = useState<string[]>(() => loadDetailedTrendSelection().selectedPillars ?? []);
   const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life'>(getInitialDetailedViewType());
   const getInitialCircleType = (): 'pillar' | 'category' | 'tasks' | 'one_time' => {
     const params = new URLSearchParams(window.location.search);
@@ -366,18 +390,21 @@ export default function Analytics() {
   const [registryCategoryFilter, setRegistryCategoryFilter] = useState<string | null>(null);
 
   
-  // Detailed view - Week/Month-over-Week/Month toggles
-  const [showWeekOverWeek, setShowWeekOverWeek] = useState(false);
-  const [showMonthOverMonth, setShowMonthOverMonth] = useState(false);
-  const [showAsHours, setShowAsHours] = useState(false);
+  // Detailed view - Day/Week/Month-over-Day/Week/Month toggles — restored from localStorage so a refresh keeps the selection
+  const [showDayOverDay, setShowDayOverDay] = useState(() => loadDetailedTrendSelection().showDayOverDay ?? true);
+  const [showWeekOverWeek, setShowWeekOverWeek] = useState(() => loadDetailedTrendSelection().showWeekOverWeek ?? false);
+  const [showMonthOverMonth, setShowMonthOverMonth] = useState(() => loadDetailedTrendSelection().showMonthOverMonth ?? false);
+  const [showAsHours, setShowAsHours] = useState(() => loadDetailedTrendSelection().showAsHours ?? false);
   const [showUtilizationAsHours, setShowUtilizationAsHours] = useState(() => loadChartToggles().showUtilizationAsHours);
+  // True while the Detailed Trend Analysis charts are (re)fetching data — lets the UI show a loading state instead of a blank chart
+  const [detailedTrendLoading, setDetailedTrendLoading] = useState(false);
   
   // Detailed view - Historical trend data
   const [taskTrendData, setTaskTrendData] = useState<any[]>([]);
   const [categoryTrendData, setCategoryTrendData] = useState<any[]>([]);
   const [pillarTrendData, setPillarTrendData] = useState<any[]>([]);
   // How far back the Detailed Trend Analysis charts look. Defaults to the original 56-day window (~8 weeks) so the existing view is unchanged unless the user opts into a longer range
-  const [trendRangeDays, setTrendRangeDays] = useState<56 | 182 | 365>(56);
+  const [trendRangeDays, setTrendRangeDays] = useState<56 | 91 | 182 | 365>(() => loadDetailedTrendSelection().trendRangeDays ?? 56);
   
   // Comparative pillar data for Today/Week/Month
   const [dailyPillarData, setDailyPillarData] = useState<PillarData[]>([]);
@@ -452,6 +479,11 @@ export default function Analytics() {
   useEffect(() => {
     localStorage.setItem(OVERVIEW_MONTH_OPTION_STORAGE_KEY, String(overviewMonthOption));
   }, [overviewMonthOption]);
+  // Persist Detailed Trend Analysis selection so a page refresh keeps the selected tasks/categories/pillars, view type, history range, Day/Week/Month-over toggles, and Hours/% display mode
+  useEffect(() => {
+    const selection: DetailedTrendSelection = { detailedViewType, selectedTasks, selectedCategories, selectedPillars, trendRangeDays, showDayOverDay, showWeekOverWeek, showMonthOverMonth, showAsHours };
+    localStorage.setItem(DETAILED_TREND_SELECTION_STORAGE_KEY, JSON.stringify(selection));
+  }, [detailedViewType, selectedTasks, selectedCategories, selectedPillars, trendRangeDays, showDayOverDay, showWeekOverWeek, showMonthOverMonth, showAsHours]);
   // Derived: still used by the expanded "View All" modal chart (which has one set of controls, not per-chart)
   const showMonthColumnGlobal = overviewMonthOption !== 'hide';
   const weekRangeOption: 0 | 1 | 2 | 4 = overviewWeekOption === 'hide' ? 0 : overviewWeekOption;
@@ -619,10 +651,12 @@ export default function Analytics() {
     }
   }, [viewMode, detailedDate, detailedPeriodType]);
 
-  // Load detailed trend data when selections change (used by the Detailed tab AND the inline Overview drill-down)
+  // Load detailed trend data when selections change (used by the Detailed tab AND the inline Overview drill-down).
+  // Also re-runs once allTasksData/allOneTimeTasksData finish loading — on refresh, selectedTasks is restored from
+  // localStorage before those arrays load, so the initial run would otherwise find no matching task and leave the chart blank
   useEffect(() => {
     loadDetailedTrendData();
-  }, [detailedViewType, selectedTasks, selectedCategories, selectedPillars, trendRangeDays]);
+  }, [detailedViewType, selectedTasks, selectedCategories, selectedPillars, trendRangeDays, allTasksData.length, allOneTimeTasksData.length]);
 
   // Load circle of life data when view type or period changes (used by the Detailed tab AND the inline Overview drill-down)
   useEffect(() => {
@@ -1067,12 +1101,14 @@ export default function Analytics() {
           <strong style={{ fontSize: '12px', color: '#374151' }}>{taskName} trend</strong>
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <button onClick={() => setShowAsHours(!showAsHours)} style={btnStyle(showAsHours)}>{showAsHours ? '⏱️ Hours' : '📊 %'}</button>
+            <button onClick={() => setShowDayOverDay(!showDayOverDay)} style={btnStyle(showDayOverDay)}>{showDayOverDay ? '✓' : '✗'} Day-over-Day</button>
             <button onClick={() => setShowWeekOverWeek(!showWeekOverWeek)} style={btnStyle(showWeekOverWeek)}>{showWeekOverWeek ? '✓' : '✗'} Week-over-Week</button>
             <button onClick={() => setShowMonthOverMonth(!showMonthOverMonth)} style={btnStyle(showMonthOverMonth)}>{showMonthOverMonth ? '✓' : '✗'} Month-over-Month</button>
             <button onClick={() => setTaskTrendOpenFor(null)} style={{ fontSize: '11px', background: 'none', border: 'none', cursor: 'pointer', color: '#718096' }}>✕ Close</button>
           </div>
         </div>
 
+        {showDayOverDay && (
         <div style={{ marginBottom: '10px' }}>
           <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📅 Daily (last {dailyChart.length} days)</div>
           <ResponsiveContainer width="100%" height={170}>
@@ -1087,6 +1123,7 @@ export default function Analytics() {
             </LineChart>
           </ResponsiveContainer>
         </div>
+        )}
 
         {showWeekOverWeek && (
           <div style={{ marginBottom: '10px' }}>
@@ -1483,6 +1520,7 @@ export default function Analytics() {
 
   // Load detailed trend data for selected tasks/categories/pillars
   const loadDetailedTrendData = async () => {
+    setDetailedTrendLoading(true);
     try {
       const today = new Date();
       const daysBack = trendRangeDays - 1;
@@ -1598,6 +1636,8 @@ export default function Analytics() {
       }
     } catch (error) {
       console.error('Error loading detailed trend data:', error);
+    } finally {
+      setDetailedTrendLoading(false);
     }
   };
 
@@ -2039,12 +2079,14 @@ export default function Analytics() {
                     <strong style={{ fontSize: '12px', color: '#374151' }}>{categoryTrendOpenFor} trend</strong>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <button onClick={() => setShowAsHours(!showAsHours)} style={btnStyle(showAsHours)}>{showAsHours ? '⏱️ Hours' : '📊 %'}</button>
+                      <button onClick={() => setShowDayOverDay(!showDayOverDay)} style={btnStyle(showDayOverDay)}>{showDayOverDay ? '✓' : '✗'} Day-over-Day</button>
                       <button onClick={() => setShowWeekOverWeek(!showWeekOverWeek)} style={btnStyle(showWeekOverWeek)}>{showWeekOverWeek ? '✓' : '✗'} Week-over-Week</button>
                       <button onClick={() => setShowMonthOverMonth(!showMonthOverMonth)} style={btnStyle(showMonthOverMonth)}>{showMonthOverMonth ? '✓' : '✗'} Month-over-Month</button>
                       <button onClick={() => setCategoryTrendOpenFor(null)} style={{ fontSize: '11px', background: 'none', border: 'none', cursor: 'pointer', color: '#718096' }}>✕ Close</button>
                     </div>
                   </div>
 
+                  {showDayOverDay && (
                   <div style={{ marginBottom: '10px' }}>
                     <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📅 Daily (last {dailyChart.length} days)</div>
                     <ResponsiveContainer width="100%" height={170}>
@@ -2059,6 +2101,7 @@ export default function Analytics() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                  )}
 
                   {showWeekOverWeek && (
                     <div style={{ marginBottom: '10px' }}>
@@ -2568,12 +2611,14 @@ export default function Analytics() {
                     <strong style={{ fontSize: '12px', color: '#374151' }}>{pillarTrendOpenFor} trend</strong>
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                       <button onClick={() => setShowAsHours(!showAsHours)} style={btnStyle(showAsHours)}>{showAsHours ? '⏱️ Hours' : '📊 %'}</button>
+                      <button onClick={() => setShowDayOverDay(!showDayOverDay)} style={btnStyle(showDayOverDay)}>{showDayOverDay ? '✓' : '✗'} Day-over-Day</button>
                       <button onClick={() => setShowWeekOverWeek(!showWeekOverWeek)} style={btnStyle(showWeekOverWeek)}>{showWeekOverWeek ? '✓' : '✗'} Week-over-Week</button>
                       <button onClick={() => setShowMonthOverMonth(!showMonthOverMonth)} style={btnStyle(showMonthOverMonth)}>{showMonthOverMonth ? '✓' : '✗'} Month-over-Month</button>
                       <button onClick={() => setPillarTrendOpenFor(null)} style={{ fontSize: '11px', background: 'none', border: 'none', cursor: 'pointer', color: '#718096' }}>✕ Close</button>
                     </div>
                   </div>
 
+                  {showDayOverDay && (
                   <div style={{ marginBottom: '10px' }}>
                     <div style={{ fontSize: '11px', color: '#718096', marginBottom: '2px' }}>📅 Daily (last {dailyChart.length} days)</div>
                     <ResponsiveContainer width="100%" height={170}>
@@ -2588,6 +2633,7 @@ export default function Analytics() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+                  )}
 
                   {showWeekOverWeek && (
                     <div style={{ marginBottom: '10px' }}>
@@ -4173,10 +4219,11 @@ export default function Analytics() {
               History:
               <select
                 value={trendRangeDays}
-                onChange={(e) => setTrendRangeDays(Number(e.target.value) as 56 | 182 | 365)}
+                onChange={(e) => setTrendRangeDays(Number(e.target.value) as 56 | 91 | 182 | 365)}
                 style={{ fontSize: '11px', padding: '3px 5px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
               >
                 <option value={56}>Last 8 Weeks (default)</option>
+                <option value={91}>Last 3 Months</option>
                 <option value={182}>Last 6 Months</option>
                 <option value={365}>Last 12 Months</option>
               </select>
@@ -4404,7 +4451,16 @@ export default function Analytics() {
             (detailedViewType === 'categories' && selectedCategories.length > 0) ||
             (detailedViewType === 'pillars' && selectedPillars.length > 0)) && (
             <div>
+              {detailedTrendLoading && (
+                <div style={{ fontSize: '11px', color: '#718096', marginBottom: '8px' }}>⏳ Loading trend data…</div>
+              )}
               <div style={{ marginBottom: '10px', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <button 
+                  className={`toggle-month-btn ${showDayOverDay ? 'active' : ''}`}
+                  onClick={() => setShowDayOverDay(!showDayOverDay)}
+                >
+                  {showDayOverDay ? '✓' : '✗'} Day-over-Day
+                </button>
                 <button 
                   className={`toggle-month-btn ${showWeekOverWeek ? 'active' : ''}`}
                   onClick={() => setShowWeekOverWeek(!showWeekOverWeek)}
@@ -4420,6 +4476,7 @@ export default function Analytics() {
               </div>
 
               {/* Daily Utilization Chart */}
+              {showDayOverDay && (
               <div className="comparative-charts-section" style={{ marginTop: '10px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
                     <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700 }}>
@@ -4502,6 +4559,7 @@ export default function Analytics() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+              )}
 
               {/* Weekly Utilization Chart */}
               {showWeekOverWeek && (() => {
@@ -4617,7 +4675,7 @@ export default function Analytics() {
                         margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="week" />
+                        <XAxis dataKey="week" height={38} interval={0} tick={<CustomMultilineLabel maxCharsPerLine={8} maxLines={2} forceSplitAt="–" />} />
                         <YAxis label={{ value: showAsHours ? (useMinutesForTasks ? 'Avg Minutes' : 'Avg Hours') : 'Avg Utilization %', angle: -90, position: 'insideLeft' }} tickFormatter={useMinutesForTasks ? (v: number) => `${(v * 60).toFixed(0)}` : undefined} />
                         <Tooltip formatter={(value: number) => showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(2)}h`) : `${value.toFixed(1)}%`} />
                         {getSelectedTrendCount() > 1 && <Legend wrapperStyle={{ fontSize: 10 }} />}
@@ -4785,7 +4843,7 @@ export default function Analytics() {
                 })();
                 return (
                 <div className="comparative-charts-section" style={{ marginTop: '14px' }}>
-                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>{getSelectedTrendNames()} — Monthly Average (Last {trendRangeDays === 56 ? '~2' : trendRangeDays === 182 ? '6' : '12'} Months, {showAsHours ? 'Hours' : 'Utilization %'})</h3>
+                  <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, marginBottom: '6px' }}>{getSelectedTrendNames()} — Monthly Average (Last {trendRangeDays === 56 ? '~2' : trendRangeDays === 91 ? '3' : trendRangeDays === 182 ? '6' : '12'} Months, {showAsHours ? 'Hours' : 'Utilization %'})</h3>
                   <ResponsiveContainer width="100%" height={220}>
                       <ComposedChart 
                         data={monthlyChartData}

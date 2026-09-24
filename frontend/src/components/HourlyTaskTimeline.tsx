@@ -128,11 +128,19 @@ const SEGMENT_PRIORITY: Record<string, number> = {
   'Sleep':        9,
 };
 
+const VIEW_MODE_STORAGE_KEY = 'hourlyTaskTimeline.viewMode';
+
+function getInitialViewMode(): ViewMode {
+  const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+  if (stored === 'pillar' || stored === 'category' || stored === 'task') return stored;
+  return 'task';
+}
+
 // ─── Component ────────────────────────────────────────────────────
 export default function HourlyTaskTimeline() {
   const today = formatDateForInput(new Date());
 
-  const [viewMode, setViewMode] = useState<ViewMode>('task');
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode);
   const [tasks,    setTasks]    = useState<TaskInfo[]>([]);
   const [entries,  setEntries]  = useState<HourlyEntry[]>([]);
   const [loading,  setLoading]  = useState(true);
@@ -146,6 +154,8 @@ export default function HourlyTaskTimeline() {
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { loadData(); }, [days]);
+
+  useEffect(() => { localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode); }, [viewMode]);
 
   const loadData = async () => {
     setLoading(true);

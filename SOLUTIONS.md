@@ -201,5 +201,53 @@
 
 ---
 
-*Last updated: 2026-09-14 | Add entries here whenever a major feature or fix lands*
+### SOL-012 — Persist Detailed Trend Analysis Selection Across Refresh
+| Field | Value |
+|-------|-------|
+| REQ | REQ-256 |
+| Date | 2026-09-23 |
+| Problem | Selecting tasks/categories/pillars, the view type tab, and the History range in the "Detailed Trend Analysis" section was lost on every page refresh — all reverted to empty selection / 8-Weeks default |
+| Approach | Added `DETAILED_TREND_SELECTION_STORAGE_KEY` + `loadDetailedTrendSelection()` helper. `detailedViewType`, `selectedTasks`, `selectedCategories`, `selectedPillars`, and `trendRangeDays` now lazy-init from localStorage (falling back to URL params for `detailedViewType`, then defaults). A single `useEffect` persists all five to one JSON blob in localStorage whenever any changes |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Refreshing the page keeps whatever tasks/categories/pillars, view type, and history range were last selected in the Detailed Trend Analysis section |
+
+---
+
+### SOL-013 — Fix Day-over-Day Toggle Reset + Blank Week/Month Trend Charts on Refresh
+| Field | Value |
+|-------|-------|
+| REQ | REQ-257 |
+| Date | 2026-09-24 |
+| Problem | After SOL-012 persisted the task/category/pillar selection, refreshing still (1) forced the "Day-over-Day" chart back on and hid Week-over-Week/Month-over-Month regardless of what was last shown (those 3 toggle states weren't persisted), and (2) showed blank/zero data on the Week-over-Week and Month-over-Month charts for a restored task selection, because `loadDetailedTrendData()` ran immediately on mount (triggered by `selectedTasks` restored from localStorage) before `allTasksData`/`allOneTimeTasksData` finished their async load — the `allTasksData.find(...)` task lookup failed silently, so `task_{id}` fields were never set on the trend rows |
+| Approach | Added `showDayOverDay`/`showWeekOverWeek`/`showMonthOverMonth` to the persisted `DetailedTrendSelection` object (same `analytics_detailed_trend_selection_v1` localStorage key). Added `allTasksData.length`/`allOneTimeTasksData.length` to the dependency array of the trend-loading `useEffect` so it re-fires once those arrays populate, re-fetching correctly-populated trend data |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Refresh now keeps whichever Day/Week/Month-over-X charts were last toggled on, and task trend charts (Daily/Weekly/Monthly) show real data immediately instead of a blank chart |
+
+---
+
+### SOL-014 — Fix Overlapping Weekly X-Axis Labels; Add Loading Indicator for Detailed Trend Charts
+| Field | Value |
+|-------|-------|
+| REQ | REQ-258 |
+| Date | 2026-09-24 |
+| Problem | (1) The Detailed Trend Analysis "Weekly Average" chart's X-axis showed date ranges like "Jun 22–Jun 28" at default font size/spacing, which overlapped once enough weeks (8+) were plotted. (2) On every refresh the chart area sat blank for a moment while the trend API calls completed, with no visual cue that it was loading rather than broken |
+| Approach | Added a `forceSplitAt` prop to `CustomMultilineLabel` that splits a label cleanly at a given substring (the en dash) into two lines, instead of the generic word-wrap (which could drop text when it produced more lines than `maxLines`). Wired it into the Weekly chart's `XAxis` (`tick={<CustomMultilineLabel maxCharsPerLine={8} maxLines={2} forceSplitAt="–" />}`, `height={38}`, `interval={0}`) so each week now renders as two short, non-overlapping lines (e.g. "Jun 22" / "Jun 28"). Added a `detailedTrendLoading` state set in `loadDetailedTrendData`'s try/finally, rendering a small "⏳ Loading trend data…" line above the Day/Week/Month-over toggle buttons while a fetch is in flight |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Weekly chart date labels no longer overlap regardless of history range; the brief blank period on refresh now reads as an explicit loading state instead of a rendering bug |
+
+---
+
+### SOL-015 — Persist Hours/% Display Toggle in Detailed Trend Analysis
+| Field | Value |
+|-------|-------|
+| REQ | REQ-259 |
+| Date | 2026-09-24 |
+| Problem | The ⏱️ Hours / 📊 % toggle on the Detailed Trend Analysis charts always reset to "%" after a page refresh, ignoring whatever the user had last selected |
+| Approach | Added `showAsHours` to the `DetailedTrendSelection` interface; the state now lazy-inits from `loadDetailedTrendSelection()` and is included in the persisting `useEffect`'s dependency array and saved object, same as the task/category/pillar selection and Day/Week/Month-over toggles |
+| Files | `frontend/src/pages/Analytics.tsx` |
+| Outcome | Refreshing the page keeps whichever of Hours/% was last selected on the Detailed Trend Analysis charts |
+
+---
+
+*Last updated: 2026-09-24 | Add entries here whenever a major feature or fix lands*
 
