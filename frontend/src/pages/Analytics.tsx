@@ -29,6 +29,10 @@ import {
 import apiClient from '../services/api';
 import './Analytics.css';
 
+// Fixed color per selection order (1st/2nd/3rd pick) - kept identical across Daily/Weekly/Monthly
+// trend charts so the same task/category is always the same color across all three views
+const TREND_SERIES_COLORS = ['#4299e1', '#48bb78', '#ed8936'];
+
 // Dynamic pillar/category configuration (loaded from API)
 interface PillarConfig {
   id: number;
@@ -359,6 +363,8 @@ export default function Analytics() {
   const [selectedTasks, setSelectedTasks] = useState<number[]>(() => loadDetailedTrendSelection().selectedTasks ?? []);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => loadDetailedTrendSelection().selectedCategories ?? []);
   const [selectedPillars, setSelectedPillars] = useState<string[]>(() => loadDetailedTrendSelection().selectedPillars ?? []);
+  // Collapses the "Select Tasks/Categories/Pillars" picker once a selection is made, to save vertical space
+  const [isSelectorExpanded, setIsSelectorExpanded] = useState<boolean>(true);
   const [detailedViewType, setDetailedViewType] = useState<'tasks' | 'categories' | 'pillars' | 'balance_visualization' | 'circle_of_life'>(getInitialDetailedViewType());
   const getInitialCircleType = (): 'pillar' | 'category' | 'tasks' | 'one_time' => {
     const params = new URLSearchParams(window.location.search);
@@ -4297,9 +4303,14 @@ export default function Analytics() {
           {/* Task Selection */}
           {detailedViewType === 'tasks' && (
             <div style={{ marginBottom: '10px', padding: '10px', background: '#f7fafc', borderRadius: '8px' }}>
-              <label style={{ fontWeight: 600, marginBottom: '6px', display: 'block', fontSize: '12px' }}>
+              <label
+                onClick={() => setIsSelectorExpanded(!isSelectorExpanded)}
+                style={{ fontWeight: 600, marginBottom: isSelectorExpanded ? '6px' : 0, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
+              >
                 Select Tasks (up to 3) - Time-Based & One-Time Tasks:
+                <span style={{ fontSize: '10px', transition: 'transform 0.15s', transform: isSelectorExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
               </label>
+              {isSelectorExpanded && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {[...allTasksData, ...allOneTimeTasksData]
                   .sort((a, b) => {
@@ -4350,7 +4361,8 @@ export default function Analytics() {
                   </label>
                 ))}
               </div>
-              {selectedTasks.length === 3 && (
+              )}
+              {isSelectorExpanded && selectedTasks.length === 3 && (
                 <p style={{ marginTop: '6px', color: '#ed8936', fontSize: '11px' }}>
                   Maximum of 3 tasks selected. Uncheck one to select another.
                 </p>
@@ -4361,9 +4373,14 @@ export default function Analytics() {
           {/* Category Selection */}
           {detailedViewType === 'categories' && (
             <div style={{ marginBottom: '10px', padding: '10px', background: '#f7fafc', borderRadius: '8px' }}>
-              <label style={{ fontWeight: 600, marginBottom: '6px', display: 'block', fontSize: '12px' }}>
+              <label
+                onClick={() => setIsSelectorExpanded(!isSelectorExpanded)}
+                style={{ fontWeight: 600, marginBottom: isSelectorExpanded ? '6px' : 0, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
+              >
                 Select Categories (up to 3):
+                <span style={{ fontSize: '10px', transition: 'transform 0.15s', transform: isSelectorExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
               </label>
+              {isSelectorExpanded && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {allCategoriesData.map(category => (
                   <label key={category.category_name} style={{ 
@@ -4394,7 +4411,8 @@ export default function Analytics() {
                   </label>
                 ))}
               </div>
-              {selectedCategories.length === 3 && (
+              )}
+              {isSelectorExpanded && selectedCategories.length === 3 && (
                 <p style={{ marginTop: '6px', color: '#ed8936', fontSize: '11px' }}>
                   Maximum of 3 categories selected. Uncheck one to select another.
                 </p>
@@ -4405,9 +4423,14 @@ export default function Analytics() {
           {/* Pillar Selection */}
           {detailedViewType === 'pillars' && (
             <div style={{ marginBottom: '10px', padding: '10px', background: '#f7fafc', borderRadius: '8px' }}>
-              <label style={{ fontWeight: 600, marginBottom: '6px', display: 'block', fontSize: '12px' }}>
+              <label
+                onClick={() => setIsSelectorExpanded(!isSelectorExpanded)}
+                style={{ fontWeight: 600, marginBottom: isSelectorExpanded ? '6px' : 0, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
+              >
                 Select Pillars (up to 3):
+                <span style={{ fontSize: '10px', transition: 'transform 0.15s', transform: isSelectorExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
               </label>
+              {isSelectorExpanded && (
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 {dailyPillarData.map(pillar => (
                   <label key={pillar.pillar_name} style={{ 
@@ -4438,7 +4461,8 @@ export default function Analytics() {
                   </label>
                 ))}
               </div>
-              {selectedPillars.length === 3 && (
+              )}
+              {isSelectorExpanded && selectedPillars.length === 3 && (
                 <p style={{ marginTop: '6px', color: '#ed8936', fontSize: '11px' }}>
                   Maximum of 3 pillars selected. Uncheck one to select another.
                 </p>
@@ -4511,7 +4535,7 @@ export default function Analytics() {
                       {/* Render lines for selected items */}
                       {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                         const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
-                        const colors = ['#4299e1', '#48bb78', '#ed8936'];
+                        const colors = TREND_SERIES_COLORS;
                         const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
                         const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
                         return (
@@ -4528,7 +4552,7 @@ export default function Analytics() {
                       })}
                       
                       {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
-                        const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                        const colors = TREND_SERIES_COLORS;
                         return (
                           <Line 
                             key={categoryName}
@@ -4684,7 +4708,7 @@ export default function Analytics() {
                         {/* Render bars + trend line for selected items */}
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
-                          const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                          const colors = TREND_SERIES_COLORS;
                           const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
                           const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
                           return [
@@ -4711,7 +4735,7 @@ export default function Analytics() {
                         })}
                         
                         {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
-                          const colors = ['#48bb78', '#4299e1', '#ed8936'];
+                          const colors = TREND_SERIES_COLORS;
                           return [
                             <Bar 
                               key={`bar-${categoryName}`}
@@ -4859,7 +4883,7 @@ export default function Analytics() {
                         {/* Render bars + trend line for selected items */}
                         {detailedViewType === 'tasks' && selectedTasks.map((taskId, index) => {
                           const task = allTasksData.find(t => t.task_id === taskId) || allOneTimeTasksData.find(t => t.task_id === taskId);
-                          const colors = ['#ed8936', '#4299e1', '#9f7aea'];
+                          const colors = TREND_SERIES_COLORS;
                           const idealLabel = task?.allocated_minutes ? (useMinutesForTasks ? `${task.allocated_minutes}m/day` : `${(task.allocated_minutes / 60).toFixed(1)}h/day`) : '0.0h/day';
                           const taskLabel = `${task?.task_name || `Task ${taskId}`} (Ideal: ${idealLabel})`;
                           return [
@@ -4886,7 +4910,7 @@ export default function Analytics() {
                         })}
                         
                         {detailedViewType === 'categories' && selectedCategories.map((categoryName, index) => {
-                          const colors = ['#ed8936', '#4299e1', '#9f7aea'];
+                          const colors = TREND_SERIES_COLORS;
                           return [
                             <Bar 
                               key={`bar-${categoryName}`}
