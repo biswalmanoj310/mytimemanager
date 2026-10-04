@@ -249,5 +249,17 @@
 
 ---
 
-*Last updated: 2026-09-24 | Add entries here whenever a major feature or fix lands*
+### SOL-016 — Quick Add Stays Open for Rapid Multi-Task Entry
+| Field | Value |
+|-------|-------|
+| REQ | REQ-260 |
+| Date | 2026-10-03 |
+| Problem | Quick Add closed after every save, forcing a mouse click on the button for each task |
+| Approach | Popup stays open after save; success toast shows inside the popup; input refocuses after each save; closes on Esc / outside click / 2 min idle. `loadTasks` gained a `silent` flag because its `setLoading(true)` triggers the page-level loading early return, which unmounted QuickAddTask and would have closed the popup regardless |
+| Files | `frontend/src/components/QuickAddTask.tsx`, `QuickAddTask.css`, `frontend/src/pages/Tasks.tsx` |
+| Outcome | Type task, Enter, type next task, Enter... keyboard only |
+
+---
+
+*Last updated: 2026-10-03 | Add entries here whenever a major feature or fix lands*
 

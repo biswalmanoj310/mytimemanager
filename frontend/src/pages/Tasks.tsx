@@ -931,9 +931,9 @@ export default function Tasks() {
   };
 
   // Load tasks function (needed by error UI)
-  const loadTasks = async (): Promise<Task[]> => {
+  const loadTasks = async (silent: boolean = false): Promise<Task[]> => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setError(null);
       const data = await api.get<Task[]>('/api/tasks/');
       setTasks(data);
@@ -945,7 +945,7 @@ export default function Tasks() {
       setError('Failed to load tasks');
       return [];
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -2132,7 +2132,7 @@ export default function Tasks() {
     return (
       <div className="tasks-error">
         <p>{error}</p>
-        <button onClick={loadTasks} className="btn btn-primary">
+        <button onClick={() => loadTasks()} className="btn btn-primary">
           Retry
         </button>
       </div>
@@ -2444,9 +2444,9 @@ export default function Tasks() {
     setAddToTrackingAfterCreate(null);
   };
 
-  // Handle quick-add task created — refresh tasks and today sections
+  // Handle quick-add task created — silent refresh so the Quick Add popup stays mounted for the next entry
   const handleQuickAddSuccess = async () => {
-    const freshTasks = await loadTasks();
+    const freshTasks = await loadTasks(true);
     await loadTodaysOnlyTasks(freshTasks);
     await loadProjectTasksDueToday();
     await loadGoalTasksDueToday();

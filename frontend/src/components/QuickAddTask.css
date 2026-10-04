@@ -158,12 +158,13 @@
 /* Success flash */
 .quick-add-success {
   color: #059669;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 4px 0;
-  text-align: center;
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #ecfdf5;
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

@@ -4,6 +4,7 @@
  * On the Today tab: adds a "today" task due today.
  * On the Misc tab: adds a "misc" task (Family/Home Tasks, 30 min, optional due date).
  * Any other tab falls back to the "today" behavior.
+ * The popup stays open after saving (rapid multi-entry); closes on Esc, outside click, or 2 min idle.
  */
 
 import { useState, useRef, useEffect } from 'react';
@@ -14,6 +15,9 @@ interface QuickAddTaskProps {
   onSuccess: () => void;
   activeTab?: string;
 }
+
+const IDLE_CLOSE_MS = 2 * 60 * 1000;
+const SUCCESS_MSG_MS = 2500;
 
 export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps) {
   const isMisc = activeTab === 'misc';
@@ -26,13 +30,25 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
 
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const successTimerRef = useRef<number | null>(null);
 
-  // Auto-focus input when popup opens
+  // Auto-focus input when popup opens, and again after each save (input is disabled while saving)
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    if (isOpen && !loading && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isOpen]);
+  }, [isOpen, loading]);
+
+  // Auto-close after 2 minutes without typing or saving
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = window.setTimeout(() => handleClose(), IDLE_CLOSE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, taskName, successMsg]);
+
+  useEffect(() => () => {
+    if (successTimerRef.current) window.clearTimeout(successTimerRef.current);
+  }, []);
 
   // Close on Escape or click outside
   useEffect(() => {
@@ -56,6 +72,7 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
   }, [isOpen]);
 
   const handleClose = () => {
+    if (successTimerRef.current) window.clearTimeout(successTimerRef.current);
     setIsOpen(false);
     setTaskName('');
     setDueDate('');
@@ -113,12 +130,10 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
       setTaskName('');
       setDueDate('');
 
-      // Brief success flash, then close and refresh
-      setTimeout(() => {
-        setSuccessMsg(null);
-        setIsOpen(false);
-        onSuccess();
-      }, 1200);
+      // Keep the popup open for the next task; refresh the list in the background
+      if (successTimerRef.current) window.clearTimeout(successTimerRef.current);
+      successTimerRef.current = window.setTimeout(() => setSuccessMsg(null), SUCCESS_MSG_MS);
+      onSuccess();
     } catch (err: any) {
       // Show backend validation detail if available (e.g. 422 field errors)
       const detail = err?.response?.data?.detail;
@@ -146,54 +161,49 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
 
       {isOpen && (
         <div className="quick-add-popup">
-          {successMsg ? (
-            <div className="quick-add-success">✅ {successMsg}</div>
-          ) : (
-            <>
-              <div className="quick-add-hint">
-                {isMisc ? '📋 Misc Task · 30m' : '📅 Today'} &nbsp;·&nbsp; 👨‍👩‍👦 Family / Home Tasks
-                {' '}&nbsp;·&nbsp; <span className="quick-add-hint-tip">Press Enter to save, Esc to close</span>
-              </div>
-              <div className="quick-add-input-row">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  className="quick-add-input"
-                  placeholder={isMisc ? 'What misc task do you need to track?' : 'What do you need to do today?'}
-                  value={taskName}
-                  onChange={e => setTaskName(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') handleSubmit();
-                    if (e.key === 'Escape') handleClose();
-                  }}
-                  disabled={loading}
-                  maxLength={200}
-                />
-                <button
-                  className="btn-quick-save"
-                  onClick={handleSubmit}
-                  disabled={loading || !taskName.trim()}
-                  title="Save task (Enter)"
-                >
-                  {loading ? '…' : '→'}
-                </button>
-              </div>
-              {isMisc && (
-                <div className="quick-add-date-row">
-                  <label htmlFor="quick-add-due-date">📆 Due date (optional):</label>
-                  <input
-                    id="quick-add-due-date"
-                    type="date"
-                    className="quick-add-date-input"
-                    value={dueDate}
-                    onChange={e => setDueDate(e.target.value)}
-                    disabled={loading}
-                  />
-                </div>
-              )}
-              {error && <div className="quick-add-error">⚠ {error}</div>}
-            </>
+          <div className="quick-add-hint">
+            {isMisc ? '📋 Misc Task · 30m' : '📅 Today'} &nbsp;·&nbsp; 👨‍👩‍👦 Family / Home Tasks
+            {' '}&nbsp;·&nbsp; <span className="quick-add-hint-tip">Enter to save &amp; add another, Esc to close</span>
+          </div>
+          <div className="quick-add-input-row">
+            <input
+              ref={inputRef}
+              type="text"
+              className="quick-add-input"
+              placeholder={isMisc ? 'What misc task do you need to track?' : 'What do you need to do today?'}
+              value={taskName}
+              onChange={e => { setTaskName(e.target.value); setError(null); }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleSubmit();
+                if (e.key === 'Escape') handleClose();
+              }}
+              disabled={loading}
+              maxLength={200}
+            />
+            <button
+              className="btn-quick-save"
+              onClick={handleSubmit}
+              disabled={loading || !taskName.trim()}
+              title="Save task (Enter)"
+            >
+              {loading ? '…' : '→'}
+            </button>
+          </div>
+          {isMisc && (
+            <div className="quick-add-date-row">
+              <label htmlFor="quick-add-due-date">📆 Due date (optional):</label>
+              <input
+                id="quick-add-due-date"
+                type="date"
+                className="quick-add-date-input"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+                disabled={loading}
+              />
+            </div>
           )}
+          {error && <div className="quick-add-error">⚠ {error}</div>}
+          {successMsg && !error && <div className="quick-add-success">✅ {successMsg}</div>}
         </div>
       )}
     </div>
