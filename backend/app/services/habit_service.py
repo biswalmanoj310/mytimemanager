@@ -9,6 +9,7 @@ from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict, Tuple
 from app.models.models import Habit, HabitEntry, HabitStreak, HabitSession, HabitPeriod, Task, DailyTimeEntry
 from app.utils.timezone_utils import get_local_now
+from app.utils.week_utils import get_week_start
 
 
 class HabitService:
@@ -627,8 +628,8 @@ class HabitService:
         # Success rate based on total days since start (missing days = failures)
         success_rate = round((successful / total_days) * 100, 1) if total_days > 0 else 0
         
-        # Calculate this week's success rate (week starts Monday)
-        week_start = today_local - timedelta(days=today_local.weekday())  # Monday
+        # Calculate this week's success rate
+        week_start = get_week_start(today_local)
         week_end = today_local
         week_total_days = (week_end - max(week_start, start_date)).days + 1 if week_start <= end_date else 0
         week_successful = 0
@@ -696,8 +697,7 @@ class HabitService:
             reference_date = date.today()
         
         if period_type == 'weekly':
-            # Week starts on Monday (0), ends on Sunday (6)
-            start = reference_date - timedelta(days=reference_date.weekday())
+            start = get_week_start(reference_date)
             end = start + timedelta(days=6)
         elif period_type == 'monthly':
             # Month starts on 1st, ends on last day

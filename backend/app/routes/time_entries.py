@@ -137,7 +137,7 @@ def get_daily_grid(
 
 @router.get("/summary/week")
 def get_week_summary(
-    start_date: date = Query(..., description="Start date of the week (Monday)"),
+    start_date: date = Query(..., description="Start date of the week (first day of week, Sunday)"),
     service: TimeEntryService = Depends(get_time_entry_service)
 ):
     """

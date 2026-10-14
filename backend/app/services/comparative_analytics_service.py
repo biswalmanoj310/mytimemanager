@@ -11,6 +11,7 @@ from collections import defaultdict
 import calendar
 
 from app.models.models import Pillar, Task, Goal, TimeEntry, Category, SubCategory
+from app.utils.week_utils import get_week_start
 
 
 class ComparativeAnalyticsService:
@@ -482,9 +483,7 @@ class ComparativeAnalyticsService:
         if period == "day":
             return dt.isoformat()
         elif period == "week":
-            # Get Monday of the week
-            monday = dt - timedelta(days=dt.weekday())
-            return f"Week of {monday.isoformat()}"
+            return f"Week of {get_week_start(dt).isoformat()}"
         else:  # month
             return f"{dt.year}-{dt.month:02d}"
     

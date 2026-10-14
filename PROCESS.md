@@ -120,6 +120,17 @@ Logged as REQ-245 through REQ-249. The core architectural guidance (REQ-246), so
 - First real life analysis with actual data from the app
 - Evaluate REQ-201 (mobile) and REQ-202 (PostgreSQL migration) priority
 
+### 2026-10-13 — Weekend Slump: Redesigning the Week (REQ-261)
+
+**Pattern**: Strong Mon–Fri, weak Sat+Sun → both weak days sit back-to-back at the end of the week, so the week (and month) always closes weak and the next Monday starts with a "recovery" mindset.
+
+**Decision**: Start the week on Sunday → Sunday becomes a *launch day* (plan the week, small win), Saturday stays the *closing day*. Weak days are split across the two ends instead of stacked.
+
+**Guardrails so this actually works** (the calendar change alone won't fix the habit):
+- Make Sunday's bar deliberately small: a 20-minute weekly planning ritual + one "minimum win" per pillar (a floor, not a stretch).
+- Make Saturday a *planned* Family/Calmness day (those pillars are weekend-natural) rather than an unstructured gap.
+- Review after 4 weeks: compare weekend vs weekday pillar hours. If weekends are still the gap, the issue is the weekend plan, not the week boundary.
+
 ---
 
-*Last updated: 2026-07-20 | Maintained by makingmehappier agent*
+*Last updated: 2026-10-13 | Maintained by makingmehappier agent*

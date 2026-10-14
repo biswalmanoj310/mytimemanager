@@ -261,5 +261,17 @@
 
 ---
 
-*Last updated: 2026-10-03 | Add entries here whenever a major feature or fix lands*
+### SOL-017 — Week Starts on Sunday
+| Field | Value |
+|-------|-------|
+| REQ | REQ-261 |
+| Date | 2026-10-13 |
+| Problem | Strong Mon–Fri but weak Sat+Sun both landed at the tail of the week, so every week (and the month) closed on a weak note |
+| Approach | Centralised the week start in one constant per side (`WEEK_START_DAY` in `dateHelpers.ts`, `WEEK_START_WEEKDAY` in `week_utils.py`) with `getWeekStart` / `getDaysSinceWeekStart` / `get_week_start` helpers; replaced inline Monday math in Tasks.tsx, WheelsOfLife, Analytics, and backend completed/habit/task/comparative-analytics code; `%W`→`%U` in trend labels. Migration 044 re-keyed existing `weekly_task_status` / `weekly_summary` / `weekly_time_entries` rows from Monday to Sunday (idempotent, collision-safe, tested on a DB copy; backup taken first) |
+| Files | `frontend/src/utils/dateHelpers.ts`, `frontend/src/pages/Tasks.tsx`, `Analytics.tsx`, `WeeklyTasks.tsx`, `frontend/src/components/WheelsOfLife.tsx`, `backend/app/utils/week_utils.py`, `backend/app/routes/completed.py`, `backend/app/services/{habit,task,comparative_analytics,analytics}_service.py`, `backend/migrations/044_shift_weekly_keys_to_sunday.py` |
+| Outcome | Weekly tab now runs Sun→Sat; current week is Oct 11–17. **Family Docker machines must run migrations 044 and 045 (after a backup) when they pull this change**, otherwise their existing weekly completions and weekly habit periods won't line up (045 = `habit_periods`/`habit_sessions`) |
+
+---
+
+*Last updated: 2026-10-13 | Add entries here whenever a major feature or fix lands*
 

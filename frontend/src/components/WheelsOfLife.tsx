@@ -1,5 +1,6 @@
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Tooltip, Legend } from 'recharts';
 import './WheelsOfLife.css';
+import { getDaysSinceWeekStart } from '../utils/dateHelpers';
 
 const PILLAR_ORDER = ['Hard Work', 'Calmness', 'Family'];
 const CATEGORY_ORDER = [
@@ -67,14 +68,11 @@ const WheelsOfLife: React.FC<WheelsOfLifeProps> = ({
   monthOneTimeTaskData,
 }) => {
   
-  // Helper: Get days elapsed in current week (week starts Monday, local time)
+  // Helper: Get days elapsed in current week (local time)
   // Excludes today if no data has been entered yet (avoids diluting the average)
   const getDaysElapsedInWeek = (): number => {
     const today = new Date();
-    const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    // Convert to Monday-based: Monday = 1, Tuesday = 2, ..., Sunday = 7
-    const mondayBased = dayOfWeek === 0 ? 7 : dayOfWeek;
-    const rawDays = mondayBased;
+    const rawDays = getDaysSinceWeekStart(today) + 1;
     const todaySpent = dailyPillarData.reduce((sum, p) => sum + (p.spent_hours || 0), 0);
     const todayIsLogged = dailyPillarData.length === 0 || todaySpent > 0;
     return todayIsLogged ? rawDays : Math.max(1, rawDays - 1);

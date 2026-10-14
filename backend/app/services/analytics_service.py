@@ -373,7 +373,7 @@ class AnalyticsService:
             date_format = "%Y-%m-%d"
         elif period == "week":
             start_date = end_date - timedelta(weeks=last_n - 1)
-            date_format = "%Y-W%W"
+            date_format = "%Y-W%U"  # %U = Sunday-based week number
         else:  # month
             start_date = end_date - timedelta(days=last_n * 30)
             date_format = "%Y-%m"

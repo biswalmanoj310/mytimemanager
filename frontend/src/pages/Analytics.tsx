@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { getWeekStart, formatDateForInput } from '../utils/dateHelpers';
+import { getWeekStart, getDaysSinceWeekStart, formatDateForInput } from '../utils/dateHelpers';
 import WheelsOfLife from '../components/WheelsOfLife';
 import HourlyTaskTimeline from '../components/HourlyTaskTimeline';
 import TimeDistributionChart from '../components/TimeDistributionChart';
@@ -296,7 +296,7 @@ function getWeekRangeForOption(option: 0 | 1 | 2 | 4): { start: string; end: str
   if (option === 0) {
     return { start: formatDateForInput(thisWeekStart), end: formatDateForInput(today) };
   }
-  // N trailing *complete* weeks (Mon→Sun), ending the Sunday before this week started
+  // N trailing *complete* weeks (full weeks), ending the day before this week started
   const end = new Date(thisWeekStart.getTime() - 24 * 60 * 60 * 1000);
   const start = new Date(end.getTime() - (option * 7 - 1) * 24 * 60 * 60 * 1000);
   return { start: formatDateForInput(start), end: formatDateForInput(end) };
@@ -638,10 +638,10 @@ export default function Analytics() {
         setCustomStartDate(detailedDate);
         setCustomEndDate(detailedDate);
       } else if (detailedPeriodType === 'week') {
-        // Week starting Monday
+        // Week starting on the first day of the week
         const weekStart = getWeekStart(selectedDate);
         const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6); // Sunday
+        weekEnd.setDate(weekStart.getDate() + 6); // Last day of week
         setCustomStartDate(formatDateForInput(weekStart));
         setCustomEndDate(formatDateForInput(weekEnd));
       } else if (detailedPeriodType === 'month') {
@@ -4597,7 +4597,7 @@ export default function Analytics() {
                           // so these align with the Weekly Tasks tab date ranges
                           const today = new Date();
                           today.setHours(0, 0, 0, 0);
-                          const currentMonday = getWeekStart(today); // Monday of current week
+                          const currentMonday = getWeekStart(today); // Start of current week
 
                           // Build a map from dateStr → day data for fast lookup
                           const dataByDate = new Map<string, any>();
@@ -4998,7 +4998,7 @@ export default function Analytics() {
             const getDaysElapsed = (key: 'today' | 'week' | 'month') => {
               const today = new Date();
               if (key === 'today') return 1;
-              if (key === 'week') { const d = today.getDay(); return d === 0 ? 7 : d; }
+              if (key === 'week') return getDaysSinceWeekStart(today) + 1;
               return today.getDate();
             };
             const buildRadar = (pillarData: PillarData[], key: 'today' | 'week' | 'month') => {

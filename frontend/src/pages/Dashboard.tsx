@@ -408,7 +408,7 @@ export default function Dashboard() {
   const loadCircleCharts = async () => {
     setCircleLoading(true);
     const fmt = formatDateForInput; // Use local date (not UTC) to match Analytics
-    const weekStart = getWeekStart; // Shared helper ensures same Monday calculation
+    const weekStart = getWeekStart; // Shared helper ensures same week-start calculation
     const today = new Date();
 
     try {

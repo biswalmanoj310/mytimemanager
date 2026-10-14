@@ -173,7 +173,7 @@ def get_year_aggregates_from_all_tabs(
     for entry in weekly_entries:
         task_id = entry.task_id
         week_start = entry.week_start_date
-        day = entry.day_of_week  # 0-6 for Mon-Sun
+        day = entry.day_of_week  # 0-6, offset from week_start_date
         
         # Calculate the actual date for this day
         actual_date = week_start + timedelta(days=day)

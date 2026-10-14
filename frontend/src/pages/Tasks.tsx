@@ -12,7 +12,7 @@ import './Projects.css';
 import TaskForm from '../components/TaskForm';
 import { Task, FollowUpFrequency, TaskType } from '../types';
 import { WeeklyTasks, MonthlyTasks, QuarterlyTasks, YearlyTasks } from './index';
-import { getWeekStart } from '../utils/dateHelpers';
+import { getWeekStart, getDaysSinceWeekStart } from '../utils/dateHelpers';
 import { AddHabitModal } from '../components/AddHabitModal';
 import { RelatedChallengesList } from '../components/RelatedChallengesList';
 import { PillarCategorySelector } from '../components/PillarCategorySelector';
@@ -152,10 +152,7 @@ export default function Tasks() {
   const [everCompletedTaskIds, setEverCompletedTaskIds] = useState<Set<number>>(new Set());
   // Selected week start date for weekly tab
   const [selectedWeekStart, setSelectedWeekStart] = useState<Date>(() => {
-    const today = new Date();
-    const day = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday (if Sunday, go back 6 days)
-    return new Date(today.setDate(diff));
+    return getWeekStart(new Date());
   });
   const [weeklySaveTimeout, setWeeklySaveTimeout] = useState<number | null>(null);
   // Weekly task modal state
@@ -1796,7 +1793,7 @@ export default function Tasks() {
           const viewingWeekStart = new Date(selectedWeekStart);
           viewingWeekStart.setHours(0, 0, 0, 0);
           const viewingWeekEnd = new Date(viewingWeekStart);
-          viewingWeekEnd.setDate(viewingWeekEnd.getDate() + 6); // Sunday
+          viewingWeekEnd.setDate(viewingWeekEnd.getDate() + 6); // Last day of week
           viewingWeekEnd.setHours(23, 59, 59, 999);
           
           const now = new Date();
@@ -2607,7 +2604,7 @@ export default function Tasks() {
   // Generate week days with dates
   function generateWeekDays(weekStart: Date) {
     const days = [];
-    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']; // indexed by getDay()
     
     for (let i = 0; i < 7; i++) {
       const date = new Date(weekStart);
@@ -2618,10 +2615,10 @@ export default function Tasks() {
       
       days.push({
         index: i,
-        name: dayNames[i],
+        name: dayNames[date.getDay()],
         date: date,
         formattedDate: formattedDate,
-        label: `${dayNames[i]}\n(${formattedDate})`
+        label: `${dayNames[date.getDay()]}\n(${formattedDate})`
       });
     }
     return days;
@@ -2870,10 +2867,7 @@ export default function Tasks() {
 
   // Go to current week
   const goToCurrentWeek = () => {
-    const today = new Date();
-    const day = today.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday (if Sunday, go back 6 days)
-    const currentWeek = new Date(today.setDate(diff));
+    const currentWeek = getWeekStart(new Date());
     setSelectedWeekStart(currentWeek);
     setContextDate(currentWeek); // Update context so WeeklyTasks component refreshes
     loadWeeklyEntries(currentWeek);
@@ -3667,19 +3661,17 @@ export default function Tasks() {
             }
           }
           
-          // 2. Calculate weekly average (Monday to today)
+          // 2. Calculate weekly average (week start to today)
           // monthly_completion array goes from 1st of month to today
-          // We need to find Monday of current week
+          // We need to find the first day of the current week
           const today = new Date();
-          const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-          const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Convert to Monday-based (0=Monday)
           const dayOfMonth = today.getDate(); // 1-31
-          const mondayDate = dayOfMonth - daysFromMonday; // Date number of this week's Monday
+          const mondayDate = dayOfMonth - getDaysSinceWeekStart(today); // Date number of this week's first day
           
           let weeklyCompletedDays = 0;
           let weeklyApplicableDays = 0;
           
-          // If Monday is in current month (mondayDate >= 1), calculate from Monday to today
+          // If the week start is in the current month (mondayDate >= 1), calculate from it to today
           // Otherwise, start from 1st of month
           const weekStartDay = Math.max(1, mondayDate);
           const weekStartIndex = weekStartDay - 1; // Array is 0-indexed, days are 1-indexed

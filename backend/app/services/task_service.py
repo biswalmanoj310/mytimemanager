@@ -404,8 +404,9 @@ class TaskService:
         else:
             db.add(DailyTaskStatus(task_id=task_id, date=today, is_completed=True))
 
-        # Weekly (current week starting Monday)
-        week_start = today - timedelta(days=today.weekday())
+        # Weekly (current week)
+        from app.utils.week_utils import get_week_start
+        week_start = get_week_start(today)
         from sqlalchemy import func as sqlfunc
         from app.utils.timezone_utils import to_local_date_start
         week_start_dt = to_local_date_start(datetime.combine(week_start, datetime.min.time()))

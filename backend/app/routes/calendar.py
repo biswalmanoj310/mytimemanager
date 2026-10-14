@@ -44,7 +44,7 @@ def get_daily_calendar(
 
 @router.get("/weekly")
 def get_weekly_calendar(
-    start_date: date = Query(..., description="Start date of week (typically Monday)"),
+    start_date: date = Query(..., description="Start date of week (typically Sunday)"),
     pillar_id: Optional[int] = Query(None, gt=0, description="Filter by pillar"),
     service: CalendarService = Depends(get_calendar_service)
 ):

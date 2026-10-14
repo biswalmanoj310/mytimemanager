@@ -5,7 +5,7 @@
  * 
  * This page displays weekly task tracking with:
  * - Tasks grouped by type (Time/Count/Boolean)
- * - 7-day columns (Mon-Sun)
+ * - 7-day columns (Sun-Sat)
  * - Color-coded rows (green=on track, red=below target)
  * - Color-coded cells (green=daily target met, red=missed)
  * - Completed/NA status per week
@@ -396,7 +396,7 @@ const WeeklyTasks: React.FC = () => {
    * Uses daily aggregates since weekly tasks show daily data rolled up
    * 
    * @param taskId - Task ID
-   * @param dayIndex - Day index (0=Mon, 6=Sun)
+   * @param dayIndex - Day index (0=first day of week, 6=last)
    * @returns Time in minutes or count value
    */
   const getWeeklyTime = (taskId: number, dayIndex: number): number => {
@@ -1271,7 +1271,7 @@ const WeeklyTasks: React.FC = () => {
             <div className="alert" style={{ background: 'linear-gradient(135deg, #93c5fd 0%, #60a5fa 100%)', color: 'white', border: 'none', marginBottom: '24px', padding: '12px 16px', borderRadius: '8px', boxShadow: '0 4px 6px rgba(102, 126, 234, 0.3)' }}>
               <div style={{ fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
                 <i className="fas fa-calendar-week me-2"></i>
-                📅 Weekly Tasks - Home Tab ({nativeWeeklyTasks.length} tasks) - Track progress day-by-day (Mon-Sun) or mark complete/NA for the entire week.
+                📅 Weekly Tasks - Home Tab ({nativeWeeklyTasks.length} tasks) - Track progress day-by-day (Sun-Sat) or mark complete/NA for the entire week.
               </div>
             </div>
             {renderTaskSection('⏱️ Time-Based Weekly Tasks', '⏱️', 'time-based', tasksByType.time)}

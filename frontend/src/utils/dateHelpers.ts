@@ -47,16 +47,28 @@ export const isFutureDate = (date: Date): boolean => {
 };
 
 /**
- * Get the Monday of the week containing the given date
+ * First day of the week: 0=Sunday, 1=Monday, ..., 6=Saturday (REQ-261).
+ * Keep in sync with WEEK_START_WEEKDAY in backend/app/utils/week_utils.py
+ * (note: Python numbers Monday=0, so Sunday is 6 there).
+ */
+export const WEEK_START_DAY = 0;
+
+/**
+ * Number of days elapsed since the start of the week containing the date (0 on the first day)
+ */
+export const getDaysSinceWeekStart = (date: Date): number => {
+  return (date.getDay() - WEEK_START_DAY + 7) % 7;
+};
+
+/**
+ * Get the first day of the week (see WEEK_START_DAY) containing the given date
  * @param date - Any date in the desired week
- * @returns Date object set to Monday of that week
- * @example getWeekStart(new Date('2025-11-05')) // Monday of that week
+ * @returns Date object set to the first day of that week at midnight
+ * @example getWeekStart(new Date('2025-11-05')) // Sunday of that week
  */
 export const getWeekStart = (date: Date): Date => {
   const result = new Date(date);
-  const day = result.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const diff = result.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
-  result.setDate(diff);
+  result.setDate(result.getDate() - getDaysSinceWeekStart(result));
   result.setHours(0, 0, 0, 0);
   return result;
 };
@@ -158,8 +170,8 @@ export const formatDateRange = (startDate: Date, endDate: Date): string => {
 };
 
 /**
- * Get array of dates for a week (7 days starting from Monday)
- * @param weekStart - Monday of the week
+ * Get array of dates for a week (7 days starting from the first day of the week)
+ * @param weekStart - First day of the week
  * @returns Array of 7 Date objects
  */
 export const getWeekDays = (weekStart: Date): Date[] => {

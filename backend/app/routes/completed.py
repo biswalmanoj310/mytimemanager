@@ -11,6 +11,7 @@ from typing import Optional
 from app.database.config import get_db
 from app.models.models import Task, ProjectTask
 from app.utils.timezone_utils import get_local_now
+from app.utils.week_utils import get_week_start
 
 router = APIRouter(prefix="/api", tags=["completed"])
 
@@ -24,7 +25,7 @@ def _build_date_range(period: str, start_date_str: Optional[str], end_date_str: 
     """
     Return (start_date, end_date) datetime objects based on period.
     - today        → today midnight .. end of today
-    - week         → this Monday midnight .. end of today
+    - week         → start of this week midnight .. end of today
     - month        → 1st of this month midnight .. end of today
     - year         → 1st Jan of this year midnight .. end of today
     - last_7_days  → 7 days ago midnight .. end of today
@@ -39,9 +40,8 @@ def _build_date_range(period: str, start_date_str: Optional[str], end_date_str: 
         return datetime.combine(today, datetime.min.time()), end_of_today
 
     elif period == "week":
-        # Monday of current week
-        monday = today - timedelta(days=today.weekday())
-        return datetime.combine(monday, datetime.min.time()), end_of_today
+        week_start = get_week_start(today)
+        return datetime.combine(week_start, datetime.min.time()), end_of_today
 
     elif period == "month":
         month_start = today.replace(day=1)
@@ -227,13 +227,13 @@ def get_completed_tasks(
     today = get_local_now().date()
     all_ts = [_get_completed_at(t).date() for t in all_daily + all_project if _get_completed_at(t)]
 
-    monday = today - timedelta(days=today.weekday())
+    week_start = get_week_start(today)
     month_start = today.replace(day=1)
     year_start = today.replace(month=1, day=1)
 
     stats = {
         "today": sum(1 for d in all_ts if d == today),
-        "week": sum(1 for d in all_ts if d >= monday),
+        "week": sum(1 for d in all_ts if d >= week_start),
         "month": sum(1 for d in all_ts if d >= month_start),
         "year": sum(1 for d in all_ts if d >= year_start),
         "last_7_days": sum(1 for d in all_ts if d >= today - timedelta(days=7)),
