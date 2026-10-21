@@ -216,6 +216,10 @@ export default function Tasks() {
     return (saved === 'due-today' || saved === 'needs-attention') ? saved : 'due-today';
   });
 
+  // Undo toast shown after a Today task is auto-moved to Misc by a future due date
+  const [movedToMiscToast, setMovedToMiscToast] = useState<{ taskId: number; name: string; newDate: string; prevDate: string } | null>(null);
+  const movedToMiscTimerRef = useRef<number | null>(null);
+
   // One-time tasks state
   interface OneTimeTaskData {
     id: number;
@@ -4342,6 +4346,57 @@ export default function Tasks() {
     }
   };
 
+  const showMovedToMiscToast = (toast: { taskId: number; name: string; newDate: string; prevDate: string }) => {
+    if (movedToMiscTimerRef.current) window.clearTimeout(movedToMiscTimerRef.current);
+    setMovedToMiscToast(toast);
+    movedToMiscTimerRef.current = window.setTimeout(() => setMovedToMiscToast(null), 8000);
+  };
+
+  const handleTodayOnlyDueDateChange = async (task: Task, newDate: string) => {
+    const todayStr = formatDateForInput(new Date());
+    const prevDate = task.due_date ? task.due_date.split('T')[0] : todayStr;
+    // A "Today" task dated after today no longer belongs on Today; convert to a dated Misc task
+    const moveToMisc = newDate > todayStr;
+
+    try {
+      if (moveToMisc) {
+        await api.put(`/api/tasks/${task.id}`, { due_date: newDate, follow_up_frequency: 'misc' });
+      } else if (task.project_id) {
+        await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
+      } else if (task.goal_id) {
+        await api.put(`/api/life-goals/tasks/${task.id}`, { due_date: newDate });
+      } else {
+        await api.put(`/api/tasks/${task.id}`, { due_date: newDate });
+      }
+
+      const freshTasks = await loadTasks();
+      await loadTodaysOnlyTasks(freshTasks);
+      if (moveToMisc) {
+        await loadMiscTaskGroups();
+        showMovedToMiscToast({ taskId: task.id, name: task.name, newDate, prevDate });
+      }
+    } catch (err: any) {
+      console.error('Error updating due date:', err);
+      alert('Failed to update due date: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  const handleUndoMovedToMisc = async () => {
+    if (!movedToMiscToast) return;
+    const { taskId, prevDate } = movedToMiscToast;
+    if (movedToMiscTimerRef.current) window.clearTimeout(movedToMiscTimerRef.current);
+    setMovedToMiscToast(null);
+    try {
+      await api.put(`/api/tasks/${taskId}`, { due_date: prevDate, follow_up_frequency: 'today' });
+      const freshTasks = await loadTasks();
+      await loadTodaysOnlyTasks(freshTasks);
+      await loadMiscTaskGroups();
+    } catch (err: any) {
+      console.error('Error undoing move to Misc:', err);
+      alert('Failed to undo: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
   const handleToggleProjectComplete = async (projectId: number, isCompleted: boolean) => {
     // Find the project to check its status
     const project = projects.find(p => p.id === projectId);
@@ -6568,7 +6623,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -6785,7 +6840,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7054,7 +7109,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7100,7 +7155,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7268,7 +7323,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => { setSelectedTaskId(null); setIsTaskFormOpen(true); }}>
             ➕ Add Task
           </button>
@@ -7544,7 +7599,7 @@ export default function Tasks() {
       <div className="tasks-page">
         <header className="tasks-header">
           <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-          <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+          <QuickAddTask onSuccess={handleQuickAddSuccess} />
           <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
             ➕ Add Task
           </button>
@@ -8043,7 +8098,7 @@ export default function Tasks() {
     <div className="tasks-page">
       <header className="tasks-header">
         <h1 style={{ flex: 1, textAlign: 'center' }}>My Time Manager Web Application</h1>
-        <QuickAddTask onSuccess={handleQuickAddSuccess} activeTab={activeTab} />
+        <QuickAddTask onSuccess={handleQuickAddSuccess} />
         <button className="btn btn-primary" onClick={() => setIsTaskFormOpen(true)}>
           ➕ Add Task
         </button>
@@ -17176,6 +17231,25 @@ export default function Tasks() {
       {activeTab === 'today' && (
         <div style={{ marginTop: '8px' }}>
 
+          {movedToMiscToast && (
+            <div style={{
+              position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 2000,
+              display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 18px',
+              backgroundColor: '#1e293b', color: '#fff', borderRadius: '8px', fontSize: '14px',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)'
+            }}>
+              <span>
+                "{movedToMiscToast.name}" moved to Misc, due {parseDateString(movedToMiscToast.newDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </span>
+              <button
+                onClick={handleUndoMovedToMisc}
+                style={{ background: 'none', border: 'none', color: '#93c5fd', fontWeight: 700, cursor: 'pointer', fontSize: '14px' }}
+              >
+                Undo
+              </button>
+            </div>
+          )}
+
           {/* Today's Only Tasks Section - Always show header if there are any tasks */}
           {todaySubTab === 'due-today' && todaysOnlyTasks.length > 0 && (
             <div id="todays-only-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -17251,39 +17325,10 @@ export default function Tasks() {
                             <input 
                               type="date"
                               value={task.due_date ? task.due_date.split('T')[0] : ''}
-                              onChange={async (e) => {
+                              onChange={(e) => {
                                 const newDate = e.target.value;
                                 if (!newDate) return;
-                                
-                                console.log('=== Date Update Debug ===');
-                                console.log('Input value (what you selected):', newDate);
-                                console.log('Current task.due_date:', task.due_date);
-                                console.log('Task ID:', task.id, 'Name:', task.name);
-                                
-                                try {
-                                  // Use the correct endpoint based on task type
-                                  if (task.project_id) {
-                                    console.log('Using project endpoint');
-                                    await api.put(`/api/projects/tasks/${task.id}`, { due_date: newDate });
-                                  } else if (task.goal_id) {
-                                    console.log('Using goal endpoint');
-                                    await api.put(`/api/life-goals/tasks/${task.id}`, { due_date: newDate });
-                                  } else {
-                                    console.log('Using misc task endpoint, sending:', { due_date: newDate });
-                                    await api.put(`/api/tasks/${task.id}`, { due_date: newDate });
-                                  }
-                                  
-                                  console.log('Update successful, refreshing...');
-                                  // Refresh the tasks list and use fresh data
-                                  const freshTasks = await loadTasks();
-                                  await loadTodaysOnlyTasks(freshTasks);
-                                  const updatedTask = freshTasks.find(t => t.id === task.id);
-                                  console.log('Refresh complete - Task due_date now:', updatedTask?.due_date);
-                                } catch (err: any) {
-                                  console.error('Error updating due date:', err);
-                                  console.error('Error details:', err.response?.data);
-                                  alert('Failed to update due date: ' + (err.response?.data?.detail || err.message));
-                                }
+                                handleTodayOnlyDueDateChange(task, newDate);
                               }}
                               style={{
                                 border: '1px solid #cbd5e1',

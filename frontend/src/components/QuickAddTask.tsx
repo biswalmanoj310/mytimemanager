@@ -1,29 +1,33 @@
 /**
  * QuickAddTask Component
  * One-click task capture: shows a single-line popup to add a task with zero friction.
- * On the Today tab: adds a "today" task due today.
- * On the Misc tab: adds a "misc" task (Family/Home Tasks, 30 min, optional due date).
- * Any other tab falls back to the "today" behavior.
+ * Same behavior on every tab, driven by the due date (defaults to today, local time):
+ *   - date = today  -> "today" task
+ *   - any other date, or cleared -> "misc" task (30 min, optional due date)
+ * Both are Family/Home Tasks and linked to the "2026: Home Tasks" project when it exists.
  * The popup stays open after saving (rapid multi-entry); closes on Esc, outside click, or 2 min idle.
  */
 
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../services/api';
+import { formatDateForInput, parseDate, formatDateDisplay } from '../utils/dateHelpers';
 import './QuickAddTask.css';
 
 interface QuickAddTaskProps {
   onSuccess: () => void;
-  activeTab?: string;
 }
 
 const IDLE_CLOSE_MS = 2 * 60 * 1000;
 const SUCCESS_MSG_MS = 2500;
 
-export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps) {
-  const isMisc = activeTab === 'misc';
+export default function QuickAddTask({ onSuccess }: QuickAddTaskProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [taskName, setTaskName] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  // null = untouched (follows today, even across midnight); '' = user cleared the date
+  const [dueDateOverride, setDueDateOverride] = useState<string | null>(null);
+  const todayStr = formatDateForInput(new Date());
+  const dueDate = dueDateOverride ?? todayStr;
+  const isMisc = dueDate !== todayStr;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -75,7 +79,7 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
     if (successTimerRef.current) window.clearTimeout(successTimerRef.current);
     setIsOpen(false);
     setTaskName('');
-    setDueDate('');
+    setDueDateOverride(null);
     setError(null);
     setSuccessMsg(null);
   };
@@ -106,29 +110,22 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
         priority: 5,
       };
 
-      if (isMisc) {
-        // Misc task — due date is optional, no project linkage
-        taskPayload.follow_up_frequency = 'misc';
-        if (dueDate) taskPayload.due_date = `${dueDate}T00:00:00`;
-      } else {
-        // Today task — due today, optionally linked to the "2026: Home Tasks" project
-        taskPayload.follow_up_frequency = 'today';
-        const todayStr = new Date().toISOString().split('T')[0];
-        taskPayload.due_date = `${todayStr}T00:00:00`;
-        try {
-          const projects = await api.get<any[]>('/api/projects/');
-          const homeProject = projects.find((p: any) => p.name === '2026: Home Tasks');
-          if (homeProject) taskPayload.project_id = homeProject.id;
-        } catch {
-          // Project lookup is optional — proceed without it
-        }
+      taskPayload.follow_up_frequency = isMisc ? 'misc' : 'today';
+      if (dueDate) taskPayload.due_date = `${dueDate}T00:00:00`;
+
+      try {
+        const projects = await api.get<any[]>('/api/projects/');
+        const homeProject = projects.find((p: any) => p.name === '2026: Home Tasks');
+        if (homeProject) taskPayload.project_id = homeProject.id;
+      } catch {
+        // Project lookup is optional — proceed without it
       }
 
       await api.post('/api/tasks/', taskPayload);
 
       setSuccessMsg(isMisc ? `"${name}" added as Misc Task!` : `"${name}" added to Today!`);
       setTaskName('');
-      setDueDate('');
+      setDueDateOverride(null);
 
       // Keep the popup open for the next task; refresh the list in the background
       if (successTimerRef.current) window.clearTimeout(successTimerRef.current);
@@ -154,7 +151,7 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
       <button
         className={`btn-quick-add ${isOpen ? 'active' : ''}`}
         onClick={() => setIsOpen(prev => !prev)}
-        title={isMisc ? 'Quick Add — capture a Misc task instantly' : 'Quick Add — capture a Today task instantly'}
+        title="Quick Add — today's date creates a Today task; another date creates a Misc task"
       >
         ⚡ Quick Add
       </button>
@@ -162,7 +159,7 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
       {isOpen && (
         <div className="quick-add-popup">
           <div className="quick-add-hint">
-            {isMisc ? '📋 Misc Task · 30m' : '📅 Today'} &nbsp;·&nbsp; 👨‍👩‍👦 Family / Home Tasks
+            {!isMisc ? '📅 Today' : `📋 Misc Task · 30m${dueDate ? ` · due ${formatDateDisplay(parseDate(dueDate) ?? new Date())}` : ''}`} &nbsp;·&nbsp; 👨‍👩‍👦 Family / Home Tasks
             {' '}&nbsp;·&nbsp; <span className="quick-add-hint-tip">Enter to save &amp; add another, Esc to close</span>
           </div>
           <div className="quick-add-input-row">
@@ -189,19 +186,17 @@ export default function QuickAddTask({ onSuccess, activeTab }: QuickAddTaskProps
               {loading ? '…' : '→'}
             </button>
           </div>
-          {isMisc && (
-            <div className="quick-add-date-row">
-              <label htmlFor="quick-add-due-date">📆 Due date (optional):</label>
-              <input
-                id="quick-add-due-date"
-                type="date"
-                className="quick-add-date-input"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-          )}
+          <div className="quick-add-date-row">
+            <label htmlFor="quick-add-due-date">📆 Due date:</label>
+            <input
+              id="quick-add-due-date"
+              type="date"
+              className="quick-add-date-input"
+              value={dueDate}
+              onChange={e => setDueDateOverride(e.target.value)}
+              disabled={loading}
+            />
+          </div>
           {error && <div className="quick-add-error">⚠ {error}</div>}
           {successMsg && !error && <div className="quick-add-success">✅ {successMsg}</div>}
         </div>
