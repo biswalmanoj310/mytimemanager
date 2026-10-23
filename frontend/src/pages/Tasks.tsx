@@ -15278,6 +15278,7 @@ export default function Tasks() {
                         on_track: { bg: '#dcfce7', text: '#166534' },
                         at_risk:  { bg: '#fef9c3', text: '#b45309' },
                         behind:   { bg: '#fee2e2', text: '#dc2626' },
+                        just_started: { bg: '#e0f2fe', text: '#0369a1' },
                       };
                       const challengePillarBg: { [k: string]: { bg: string; text: string } } = {
                         'Hard Work': { bg: '#dbeafe', text: '#1d4ed8' },
@@ -15327,7 +15328,7 @@ export default function Tasks() {
                                       <td style={{ padding: '8px 10px', fontWeight: '600', color: '#1e293b', borderBottom: '1px solid #e5e7eb', maxWidth: '225px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{challenge.name}</td>
                                       <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb' }}>
                                         <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '11px', fontWeight: '700', background: sc.bg, color: sc.text, whiteSpace: 'nowrap' }}>
-                                          {challenge.status_indicator === 'on_track' ? '🟢 On Track' : challenge.status_indicator === 'at_risk' ? '🟡 At Risk' : '🔴 Behind'}
+                                          {challenge.status_indicator === 'on_track' ? '🟢 On Track' : challenge.status_indicator === 'at_risk' ? '🟡 At Risk' : challenge.status_indicator === 'just_started' ? '🌱 Just Started' : '🔴 Behind'}
                                         </span>
                                       </td>
                                       <td style={{ padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: diffColors[challenge.difficulty || ''] || '#374151', fontWeight: '600', fontSize: '12px', whiteSpace: 'nowrap' }}>
@@ -15372,12 +15373,14 @@ export default function Tasks() {
                       const statusColors = {
                         on_track: '#48bb78',
                         at_risk: '#ed8936',
-                        behind: '#f56565'
+                        behind: '#f56565',
+                        just_started: '#4299e1'
                       };
                       const statusLabels = {
                         on_track: '🟢 On Track',
                         at_risk: '🟡 At Risk',
-                        behind: '🔴 Behind'
+                        behind: '🔴 Behind',
+                        just_started: '🌱 Just Started'
                       };
                       
                       return (
@@ -19311,11 +19314,13 @@ export default function Tasks() {
                   const statusColors: Record<string, string> = {
                     'on_track': '#10b981',
                     'at_risk': '#f59e0b', 
-                    'behind': '#ef4444'
+                    'behind': '#ef4444',
+                    'just_started': '#4299e1'
                   };
                   const statusColor = statusColors[challenge.status_indicator] || '#6b7280';
                   const statusEmoji = challenge.status_indicator === 'on_track' ? '🟢' : 
-                                     challenge.status_indicator === 'at_risk' ? '🟡' : '🔴';
+                                     challenge.status_indicator === 'at_risk' ? '🟡' :
+                                     challenge.status_indicator === 'just_started' ? '🌱' : '🔴';
 
                   return (
                     <div

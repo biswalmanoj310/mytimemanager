@@ -6,31 +6,70 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
+import { addDays, formatDateForInput } from '../utils/dateHelpers';
 import { PillarCategorySelector } from './PillarCategorySelector';
 import { TaskSelector } from './TaskSelector';
 
 interface Challenge {
   id: number;
   name: string;
-  description?: string;
+  description?: string | null;
   challenge_type: string;
   start_date: string;
   end_date: string;
-  target_days?: number;
-  target_count?: number;
-  target_value?: number;
-  unit?: string;
-  difficulty: string;
-  why_reason?: string;
+  target_days?: number | null;
+  target_count?: number | null;
+  target_value?: number | null;
+  unit?: string | null;
+  daily_target?: number | null;
+  required_days?: number | null;
+  difficulty: string | null;
+  why_reason?: string | null;
+  reward?: string | null;
   pillar_id?: number | null;
   category_id?: number | null;
   sub_category_id?: number | null;
   linked_task_id?: number | null;
   goal_id?: number | null;
   project_id?: number | null;
-  is_active: boolean;
+  is_active?: boolean;
   is_completed: boolean;
 }
+
+// Whole days a challenge spans, counting both the start and the end day
+const getInclusiveDuration = (start: string, end: string): number => {
+  const [sy, sm, sd] = start.split('-').map(Number);
+  const [ey, em, ed] = end.split('-').map(Number);
+  const ms = new Date(ey, em - 1, ed).getTime() - new Date(sy, sm - 1, sd).getTime();
+  return Math.round(ms / 86400000) + 1;
+};
+
+type UnitPreset = 'Hours' | 'Minutes' | 'Other';
+
+const presetFromUnit = (unit?: string | null): UnitPreset => {
+  const u = (unit || '').trim().toLowerCase();
+  if (['hour', 'hours', 'h', 'hr', 'hrs'].includes(u)) return 'Hours';
+  if (['minute', 'minutes', 'min', 'mins'].includes(u)) return 'Minutes';
+  return 'Other';
+};
+
+// 1.43 hours -> "1h 26m"; everything else -> plain number
+const formatQuantity = (n: number, unit: string, preset: UnitPreset): string => {
+  if (preset === 'Hours') {
+    const totalMinutes = Math.round(n * 60);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  const text = Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return `${text} ${unit}`.trim();
+};
+
+// Last day of a challenge that starts on `start` and runs `days` days (start day counts)
+const endDateFor = (start: string, days: number): string => {
+  const [y, m, d] = start.split('-').map(Number);
+  return formatDateForInput(addDays(new Date(y, m - 1, d), days - 1));
+};
 
 interface AddChallengeModalProps {
   show: boolean;
@@ -56,6 +95,44 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
   const [goals, setGoals] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
+
+  const initialDuration =
+    editingChallenge && editingChallenge.start_date && editingChallenge.end_date
+      ? getInclusiveDuration(editingChallenge.start_date, editingChallenge.end_date)
+      : 30;
+
+  // How a counting challenge is measured
+  const [winMode, setWinMode] = useState<'daily' | 'total'>('total');
+  const [unitPreset, setUnitPreset] = useState<UnitPreset>('Hours');
+  const [unitText, setUnitText] = useState('');
+  const [totalTarget, setTotalTarget] = useState('');
+  const [dailyMin, setDailyMin] = useState('');
+  const [requiredDays, setRequiredDays] = useState('');
+
+  // Start, duration and end date stay in sync: edit any one and the others follow
+  const [startDate, setStartDate] = useState(() => formatDateForInput(new Date()));
+  const [duration, setDuration] = useState('30');
+  const [endDate, setEndDate] = useState(() => endDateFor(formatDateForInput(new Date()), 30));
+
+  const handleStartChange = (value: string) => {
+    setStartDate(value);
+    const days = parseInt(duration, 10);
+    if (value && days >= 1) setEndDate(endDateFor(value, days));
+  };
+
+  const handleDurationChange = (value: string) => {
+    setDuration(value);
+    const days = parseInt(value, 10);
+    if (startDate && days >= 1) setEndDate(endDateFor(startDate, days));
+  };
+
+  const handleEndChange = (value: string) => {
+    setEndDate(value);
+    if (startDate && value) {
+      const days = getInclusiveDuration(startDate, value);
+      if (days >= 1) setDuration(String(days));
+    }
+  };
 
   // Fetch goals and projects on mount
   useEffect(() => {
@@ -113,8 +190,29 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
       setProjectId(editingChallenge.project_id || null);
       setChallengeType(editingChallenge.challenge_type);
       setShowTaskLink(!!editingChallenge.linked_task_id);
+      setStartDate(editingChallenge.start_date);
+      setEndDate(editingChallenge.end_date);
+      setDuration(String(initialDuration));
+      const preset = editingChallenge.challenge_type === 'accumulation' ? presetFromUnit(editingChallenge.unit) : 'Other';
+      setUnitPreset(editingChallenge.challenge_type === 'accumulation' ? preset : 'Other');
+      setUnitText(preset === 'Other' ? editingChallenge.unit || '' : '');
+      setWinMode(editingChallenge.daily_target ? 'daily' : 'total');
+      setDailyMin(editingChallenge.daily_target ? String(editingChallenge.daily_target) : '');
+      setRequiredDays(editingChallenge.required_days ? String(editingChallenge.required_days) : '');
+      const total = editingChallenge.challenge_type === 'count_based' ? editingChallenge.target_count : editingChallenge.target_value;
+      setTotalTarget(!editingChallenge.daily_target && total ? String(total) : '');
     } else {
       // Reset for new challenge
+      const today = formatDateForInput(new Date());
+      setStartDate(today);
+      setDuration('30');
+      setEndDate(endDateFor(today, 30));
+      setUnitPreset('Hours');
+      setUnitText('');
+      setWinMode('total');
+      setTotalTarget('');
+      setDailyMin('');
+      setRequiredDays('');
       setPillarId(null);
       setCategoryId(null);
       setSubCategoryId(null);
@@ -131,40 +229,86 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
     const formData = new FormData(e.currentTarget);
     
     const type = formData.get('challenge_type') as string;
-    const startDate = formData.get('start_date') as string;
-    const durationDays = parseInt(formData.get('duration_days') as string);
+    // Either a duration or an end date is enough; an end date wins when both are present
+    const typedDays = parseInt(duration, 10);
+    const finalEnd = endDate || (startDate && typedDays >= 1 ? endDateFor(startDate, typedDays) : '');
+    if (!startDate || !finalEnd) {
+      alert('Enter either a duration (days) or an end date.');
+      return;
+    }
+    // Start and end are inclusive, so the duration is the number of calendar days they span
+    const durationDays = getInclusiveDuration(startDate, finalEnd);
+    if (durationDays < 1) {
+      alert('The end date cannot be before the start date.');
+      return;
+    }
     
-    // Calculate end date
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + durationDays);
+    // Explicit nulls so cleared fields are really cleared on update
+    const text = (key: string) => ((formData.get(key) as string) || '').trim() || null;
     
     const challengeData: any = {
-      name: formData.get('name') as string,
-      description: formData.get('description') as string || null,
+      name: (formData.get('name') as string).trim(),
+      description: text('description'),
       challenge_type: type,
       start_date: startDate,
-      end_date: endDate.toISOString().split('T')[0],
+      end_date: finalEnd,
       difficulty: formData.get('difficulty') as string || 'medium',
-      why_reason: formData.get('why_reason') as string || null,
-      // NEW: Pillar/Category/Task/Goal/Project linking
+      why_reason: text('why_reason'),
+      reward: text('reward'),
+      // Pillar/Category/Task/Goal/Project linking
       pillar_id: pillarId,
       category_id: categoryId,
       sub_category_id: subCategoryId,
       linked_task_id: linkedTaskId,
       auto_sync: linkedTaskId ? true : false, // Auto-sync if linked to a task
       goal_id: goalId,
-      project_id: projectId
+      project_id: projectId,
+      target_days: null,
+      target_count: null,
+      target_value: null,
+      unit: null,
+      daily_target: null,
+      required_days: null
     };
 
     // Add type-specific fields
     if (type === 'daily_streak') {
-      challengeData.target_days = durationDays;
-    } else if (type === 'count_based') {
-      challengeData.target_count = parseInt(formData.get('target_count') as string);
-      challengeData.unit = formData.get('unit') as string;
-    } else if (type === 'accumulation') {
-      challengeData.target_value = parseFloat(formData.get('target_value') as string);
-      challengeData.unit = formData.get('unit') as string;
+      // Editing without touching the duration keeps the existing target
+      const unchanged = editingChallenge && editingChallenge.target_days && durationDays === initialDuration;
+      challengeData.target_days = unchanged ? editingChallenge!.target_days : durationDays;
+    } else {
+      const unit = type === 'accumulation' && unitPreset !== 'Other' ? unitPreset : unitText.trim();
+      if (!unit) {
+        alert('Enter the unit you are counting (e.g. pushups, pages, km).');
+        return;
+      }
+      challengeData.unit = unit;
+
+      if (winMode === 'daily') {
+        const minimum = parseFloat(dailyMin);
+        if (!(minimum > 0)) {
+          alert('Enter the minimum you want to reach every day.');
+          return;
+        }
+        const required = parseInt(requiredDays, 10);
+        if (required > durationDays) {
+          alert(`Days that must count cannot be more than the ${durationDays} days of the challenge.`);
+          return;
+        }
+        challengeData.daily_target = minimum;
+        challengeData.required_days = required >= 1 ? required : null;
+        // The total over the whole challenge is simply minimum x days
+        if (type === 'count_based') challengeData.target_count = Math.max(1, Math.round(minimum * durationDays));
+        else challengeData.target_value = minimum * durationDays;
+      } else {
+        const total = parseFloat(totalTarget);
+        if (!(total > 0)) {
+          alert('Enter the total you want to reach.');
+          return;
+        }
+        if (type === 'count_based') challengeData.target_count = Math.round(total);
+        else challengeData.target_value = total;
+      }
     }
 
     try {
@@ -303,65 +447,160 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
               >
                 <option value="daily_streak">Daily Streak (Yes/No)</option>
                 <option value="count_based">Count-Based (Number of times)</option>
-                <option value="accumulation">Time/Value-Based (Total minutes/hours)</option>
+                <option value="accumulation">Time/Value-Based (hours, minutes, km, pages…)</option>
               </select>
               <small style={{ display: 'block', marginTop: '4px', color: '#666' }}>
                 • Daily Streak: Track if you did it each day<br/>
-                • Count-Based: Track how many times (pushups, pages, etc.)<br/>
-                • Time/Value-Based: Track total time or values
+                • Count-Based: Track how many times (pushups, treks, etc.)<br/>
+                • Time/Value-Based: Track time or an amount (study hours, km, pages)
               </small>
             </div>
 
-            {/* Target Fields (hidden for daily_streak) */}
-            {challengeType !== 'daily_streak' && (
-              <>
-                {challengeType === 'count_based' && (
-                  <div className="form-group">
-                    <label htmlFor="target_count">Daily Target *</label>
-                    <input
-                      type="number"
-                      id="target_count"
-                      name="target_count"
-                      min="1"
-                      placeholder="e.g., 20, 10000"
-                      defaultValue={editingChallenge?.target_count || ''}
-                      required
-                    />
-                  </div>
-                )}
+            {/* How the challenge is measured (counting types only) */}
+            {challengeType !== 'daily_streak' && (() => {
+              const unitLabel = challengeType === 'accumulation' && unitPreset !== 'Other' ? unitPreset : unitText.trim();
+              const preset: UnitPreset = challengeType === 'accumulation' ? unitPreset : 'Other';
+              const planDays = endDate && startDate ? getInclusiveDuration(startDate, endDate) : parseInt(duration, 10) || 0;
+              const perDayOf = (total: number) => (planDays > 0 ? total / planDays : 0);
+              const show = (n: number) => formatQuantity(n, unitLabel.toLowerCase(), preset);
+              const warnTooMuch = (perDay: number) =>
+                (preset === 'Hours' && perDay > 8) || (preset === 'Minutes' && perDay > 480);
 
-                {challengeType === 'accumulation' && (
-                  <div className="form-group">
-                    <label htmlFor="target_value">Total Target *</label>
-                    <input
-                      type="number"
-                      id="target_value"
-                      name="target_value"
-                      min="1"
-                      step="0.1"
-                      placeholder="e.g., 600 (for 600 minutes total)"
-                      defaultValue={editingChallenge?.target_value || ''}
-                      required
-                    />
-                  </div>
-                )}
+              const total = parseFloat(totalTarget);
+              const minimum = parseFloat(dailyMin);
+              const required = parseInt(requiredDays, 10);
 
-                <div className="form-group">
-                  <label htmlFor="unit">Unit *</label>
-                  <input
-                    type="text"
-                    id="unit"
-                    name="unit"
-                    placeholder="e.g., pushups, pages, minutes, steps"
-                    defaultValue={editingChallenge?.unit || ''}
-                    required
-                  />
+              return (
+                <div className="ch-measure">
+                  <div className="ch-measure-title">📐 What are you counting?</div>
+
+                  <div className="ch-unit-row">
+                    {challengeType === 'accumulation' ? (
+                      <>
+                        <select
+                          value={unitPreset}
+                          onChange={(e) => setUnitPreset(e.target.value as UnitPreset)}
+                          aria-label="Unit"
+                        >
+                          <option value="Hours">Hours</option>
+                          <option value="Minutes">Minutes</option>
+                          <option value="Other">Other (km, pages, $…)</option>
+                        </select>
+                        {unitPreset === 'Other' && (
+                          <input
+                            type="text"
+                            value={unitText}
+                            placeholder="e.g., km, pages, dollars"
+                            onChange={(e) => setUnitText(e.target.value)}
+                            required
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <input
+                        type="text"
+                        value={unitText}
+                        placeholder="e.g., pushups, pages, steps, treks"
+                        onChange={(e) => setUnitText(e.target.value)}
+                        required
+                      />
+                    )}
+                  </div>
+                  {linkedTaskId && challengeType === 'accumulation' && (
+                    <small className="ch-measure-hint">
+                      📡 Time logged on your linked Daily task is converted to {unitPreset === 'Other' ? 'minutes' : unitPreset.toLowerCase()} automatically.
+                    </small>
+                  )}
+
+                  <div className="ch-measure-title" style={{ marginTop: 12 }}>🏆 How do you win?</div>
+
+                  <label className={`ch-win-option ${winMode === 'daily' ? 'is-selected' : ''}`}>
+                    <input type="radio" name="win_mode" checked={winMode === 'daily'} onChange={() => setWinMode('daily')} />
+                    <span className="ch-win-text">
+                      Every day at least
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        className="ch-win-input"
+                        value={dailyMin}
+                        disabled={winMode !== 'daily'}
+                        required={winMode === 'daily'}
+                        placeholder="20"
+                        onChange={(e) => setDailyMin(e.target.value)}
+                      />
+                      {unitLabel.toLowerCase() || 'units'}
+                    </span>
+                    <small>Best for habits: a day only counts once you reach the minimum.</small>
+                  </label>
+
+                  <label className={`ch-win-option ${winMode === 'total' ? 'is-selected' : ''}`}>
+                    <input type="radio" name="win_mode" checked={winMode === 'total'} onChange={() => setWinMode('total')} />
+                    <span className="ch-win-text">
+                      A total of
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        className="ch-win-input"
+                        value={totalTarget}
+                        disabled={winMode !== 'total'}
+                        required={winMode === 'total'}
+                        placeholder="100"
+                        onChange={(e) => setTotalTarget(e.target.value)}
+                      />
+                      {unitLabel.toLowerCase() || 'units'} by the end date
+                    </span>
+                    <small>Best for big goals: spread it however suits you; the page shows the pace you need.</small>
+                  </label>
+
+                  {winMode === 'daily' && (
+                    <div className="ch-win-extra">
+                      <label htmlFor="required_days">Days that must count (optional)</label>
+                      <div className="ch-win-extra-row">
+                        <input
+                          id="required_days"
+                          type="number"
+                          min="1"
+                          max={planDays || undefined}
+                          value={requiredDays}
+                          placeholder={planDays ? String(planDays) : 'all'}
+                          onChange={(e) => setRequiredDays(e.target.value)}
+                        />
+                        <span>of {planDays || '…'} days — leave empty to require every day</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Live reality check: what does this goal ask of you? */}
+                  {planDays > 0 && ((winMode === 'total' && total > 0) || (winMode === 'daily' && minimum > 0)) && (() => {
+                    const perDay = winMode === 'total' ? perDayOf(total) : minimum;
+                    return (
+                      <div className={`ch-preview ${warnTooMuch(perDay) ? 'is-warn' : ''}`}>
+                        {winMode === 'total' ? (
+                          <>
+                            <b>≈ {show(perDay)} per day</b> · ≈ {show(perDay * 7)} per week over {planDays} days
+                          </>
+                        ) : (
+                          <>
+                            <b>{show(minimum)} a day</b> × {planDays} days = <b>{show(minimum * planDays)}</b> in total
+                            {required >= 1 && required <= planDays && (
+                              <> · win with {required} of {planDays} days ({planDays - required} miss{planDays - required === 1 ? '' : 'es'} allowed)</>
+                            )}
+                          </>
+                        )}
+                        {warnTooMuch(perDay) && (
+                          <div>⚠️ That is more than 8 hours a day — consider a later end date or a smaller target.</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
-              </>
-            )}
+              );
+            })()}
 
-            {/* Start Date and Duration */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            {/* Start Date, Duration and End Date (linked - edit any one) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
                 <label htmlFor="start_date">Start Date *</label>
                 <input
@@ -369,27 +608,39 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
                   id="start_date"
                   name="start_date"
                   required
-                  defaultValue={editingChallenge?.start_date || new Date().toISOString().split('T')[0]}
+                  value={startDate}
+                  onChange={(e) => handleStartChange(e.target.value)}
                 />
               </div>
 
               <div className="form-group">
-                <label htmlFor="duration_days">Duration (days) *</label>
+                <label htmlFor="duration_days">Duration (days)</label>
                 <input
                   type="number"
                   id="duration_days"
                   name="duration_days"
                   min="1"
-                  required
                   placeholder="e.g., 30, 66, 90"
-                  defaultValue={
-                    editingChallenge && editingChallenge.start_date && editingChallenge.end_date
-                      ? Math.ceil((new Date(editingChallenge.end_date).getTime() - new Date(editingChallenge.start_date).getTime()) / (1000 * 60 * 60 * 24))
-                      : 30
-                  }
+                  value={duration}
+                  onChange={(e) => handleDurationChange(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="end_date">End Date</label>
+                <input
+                  type="date"
+                  id="end_date"
+                  name="end_date"
+                  min={startDate || undefined}
+                  value={endDate}
+                  onChange={(e) => handleEndChange(e.target.value)}
                 />
               </div>
             </div>
+            <small style={{ display: 'block', margin: '-0.75rem 0 1.25rem', color: '#666' }}>
+              Fill in either the duration or the end date — the other fills itself in. Start and end days both count.
+            </small>
 
             {/* Difficulty */}
             <div className="form-group">
@@ -482,6 +733,18 @@ export const AddChallengeModal: React.FC<AddChallengeModalProps> = ({
                 rows={2}
                 placeholder="What will you gain from completing this challenge?"
                 defaultValue={editingChallenge?.why_reason || ''}
+              />
+            </div>
+
+            {/* Reward */}
+            <div className="form-group">
+              <label htmlFor="reward">🎁 Reward for Finishing (optional)</label>
+              <input
+                type="text"
+                id="reward"
+                name="reward"
+                placeholder="e.g., a movie night, new running shoes"
+                defaultValue={editingChallenge?.reward || ''}
               />
             </div>
           </div>

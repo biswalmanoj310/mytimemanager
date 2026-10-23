@@ -1151,6 +1151,9 @@ class Challenge(Base):
     target_count = Column(Integer, nullable=True)  # For count_based
     target_value = Column(Float, nullable=True)  # For accumulation
     unit = Column(String(50), nullable=True)  # fruits, treks, km, pages, etc.
+    # "At least X per day" mode: a day only counts when its value reaches daily_target
+    daily_target = Column(Float, nullable=True)
+    required_days = Column(Integer, nullable=True)  # days that must hit the target (NULL = every day)
     
     # Tracking
     current_streak = Column(Integer, default=0)

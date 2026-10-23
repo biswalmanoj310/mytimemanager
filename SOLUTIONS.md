@@ -273,5 +273,65 @@
 
 ---
 
-*Last updated: 2026-10-13 | Add entries here whenever a major feature or fix lands*
+### SOL-018 — Today Task Auto-Moves to Misc When Deferred
+| Field | Value |
+|-------|-------|
+| REQ | REQ-266, REQ-267 |
+| Date | 2026-10-20 |
+| Problem | Changing the due date of a Quick-Added Today task showed "Network Error" (project endpoint response read `.order`, absent on `Task` → 500 → no CORS headers). Also, a deferred Today task stayed on the Today list |
+| Approach | `getattr(updated_task, "order", 0)` in `projects.py`. In Tasks.tsx a future due date now PUTs `follow_up_frequency='misc'` + the date to `/api/tasks/{id}`, refreshes Today/Misc lists, and shows an 8s "Moved to Misc, due <date>" toast with Undo (restores `today` + previous date) |
+| Files | `backend/app/routes/projects.py`, `frontend/src/pages/Tasks.tsx` |
+| Outcome | Today holds only what is planned for today; deferred tasks reappear via Misc on their due day. Restart backend after pulling |
+
+---
+
+### SOL-020 — Challenges Page Redesign + Daily-Tab Sync & Data-Integrity Fixes
+| Field | Value |
+|-------|-------|
+| REQ | REQ-269, REQ-270 |
+| Date | 2026-10-20 |
+| Problem | `/challenges` was a single 1,400-line component with minutes-only trackers, no list view, no way to rename completed challenges, expired challenges stuck on "Day 345 of 6", and Daily-tab data not flowing correctly (no streak/day counts, entries outside the window counted, stats endpoint returned 500, Graduate/Repeat broken, goal/project links dropped on create) |
+| Approach | Backend: one source of truth `recalculate_challenge()` (window-clamped; Daily tab for `auto_sync`, `challenge_entries` otherwise) called from log/update/create, the Daily-tab hook, and `refresh_active_challenges()` on every list; `build_challenge_metrics()` supplies progress %, on-track status, today's target, pace and a 14-day strip to list / detail / `/today/active`; new `POST /sync` and `POST /{id}/reopen`. Frontend: `pages/Challenges.tsx` + `components/challenges/` (card, list, detail modal, log modal, inline rename, progress ring, day strip). Type-aware one-tap logging (✓ / +1 / amount); synced challenges are read-only for values (notes/mood still editable) |
+| Files | `backend/app/services/challenge_service.py`, `backend/app/routes/challenges.py`, `backend/tests/test_challenges.py`, `frontend/src/pages/Challenges.tsx/.css`, `frontend/src/components/challenges/*`, `frontend/src/components/AddChallengeModal.tsx` |
+| Outcome | No migration. Expired challenges now flip to Completed/Ended on next load (the two old Nov-2025 challenges became "Ended" and can be Repeated or Reopened). Duration in the form now counts the start day (30 days = 30 calendar days). Count-based "Daily Target" label corrected to "Total Target". Not changed: Today-tab "Done today" on a *synced* challenge no longer counts — the Daily tab alone decides |
+
+---
+
+### SOL-022 — Honest Challenge Status ("On Track" must be earned) + Full-Width Calendars
+| Field | Value |
+|-------|-------|
+| REQ | REQ-275, REQ-276 |
+| Date | 2026-10-23 |
+| Problem | 10 minutes logged toward 60,000 minutes in 70 days (needs 14h 17m/day) showed "On Track". On day 1 expected progress is 0%, and the old tolerance was a flat 15 percentage points — so a long challenge could not be flagged "behind" until ~15% of its length had passed |
+| Approach | `build_challenge_metrics`: status from **days behind** the ideal pace (`>1` at risk, `>min(3, max(2, 15% of length))` behind); new `just_started` status while no day has finished and today's quota is not met; `unrealistic_pace` flag when a time target needs >8 h/day (forces Behind); projection computed from finished days only. Frontend: new status in badges/filters/Today tab, "N days behind" and "Needs 14h 17m/day — lower the target or extend the date" messages; hero no longer says "all done today" while a quota is only partly met |
+| Files | `backend/app/services/challenge_service.py`, `backend/tests/test_challenges.py` (39 tests), `frontend/src/components/challenges/*`, `frontend/src/pages/Challenges.tsx/.css`, `frontend/src/pages/Tasks.tsx` |
+| Outcome | No migration. Existing challenges may change status on next load (stricter and more honest). The 8 h/day ceiling is a constant (`MAX_REALISTIC_MINUTES_PER_DAY`) |
+
+---
+
+### SOL-021 — Daily-Minimum Challenges, Hours Unit, Pace Preview, Compact Calendars
+| Field | Value |
+|-------|-------|
+| REQ | REQ-272, REQ-273, REQ-274 |
+| Date | 2026-10-23 |
+| Problem | The form could not express "at least 20 pushups every day" (only a total, with catch-up pressure and any non-zero day counting) or "100 hours by Dec 31" (Daily tab logs minutes, so hours needed manual conversion); End Date/Duration were both mandatory; detail modal and list view were bulky |
+| Approach | Migration `046_add_daily_target_to_challenges.py` adds `daily_target` + `required_days`. `challenge_service`: `_is_hit()` decides what counts (value ≥ minimum), streaks/completed_days/won-status use hit days, status judged by missed days vs allowed slack, fixed daily target (no catch-up), `_minutes_factor()` converts Daily-tab minutes into hours. Form: unit picker (Hours/Minutes/Other), "How do you win?" radios, optional required days, live pace preview, linked Start/Duration/End. UI: habit-style `MonthCalendar` in the list view's expanded row, compact tiles/grid in the detail modal |
+| Files | `backend/migrations/046_add_daily_target_to_challenges.py`, `backend/app/models/models.py`, `backend/app/services/challenge_service.py`, `backend/app/routes/challenges.py`, `backend/tests/test_challenges.py` (33 tests), `frontend/src/components/AddChallengeModal.tsx`, `frontend/src/components/challenges/*`, `frontend/src/pages/Challenges.css` |
+| Outcome | Run migration 046 on every machine (Docker: it lives in the mounted migrations folder; backup first). Existing challenges are unchanged (daily_target NULL = classic total mode). A challenge stored in Minutes can be switched to Hours by editing unit + target. A flexible "18 of 20 days" challenge completes as soon as the 18th day counts |
+
+---
+
+### SOL-019 — Compact Completed Page + Graph View + Misc/Project/Dream Filters
+| Field | Value |
+|-------|-------|
+| REQ | REQ-268 |
+| Date | 2026-10-20 |
+| Problem | Completed page used oversized text/buttons, couldn't filter by task kind (Misc / Project / Dream), listed no dream tasks, and gave no sense of trends |
+| Approach | Rewrote page CSS/markup for dense rows (one table per date, pillar sub-rows, icon restore button, category dropdown instead of many chips). Multi-select Type chips filter the list client-side. New `CompletedAnalyticsService` + `GET /api/completed-tasks/analytics` returns daily/weekly/monthly series (stacked by type & pillar), mix, weekday counts and insights (week/month Δ%, streak, best day); recharts + CSS heatmap render it. Streak nudge and delta messaging are the "progress principle" hooks |
+| Files | `frontend/src/pages/Completed.tsx/.css`, `frontend/src/components/CompletedCharts.tsx`, `backend/app/routes/completed.py`, `backend/app/services/completed_analytics_service.py` |
+| Outcome | Backend auto-reloads (`--reload`); no migration needed. Many old records have date-only timestamps, so the time column is blank for midnight values. Round 3: analytics endpoint now takes `task_types` / `pillar_names` / `category_names` (CSV) and returns per-bucket `by_type/by_pillar/by_category`, filter `options`, and `on_time_pct`; streak/best-day insights dropped |
+
+---
+
+*Last updated: 2026-10-20 | Add entries here whenever a major feature or fix lands*
 

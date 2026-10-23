@@ -10,6 +10,7 @@ from sqlalchemy import and_, func
 from pydantic import BaseModel, Field
 
 from app.database.config import get_db
+from app.utils.timezone_utils import get_local_now
 from app.services.challenge_service import (
     get_all_challenges,
     get_challenge_by_id,
@@ -21,8 +22,12 @@ from app.services.challenge_service import (
     get_challenge_stats,
     complete_challenge,
     abandon_challenge,
+    reopen_challenge,
     graduate_to_habit,
-    repeat_challenge
+    repeat_challenge,
+    recalculate_challenge,
+    refresh_active_challenges,
+    build_challenge_metrics,
 )
 
 router = APIRouter(prefix="/api/challenges", tags=["challenges"])
@@ -40,6 +45,8 @@ class ChallengeBase(BaseModel):
     target_count: Optional[int] = None
     target_value: Optional[float] = None
     unit: Optional[str] = Field(None, max_length=50)
+    daily_target: Optional[float] = Field(None, gt=0)  # "at least X per day" mode
+    required_days: Optional[int] = Field(None, ge=1)  # days that must reach it (None = every day)
     difficulty: Optional[str] = Field(None, pattern="^(easy|medium|hard)$")
     reward: Optional[str] = None
     why_reason: Optional[str] = None
@@ -67,6 +74,8 @@ class ChallengeUpdate(BaseModel):
     target_count: Optional[int] = None
     target_value: Optional[float] = None
     unit: Optional[str] = Field(None, max_length=50)
+    daily_target: Optional[float] = Field(None, gt=0)
+    required_days: Optional[int] = Field(None, ge=1)
     difficulty: Optional[str] = Field(None, pattern="^(easy|medium|hard)$")
     reward: Optional[str] = None
     why_reason: Optional[str] = None
@@ -89,7 +98,7 @@ class ChallengeResponse(ChallengeBase):
     current_value: float
     status: str
     is_completed: bool
-    completion_date: Optional[date] = None
+    completion_date: Optional[datetime] = None
     graduated_habit_id: Optional[int] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -112,8 +121,8 @@ class ChallengeResponse(ChallengeBase):
 class ChallengeEntryLog(BaseModel):
     entry_date: date
     is_completed: bool = False
-    count_value: Optional[int] = 0
-    numeric_value: Optional[float] = 0.0
+    count_value: Optional[int] = None  # None = keep the stored value
+    numeric_value: Optional[float] = None
     note: Optional[str] = None
     mood: Optional[str] = Field(None, pattern="^(great|good|okay|struggled)$")
 
@@ -152,6 +161,13 @@ class ChallengeStatsResponse(BaseModel):
     success_rate: float
     is_on_track: bool
     is_completed: bool
+    status_indicator: str
+    expected_percentage: float
+    projected_percentage: Optional[float] = None
+    daily_average: float = 0
+    needed_per_day: float = 0
+    todays_target: Optional[float] = None
+    today_remaining: Optional[float] = None
 
 
 class GraduateToHabitRequest(BaseModel):
@@ -159,79 +175,13 @@ class GraduateToHabitRequest(BaseModel):
     habit_description: Optional[str] = None
 
 
-# ===== Endpoints =====
-
-@router.get("/")
-def list_challenges(
-    status: Optional[str] = None,
-    pillar_id: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    """
-    List all challenges with optional filtering
+def serialize_challenge(db: Session, challenge) -> dict:
+    """Challenge fields + names of linked pillar/category/task/goal/project + live progress metrics"""
+    from app.models.goal import LifeGoal
     
-    - **status**: Filter by status (active, completed, failed, abandoned)
-    - **pillar_id**: Filter by pillar
-    """
-    challenges = get_all_challenges(db, status=status, pillar_id=pillar_id)
+    # goal_id holds a Life Goal id (that is what the Add Challenge form links to)
+    life_goal = db.query(LifeGoal).filter(LifeGoal.id == challenge.goal_id).first() if challenge.goal_id else None
     
-    # Manually construct response with pillar details
-    result = []
-    for challenge in challenges:
-        challenge_dict = {
-            "id": challenge.id,
-            "name": challenge.name,
-            "description": challenge.description,
-            "challenge_type": challenge.challenge_type,
-            "start_date": challenge.start_date,
-            "end_date": challenge.end_date,
-            "target_days": challenge.target_days,
-            "target_count": challenge.target_count,
-            "target_value": challenge.target_value,
-            "unit": challenge.unit,
-            "difficulty": challenge.difficulty,
-            "reward": challenge.reward,
-            "why_reason": challenge.why_reason,
-            "pillar_id": challenge.pillar_id,
-            "category_id": challenge.category_id,
-            "sub_category_id": challenge.sub_category_id,
-            "linked_task_id": challenge.linked_task_id,
-            "goal_id": challenge.goal_id,
-            "project_id": challenge.project_id,
-            "auto_sync": challenge.auto_sync,
-            "can_graduate_to_habit": challenge.can_graduate_to_habit,
-            "current_streak": challenge.current_streak,
-            "longest_streak": challenge.longest_streak,
-            "completed_days": challenge.completed_days,
-            "current_count": challenge.current_count,
-            "current_value": challenge.current_value,
-            "status": challenge.status,
-            "is_completed": challenge.is_completed,
-            "completion_date": challenge.completion_date,
-            "graduated_habit_id": challenge.graduated_habit_id,
-            "created_at": challenge.created_at,
-            "updated_at": challenge.updated_at,
-            "pillar_name": challenge.pillar.name if challenge.pillar else None,
-            "pillar_color": challenge.pillar.color_code if challenge.pillar else None,
-            "category_name": challenge.category.name if challenge.category else None,
-            "sub_category_name": challenge.sub_category.name if challenge.sub_category else None,
-            "linked_task_name": challenge.linked_task.name if challenge.linked_task else None,
-            "goal_name": challenge.goal.name if challenge.goal else None,
-            "project_name": challenge.project.name if challenge.project else None,
-        }
-        result.append(challenge_dict)
-    
-    return result
-
-
-@router.get("/{challenge_id}")
-def get_challenge(challenge_id: int, db: Session = Depends(get_db)):
-    """Get challenge by ID"""
-    challenge = get_challenge_by_id(db, challenge_id)
-    if not challenge:
-        raise HTTPException(status_code=404, detail=f"Challenge {challenge_id} not found")
-    
-    # Include pillar details
     return {
         "id": challenge.id,
         "name": challenge.name,
@@ -243,6 +193,8 @@ def get_challenge(challenge_id: int, db: Session = Depends(get_db)):
         "target_count": challenge.target_count,
         "target_value": challenge.target_value,
         "unit": challenge.unit,
+        "daily_target": challenge.daily_target,
+        "required_days": challenge.required_days,
         "difficulty": challenge.difficulty,
         "reward": challenge.reward,
         "why_reason": challenge.why_reason,
@@ -270,9 +222,47 @@ def get_challenge(challenge_id: int, db: Session = Depends(get_db)):
         "category_name": challenge.category.name if challenge.category else None,
         "sub_category_name": challenge.sub_category.name if challenge.sub_category else None,
         "linked_task_name": challenge.linked_task.name if challenge.linked_task else None,
-        "goal_name": challenge.goal.name if challenge.goal else None,
+        "goal_name": life_goal.name if life_goal else None,
         "project_name": challenge.project.name if challenge.project else None,
+        **build_challenge_metrics(db, challenge),
     }
+
+
+# ===== Endpoints =====
+
+@router.get("/")
+def list_challenges(
+    status: Optional[str] = None,
+    pillar_id: Optional[int] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    List all challenges with optional filtering
+    
+    - **status**: Filter by status (active, completed, failed, abandoned)
+    - **pillar_id**: Filter by pillar
+    """
+    refresh_active_challenges(db)
+    challenges = get_all_challenges(db, status=status, pillar_id=pillar_id)
+    return [serialize_challenge(db, challenge) for challenge in challenges]
+
+
+@router.post("/sync")
+def sync_challenges(db: Session = Depends(get_db)):
+    """Recalculate all active challenges from the Daily tab / logged entries"""
+    refresh_active_challenges(db)
+    return {"success": True}
+
+
+@router.get("/{challenge_id}")
+def get_challenge(challenge_id: int, db: Session = Depends(get_db)):
+    """Get challenge by ID"""
+    challenge = get_challenge_by_id(db, challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail=f"Challenge {challenge_id} not found")
+    if challenge.status == 'active':
+        recalculate_challenge(db, challenge)
+    return serialize_challenge(db, challenge)
 
 
 @router.post("/", response_model=ChallengeResponse, status_code=201)
@@ -286,7 +276,31 @@ def create_new_challenge(challenge: ChallengeCreate, db: Session = Depends(get_d
     - **accumulation**: target_value, unit
     """
     try:
-        new_challenge = create_challenge(db, challenge.dict())
+        data = challenge.dict()
+        if data['end_date'] < data['start_date']:
+            raise ValueError("End date cannot be before the start date")
+        days_total = (data['end_date'] - data['start_date']).days + 1
+        counting = data['challenge_type'] != 'daily_streak'
+        if data.get('daily_target') and not counting:
+            data['daily_target'] = None  # a plain streak has no amount to reach
+        if data.get('required_days') and (not data.get('daily_target') or data['required_days'] > days_total):
+            if data.get('daily_target'):
+                raise ValueError("Required days cannot exceed the challenge length")
+            data['required_days'] = None
+        if data['challenge_type'] == 'daily_streak' and not data.get('target_days'):
+            data['target_days'] = days_total
+        if data.get('daily_target'):
+            # Total over the whole challenge is simply minimum x days (informational)
+            total = data['daily_target'] * days_total
+            if data['challenge_type'] == 'count_based':
+                data['target_count'] = max(1, int(round(total)))
+            else:
+                data['target_value'] = total
+        elif data['challenge_type'] == 'count_based' and not data.get('target_count'):
+            raise ValueError("Count-based challenges need a target count")
+        elif data['challenge_type'] == 'accumulation' and not data.get('target_value'):
+            raise ValueError("Accumulation challenges need a target value")
+        new_challenge = create_challenge(db, data)
         return new_challenge
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -382,11 +396,10 @@ def mark_complete(challenge_id: int, db: Session = Depends(get_db)):
     
     Sets status to 'completed' and records completion date.
     """
-    try:
-        challenge = complete_challenge(db, challenge_id)
-        return challenge
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    challenge = complete_challenge(db, challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail=f"Challenge {challenge_id} not found")
+    return challenge
 
 
 @router.post("/{challenge_id}/abandon", response_model=ChallengeResponse)
@@ -396,11 +409,19 @@ def mark_abandoned(challenge_id: int, db: Session = Depends(get_db)):
     
     Sets status to 'abandoned'. Challenge stays in history but won't show in active list.
     """
-    try:
-        challenge = abandon_challenge(db, challenge_id)
-        return challenge
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    challenge = abandon_challenge(db, challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail=f"Challenge {challenge_id} not found")
+    return challenge
+
+
+@router.post("/{challenge_id}/reopen", response_model=ChallengeResponse)
+def reopen_existing_challenge(challenge_id: int, db: Session = Depends(get_db)):
+    """Bring an abandoned/failed/completed challenge back to active"""
+    challenge = reopen_challenge(db, challenge_id)
+    if not challenge:
+        raise HTTPException(status_code=404, detail=f"Challenge {challenge_id} not found")
+    return challenge
 
 
 @router.post("/{challenge_id}/graduate", response_model=dict)
@@ -412,9 +433,8 @@ def graduate_challenge(
     """
     Graduate a completed challenge to a permanent habit
     
-    - Creates a new habit linked to the challenge's pillar
+    - Creates a daily habit carrying over the challenge's pillar, category, task link and "why"
     - Marks challenge as having graduated
-    - Returns both challenge and new habit
     """
     try:
         result = graduate_to_habit(
@@ -423,9 +443,11 @@ def graduate_challenge(
             habit_name=graduate_request.habit_name,
             habit_description=graduate_request.habit_description
         )
-        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Challenge {challenge_id} not found")
+    return result
 
 
 @router.post("/{challenge_id}/repeat", response_model=ChallengeResponse, status_code=201)
@@ -454,9 +476,10 @@ def repeat_existing_challenge(
 @router.get("/today/active")
 def get_todays_active_challenges(db: Session = Depends(get_db)):
     """Get all active challenges for today with progress and status"""
-    from app.models.models import Challenge, ChallengeEntry
+    from app.models.models import Challenge
     
-    today = datetime.now().date()
+    refresh_active_challenges(db)
+    today = get_local_now().date()
     
     # Get all active challenges (not completed, failed, or abandoned)
     challenges = db.query(Challenge).filter(
@@ -466,109 +489,7 @@ def get_todays_active_challenges(db: Session = Depends(get_db)):
         Challenge.end_date >= today
     ).all()
     
-    result = []
-    for challenge in challenges:
-        # Calculate days remaining
-        days_total = (challenge.end_date - challenge.start_date).days + 1
-        days_elapsed = (today - challenge.start_date).days + 1
-        days_remaining = (challenge.end_date - today).days
-        
-        # Check if there's an entry for today
-        today_entry = None
-        today_value = None
-        completed_today = False
-        
-        if challenge.auto_sync and challenge.linked_task_id:
-            # For auto-synced challenges, fetch from daily_time_entries
-            from app.models.models import DailyTimeEntry
-            total_minutes = db.query(func.sum(DailyTimeEntry.minutes)).filter(
-                DailyTimeEntry.task_id == challenge.linked_task_id,
-                func.date(DailyTimeEntry.entry_date) == today
-            ).scalar() or 0.0
-            
-            if total_minutes > 0:
-                completed_today = True
-                today_value = float(total_minutes)
-        else:
-            # For manual challenges, check challenge_entries
-            today_entry = db.query(ChallengeEntry).filter(
-                and_(
-                    ChallengeEntry.challenge_id == challenge.id,
-                    ChallengeEntry.entry_date == today
-                )
-            ).first()
-            
-            if today_entry:
-                completed_today = today_entry.is_completed
-                today_value = today_entry.numeric_value
-        
-        # Calculate progress percentage
-        progress_pct = 0
-        if challenge.challenge_type == 'daily_streak':
-            progress_pct = (challenge.completed_days / challenge.target_days * 100) if challenge.target_days else 0
-        elif challenge.challenge_type == 'count_based':
-            progress_pct = (challenge.current_count / challenge.target_count * 100) if challenge.target_count else 0
-        elif challenge.challenge_type == 'accumulation':
-            progress_pct = (challenge.current_value / challenge.target_value * 100) if challenge.target_value else 0
-        
-        # Determine status color (on track, at risk, behind)
-        expected_progress = (days_elapsed / days_total * 100)
-        status_indicator = 'on_track'
-        if progress_pct < expected_progress - 15:
-            status_indicator = 'behind'
-        elif progress_pct < expected_progress - 5:
-            status_indicator = 'at_risk'
-        
-        # Get pillar color
-        pillar_color = None
-        if challenge.pillar:
-            pillar_color = challenge.pillar.color_code
-        
-        # Calculate daily average for accumulation challenges
-        daily_average = 0
-        if challenge.challenge_type == 'accumulation' and days_elapsed > 0:
-            daily_average = challenge.current_value / days_elapsed
-        
-        result.append({
-            "id": challenge.id,
-            "name": challenge.name,
-            "description": challenge.description,
-            "challenge_type": challenge.challenge_type,
-            "pillar_id": challenge.pillar_id,
-            "pillar_name": challenge.pillar.name if challenge.pillar else None,
-            "pillar_color": pillar_color,
-            "category_id": challenge.category_id,
-            "category_name": challenge.category.name if challenge.category else None,
-            "sub_category_name": challenge.sub_category.name if challenge.sub_category else None,
-            "linked_task_name": challenge.linked_task.name if challenge.linked_task else None,
-            "goal_id": challenge.goal_id,
-            "goal_name": challenge.goal.name if challenge.goal else None,
-            "project_id": challenge.project_id,
-            "project_name": challenge.project.name if challenge.project else None,
-            "start_date": challenge.start_date,
-            "end_date": challenge.end_date,
-            "days_total": days_total,
-            "days_elapsed": days_elapsed,
-            "days_remaining": days_remaining,
-            "target_days": challenge.target_days,
-            "target_count": challenge.target_count,
-            "target_value": challenge.target_value,
-            "unit": challenge.unit,
-            "current_streak": challenge.current_streak,
-            "completed_days": challenge.completed_days,
-            "current_count": challenge.current_count,
-            "current_value": challenge.current_value,
-            "progress_percentage": round(progress_pct, 1),
-            "status_indicator": status_indicator,
-            "completed_today": completed_today,
-            "today_value": today_value,
-            "difficulty": challenge.difficulty,
-            "reward": challenge.reward,
-            # Daily average for accumulation challenges
-            "daily_average": round(daily_average, 2)
-        })
-    
-    return result
+    return [serialize_challenge(db, challenge) for challenge in challenges]
 
 
 @router.post("/{challenge_id}/log-today")
@@ -580,9 +501,7 @@ def log_challenge_today(
     db: Session = Depends(get_db)
 ):
     """Quick action to log today's challenge entry"""
-    from datetime import datetime
-    
-    today = datetime.now().date()
+    today = get_local_now().date()
     
     try:
         entry = log_challenge_entry(
