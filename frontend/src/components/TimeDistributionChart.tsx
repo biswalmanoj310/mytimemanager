@@ -2,13 +2,19 @@ import { useState, useEffect, useMemo } from 'react';
 import { PieChart, Pie, Cell } from 'recharts';
 import apiClient from '../services/api';
 import { formatDateForInput, getWeekStart } from '../utils/dateHelpers';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
+import RowOrderResetButton from './RowOrderResetButton';
+import EntitySelector from './EntitySelector';
+import { fetchDailyCompletionDates, isDailyTabTask } from '../utils/dailyTabTasks';
 
 // ─── Types ────────────────────────────────────────────────────────
 type Period   = 'day' | 'week' | 'month' | 'year';
 type ViewType = 'pillar' | 'category' | 'task' | 'one_time';
 type Display  = 'time' | 'percent';
+type ChartMode = 'share' | 'plan';
 
-interface DistItem { name: string; minutes: number; color: string; pillar?: string; category?: string; }
+// allocPerDay = planned minutes per day (0 when unknown)
+interface DistItem { id: string; name: string; minutes: number; allocPerDay: number; color: string; pillar?: string; category?: string; }
 
 // ─── Daily tab hierarchy order (mirrors HourlyTaskTimeline) ────────
 const PILLAR_ORDER   = ['Hard Work', 'Calmness', 'Family'];
@@ -32,6 +38,9 @@ const PILLAR_COLORS: Record<string, string> = {
   'Family':    '#8b5cf6',
 };
 const FALLBACK_PALETTE = ['#3b82f6','#ec4899','#14b8a6','#a855f7','#fb923c','#0ea5e9','#d946ef','#64748b'];
+// Per-task colours (no reds); Time Waste / Screen Time tasks cycle through the red family instead
+const TASK_COLORS = ['#3b82f6','#16a34a','#eab308','#8b5cf6','#14b8a6','#ec4899','#f97316','#64748b','#0ea5e9','#84cc16','#a855f7','#06b6d4','#d946ef','#65a30d'];
+const CEILING_TASK_COLORS = ['#dc2626','#9f1239','#ea580c','#b45309'];
 
 function isDeepRed(n: string) {
   const l = n.toLowerCase();
@@ -74,6 +83,142 @@ function CustomLabel(props: any) {
   );
 }
 
+const DAY_MS = 86400000;
+const SELECTOR_NOUN: Record<ViewType, string> = { pillar: 'pillars', category: 'categories', task: 'tasks', one_time: 'one-time tasks' };
+
+// Picked items per view, kept separate from Detailed Trend Analysis; empty list = show everything
+const SELECTION_KEY = 'timedist:selection';
+const EMPTY_SELECTION: Record<ViewType, string[]> = { pillar: [], category: [], task: [], one_time: [] };
+
+function loadSelection(): Record<ViewType, string[]> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SELECTION_KEY) || 'null');
+    return raw ? { ...EMPTY_SELECTION, ...raw } : EMPTY_SELECTION;
+  } catch {
+    return EMPTY_SELECTION;
+  }
+}
+
+function daysInclusive(s: string, e: string) {
+  const diff = new Date(e + 'T00:00:00').getTime() - new Date(s + 'T00:00:00').getTime();
+  return Math.max(1, Math.round(diff / DAY_MS) + 1);
+}
+
+// Time Waste / Screen Time: the allocation is a ceiling, so going over is the bad direction
+function isCeiling(item: DistItem) {
+  return isDeepRed(item.name) || isDeepRed(item.category || '');
+}
+
+function utilStyle(util: number, ceiling: boolean) {
+  if (ceiling) return util > 100 ? { fg: '#dc2626', bg: '#fee2e2' } : { fg: '#166534', bg: '#dcfce7' };
+  if (util >= 100) return { fg: '#166534', bg: '#dcfce7' };
+  if (util >= 60)  return { fg: '#1d4ed8', bg: '#dbeafe' };
+  return { fg: '#475569', bg: '#f1f5f9' };
+}
+
+function deltaColor(delta: number, ceiling: boolean) {
+  if (delta >= 0) return ceiling ? '#dc2626' : '#16a34a';
+  return ceiling ? '#16a34a' : '#64748b';
+}
+
+// ─── Data loading ─────────────────────────────────────────────────
+function sortItems(items: DistItem[], viewType: ViewType): DistItem[] {
+  if (viewType === 'pillar') {
+    return items.sort((a, b) => {
+      const pa = PILLAR_ORDER.indexOf(a.name);
+      const pb = PILLAR_ORDER.indexOf(b.name);
+      return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+    });
+  }
+  if (viewType === 'category') {
+    return items.sort((a, b) => {
+      const ca = CATEGORY_ORDER.indexOf(a.name);
+      const cb = CATEGORY_ORDER.indexOf(b.name);
+      return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb);
+    });
+  }
+  // task / one_time: pillar → category
+  return items.sort((a, b) => {
+    const pa = PILLAR_ORDER.indexOf(a.pillar || '');
+    const pb = PILLAR_ORDER.indexOf(b.pillar || '');
+    if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
+    const ca = CATEGORY_ORDER.indexOf(a.category || '');
+    const cb = CATEGORY_ORDER.indexOf(b.category || '');
+    return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb);
+  });
+}
+
+async function fetchItems(viewType: ViewType, start: string, end: string): Promise<DistItem[]> {
+  let items: DistItem[] = [];
+
+  if (viewType === 'pillar') {
+    const res = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${start}&end_date=${end}`);
+    items = (res.data.pillars || [])
+      .map((p: any) => ({
+        id: `p:${p.pillar_name}`,
+        name: p.pillar_name,
+        minutes: Math.round(p.spent_hours * 60),
+        allocPerDay: Math.round((p.allocated_hours || 0) * 60),
+        color: getPillarColor(p.pillar_name),
+      }));
+
+  } else if (viewType === 'category') {
+    const res = await apiClient.get(`/api/analytics/category-breakdown?start_date=${start}&end_date=${end}`);
+    items = (res.data.categories || [])
+      .map((c: any) => ({
+        id: `c:${c.category_name}`,
+        name: c.category_name,
+        minutes: Math.round(c.spent_hours * 60),
+        allocPerDay: Math.round((c.allocated_hours || 0) * 60),
+        color: getCatColor(c.category_name),
+      }));
+
+  } else {
+    const [tasksRes, entriesRes, completionDates] = await Promise.all([
+      apiClient.get('/api/tasks?limit=1000&is_active=true&is_completed=false'),
+      apiClient.get(`/api/daily-time?start_date=${start}&end_date=${end}`),
+      fetchDailyCompletionDates(),
+    ]);
+    const allTasks: any[] = tasksRes.data || [];
+    const entries: any[] = entriesRes.data || [];
+
+    // Same list as the Daily tab / Detailed Trend picker; Task = time-based + one-time together
+    const filtered = allTasks.filter((t: any) =>
+      isDailyTabTask(t, 'one_time', completionDates) ||
+      (viewType === 'task' && isDailyTabTask(t, 'time', completionDates)));
+
+    const taskSet = new Set(filtered.map((t: any) => t.id));
+    const spentMap = new Map<number, number>();
+    entries.forEach((e: any) => {
+      if (taskSet.has(e.task_id))
+        spentMap.set(e.task_id, (spentMap.get(e.task_id) || 0) + e.minutes);
+    });
+
+    items = filtered
+      .map((t: any) => ({
+        id: `t:${t.id}`,
+        name: t.name,
+        minutes: spentMap.get(t.id) || 0,
+        allocPerDay: t.allocated_minutes || 0,
+        color: '',
+        pillar:   t.pillar_name   || '',
+        category: t.category_name || '',
+      }));
+  }
+
+  const sorted = sortItems(items, viewType);
+  if (viewType === 'task' || viewType === 'one_time') {
+    // One colour per task (by list position) so two tasks in the same category never look alike
+    let normal = 0, ceiling = 0;
+    sorted.forEach(it => {
+      it.color = isCeiling(it)
+        ? CEILING_TASK_COLORS[ceiling++ % CEILING_TASK_COLORS.length]
+        : TASK_COLORS[normal++ % TASK_COLORS.length];
+    });
+  }
+  return sorted;
+}
+
 // ─── Component ────────────────────────────────────────────────────
 export default function TimeDistributionChart() {
   const today = formatDateForInput(new Date());
@@ -82,22 +227,32 @@ export default function TimeDistributionChart() {
   const [offset,   setOffset]   = useState(0);
   const [viewType, setViewType] = useState<ViewType>('category');
   const [display,  setDisplay]  = useState<Display>('time');
-  const [data,     setData]     = useState<DistItem[]>([]);
+  const [chartMode, setChartMode] = useState<ChartMode>('share');
+  const [allItems, setAllItems] = useState<DistItem[]>([]);
+  const [selection, setSelection] = useState<Record<ViewType, string[]>>(loadSelection);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  // Baseline minutes/day per item id: 30 days before today (Day view) or the previous full period
+  const [refPerDay, setRefPerDay] = useState<Map<string, number>>(new Map());
   const [loading,  setLoading]  = useState(true);
+  const rowOrder = useCustomRowOrder(`analytics:timedist:${viewType}`);
 
   // Reset offset when period changes
   useEffect(() => { setOffset(0); }, [period]);
 
-  // Compute date range + navigation label
-  const { start, end, navLabel } = useMemo(() => {
+  // Compute date range + navigation label (weeks start on Sunday via getWeekStart); ref* = baseline range for comparison
+  const { start, end, navLabel, refStart, refEnd } = useMemo(() => {
     const base = new Date(today + 'T00:00:00');
+    const fmt = formatDateForInput;
 
     if (period === 'day') {
       const d = new Date(base); d.setDate(d.getDate() + offset);
-      const ds = formatDateForInput(d);
+      const ds = fmt(d);
       const lbl = offset === 0 ? 'Today' : offset === -1 ? 'Yesterday'
         : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-      return { start: ds, end: ds, navLabel: lbl };
+      // Baseline: the 30 days before this day
+      const rs = new Date(d); rs.setDate(rs.getDate() - 30);
+      const re = new Date(d); re.setDate(re.getDate() - 1);
+      return { start: ds, end: ds, navLabel: lbl, refStart: fmt(rs), refEnd: fmt(re) };
     }
 
     if (period === 'week') {
@@ -106,16 +261,21 @@ export default function TimeDistributionChart() {
       const cap = we > base ? base : we;
       const lbl = offset === 0 ? 'This Week' : offset === -1 ? 'Last Week'
         : `${ws.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${we.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
-      return { start: formatDateForInput(ws), end: formatDateForInput(cap), navLabel: lbl };
+      const rs = new Date(ws); rs.setDate(rs.getDate() - 7);
+      const re = new Date(ws); re.setDate(re.getDate() - 1);
+      return { start: fmt(ws), end: fmt(cap), navLabel: lbl, refStart: fmt(rs), refEnd: fmt(re) };
     }
 
     if (period === 'month') {
       const ms = new Date(base.getFullYear(), base.getMonth() + offset, 1);
       const me = new Date(ms.getFullYear(), ms.getMonth() + 1, 0);
       const cap = me > base ? base : me;
+      const rs = new Date(ms.getFullYear(), ms.getMonth() - 1, 1);
+      const re = new Date(ms.getFullYear(), ms.getMonth(), 0);
       return {
-        start: formatDateForInput(ms), end: formatDateForInput(cap),
+        start: fmt(ms), end: fmt(cap),
         navLabel: ms.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+        refStart: fmt(rs), refEnd: fmt(re),
       };
     }
 
@@ -124,103 +284,32 @@ export default function TimeDistributionChart() {
     const ys = new Date(yr, 0, 1);
     const ye = new Date(yr, 11, 31);
     const cap = ye > base ? base : ye;
-    return { start: formatDateForInput(ys), end: formatDateForInput(cap), navLabel: String(yr) };
+    return {
+      start: fmt(ys), end: fmt(cap), navLabel: String(yr),
+      refStart: fmt(new Date(yr - 1, 0, 1)), refEnd: fmt(new Date(yr - 1, 11, 31)),
+    };
   }, [period, offset, today]);
 
-  // Fetch data whenever date range or view type changes
+  const days = daysInclusive(start, end);
+  const refDays = daysInclusive(refStart, refEnd);
+
+  // Fetch the period and its baseline whenever the date range or view type changes
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
     const load = async () => {
       try {
-        let items: DistItem[] = [];
-
-        if (viewType === 'pillar') {
-          const res = await apiClient.get(`/api/analytics/pillar-distribution?start_date=${start}&end_date=${end}`);
-          items = (res.data.pillars || [])
-            .filter((p: any) => p.spent_hours > 0)
-            .map((p: any) => ({
-              name: p.pillar_name,
-              minutes: Math.round(p.spent_hours * 60),
-              color: getPillarColor(p.pillar_name),
-            }));
-
-        } else if (viewType === 'category') {
-          const res = await apiClient.get(`/api/analytics/category-breakdown?start_date=${start}&end_date=${end}`);
-          items = (res.data.categories || [])
-            .filter((c: any) => c.spent_hours > 0)
-            .map((c: any) => ({
-              name: c.category_name,
-              minutes: Math.round(c.spent_hours * 60),
-              color: getCatColor(c.category_name),
-            }));
-
-        } else {
-          // task or one_time
-          const [tasksRes, entriesRes] = await Promise.all([
-            apiClient.get('/api/tasks?limit=1000&is_active=true'),
-            apiClient.get(`/api/daily-time?start_date=${start}&end_date=${end}`),
-          ]);
-          const allTasks: any[] = tasksRes.data || [];
-          const entries: any[] = entriesRes.data || [];
-
-          const filtered = allTasks.filter((t: any) => {
-            if (t.task_type?.toUpperCase() !== 'TIME') return false;
-            if (!t.is_active) return false;
-            if (viewType === 'one_time') return t.is_daily_one_time === true;
-            return t.follow_up_frequency === 'daily' && !t.is_daily_one_time;
-          });
-
-          const taskSet = new Set(filtered.map((t: any) => t.id));
-          const spentMap = new Map<number, number>();
-          entries.forEach((e: any) => {
-            if (taskSet.has(e.task_id))
-              spentMap.set(e.task_id, (spentMap.get(e.task_id) || 0) + e.minutes);
-          });
-
-          items = filtered
-            .filter((t: any) => (spentMap.get(t.id) || 0) > 0)
-            .map((t: any, i: number) => ({
-              name: t.name,
-              minutes: spentMap.get(t.id) || 0,
-              color: (isDeepRed(t.name) || isDeepRed(t.category_name || ''))
-                ? '#dc2626'
-                : getCatColor(t.category_name || FALLBACK_PALETTE[i % FALLBACK_PALETTE.length]),
-              pillar:   t.pillar_name   || '',
-              category: t.category_name || '',
-            }));
-        }
-
-        // Sort to match Daily tab hierarchy
-        let sorted: DistItem[];
-        if (viewType === 'pillar') {
-          sorted = items.sort((a, b) => {
-            const pa = PILLAR_ORDER.indexOf(a.name);
-            const pb = PILLAR_ORDER.indexOf(b.name);
-            return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
-          });
-        } else if (viewType === 'category') {
-          sorted = items.sort((a, b) => {
-            const ca = CATEGORY_ORDER.indexOf(a.name);
-            const cb = CATEGORY_ORDER.indexOf(b.name);
-            return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb);
-          });
-        } else {
-          // task / one_time: pillar → category → name
-          sorted = items.sort((a, b) => {
-            const pa = PILLAR_ORDER.indexOf(a.pillar || '');
-            const pb = PILLAR_ORDER.indexOf(b.pillar || '');
-            if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
-            const ca = CATEGORY_ORDER.indexOf(a.category || '');
-            const cb = CATEGORY_ORDER.indexOf(b.category || '');
-            return (ca < 0 ? 99 : ca) - (cb < 0 ? 99 : cb);
-          });
-        }
-        if (!cancelled) setData(sorted);
+        const [items, refItems] = await Promise.all([
+          fetchItems(viewType, start, end),
+          fetchItems(viewType, refStart, refEnd).catch(() => [] as DistItem[]),
+        ]);
+        if (cancelled) return;
+        setAllItems(items);
+        setRefPerDay(new Map(refItems.map(i => [i.id, i.minutes / refDays])));
       } catch (err) {
         console.error('TimeDistributionChart error', err);
-        if (!cancelled) setData([]);
+        if (!cancelled) setAllItems([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -228,7 +317,27 @@ export default function TimeDistributionChart() {
 
     load();
     return () => { cancelled = true; };
-  }, [start, end, viewType]);
+  }, [start, end, refStart, refEnd, refDays, viewType]);
+
+  const selected = selection[viewType];
+  useEffect(() => { localStorage.setItem(SELECTION_KEY, JSON.stringify(selection)); }, [selection]);
+
+  // Only items with tracked time are charted; a non-empty selection narrows them further
+  const data = useMemo(
+    () => allItems.filter(i => i.minutes > 0 && (selected.length === 0 || selected.includes(i.id))),
+    [allItems, selected],
+  );
+  const rows = useMemo(() => rowOrder.applyOrder(data), [data, rowOrder.applyOrder]);
+
+  // perDay: average per day over the elapsed days (Day view: the day itself). Compared with the baseline for the ▲/▼ delta.
+  const metricsOf = (item: DistItem) => {
+    const perDay = item.minutes / days;
+    const ref = refPerDay.get(item.id) || 0;
+    const delta = ref > 0 ? ((perDay - ref) / ref) * 100 : null;
+    const util = item.allocPerDay > 0 ? (perDay / item.allocPerDay) * 100 : null;
+    return { perDay, ref, delta, util, ceiling: isCeiling(item) };
+  };
+  const isDay = period === 'day';
 
   const totalMins = data.reduce((s, d) => s + d.minutes, 0);
   const totalH = Math.floor(totalMins / 60);
@@ -292,18 +401,59 @@ export default function TimeDistributionChart() {
           <button className={`time-dist-pill${display === 'time' ? ' active' : ''}`} onClick={() => setDisplay('time')}>⏱ Time</button>
           <button className={`time-dist-pill${display === 'percent' ? ' active' : ''}`} onClick={() => setDisplay('percent')}>% Percent</button>
         </div>
+        <div className="time-dist-btngroup">
+          <button className={`time-dist-pill${chartMode === 'share' ? ' active' : ''}`} onClick={() => setChartMode('share')} title="Where did my time go (share of total)">🍩 Share</button>
+          <button className={`time-dist-pill${chartMode === 'plan' ? ' active' : ''}`} onClick={() => setChartMode('plan')} title="How much of the planned time did I use">🎯 Plan</button>
+        </div>
       </div>
+
+      {/* ── Picker: narrow the chart and totals to chosen items ── */}
+      <EntitySelector
+        title={`Choose ${SELECTOR_NOUN[viewType]} (none selected = all)`}
+        noun={SELECTOR_NOUN[viewType]}
+        expanded={selectorOpen}
+        onToggleExpanded={() => setSelectorOpen(o => !o)}
+        selected={selected}
+        onChange={next => setSelection(s => ({ ...s, [viewType]: next }))}
+        options={allItems.map(i => ({ key: i.id, label: i.name }))}
+      />
 
       {/* ── Body ── */}
       {loading ? (
         <div className="time-dist-empty">Loading...</div>
       ) : data.length === 0 ? (
-        <div className="time-dist-empty">No time tracked for this period.</div>
+        <div className="time-dist-empty">
+          {selected.length > 0 ? 'No time tracked for the selected items in this period.' : 'No time tracked for this period.'}
+        </div>
       ) : (
         <div className="time-dist-body">
-          {/* Donut chart */}
+          {chartMode === 'plan' ? (
+            <div className="time-dist-plan">
+              <div className="time-dist-plan-note">
+                {isDay ? 'Today' : 'Average per day'} ÷ planned time per day. The line marks 100%.
+              </div>
+              {rows.filter(r => r.allocPerDay > 0).map(item => {
+                const m = metricsOf(item);
+                const util = m.util ?? 0;
+                const st = utilStyle(util, m.ceiling);
+                return (
+                  <div key={item.id} className="time-dist-plan-row">
+                    <span className="time-dist-plan-name" title={item.name}>{item.name}</span>
+                    <div className="time-dist-plan-track">
+                      <div className="time-dist-plan-fill" style={{ width: `${Math.min(util, 150) / 150 * 100}%`, background: st.fg }} />
+                      <div className="time-dist-plan-marker" />
+                    </div>
+                    <span className="time-dist-plan-pct" style={{ color: st.fg }}>{Math.round(util)}%</span>
+                  </div>
+                );
+              })}
+              {!rows.some(r => r.allocPerDay > 0) && (
+                <div className="time-dist-empty">No planned time is set for these items.</div>
+              )}
+            </div>
+          ) : (
           <div className="time-dist-chart-wrap">
-            <PieChart width={460} height={340}>
+            <PieChart width={430} height={340}>
               <Pie
                 data={data}
                 cx={210}
@@ -330,26 +480,54 @@ export default function TimeDistributionChart() {
               </text>
             </PieChart>
           </div>
+          )}
 
-          {/* Legend panel */}
+          {/* Table: drag rows to reorder */}
           <div className="time-dist-legend-panel">
-            {data.map((item, i) => {
+            <div className="time-dist-grid time-dist-grid-head">
+              <span>{VIEWS.find(v => v.key === viewType)?.label.replace(/^\S+\s/, '')}</span>
+              <span>Plan/day</span>
+              <span>Total</span>
+              <span>{isDay ? 'Usual/day (30d)' : 'Avg/day'}</span>
+              <span>Used</span>
+            </div>
+            {rows.map(item => {
               const pct = totalMins > 0 ? Math.round((item.minutes / totalMins) * 100) : 0;
+              const m = metricsOf(item);
+              const st = m.util !== null ? utilStyle(m.util, m.ceiling) : null;
+              const secondVal = isDay ? m.ref : m.perDay;
               return (
-                <div key={i} className="time-dist-legend-row">
+                <div key={item.id} className="time-dist-legend-row time-dist-grid" {...rowOrder.rowProps(item.id, rows)}>
                   <div className="time-dist-legend-left">
                     <span className="time-dist-legend-dot" style={{ background: item.color }} />
-                    <span className="time-dist-legend-name">{item.name}</span>
+                    <span className="time-dist-legend-name" title={item.name}>{item.name}</span>
                   </div>
-                  <div className="time-dist-legend-meta">
+                  <span className="time-dist-legend-meta">{item.allocPerDay > 0 ? fmtShort(item.allocPerDay) : '—'}</span>
+                  <span className="time-dist-legend-meta">
                     {display === 'time'
                       ? <><strong>{fmtShort(item.minutes)}</strong> · {pct}%</>
                       : <strong>{pct}%</strong>
                     }
-                  </div>
+                  </span>
+                  <span className="time-dist-legend-meta">
+                    <strong>{secondVal > 0 ? fmtShort(Math.round(secondVal)) : '—'}</strong>
+                    {m.delta !== null && Math.abs(m.delta) >= 1 && (
+                      <span className="time-dist-delta" style={{ color: deltaColor(m.delta, m.ceiling) }}
+                        title={isDay ? 'Today vs your usual day' : 'Avg/day vs the previous period'}>
+                        {m.delta >= 0 ? ' ▲' : ' ▼'}{Math.abs(Math.round(m.delta))}%
+                      </span>
+                    )}
+                    {period === 'year' && <span className="time-dist-sub">{fmtShort(Math.round(m.perDay * 7))}/wk</span>}
+                  </span>
+                  <span className="time-dist-legend-meta">
+                    {m.util !== null && st
+                      ? <span className="time-dist-chip" style={{ color: st.fg, background: st.bg }}>{Math.round(m.util)}%</span>
+                      : '—'}
+                  </span>
                 </div>
               );
             })}
+            <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
           </div>
         </div>
       )}

@@ -285,6 +285,30 @@
 
 ---
 
+### SOL-026 — Shared Selector, Time Distribution Picker, 5-Series Trend Charts
+| Field | Value |
+|-------|-------|
+| REQ | REQ-280, REQ-282 (legend highlight split to REQ-283) |
+| Date | 2026-10-27 |
+| Problem | Detailed Trend Analysis capped selections at 3 only because `TREND_SERIES_COLORS` had 3 colours; the picker was ~170 lines of copy-pasted JSX; Time Distribution could not be narrowed to chosen items |
+| Approach | New `components/EntitySelector.tsx` (collapsible chips, optional max, Clear, "N selected" when collapsed) used by the three Detailed Trend pickers and by Time Distribution. Trend charts: 5 colours + per-pick line dashes on the Day chart, max 5 tasks/categories (pillars stay 3), smaller bar labels when >3 series. Time Distribution keeps its own selection per view in localStorage `timedist:selection` (empty = all, no cap); totals, share %, Avg/day and Used recompute for the picked items; picker lists every item, not only those with time this period |
+| Files | `frontend/src/components/EntitySelector.tsx` (new), `frontend/src/pages/Analytics.tsx`, `frontend/src/components/TimeDistributionChart.tsx` |
+| Outcome | Frontend only. Previously saved 3-item selections still load. Share % in the donut is now relative to the selection. Follow-up (REQ-284): Day chart lines solid; Time Distribution task list now uses the Daily-tab rules (`utils/dailyTabTasks.ts`: active, not NA, not completed on an earlier day) so deleted/unmonitored tasks disappear — their past time no longer counts in Task/One-Time views; one colour per task; table moved closer to the donut |
+
+---
+
+### SOL-025 — Time Distribution: Daily Average, Plan Utilization, Drag-to-Reorder Rows
+| Field | Value |
+|-------|-------|
+| REQ | REQ-279, REQ-281 |
+| Date | 2026-10-27 |
+| Problem | Time Distribution showed only totals and share-of-total, so a partial week/month looked "low" and there was no way to see progress against the planned time |
+| Approach | Table columns Plan/day · Total · Avg/day · Used. Avg/day = total ÷ days elapsed (range already capped at today; weeks start Sunday via `getWeekStart`). Used = avg/day ÷ planned/day (same definition as Detailed Trend Analysis). Baseline for the ▲/▼ delta: previous full period (Week/Month/Year) or the 30 days before the day (Day, shown as "Usual/day"). Year also shows per-week avg. New 🍩 Share / 🎯 Plan toggle: Plan mode draws bars with a 100% marker. Time Waste/Screen Time rows treat the plan as a ceiling (over = red). Rows drag-reorder via `useCustomRowOrder`, saved per view |
+| Files | `frontend/src/components/TimeDistributionChart.tsx`, `frontend/src/pages/Analytics.css` |
+| Outcome | Frontend only, no migration. Plan/day is the task/category/pillar's *current* allocation, so editing it changes how past periods look. Not yet done: REQ-280 (selector), REQ-282 (5-item cap) |
+
+---
+
 ### SOL-020 — Challenges Page Redesign + Daily-Tab Sync & Data-Integrity Fixes
 | Field | Value |
 |-------|-------|

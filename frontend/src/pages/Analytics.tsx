@@ -3,6 +3,7 @@ import { getWeekStart, getDaysSinceWeekStart, formatDateForInput } from '../util
 import WheelsOfLife from '../components/WheelsOfLife';
 import HourlyTaskTimeline from '../components/HourlyTaskTimeline';
 import TimeDistributionChart from '../components/TimeDistributionChart';
+import EntitySelector from '../components/EntitySelector';
 import {
   XAxis,
   YAxis,
@@ -29,9 +30,11 @@ import {
 import apiClient from '../services/api';
 import './Analytics.css';
 
-// Fixed color per selection order (1st/2nd/3rd pick) - kept identical across Daily/Weekly/Monthly
+// Fixed color per selection order (1st..5th pick) - kept identical across Daily/Weekly/Monthly
 // trend charts so the same task/category is always the same color across all three views
-const TREND_SERIES_COLORS = ['#4299e1', '#48bb78', '#ed8936'];
+const TREND_SERIES_COLORS = ['#4299e1', '#48bb78', '#ed8936', '#9f7aea', '#2d3748'];
+const MAX_TREND_SELECTION = 5;
+const MAX_PILLAR_SELECTION = 3;
 
 // Dynamic pillar/category configuration (loaded from API)
 interface PillarConfig {
@@ -359,7 +362,7 @@ export default function Analytics() {
   const [detailedPeriodType, setDetailedPeriodType] = useState<'day' | 'week' | 'month'>('week');
   const [detailedDate, setDetailedDate] = useState<string>(formatDateForInput(new Date()));
   
-  // Detailed view - Multi-select state (up to 3 items) — restored from localStorage so a refresh keeps the selection
+  // Detailed view - Multi-select state (up to 5 tasks/categories, 3 pillars) — restored from localStorage so a refresh keeps the selection
   const [selectedTasks, setSelectedTasks] = useState<number[]>(() => loadDetailedTrendSelection().selectedTasks ?? []);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => loadDetailedTrendSelection().selectedCategories ?? []);
   const [selectedPillars, setSelectedPillars] = useState<string[]>(() => loadDetailedTrendSelection().selectedPillars ?? []);
@@ -942,6 +945,8 @@ export default function Analytics() {
     if (detailedViewType === 'pillars') return selectedPillars.length;
     return 0;
   };
+  // Smaller bar labels so 4-5 grouped bars per week/month don't overlap
+  const trendBarLabelSize = getSelectedTrendCount() > 3 ? 9 : 11;
 
   // Aggregate a daily trend series (from loadDetailedTrendData) into calendar weeks (Mon–Sun)
   const buildWeeklyFromDaily = (daily: any[], dataKey: string) => {
@@ -4302,17 +4307,15 @@ export default function Analytics() {
 
           {/* Task Selection */}
           {detailedViewType === 'tasks' && (
-            <div style={{ marginBottom: '10px', padding: '10px', background: '#f7fafc', borderRadius: '8px' }}>
-              <label
-                onClick={() => setIsSelectorExpanded(!isSelectorExpanded)}
-                style={{ fontWeight: 600, marginBottom: isSelectorExpanded ? '6px' : 0, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
-              >
-                Select Tasks (up to 3) - Time-Based & One-Time Tasks:
-                <span style={{ fontSize: '10px', transition: 'transform 0.15s', transform: isSelectorExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
-              </label>
-              {isSelectorExpanded && (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {[...allTasksData, ...allOneTimeTasksData]
+            <EntitySelector
+              title="Select Tasks (up to 5) - Time-Based & One-Time Tasks:"
+              noun="tasks"
+              max={MAX_TREND_SELECTION}
+              expanded={isSelectorExpanded}
+              onToggleExpanded={() => setIsSelectorExpanded(!isSelectorExpanded)}
+              selected={selectedTasks}
+              onChange={setSelectedTasks}
+              options={[...allTasksData, ...allOneTimeTasksData]
                   .sort((a, b) => {
                     // Sort by Daily tab order: category first (which groups by pillar), then task name
                     const categoryOrderA = getCategoryOrder(a.category_name);
@@ -4332,142 +4335,37 @@ export default function Analytics() {
                     
                     return a.task_name.localeCompare(b.task_name);
                   })
-                  .slice(0, 50).map(task => (
-                  <label key={task.task_id} style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    padding: '4px 8px', 
-                    fontSize: '11px',
-                    background: selectedTasks.includes(task.task_id) ? '#4299e1' : 'white',
-                    color: selectedTasks.includes(task.task_id) ? 'white' : '#2d3748',
-                    borderRadius: '999px',
-                    cursor: 'pointer',
-                    border: '1px solid #cbd5e0'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedTasks.includes(task.task_id)}
-                      onChange={(e) => {
-                        if (e.target.checked && selectedTasks.length < 3) {
-                          setSelectedTasks([...selectedTasks, task.task_id]);
-                        } else if (!e.target.checked) {
-                          setSelectedTasks(selectedTasks.filter(id => id !== task.task_id));
-                        }
-                      }}
-                      disabled={!selectedTasks.includes(task.task_id) && selectedTasks.length >= 3}
-                      style={{ marginRight: '5px' }}
-                    />
-                    {task.task_name}
-                  </label>
-                ))}
-              </div>
-              )}
-              {isSelectorExpanded && selectedTasks.length === 3 && (
-                <p style={{ marginTop: '6px', color: '#ed8936', fontSize: '11px' }}>
-                  Maximum of 3 tasks selected. Uncheck one to select another.
-                </p>
-              )}
-            </div>
+                  .slice(0, 50).map(task => ({ key: task.task_id, label: task.task_name }))}
+            />
           )}
 
           {/* Category Selection */}
           {detailedViewType === 'categories' && (
-            <div style={{ marginBottom: '10px', padding: '10px', background: '#f7fafc', borderRadius: '8px' }}>
-              <label
-                onClick={() => setIsSelectorExpanded(!isSelectorExpanded)}
-                style={{ fontWeight: 600, marginBottom: isSelectorExpanded ? '6px' : 0, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
-              >
-                Select Categories (up to 3):
-                <span style={{ fontSize: '10px', transition: 'transform 0.15s', transform: isSelectorExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
-              </label>
-              {isSelectorExpanded && (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {allCategoriesData.map(category => (
-                  <label key={category.category_name} style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    padding: '4px 8px', 
-                    fontSize: '11px',
-                    background: selectedCategories.includes(category.category_name) ? '#48bb78' : 'white',
-                    color: selectedCategories.includes(category.category_name) ? 'white' : '#2d3748',
-                    borderRadius: '999px',
-                    cursor: 'pointer',
-                    border: '1px solid #cbd5e0'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedCategories.includes(category.category_name)}
-                      onChange={(e) => {
-                        if (e.target.checked && selectedCategories.length < 3) {
-                          setSelectedCategories([...selectedCategories, category.category_name]);
-                        } else if (!e.target.checked) {
-                          setSelectedCategories(selectedCategories.filter(name => name !== category.category_name));
-                        }
-                      }}
-                      disabled={!selectedCategories.includes(category.category_name) && selectedCategories.length >= 3}
-                      style={{ marginRight: '5px' }}
-                    />
-                    {category.category_name}
-                  </label>
-                ))}
-              </div>
-              )}
-              {isSelectorExpanded && selectedCategories.length === 3 && (
-                <p style={{ marginTop: '6px', color: '#ed8936', fontSize: '11px' }}>
-                  Maximum of 3 categories selected. Uncheck one to select another.
-                </p>
-              )}
-            </div>
+            <EntitySelector
+              title="Select Categories (up to 5):"
+              noun="categories"
+              accent="#48bb78"
+              max={MAX_TREND_SELECTION}
+              expanded={isSelectorExpanded}
+              onToggleExpanded={() => setIsSelectorExpanded(!isSelectorExpanded)}
+              selected={selectedCategories}
+              onChange={setSelectedCategories}
+              options={allCategoriesData.map(category => ({ key: category.category_name, label: category.category_name }))}
+            />
           )}
 
           {/* Pillar Selection */}
           {detailedViewType === 'pillars' && (
-            <div style={{ marginBottom: '10px', padding: '10px', background: '#f7fafc', borderRadius: '8px' }}>
-              <label
-                onClick={() => setIsSelectorExpanded(!isSelectorExpanded)}
-                style={{ fontWeight: 600, marginBottom: isSelectorExpanded ? '6px' : 0, display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', userSelect: 'none' }}
-              >
-                Select Pillars (up to 3):
-                <span style={{ fontSize: '10px', transition: 'transform 0.15s', transform: isSelectorExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>▼</span>
-              </label>
-              {isSelectorExpanded && (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {dailyPillarData.map(pillar => (
-                  <label key={pillar.pillar_name} style={{ 
-                    display: 'inline-flex', 
-                    alignItems: 'center', 
-                    padding: '4px 8px', 
-                    fontSize: '11px',
-                    background: selectedPillars.includes(pillar.pillar_name) ? pillar.color_code : 'white',
-                    color: selectedPillars.includes(pillar.pillar_name) ? 'white' : '#2d3748',
-                    borderRadius: '999px',
-                    cursor: 'pointer',
-                    border: '1px solid #cbd5e0'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedPillars.includes(pillar.pillar_name)}
-                      onChange={(e) => {
-                        if (e.target.checked && selectedPillars.length < 3) {
-                          setSelectedPillars([...selectedPillars, pillar.pillar_name]);
-                        } else if (!e.target.checked) {
-                          setSelectedPillars(selectedPillars.filter(name => name !== pillar.pillar_name));
-                        }
-                      }}
-                      disabled={!selectedPillars.includes(pillar.pillar_name) && selectedPillars.length >= 3}
-                      style={{ marginRight: '5px' }}
-                    />
-                    {pillar.pillar_name}
-                  </label>
-                ))}
-              </div>
-              )}
-              {isSelectorExpanded && selectedPillars.length === 3 && (
-                <p style={{ marginTop: '6px', color: '#ed8936', fontSize: '11px' }}>
-                  Maximum of 3 pillars selected. Uncheck one to select another.
-                </p>
-              )}
-            </div>
+            <EntitySelector
+              title="Select Pillars (up to 3):"
+              noun="pillars"
+              max={MAX_PILLAR_SELECTION}
+              expanded={isSelectorExpanded}
+              onToggleExpanded={() => setIsSelectorExpanded(!isSelectorExpanded)}
+              selected={selectedPillars}
+              onChange={setSelectedPillars}
+              options={dailyPillarData.map(pillar => ({ key: pillar.pillar_name, label: pillar.pillar_name, color: pillar.color_code }))}
+            />
           )}
 
           {/* Show charts only if something is selected */}
@@ -4718,7 +4616,7 @@ export default function Analytics() {
                               name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
+                              label={{ position: 'top', fontSize: trendBarLabelSize, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
                             />,
                             <Line
                               key={`trend-${taskId}`}
@@ -4743,7 +4641,7 @@ export default function Analytics() {
                               name={categoryName}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                              label={{ position: 'top', fontSize: trendBarLabelSize, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />,
                             <Line
                               key={`trend-${categoryName}`}
@@ -4893,7 +4791,7 @@ export default function Analytics() {
                               name={taskLabel}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
+                              label={{ position: 'top', fontSize: trendBarLabelSize, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? (useMinutesForTasks ? `${(value * 60).toFixed(0)}m` : `${value.toFixed(1)}h`) : `${value.toFixed(0)}%`) : '' }}
                             />,
                             <Line
                               key={`trend-${taskId}`}
@@ -4918,7 +4816,7 @@ export default function Analytics() {
                               name={categoryName}
                               fill={colors[index]}
                               radius={[6, 6, 0, 0]}
-                              label={{ position: 'top', fontSize: 11, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
+                              label={{ position: 'top', fontSize: trendBarLabelSize, fontWeight: 600, formatter: (value: number) => value > 0 ? (showAsHours ? `${value.toFixed(1)}h` : `${value.toFixed(0)}%`) : '' }}
                             />,
                             <Line
                               key={`trend-${categoryName}`}
@@ -4981,7 +4879,7 @@ export default function Analytics() {
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
               <h3 style={{ marginBottom: '8px' }}>No {detailedViewType} selected</h3>
               <p style={{ color: '#718096' }}>
-                Select up to 3 {detailedViewType} above to view their utilization trends
+                Select up to {detailedViewType === 'pillars' ? MAX_PILLAR_SELECTION : MAX_TREND_SELECTION} {detailedViewType} above to view their utilization trends
               </p>
             </div>
           )}
