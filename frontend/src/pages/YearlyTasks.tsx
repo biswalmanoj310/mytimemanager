@@ -18,6 +18,8 @@ import {
 import {
   sortTasksByHierarchy,
 } from '../utils/taskHelpers';
+import RowOrderResetButton from '../components/RowOrderResetButton';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
 
 const YearlyTasks: React.FC = () => {
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
@@ -38,6 +40,7 @@ const YearlyTasks: React.FC = () => {
     hierarchyOrder,
     taskNameOrder,
   } = useUserPreferencesContext();
+  const rowOrder = useCustomRowOrder('tasks:yearly');
 
   const [loading, setLoading] = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(false);
@@ -119,8 +122,8 @@ const YearlyTasks: React.FC = () => {
       
       return true;
     });
-    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+    return rowOrder.applyOrder(sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder));
+  }, [tasks, yearlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder, rowOrder.applyOrder]);
 
   // Completed/NA tasks for bottom section
   const completedTasks = useMemo(() => {
@@ -387,7 +390,7 @@ const YearlyTasks: React.FC = () => {
     };
   };
 
-  const renderTaskRow = (task: Task) => {
+  const renderTaskRow = (task: Task, visible: Task[]) => {
     // Determine tracking start month FIRST — totalSpent must only count from this month onwards
     const yearlyStatus = yearlyTaskStatuses[task.id];
     let trackingStartMonth: number | null = 1; // Default to January
@@ -482,7 +485,7 @@ const YearlyTasks: React.FC = () => {
     const bgColor = isYearlyCompleted ? '#c6f6d5' : isYearlyNA ? '#e2e8f0' : undefined;
     
     return (
-      <tr key={task.id} className={rowClassName} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+      <tr key={task.id} className={rowClassName} {...rowOrder.rowProps(task.id, visible)} style={bgColor ? { backgroundColor: bgColor } : undefined}>
         <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`} style={bgColor ? { backgroundColor: bgColor } : undefined}>
           <div className="task-name">
             {task.name}
@@ -598,7 +601,7 @@ const YearlyTasks: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {tasks.map(task => renderTaskRow(task))}
+              {tasks.map(task => renderTaskRow(task, tasks))}
             </tbody>
           </table>
         </div>
@@ -804,6 +807,7 @@ const YearlyTasks: React.FC = () => {
 
   return (
     <>
+      <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
       <div className="row mb-3">
         <div className="col">
           {/* Yearly Summary Banner */}

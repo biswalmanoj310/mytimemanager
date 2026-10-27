@@ -19,6 +19,8 @@ import {
 import {
   sortTasksByHierarchy,
 } from '../utils/taskHelpers';
+import RowOrderResetButton from '../components/RowOrderResetButton';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
 
 const MonthlyTasks: React.FC = () => {
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
@@ -39,6 +41,7 @@ const MonthlyTasks: React.FC = () => {
     hierarchyOrder,
     taskNameOrder,
   } = useUserPreferencesContext();
+  const rowOrder = useCustomRowOrder('tasks:monthly');
 
   const [loading, setLoading] = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(false);
@@ -104,8 +107,8 @@ const MonthlyTasks: React.FC = () => {
       
       return true;
     });
-    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, monthlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+    return rowOrder.applyOrder(sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder));
+  }, [tasks, monthlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder, rowOrder.applyOrder]);
 
   // Completed/NA tasks for bottom section
   const completedTasks = useMemo(() => {
@@ -330,7 +333,7 @@ const MonthlyTasks: React.FC = () => {
     };
   };
 
-  const renderTaskRow = (task: Task) => {
+  const renderTaskRow = (task: Task, visible: Task[]) => {
     const totalSpent = monthDays.reduce((sum, day) => sum + getMonthlyTime(task.id, day.day), 0);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -391,7 +394,7 @@ const MonthlyTasks: React.FC = () => {
     const bgColor = isMonthlyCompleted ? '#c6f6d5' : isMonthlyNA ? '#e2e8f0' : undefined;
     
     return (
-      <tr key={task.id} className={rowClassName} style={bgColor ? { backgroundColor: bgColor } : undefined}>
+      <tr key={task.id} className={rowClassName} {...rowOrder.rowProps(task.id, visible)} style={bgColor ? { backgroundColor: bgColor } : undefined}>
         <td className={`col-task sticky-col sticky-col-1 ${rowColorClass}`} style={{ ...(bgColor ? { backgroundColor: bgColor } : {}), color: '#1a202c' }}>
           <div className="task-name" style={{ color: '#1a202c' }}>
             {task.name}
@@ -645,7 +648,7 @@ const MonthlyTasks: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {tasks.map(task => renderTaskRow(task))}
+              {tasks.map(task => renderTaskRow(task, tasks))}
             </tbody>
           </table>
         </div>
@@ -666,6 +669,7 @@ const MonthlyTasks: React.FC = () => {
 
   return (
     <>
+      <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
       <div className="row mb-3">
         <div className="col">
           {/* Monthly Summary Banner */}

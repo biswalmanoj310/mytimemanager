@@ -19,6 +19,8 @@ import {
 } from './challengeUtils';
 import { InlineName, MonthCalendar, StatusBadge, TodayAction } from './ChallengeParts';
 import { ChallengeActionBar, timelineText } from './ChallengeCard';
+import RowOrderResetButton from '../RowOrderResetButton';
+import { useCustomRowOrder } from '../../hooks/useCustomRowOrder';
 
 type SortKey = 'name' | 'status' | 'progress' | 'streak' | 'left' | 'pillar' | 'category';
 
@@ -92,6 +94,7 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({ challenges
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [expanded, setExpanded] = useState<number | null>(null);
+  const rowOrder = useCustomRowOrder('challenges:list');
 
   const rows = useMemo(() => {
     const byHierarchy = (c: Challenge) => HIERARCHY_ORDER[`${c.pillar_name || ''}|${c.category_name || ''}`] ?? 999;
@@ -109,8 +112,10 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({ challenges
       }
     };
     const sorted = [...challenges].sort(compare);
-    return sortKey && sortDir === 'desc' ? sorted.reverse() : sorted;
-  }, [challenges, sortKey, sortDir]);
+    if (sortKey) return sortDir === 'desc' ? sorted.reverse() : sorted;
+    // A dragged order only applies while no column sort is chosen
+    return rowOrder.applyOrder(sorted);
+  }, [challenges, sortKey, sortDir, rowOrder.applyOrder]);
 
   const toggleSort = (key?: SortKey) => {
     if (!key) return;
@@ -123,6 +128,10 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({ challenges
 
   return (
     <div className="ch-list-wrap">
+      <RowOrderResetButton
+        visible={rowOrder.isCustom}
+        onReset={() => { rowOrder.reset(); setSortKey(null); }}
+      />
       <table className="ch-list">
         <thead>
           <tr>
@@ -148,6 +157,7 @@ export const ChallengeListView: React.FC<ChallengeListViewProps> = ({ challenges
                 <tr
                   className={`ch-row ch-row-${c.status_indicator} ${c.completed_today ? 'is-done-today' : ''} ${isOpenRow ? 'is-expanded' : ''}`}
                   onClick={() => setExpanded(isOpenRow ? null : c.id)}
+                  {...(sortKey ? {} : rowOrder.rowProps(c.id, rows))}
                 >
                   <td className="ch-cell-index">
                     <span className={`ch-caret ${isOpenRow ? 'is-open' : ''}`}>▶</span>

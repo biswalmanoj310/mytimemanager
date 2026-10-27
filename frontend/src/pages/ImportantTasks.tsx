@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Tasks.css';
+import RowOrderResetButton from '../components/RowOrderResetButton';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
 
 interface ImportantTask {
   id: number;
@@ -64,6 +66,7 @@ declare global {
 }
 
 const ImportantTasks: React.FC = () => {
+  const rowOrder = useCustomRowOrder('important');
   const [tasks, setTasks] = useState<ImportantTask[]>([]);
   const [completedTasks, setCompletedTasks] = useState<ImportantTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -380,7 +383,7 @@ const ImportantTasks: React.FC = () => {
     return 'important-task-red';
   };
 
-  const renderTask = (task: ImportantTask, level: number = 0, index: { count: number } = { count: 0 }) => {
+  const renderTask = (task: ImportantTask, level: number = 0, index: { count: number } = { count: 0 }, siblings: ImportantTask[] = []) => {
     // Completed child under a still-active parent: render with strikethrough/done styling
     if (!task.is_active) {
       const currentNumber = ++index.count;
@@ -425,6 +428,7 @@ const ImportantTasks: React.FC = () => {
       <React.Fragment key={task.id}>
         <tr 
           className={getRowClassName(effectiveStatus)}
+          {...rowOrder.rowProps(task.id, siblings, 'tasks')}
           style={{ 
             height: level > 0 ? '35px' : '48px',
             backgroundColor: isHighlighted ? '#fff3cd' : undefined,
@@ -522,7 +526,10 @@ const ImportantTasks: React.FC = () => {
             </div>
           </td>
         </tr>
-        {hasChildren && isExpanded && task.children!.map((child: ImportantTask) => renderTask(child, level + 1, index))}
+        {hasChildren && isExpanded && (() => {
+          const kids = rowOrder.applyOrder(task.children!, 'tasks');
+          return kids.map((child: ImportantTask) => renderTask(child, level + 1, index, kids));
+        })()}
       </React.Fragment>
     );
   };
@@ -631,6 +638,9 @@ const ImportantTasks: React.FC = () => {
         </div>
       </div>
 
+      {/* Drag category headers or task rows to prioritise; this returns everything to the default order */}
+      <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
+
       {/* Category-Based Sections (Collapsible) */}
       {(() => {
         // Define hierarchy order (same as Daily tab)
@@ -659,7 +669,7 @@ const ImportantTasks: React.FC = () => {
         }, {} as Record<string, ImportantTask[]>);
 
         // Sort categories by hierarchy order (same as Daily tab)
-        const sortedCategories = Object.keys(tasksByCategory).sort((a, b) => {
+        const sortedCategories = rowOrder.applyOrderBy(Object.keys(tasksByCategory).sort((a, b) => {
           const aPillarName = tasksByCategory[a][0]?.pillar_name || '';
           const bPillarName = tasksByCategory[b][0]?.pillar_name || '';
           const keyA = `${aPillarName}|${a}`;
@@ -667,7 +677,7 @@ const ImportantTasks: React.FC = () => {
           const orderA = hierarchyOrder[keyA] || 999;
           const orderB = hierarchyOrder[keyB] || 999;
           return orderA - orderB;
-        });
+        }), name => name, 'categories');
 
         return sortedCategories.map(categoryName => {
           const categoryTasks = tasksByCategory[categoryName];
@@ -695,6 +705,7 @@ const ImportantTasks: React.FC = () => {
           return (
             <div key={categoryId} style={{ marginBottom: '20px' }}>
               <div 
+                {...rowOrder.rowProps(categoryName, sortedCategories.map(name => ({ id: name })), 'categories')}
                 onClick={() => {
                   const newExpanded = new Set(expandedCategories);
                   if (isExpanded) {
@@ -761,7 +772,8 @@ const ImportantTasks: React.FC = () => {
                     <tbody>
                       {(() => {
                         const counter = { count: 0 };
-                        return categoryTasks.map(task => renderTask(task, 0, counter));
+                        const ordered = rowOrder.applyOrder(categoryTasks, 'tasks');
+                        return ordered.map(task => renderTask(task, 0, counter, ordered));
                       })()}
                     </tbody>
                   </table>

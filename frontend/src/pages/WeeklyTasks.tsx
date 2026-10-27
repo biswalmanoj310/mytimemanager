@@ -37,6 +37,8 @@ import {
   sortTasksByHierarchy,
 } from '../utils/taskHelpers';
 import TaskForm from '../components/TaskForm';
+import RowOrderResetButton from '../components/RowOrderResetButton';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
 
 const WeeklyTasks: React.FC = () => {
   // ============================================================================
@@ -65,6 +67,7 @@ const WeeklyTasks: React.FC = () => {
     hierarchyOrder,
     taskNameOrder,
   } = useUserPreferencesContext();
+  const rowOrder = useCustomRowOrder('tasks:weekly');
 
   // ============================================================================
   // LOCAL STATE
@@ -249,9 +252,9 @@ const WeeklyTasks: React.FC = () => {
       return true;
     });
 
-    // Sort by hierarchy
-    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, weeklyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder]);
+    // Sort by hierarchy, then apply the user's dragged order (if any)
+    return rowOrder.applyOrder(sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder));
+  }, [tasks, weeklyTaskStatuses, selectedPillar, selectedCategory, showCompleted, showNA, showInactive, hierarchyOrder, taskNameOrder, rowOrder.applyOrder]);
 
   /**
    * Separate native weekly tasks from monitoring tasks
@@ -839,7 +842,7 @@ const WeeklyTasks: React.FC = () => {
   /**
    * Render a single task row with full styling
    */
-  const renderTaskRow = (task: Task) => {
+  const renderTaskRow = (task: Task, visible: Task[]) => {
     const isNativeWeeklyTask = task.follow_up_frequency === 'weekly';
     
     // Calculate totals for this task
@@ -936,6 +939,7 @@ const WeeklyTasks: React.FC = () => {
       <tr 
         key={task.id} 
         className={rowClassName}
+        {...rowOrder.rowProps(task.id, visible)}
         style={bgColor ? { backgroundColor: bgColor } : undefined}
       >
         {/* Task Name - Sticky Column 1 */}
@@ -1204,7 +1208,7 @@ const WeeklyTasks: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {tasks.map(task => renderTaskRow(task))}
+              {tasks.map(task => renderTaskRow(task, tasks))}
             </tbody>
           </table>
         </div>
@@ -1231,6 +1235,7 @@ const WeeklyTasks: React.FC = () => {
 
   return (
     <>
+      <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
       {/* Native Weekly Tasks Section - Tasks with follow_up_frequency='weekly' */}
       {nativeWeeklyTasks.length > 0 && (
         <div className="row mb-4">

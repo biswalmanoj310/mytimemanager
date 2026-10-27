@@ -9,7 +9,8 @@ from sqlalchemy import or_
 from datetime import datetime, timedelta
 from typing import Optional
 from app.database.config import get_db
-from app.models.models import Task, ProjectTask
+from app.models.models import Task, ProjectTask, WishTask
+from app.services.completed_analytics_service import CompletedAnalyticsService
 from app.utils.timezone_utils import get_local_now
 from app.utils.week_utils import get_week_start
 
@@ -111,6 +112,7 @@ def get_completed_tasks(
             "task_type": task.follow_up_frequency or "daily",
             "source_table": "task",
             "status": "completed",
+            "created_at": task.created_at,
             "category_name": task.category.name if task.category else None,
             "pillar_name": task.pillar.name if task.pillar else None,
             "project_name": task.project.name if task.project else None,
@@ -143,6 +145,7 @@ def get_completed_tasks(
             "task_type": task.follow_up_frequency or "daily",
             "source_table": "task",
             "status": "na",
+            "created_at": task.created_at,
             "category_name": task.category.name if task.category else None,
             "pillar_name": task.pillar.name if task.pillar else None,
             "project_name": task.project.name if task.project else None,
@@ -173,6 +176,7 @@ def get_completed_tasks(
             "task_type": task.follow_up_frequency or "daily",
             "source_table": "task",
             "status": "deleted",
+            "created_at": task.created_at,
             "category_name": task.category.name if task.category else None,
             "pillar_name": task.pillar.name if task.pillar else None,
             "project_name": task.project.name if task.project else None,
@@ -209,9 +213,47 @@ def get_completed_tasks(
             "completed_at": _get_completed_at(task),
             "task_type": "project",
             "source_table": "project_task",
+            "created_at": task.created_at,
             "category_name": proj_category,
             "pillar_name": proj_pillar,
             "project_name": proj.name if proj else None,
+            "priority": task.priority,
+            "due_date": task.due_date.date() if task.due_date else None,
+        })
+
+    # ── Dream tasks (tasks under a Dream/Wish) ──
+    dream_query = db.query(WishTask).filter(WishTask.is_completed == True)
+    if start_date:
+        dream_query = dream_query.filter(
+            or_(WishTask.completed_at >= start_date, WishTask.updated_at >= start_date)
+        )
+    if end_date:
+        dream_query = dream_query.filter(
+            or_(WishTask.completed_at <= end_date, WishTask.updated_at <= end_date)
+        )
+
+    for task in dream_query.all():
+        wish = task.wish
+        dream_pillar = wish.pillar_relation.name if (wish and wish.pillar_relation) else None
+        dream_category = wish.category_relation.name if (wish and wish.category_relation) else None
+
+        if pillar_name and dream_pillar != pillar_name:
+            continue
+        if category_name and dream_category != category_name:
+            continue
+
+        completed_tasks.append({
+            "id": task.id,
+            "name": task.name,
+            "description": task.description,
+            "completed_at": _get_completed_at(task),
+            "task_type": "dream",
+            "source_table": "wish_task",
+            "status": "completed",
+            "created_at": task.created_at,
+            "category_name": dream_category,
+            "pillar_name": dream_pillar,
+            "project_name": wish.title if wish else None,
             "priority": task.priority,
             "due_date": task.due_date.date() if task.due_date else None,
         })
@@ -223,9 +265,10 @@ def get_completed_tasks(
     # Exclude deleted tasks from stats
     all_daily = db.query(Task).filter(Task.is_completed == True, Task.deleted_at == None).all()
     all_project = db.query(ProjectTask).filter(ProjectTask.is_completed == True).all()
+    all_dream = db.query(WishTask).filter(WishTask.is_completed == True).all()
 
     today = get_local_now().date()
-    all_ts = [_get_completed_at(t).date() for t in all_daily + all_project if _get_completed_at(t)]
+    all_ts = [_get_completed_at(t).date() for t in all_daily + all_project + all_dream if _get_completed_at(t)]
 
     week_start = get_week_start(today)
     month_start = today.replace(day=1)
@@ -251,6 +294,25 @@ def get_completed_tasks(
         "pillars": pillars,
         "categories": categories,
     }
+
+
+@router.get("/completed-tasks/analytics")
+def get_completed_analytics(
+    task_types: str = Query(None, description="Comma-separated: daily,weekly,monthly,yearly,one_time,today,misc,project,dream"),
+    pillar_names: str = Query(None, description="Comma-separated pillar names"),
+    category_names: str = Query(None, description="Comma-separated category names"),
+    weeks: int = Query(12, ge=1, le=104),
+    months: int = Query(12, ge=1, le=36),
+    days: int = Query(84, ge=7, le=365),
+    db: Session = Depends(get_db)
+):
+    """Trend series (daily/weekly/monthly), mix breakdowns and momentum insights for completed tasks."""
+    def to_set(csv: Optional[str]):
+        return {v.strip() for v in csv.split(",") if v.strip()} if csv else None
+
+    return CompletedAnalyticsService.get_analytics(
+        db, to_set(task_types), to_set(pillar_names), to_set(category_names), weeks, months, days
+    )
 
 
 @router.post("/completed-tasks/{task_id}/restore")
@@ -281,5 +343,14 @@ def restore_task(
         db.commit()
         return {"message": "Project task restored successfully"}
 
+    elif source_table == "wish_task":
+        task = db.query(WishTask).filter(WishTask.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Dream task not found")
+        task.is_completed = False
+        task.completed_at = None
+        db.commit()
+        return {"message": "Dream task restored successfully"}
+
     else:
-        raise HTTPException(status_code=400, detail="source_table must be 'task' or 'project_task'")
+        raise HTTPException(status_code=400, detail="source_table must be 'task', 'project_task' or 'wish_task'")

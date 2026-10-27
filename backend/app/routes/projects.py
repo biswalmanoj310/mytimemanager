@@ -413,7 +413,7 @@ def update_task(
         "priority": updated_task.priority,
         "is_completed": updated_task.is_completed,
         "completed_at": updated_task.completed_at,
-        "order": updated_task.order,
+        "order": getattr(updated_task, "order", 0),  # regular Task rows have no `order` column
         "created_at": updated_task.created_at,
         "updated_at": updated_task.updated_at
     }

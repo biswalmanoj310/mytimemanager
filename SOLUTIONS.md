@@ -297,6 +297,31 @@
 
 ---
 
+### SOL-024 — Date Picker Stays Open While Changing Months
+| Field | Value |
+|-------|-------|
+| REQ | REQ-278 |
+| Date | 2026-10-24 |
+| Problem | In the Misc tab tree and the Today tab sections, pressing a month arrow in the date popup closed it after one click |
+| Cause | Chrome fires `change` on month navigation, the page saved and refreshed. `TaskNode` is declared inside `Tasks()`, so every refresh gave it a new component identity and React remounted every row; Today-tab saves also called `loadTasks()` which swapped the whole page for the loading spinner |
+| Approach | Module-level stable `TaskNode` wrapper that delegates to the in-render `TaskNodeImpl`; `loadTasks()` shows the spinner only on the first load |
+| Files | `frontend/src/pages/Tasks.tsx` |
+| Outcome | Refreshes update rows in place so the popup survives. Round 2 (2026-10-24): month arrows past the current month still closed it (a Today task dated after today moves to Misc, removing the row). Added a module-level `DeferredDateInput` used by the auto-saving due-date inputs (Misc/Project trees, Today tab sections): it only saves once the picker is dismissed (page pointer activity, blur or Enter) |
+
+---
+
+### SOL-023 — Drag-to-Prioritise Rows (default stays Pillar → Category)
+| Field | Value |
+|-------|-------|
+| REQ | REQ-277 (closes REQ-204) |
+| Date | 2026-10-23 |
+| Problem | Rows were locked to a fixed Pillar → Category order; no way to put today's most important rows first |
+| Approach | Native HTML5 drag on `<tr>` (no library; rows with inputs/buttons/links start a drag only from non-interactive spots). A saved order is a list of ids per scope in localStorage; no saved list = the old sort is untouched, so "reset" is just deleting the list. New rows not yet in the list go after the dragged ones. Drop indicator is drawn with a DOM attribute, so the 19k-line Tasks page does not re-render while dragging |
+| Files | `frontend/src/utils/rowOrder.ts`, `hooks/useCustomRowOrder.ts`, `components/RowOrderResetButton.tsx`, `styles/RowReorder.css`; wired into `pages/Tasks.tsx` (Daily, Projects, Habits), `WeeklyTasks/MonthlyTasks/QuarterlyTasks/YearlyTasks.tsx`, `components/challenges/ChallengeListView.tsx` |
+| Outcome | No migration, no backend change. Order is per browser (Docker family machines keep their own). Extended the same day to the Daily "One Time" table, the Today tab sections (one saved list per section via `useCustomRowOrder(scope).rowProps(id, rows, section)`, because ids overlap between tasks/habits/challenges) and `pages/ImportantTasks.tsx` (category headers + task rows). Follow-up if wanted: Goals/Wishes lists, or server-side storage so the order follows the profile across devices |
+
+---
+
 ### SOL-022 — Honest Challenge Status ("On Track" must be earned) + Full-Width Calendars
 | Field | Value |
 |-------|-------|

@@ -19,6 +19,8 @@ import {
 import {
   sortTasksByHierarchy,
 } from '../utils/taskHelpers';
+import RowOrderResetButton from '../components/RowOrderResetButton';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
 
 const QuarterlyTasks: React.FC = () => {
   const { tasks, loadTasks, loadPillars, loadCategories } = useTaskContext();
@@ -39,6 +41,7 @@ const QuarterlyTasks: React.FC = () => {
     hierarchyOrder,
     taskNameOrder,
   } = useUserPreferencesContext();
+  const rowOrder = useCustomRowOrder('tasks:quarterly');
 
   const [loading, setLoading] = useState(false);
   const [showCompletedSection, setShowCompletedSection] = useState(true);
@@ -106,8 +109,8 @@ const QuarterlyTasks: React.FC = () => {
       console.log(`✅ Task ${task.id} "${task.name}" passed all filters`);
       return true;
     });
-    return sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder);
-  }, [tasks, quarterlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder]);
+    return rowOrder.applyOrder(sortTasksByHierarchy(filtered, hierarchyOrder, taskNameOrder));
+  }, [tasks, quarterlyTaskStatuses, selectedPillar, selectedCategory, showInactive, hierarchyOrder, taskNameOrder, rowOrder.applyOrder]);
 
   // Completed/NA tasks for bottom section
   const completedTasks = useMemo(() => {
@@ -517,7 +520,7 @@ const QuarterlyTasks: React.FC = () => {
     const taskIsNA = yearlyStatus?.is_na || false;
 
     return (
-      <tr key={task.id} className={rowColorClass}>
+      <tr key={task.id} className={rowColorClass} {...rowOrder.rowProps(task.id, filteredTasks)}>
         <td className="col-task sticky-col sticky-col-1" style={{ minWidth: '250px' }}>
           <div style={{ fontWeight: 500, color: '#2d3748' }}>{task.name} <span style={{ color: '#718096', fontSize: '0.85em' }}>{taskTypeIndicator}</span></div>
           <div style={{ fontSize: '11px', color: '#718096', marginTop: '2px' }}>{task.pillar_name} → {task.category_name}</div>
@@ -633,6 +636,7 @@ const QuarterlyTasks: React.FC = () => {
 
   return (
     <div>
+      <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
       {!dataLoaded ? (
         <div className="alert alert-info" style={{ textAlign: 'center', padding: '30px', margin: '20px 0' }}>
           <i className="fas fa-spinner fa-spin me-2"></i>

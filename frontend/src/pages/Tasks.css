@@ -404,11 +404,6 @@ td.section-header-cell.boolean-based {
   isolation: isolate;
 }
 
-/* Only for daily time-based table */
-.daily-table-container {
-  min-height: 400px;
-}
-
 .tasks-table {
   width: 100%;
   border-collapse: separate;

@@ -21,6 +21,8 @@ import UpcomingTasks from './UpcomingTasks';
 import QuickAddTask from '../components/QuickAddTask';
 import QuickAddSubtask from '../components/QuickAddSubtask';
 import { useUserPreferencesContext } from '../contexts/UserPreferencesContext';
+import { useCustomRowOrder } from '../hooks/useCustomRowOrder';
+import RowOrderResetButton from '../components/RowOrderResetButton';
 
 type TabType = 'now' | 'today' | 'daily' | 'weekly' | 'monthly' | 'upcoming' | 'quarterly' | 'yearly' | 'onetime' | 'misc' | 'projects' | 'habits';
 
@@ -96,12 +98,72 @@ const formatTaskValue = (task: Task, value: number): string => {
 // Maximum number of tasks visible in the NOW tab
 const NOW_LIMIT = 10;
 
+// Reports a date change only once the picker is dismissed (page pointer activity, blur or Enter), so month arrows don't save and re-render the row mid-navigation.
+const DeferredDateInput = ({ value, onChange, onBlur, onKeyDown, ...rest }: React.InputHTMLAttributes<HTMLInputElement>) => {
+  const [draft, setDraft] = useState(String(value ?? ''));
+  const [dirty, setDirty] = useState(false);
+  const pending = useRef<React.ChangeEvent<HTMLInputElement> | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!pending.current) setDraft(String(value ?? ''));
+  }, [value]);
+
+  const commit = useCallback(() => {
+    const ev = pending.current;
+    if (!ev) return;
+    pending.current = null;
+    setDirty(false);
+    onChangeRef.current?.(ev);
+  }, []);
+
+  useEffect(() => {
+    if (!dirty) return;
+    // The native picker popup does not send events to the page, so any page pointer event means it closed.
+    document.addEventListener('pointermove', commit);
+    document.addEventListener('pointerdown', commit);
+    return () => {
+      document.removeEventListener('pointermove', commit);
+      document.removeEventListener('pointerdown', commit);
+    };
+  }, [dirty, commit]);
+
+  useEffect(() => commit, [commit]);
+
+  return (
+    <input
+      {...rest}
+      type="date"
+      value={draft}
+      onChange={(e) => {
+        pending.current = e;
+        setDraft(e.target.value);
+        setDirty(true);
+      }}
+      onBlur={(e) => {
+        commit();
+        onBlur?.(e);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit();
+        onKeyDown?.(e);
+      }}
+    />
+  );
+};
+
+// TaskNodeImpl is declared inside Tasks(); this stable wrapper stops React remounting rows on every render, which closed open date pickers.
+let renderTaskNodeImpl: (props: any) => React.ReactElement;
+const TaskNode = (props: any) => renderTaskNodeImpl(props);
+
 export default function Tasks() {
   // Get setSelectedDate from UserPreferencesContext to update nested components
   const { setSelectedDate: setContextDate } = useUserPreferencesContext();
   
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const tasksLoadedOnceRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [isTaskFormOpen, setIsTaskFormOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
@@ -933,10 +995,13 @@ export default function Tasks() {
 
   // Load tasks function (needed by error UI)
   const loadTasks = async (silent: boolean = false): Promise<Task[]> => {
+    // Spinner only on first load; replacing the page on refresh closes open date pickers
+    const showSpinner = !silent && !tasksLoadedOnceRef.current;
     try {
-      if (!silent) setLoading(true);
+      if (showSpinner) setLoading(true);
       setError(null);
       const data = await api.get<Task[]>('/api/tasks/');
+      tasksLoadedOnceRef.current = true;
       setTasks(data);
       // Load completion dates for daily tasks
       await loadDailyTaskCompletionDates();
@@ -946,7 +1011,7 @@ export default function Tasks() {
       setError('Failed to load tasks');
       return [];
     } finally {
-      if (!silent) setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
@@ -2048,8 +2113,13 @@ export default function Tasks() {
     });
   }, [tasks, activeTab, weekDays, dailyAggregates, weeklyEntries, weeklyTaskStatuses, monthlyTaskStatuses, yearlyTaskStatuses, dailyStatuses, selectedDate, hierarchyOrder, taskNameOrder]);
 
+  // Drag-to-reorder rows; falls back to the default pillar → category order until the user drags
+  const rowOrder = useCustomRowOrder(`tasks:${activeTab}`);
+  const projectRowOrder = useCustomRowOrder('projects:list');
+  const habitRowOrder = useCustomRowOrder('habits:list');
+
   // Separate tasks by type for daily and weekly tabs
-  const timeBasedTasks = useMemo(() => {
+  const timeBasedTasksDefault = useMemo(() => {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table (they show in completed section)
       if (activeTab === 'daily') {
@@ -2071,8 +2141,9 @@ export default function Tasks() {
     }
     return [];
   }, [activeTab, filteredTasks, dailyStatuses, weeklyTaskStatuses]);
+  const timeBasedTasks = useMemo(() => rowOrder.applyOrder(timeBasedTasksDefault), [rowOrder.applyOrder, timeBasedTasksDefault]);
   
-  const countBasedTasks = useMemo(() => {
+  const countBasedTasksDefault = useMemo(() => {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table
       if (activeTab === 'daily') {
@@ -2094,8 +2165,9 @@ export default function Tasks() {
     }
     return [];
   }, [activeTab, filteredTasks, dailyStatuses, weeklyTaskStatuses]);
+  const countBasedTasks = useMemo(() => rowOrder.applyOrder(countBasedTasksDefault), [rowOrder.applyOrder, countBasedTasksDefault]);
   
-  const booleanTasks = useMemo(() => {
+  const booleanTasksDefault = useMemo(() => {
     if (activeTab === 'daily' || activeTab === 'weekly' || activeTab === 'monthly' || activeTab === 'quarterly' || activeTab === 'yearly') {
       // For daily tab: exclude completed/NA tasks from main table
       if (activeTab === 'daily') {
@@ -2118,6 +2190,7 @@ export default function Tasks() {
     }
     return [];
   }, [activeTab, filteredTasks, dailyStatuses, weeklyTaskStatuses]);
+  const booleanTasks = useMemo(() => rowOrder.applyOrder(booleanTasksDefault), [rowOrder.applyOrder, booleanTasksDefault]);
 
   // Early returns for loading and error states (must come AFTER all hooks)
   if (loading) {
@@ -6327,7 +6400,7 @@ export default function Tasks() {
   ];
 
   // TaskNode component for hierarchical display
-  const TaskNode = ({ 
+  const TaskNodeImpl = ({ 
     task, 
     level, 
     allTasks, 
@@ -6486,7 +6559,7 @@ export default function Tasks() {
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
             >
-              <input 
+              <DeferredDateInput 
                 type="date"
                 value={task.due_date ? task.due_date.split('T')[0] : ''}
                 onChange={(e) => {
@@ -6616,6 +6689,7 @@ export default function Tasks() {
       </div>
     );
   };
+  renderTaskNodeImpl = TaskNodeImpl;
 
   // Route to extracted page components for specific tabs
   if (activeTab === 'weekly') {
@@ -7849,7 +7923,7 @@ export default function Tasks() {
                           </td>
                           <td className="col-time" style={{ textAlign: 'center' }}>
                             {task.due_date ? (
-                              <input 
+                              <DeferredDateInput 
                                 type="date"
                                 value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={async (e) => {
@@ -7882,7 +7956,7 @@ export default function Tasks() {
                                 }}
                               />
                             ) : (
-                              <input 
+                              <DeferredDateInput 
                                 type="date"
                                 value=""
                                 onChange={async (e) => {
@@ -8520,8 +8594,10 @@ export default function Tasks() {
                     }
                     return true;
                   };
-                  const activeProj = [...projects].filter(p => !p.is_completed && applyProjListFilter(p)).sort(projSortBy);
-                  const completedProj = [...projects].filter(p => p.is_completed && (projectListFilter === 'all' || projectListFilter === 'completed') && (projectTaskLevelFilter === 'all' || projectTaskLevelFilter === 'completed')).sort(projSortBy);
+                  // A dragged order only applies while no column sort is chosen
+                  const orderProj = (list: ProjectData[]) => (projectListSortCol ? list : projectRowOrder.applyOrder(list));
+                  const activeProj = orderProj([...projects].filter(p => !p.is_completed && applyProjListFilter(p)).sort(projSortBy));
+                  const completedProj = orderProj([...projects].filter(p => p.is_completed && (projectListFilter === 'all' || projectListFilter === 'completed') && (projectTaskLevelFilter === 'all' || projectTaskLevelFilter === 'completed')).sort(projSortBy));
                   const pillarColors: { [key: string]: string } = { 'Hard Work': '#dbeafe', 'Calmness': '#dcfce7', 'Family': '#f3e8ff' };
                   const renderRow = (project: ProjectData, idx: number, isCompleted: boolean) => {
                     const overdue = project.progress?.overdue_tasks || 0;
@@ -8537,6 +8613,7 @@ export default function Tasks() {
                       : null;
                     return (
                       <tr key={project.id} style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s' }}
+                        {...(projectListSortCol ? {} : projectRowOrder.rowProps(project.id, isCompleted ? completedProj : activeProj))}
                         onClick={() => handleSelectProject(project)}
                         onMouseEnter={(e) => (e.currentTarget.style.background = '#ede9fe')}
                         onMouseLeave={(e) => (e.currentTarget.style.background = rowBg)}
@@ -8614,6 +8691,12 @@ export default function Tasks() {
                   const activeRemaining = activeProj.reduce((s, p) => s + ((p.progress?.total_tasks || 0) - (p.progress?.completed_tasks || 0)), 0);
                   return (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div>
+                        <RowOrderResetButton
+                          visible={projectRowOrder.isCustom}
+                          onReset={() => { projectRowOrder.reset(); setProjectListSortCol(''); }}
+                        />
+                      </div>
                       {/* ─ Projects (Active) section ─ */}
                       <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                         <div
@@ -11613,6 +11696,7 @@ export default function Tasks() {
                   return (
                     <React.Fragment key={habit.id}>
                       <tr style={{ background: rowBg, cursor: 'pointer', transition: 'background 0.15s', outline: isExpanded ? '2px solid #818cf8' : 'none' }}
+                        {...(isDone || habitListSortCol ? {} : habitRowOrder.rowProps(habit.id, orderedHabits))}
                         onClick={async () => {
                           if (!isExpanded) {
                             setExpandedHabitId(habit.id);
@@ -11944,8 +12028,17 @@ export default function Tasks() {
                     })}
                   </tr>
                 );
+                // A dragged order only applies while no column sort is chosen
+                const sortedHabits = [...habits].sort(habitSortBy);
+                const orderedHabits = habitListSortCol ? sortedHabits : habitRowOrder.applyOrder(sortedHabits);
                 return (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
+                    <div>
+                      <RowOrderResetButton
+                        visible={habitRowOrder.isCustom}
+                        onReset={() => { habitRowOrder.reset(); setHabitListSortCol(''); }}
+                      />
+                    </div>
                     {/* Active Habits */}
                     <div style={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                       <div onClick={() => setHabitListActiveCollapsed(prev => !prev)}
@@ -11971,7 +12064,7 @@ export default function Tasks() {
                         <div style={{ overflowX: 'auto' }}>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', background: 'white' }}>
                             <thead>{colHeaderRow}</thead>
-                            <tbody>{[...habits].sort(habitSortBy).map((h, i) => renderHabitRow(h, i, false))}</tbody>
+                            <tbody>{orderedHabits.map((h, i) => renderHabitRow(h, i, false))}</tbody>
                           </table>
                         </div>
                       )}
@@ -12989,6 +13082,7 @@ export default function Tasks() {
       ) : activeTab === 'daily' ? (
         /* DAILY TAB: Three separate tables by task type */
         <>
+          <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
           {/* TIME-BASED TASKS TABLE */}
           {timeBasedTasks.length > 0 && (
             <div style={{ marginBottom: '32px' }}>
@@ -13037,6 +13131,7 @@ export default function Tasks() {
                         <tr 
                           key={task.id} 
                           className={`${rowClassName} ${isFocusedRow ? 'focused-row' : ''}`}
+                          {...rowOrder.rowProps(task.id, timeBasedTasks)}
                           style={
                             isDailyCompleted
                               ? { backgroundColor: '#c6f6d5' } 
@@ -13310,7 +13405,7 @@ export default function Tasks() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredTasks
+                  {rowOrder.applyOrder(filteredTasks
                     .filter(task => task.is_daily_one_time === true && task.task_type === 'time')
                     .filter(task => {
                       // Exclude completed and NA tasks (they show in completed section)
@@ -13321,15 +13416,15 @@ export default function Tasks() {
                       // One-time daily tasks are never filtered by is_tracked
                       // (is_tracked only applies to the hourly tracking table)
                       return true;
-                    })
-                    .map((task) => {
+                    }))
+                    .map((task, _idx, visibleOneTime) => {
                       const dailyStatus = dailyStatuses.get(task.id);
                       const isDailyCompleted = dailyStatus?.is_completed;
                       const isDailyNA = dailyStatus?.is_na;
                       const spentTime = hourLabels.reduce((sum, hour) => sum + getHourlyTime(task.id, hour.index), 0);
                       
                       return (
-                        <tr key={task.id} className={isDailyCompleted ? 'completed-row' : isDailyNA ? 'na-row' : ''}>
+                        <tr key={task.id} className={isDailyCompleted ? 'completed-row' : isDailyNA ? 'na-row' : ''} {...rowOrder.rowProps(task.id, visibleOneTime)}>
                           <td style={{ padding: '8px', width: '250px' }}>
                             <div 
                               className="task-name task-link"
@@ -13456,7 +13551,7 @@ export default function Tasks() {
                       const isComplete = value >= target;
                       
                       return (
-                        <tr key={task.id} className={rowClassName}>
+                        <tr key={task.id} className={rowClassName} {...rowOrder.rowProps(task.id, countBasedTasks)}>
                           <td style={{ padding: '8px', width: '250px' }}>
                             <div 
                               className="task-name task-link"
@@ -13627,6 +13722,7 @@ export default function Tasks() {
                         <tr 
                           key={task.id} 
                           className={rowClassName}
+                          {...rowOrder.rowProps(task.id, booleanTasks)}
                           style={
                             isDailyCompleted
                               ? { backgroundColor: '#c6f6d5' } 
@@ -17253,6 +17349,9 @@ export default function Tasks() {
             </div>
           )}
 
+          {/* Drag rows inside any section to prioritise; this button returns every section to the default order */}
+          <RowOrderResetButton visible={rowOrder.isCustom} onReset={rowOrder.reset} />
+
           {/* Today's Only Tasks Section - Always show header if there are any tasks */}
           {todaySubTab === 'due-today' && todaysOnlyTasks.length > 0 && (
             <div id="todays-only-tasks-section" style={{ marginBottom: '30px', scrollMarginTop: '80px' }}>
@@ -17291,7 +17390,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...todaysOnlyTasks].sort(sortByHierarchy).map(task => {
+                      {rowOrder.applyOrder([...todaysOnlyTasks].sort(sortByHierarchy), 'todaysOnly').map((task, _i, visibleRows) => {
                         const isCompleted = task.is_completed;
                         const baseBackgroundColor = isCompleted ? '#d1fae5' : '#fff'; // Green for completed, white for active
                         const hoverBackgroundColor = isCompleted ? '#a7f3d0' : '#f1f5f9';
@@ -17299,6 +17398,7 @@ export default function Tasks() {
                         return (
                         <tr 
                           key={task.id}
+                          {...rowOrder.rowProps(task.id, visibleRows, 'todaysOnly')}
                           style={{
                             borderBottom: '1px solid #e2e8f0',
                             backgroundColor: baseBackgroundColor,
@@ -17325,7 +17425,7 @@ export default function Tasks() {
                             {task.allocated_minutes || 0}
                           </td>
                           <td style={{ padding: '8px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
-                            <input 
+                            <DeferredDateInput 
                               type="date"
                               value={task.due_date ? task.due_date.split('T')[0] : ''}
                               onChange={(e) => {
@@ -17509,7 +17609,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...filteredTasks].sort(sortByHierarchy).map((task) => {
+                      {rowOrder.applyOrder([...filteredTasks].sort(sortByHierarchy), 'project').map((task, _i, visibleRows) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         const isOverdue = dueDateClass.includes('overdue'); // Only 'overdue', not 'urgent'
                         const isCompleted = task.is_completed;
@@ -17519,6 +17619,7 @@ export default function Tasks() {
                         return (
                           <tr 
                             key={task.id}
+                            {...rowOrder.rowProps(task.id, visibleRows, 'project')}
                             style={{
                               borderBottom: '1px solid #e2e8f0',
                               backgroundColor: rowBgColor,
@@ -17534,7 +17635,7 @@ export default function Tasks() {
                               📂 {task.project_name || `Project #${task.project_id}`}
                             </td>
                             <td style={{ padding: '8px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
-                              <input 
+                              <DeferredDateInput 
                                 type="date"
                                 value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={(e) => handleUpdateTaskDueDate(task.id, e.target.value)}
@@ -17683,7 +17784,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...filteredTasks].sort(sortByHierarchy).map((task) => {
+                      {rowOrder.applyOrder([...filteredTasks].sort(sortByHierarchy), 'goal').map((task, _i, visibleRows) => {
                         const dueDateClass = getDueDateColorClass(task.due_date);
                         // IMPORTANT: Only mark as overdue if task HAS a due date AND it's past due
                         const isOverdue = task.due_date && dueDateClass.includes('overdue');
@@ -17694,6 +17795,7 @@ export default function Tasks() {
                         return (
                           <tr 
                             key={`goal-${task.id}`}
+                            {...rowOrder.rowProps(task.id, visibleRows, 'goal')}
                             style={{ 
                               backgroundColor: rowBgColor,
                               borderBottom: '1px solid #e2e8f0',
@@ -17709,7 +17811,7 @@ export default function Tasks() {
                               🎯 {task.goal_name || `Goal #${task.goal_id}`}
                             </td>
                             <td style={{ padding: '12px 16px', textAlign: 'center', borderRight: '2px solid #3b82f6', background: 'inherit' }}>
-                              <input 
+                              <DeferredDateInput 
                                 type="date"
                                 value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                                 onChange={(e) => handleUpdateGoalTaskDueDate(task.id, e.target.value)}
@@ -17844,7 +17946,7 @@ export default function Tasks() {
                       </tr>
                     </thead>
                     <tbody>
-                      {[...filteredTasks].sort(sortByHierarchy).map((task) => {
+                      {rowOrder.applyOrder([...filteredTasks].sort(sortByHierarchy), 'misc').map((task, _i, visibleRows) => {
                         // IMPORTANT: Only mark as overdue if task HAS a due date AND daysOverdue > 0
                         // (tasks without due dates are already filtered out by loadMiscTasksDueToday)
                         const isOverdue = task.due_date && (task.daysOverdue || 0) > 0;
@@ -17852,6 +17954,7 @@ export default function Tasks() {
                         return (
                           <tr 
                             key={task.id}
+                            {...rowOrder.rowProps(task.id, visibleRows, 'misc')}
                             style={{
                               borderBottom: '1px solid #e2e8f0',
                               borderLeft: isOverdue ? '4px solid #dc2626' : '4px solid #8b5cf6',
@@ -17878,7 +17981,7 @@ export default function Tasks() {
                             </td>
                             <td style={{ padding: '12px 16px', border: '1px solid #e2e8f0' }}>
                               {task.due_date ? (
-                                <input
+                                <DeferredDateInput
                                   type="date"
                                   value={task.due_date.split('T')[0]}
                                   onChange={async (e) => {
@@ -18092,13 +18195,14 @@ export default function Tasks() {
                         </tr>
                       </thead>
                       <tbody>
-                        {[...filteredTasks].sort(sortByHierarchy).map((task) => {
+                        {rowOrder.applyOrder([...filteredTasks].sort(sortByHierarchy), 'important').map((task, _i, visibleRows) => {
                             const isRed = task.status === 'red';
                             const isGray = task.status === 'gray';
                             
                             return (
                               <tr 
                                 key={task.id}
+                                {...rowOrder.rowProps(task.id, visibleRows, 'important')}
                                 style={{
                                   borderBottom: '1px solid #e2e8f0',
                                   backgroundColor: isRed ? '#fef2f2' : isGray ? '#f9fafb' : '#fff'
@@ -18254,9 +18358,10 @@ export default function Tasks() {
 
                     {todayTabSections.weeklyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {[...weeklyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
+                        {rowOrder.applyOrderBy([...weeklyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)), i => i.task.id, 'weekly').map((item, index, arr) => (
                           <div 
                             key={item.task.id}
+                            {...rowOrder.rowProps(item.task.id, arr.map(i => ({ id: i.task.id })), 'weekly')}
                             style={{
                               marginBottom: '6px',
                               padding: '10px 14px',
@@ -18413,9 +18518,10 @@ export default function Tasks() {
 
                     {todayTabSections.monthlyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {[...monthlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
+                        {rowOrder.applyOrderBy([...monthlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)), i => i.task.id, 'monthly').map((item, index, arr) => (
                           <div 
                             key={item.task.id}
+                            {...rowOrder.rowProps(item.task.id, arr.map(i => ({ id: i.task.id })), 'monthly')}
                             style={{
                               marginBottom: '6px',
                               padding: '10px 14px',
@@ -18564,9 +18670,10 @@ export default function Tasks() {
 
                     {todayTabSections.quarterlyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {[...quarterlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
+                        {rowOrder.applyOrderBy([...quarterlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)), i => i.task.id, 'quarterly').map((item, index, arr) => (
                           <div 
                             key={item.task.id}
+                            {...rowOrder.rowProps(item.task.id, arr.map(i => ({ id: i.task.id })), 'quarterly')}
                             style={{
                               marginBottom: '6px',
                               padding: '10px 14px',
@@ -18716,9 +18823,10 @@ export default function Tasks() {
 
                     {todayTabSections.yearlyNeedsAttention && (
                       <div style={{ marginTop: '12px' }}>
-                        {[...yearlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)).map((item, index) => (
+                        {rowOrder.applyOrderBy([...yearlyTasks].sort((a, b) => sortByHierarchy(a.task, b.task)), i => i.task.id, 'yearly').map((item, index, arr) => (
                           <div 
                             key={item.task.id}
+                            {...rowOrder.rowProps(item.task.id, arr.map(i => ({ id: i.task.id })), 'yearly')}
                             style={{
                               marginBottom: '6px',
                               padding: '10px 14px',
@@ -18865,9 +18973,10 @@ export default function Tasks() {
               </div>
 
               <div style={{ marginTop: '12px' }}>
-                {todaysChallenges.map((challenge) => (
+                {rowOrder.applyOrder(todaysChallenges, 'challenges').map((challenge, _i, visibleChallenges) => (
                   <div 
                     key={challenge.id}
+                    {...rowOrder.rowProps(challenge.id, visibleChallenges, 'challenges')}
                     style={{
                       marginBottom: '8px',
                       padding: '12px 16px',
@@ -18968,7 +19077,7 @@ export default function Tasks() {
               
               {todayTabSections.todaysHabits && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {todaysHabits
+                  {rowOrder.applyOrder([...todaysHabits]
                     .sort((a, b) => {
                       // Sort by pillar-category hierarchy first
                       const keyA = `${a.pillar_name || 'Other'}|${a.category_name || 'Other'}`;
@@ -18982,12 +19091,13 @@ export default function Tasks() {
                       
                       // If same hierarchy, sort alphabetically by name
                       return a.name.localeCompare(b.name);
-                    })
-                    .map(habit => {
+                    }), 'habits')
+                    .map((habit, _i, visibleHabits) => {
                     const isInNOW = nowHabits.has(habit.id);
                     return (
                   <div
                     key={habit.id}
+                    {...rowOrder.rowProps(habit.id, visibleHabits, 'habits')}
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
@@ -19310,7 +19420,7 @@ export default function Tasks() {
                 <span style={{ fontSize: '13px', fontWeight: '400', color: '#718096' }}>({todaysChallenges.length})</span>
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {todaysChallenges.map(challenge => {
+                {rowOrder.applyOrder(todaysChallenges, 'challenges').map((challenge, _i, visibleChallenges) => {
                   const statusColors: Record<string, string> = {
                     'on_track': '#10b981',
                     'at_risk': '#f59e0b', 
@@ -19325,6 +19435,7 @@ export default function Tasks() {
                   return (
                     <div
                       key={challenge.id}
+                      {...rowOrder.rowProps(challenge.id, visibleChallenges, 'challenges')}
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
@@ -19753,7 +19864,7 @@ export default function Tasks() {
                             </div>
 
                             {/* Due date picker */}
-                            <input
+                            <DeferredDateInput
                               type="date"
                               value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                               onChange={async (e) => {
@@ -19958,7 +20069,7 @@ export default function Tasks() {
                             </div>
 
                             {/* Due date picker */}
-                            <input
+                            <DeferredDateInput
                               type="date"
                               value={task.due_date ? formatDateForInput(parseDateString(task.due_date)) : ''}
                               onChange={async (e) => {

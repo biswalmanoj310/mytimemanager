@@ -1,0 +1,27 @@
+/* Drag-to-reorder rows (see hooks/useCustomRowOrder.ts) */
+tr[data-row-drop="above"] > td { box-shadow: inset 0 3px 0 0 #667eea; }
+tr[data-row-drop="below"] > td { box-shadow: inset 0 -3px 0 0 #667eea; }
+[data-row-drop="above"]:not(tr) { box-shadow: 0 -3px 0 0 #667eea; }
+[data-row-drop="below"]:not(tr) { box-shadow: 0 3px 0 0 #667eea; }
+[data-row-dragging="true"] { opacity: 0.45; }
+[data-row-reorderable] { cursor: grab; }
+[data-row-reorderable] input,
+[data-row-reorderable] button,
+[data-row-reorderable] a,
+[data-row-reorderable] .task-link { cursor: pointer; }
+
+.row-order-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5a67d8;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.row-order-reset:hover { background: #e0e7ff; }
